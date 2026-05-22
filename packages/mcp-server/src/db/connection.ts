@@ -346,9 +346,9 @@ async function openReadWriteConnection(
   const dataDir = path.dirname(dbPath);
   const dataRoot = getDataRoot(dataDir);
 
-  // Parquet view overlay: create views over shared Parquet files.
-  // Replaces physical tables when Parquet files exist (D-00, D-09).
-  // The env var controls WRITE path; read path is always opportunistic (D-00c).
+  // Parquet view overlay: create views over shared Parquet files when present.
+  // The env var controls WRITE path; the read path is always opportunistic —
+  // views are registered whenever the Parquet files exist.
   // Runs BEFORE ensureMarketDataTables so stale views from a previous data path
   // are dropped first — otherwise CREATE TABLE IF NOT EXISTS is a no-op against
   // the existing view name, leaving a broken view referencing a missing file.
@@ -356,7 +356,7 @@ async function openReadWriteConnection(
 
   // Physical market data tables as fallback for datasets not covered by Parquet views.
   //
-  // IMPORTANT — lifecycle ordering (Phase 2 D-12, #market-data-3.0):
+  // IMPORTANT — lifecycle ordering:
   // Because createMarketParquetViews (above) runs FIRST, by the time we get here
   // a VIEW may already occupy any of the canonical names (e.g. market.option_quote_minutes
   // over legacy-layout Parquet files that lack the new `underlying` column). Any
@@ -364,10 +364,9 @@ async function openReadWriteConnection(
   // a physical table MUST filter information_schema.tables by
   // `table_type = 'BASE TABLE'` so it does not accidentally drop a legitimate VIEW.
   // VIEWs are owned by the Parquet-view layer, not by this schema layer.
-  // See market-schemas.ts §D-12 option_quote_minutes block for the canonical pattern.
   await ensureMarketDataTables(connection);
 
-  // One-time metadata migration: DuckDB -> JSON files (Phase 3)
+  // One-time metadata migration: DuckDB -> JSON files.
   // Runs only when TRADEBLOCKS_PARQUET=true and JSON files don't yet exist.
   // Must run AFTER all DuckDB tables are created (profiles, sync, market schemas).
   try {
@@ -694,8 +693,8 @@ export function getCurrentConnection(): DuckDBConnection {
   return connection;
 }
 
-// Phase 4 D-10: the legacy intraday write-target getter / module-state variable
-// + the connection.ext.ts override hook were DELETED. Every spot write now
+// Note: the legacy intraday write-target getter / module-state variable and
+// the connection.ext.ts override hook have been removed. Every spot write now
 // flows through SpotStore.writeBars (the canonical Hive-partitioned
 // `spot/ticker=X/date=Y/` layout); there is no longer a per-process override
-// of the write target. See PATTERNS.md §src/db/connection.ts for the rationale.
+// of the write target.

@@ -118,18 +118,18 @@ export async function ensureTradeDataTable(conn: DuckDBConnection): Promise<void
   if (!(await hasColumn(conn, "trades", "trade_data", "ticker"))) {
     await conn.run(`ALTER TABLE trades.trade_data ADD COLUMN ticker VARCHAR`);
   }
-  // Migration: add source column for trade provenance tracking (Phase 76)
+  // Migration: add source column for trade provenance tracking.
   // 'csv' = imported from Option Omega CSV; other values may be populated by
   // optional private extensions when present.
   if (!(await hasColumn(conn, "trades", "trade_data", "source"))) {
     await conn.run(`ALTER TABLE trades.trade_data ADD COLUMN source VARCHAR DEFAULT 'csv'`);
     await conn.run(`UPDATE trades.trade_data SET source = 'csv' WHERE source IS NULL`);
   }
-  // Migration: add dte column for DTE-at-entry (Phase 80 gap closure)
+  // Migration: add dte column for DTE-at-entry.
   if (!(await hasColumn(conn, "trades", "trade_data", "dte"))) {
     await conn.run(`ALTER TABLE trades.trade_data ADD COLUMN dte INTEGER`);
   }
-  // Migration: add entry_greeks_json column for per-trade entry greeks (Phase 80 gap closure)
+  // Migration: add entry_greeks_json column for per-trade entry greeks.
   if (!(await hasColumn(conn, "trades", "trade_data", "entry_greeks_json"))) {
     await conn.run(`ALTER TABLE trades.trade_data ADD COLUMN entry_greeks_json JSON`);
   }
