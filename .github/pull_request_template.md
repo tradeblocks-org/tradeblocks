@@ -1,5 +1,9 @@
 # TradeBlocks Pull Request
 
+Tier:
+
+<!-- Tier is required for human-authored PRs. Use Tier: 3 for public-surface, CI/workflow, package contract, or release-path changes. Dependabot PRs are exempt from the no-tier failure path. -->
+
 ## 🧱 What's Changed
 
 <!-- Describe your changes here -->
