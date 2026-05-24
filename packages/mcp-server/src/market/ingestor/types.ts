@@ -15,8 +15,11 @@ export type IngestStatus = "ok" | "partial" | "skipped" | "unsupported" | "error
  *                        missing chain partition). Without this guard the
  *                        batch would persist with intact bid/ask but null
  *                        greeks. The `resolveRatio` field carries the
- *                        observed missingUnderlyingRows/rowsVisited fraction
- *                        that tripped COVERAGE_GAP_THRESHOLD.
+ *                        observed missingUnderlyingRows / attemptedRows
+ *                        fraction (where attemptedRows = missingUnderlyingRows
+ *                        + computedRows — only rows that reached the
+ *                        underlying-lookup branch) that tripped
+ *                        COVERAGE_GAP_THRESHOLD.
  *
  * Both reasons escalate the enclosing IngestResult to `status: "partial"`.
  * Orchestrated callers MUST treat `partial` as a non-success signal —

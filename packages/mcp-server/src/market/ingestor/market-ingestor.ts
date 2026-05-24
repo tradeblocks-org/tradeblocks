@@ -28,27 +28,39 @@ export interface MarketIngestorDeps {
 }
 
 // When `applyQuoteGreeks` fails to resolve the underlying price for more than
-// this fraction of rows visited, the batch is suspected of a coverage gap
-// (partial-day spot bars, missing chain partition, schema-filter mismatch).
-// Such batches are dropped — they'd otherwise persist with intact bid/ask but
-// null greeks, which silently corrupts the option_quotes store.
+// this fraction of the rows that actually attempted underlying-price lookup,
+// the batch is suspected of a coverage gap (partial-day spot bars, missing
+// chain partition, schema-filter mismatch). Such batches are dropped — they'd
+// otherwise persist with intact bid/ask but null greeks, which silently
+// corrupts the option_quotes store.
+//
+// Denominator is `missingUnderlyingRows + computedRows` — i.e. only rows that
+// reached the underlying-lookup branch in compute mode. Rows skipped earlier
+// (provider greeks already present, missing contract meta, provider-only mode)
+// don't dilute the signal. This catches a real production leak: a mixed-source
+// partition where one provider supplies inline greeks for 60% of rows and the
+// remaining 40% all fail underlying lookup on a partial-day spot outage — a
+// `missing/visited` ratio of 0.4 wouldn't trip the 0.5 threshold, but
+// `missing/attempted` is 1.0 and does.
+//
 // Tunable from telemetry: lower → more conservative (false-positives on
 // genuinely-sparse chain reads); higher → more leakage of null-greeks rows.
-// 0.5 is the initial pick: aggressive enough to catch a partial-day spot
-// outage that leaves the underlying-price map nearly empty (the canonical
-// failure mode this guard targets), conservative enough that a single
-// sparsely-quoted expiration with a few unresolved rows doesn't trip it.
+// 0.5 means "half of the rows that needed compute failed to resolve the
+// underlying price" — conservative enough that a few unresolved rows in a
+// large compute batch don't trip it, aggressive enough that a partial-day
+// spot outage (which sends the ratio to ~1.0) is caught immediately.
 const COVERAGE_GAP_THRESHOLD = 0.5;
 
 function coverageGapEntry(
   stats: QuoteGreeksStats,
   batch: { underlying: string; date: string; ticker?: string; rows: number },
 ): IngestSkippedBatch | null {
-  if (stats.rowsVisited <= 0) return null;
-  const ratio = stats.missingUnderlyingRows / stats.rowsVisited;
+  const attemptedRows = stats.missingUnderlyingRows + stats.computedRows;
+  if (attemptedRows <= 0) return null;
+  const ratio = stats.missingUnderlyingRows / attemptedRows;
   if (ratio <= COVERAGE_GAP_THRESHOLD) return null;
   const message =
-    `underlying-price coverage gap: ${stats.missingUnderlyingRows}/${stats.rowsVisited} rows ` +
+    `underlying-price coverage gap: ${stats.missingUnderlyingRows}/${attemptedRows} rows ` +
     `missing underlying price (ratio=${ratio.toFixed(2)}, threshold=${COVERAGE_GAP_THRESHOLD.toFixed(2)})`;
   return {
     underlying: batch.underlying,
