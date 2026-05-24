@@ -51,6 +51,25 @@ export interface MarketIngestorDeps {
 // spot outage (which sends the ratio to ~1.0) is caught immediately.
 const COVERAGE_GAP_THRESHOLD = 0.5;
 
+// Sibling of COVERAGE_GAP_THRESHOLD, distinct failure mode. Fires when
+// underlying-price lookup SUCCEEDED but `computeQuoteGreeks` returned null for
+// the majority of the rows that actually attempted the math (zero/negative
+// option price, corrupt expiration → negative DTE, malformed strike grid).
+// Without this guard those rows would mis-attribute as `coverage_gap` because
+// they all flowed into `unresolvedRows`; coverage_gap's denominator
+// (`missingUnderlyingRows + computedRows`) excludes math failures, so a
+// math-only failure mode never tripped coverage_gap by itself, but a single
+// missing-underlying row in the same partition would — labeling the trip
+// "coverage gap" even though the bulk of the leak was BS-math corruption.
+// Both guards can fire on the same partition when both subsets exceed their
+// thresholds independently; see types.ts on the no-dedupe convention.
+//
+// Set to 0.5 for symmetry with COVERAGE_GAP_THRESHOLD. Tunable from telemetry
+// independently — the two failure modes have different operational meanings
+// (spot/chain coverage vs. quote/chain corruption) and may want different
+// trip points later.
+const COMPUTE_FAILURE_THRESHOLD = 0.5;
+
 function coverageGapEntry(
   stats: QuoteGreeksStats,
   batch: { underlying: string; date: string; ticker?: string; rows: number },
@@ -68,6 +87,29 @@ function coverageGapEntry(
     ...(batch.ticker ? { ticker: batch.ticker } : {}),
     rows: batch.rows,
     reason: "coverage_gap",
+    error: message,
+    resolveRatio: ratio,
+  };
+}
+
+function computeFailureEntry(
+  stats: QuoteGreeksStats,
+  batch: { underlying: string; date: string; ticker?: string; rows: number },
+): IngestSkippedBatch | null {
+  const attemptedRows = stats.mathFailedRows + stats.computedRows;
+  if (attemptedRows <= 0) return null;
+  const ratio = stats.mathFailedRows / attemptedRows;
+  if (ratio <= COMPUTE_FAILURE_THRESHOLD) return null;
+  const message =
+    `compute failure: ${stats.mathFailedRows}/${attemptedRows} rows failed ` +
+    `black-scholes math after underlying-price lookup succeeded ` +
+    `(ratio=${ratio.toFixed(2)}, threshold=${COMPUTE_FAILURE_THRESHOLD.toFixed(2)})`;
+  return {
+    underlying: batch.underlying,
+    date: batch.date,
+    ...(batch.ticker ? { ticker: batch.ticker } : {}),
+    rows: batch.rows,
+    reason: "compute_failure",
     error: message,
     resolveRatio: ratio,
   };
@@ -372,6 +414,7 @@ export class MarketIngestor {
           computedRows: 0,
           missingContractRows: 0,
           missingUnderlyingRows: 0,
+          mathFailedRows: 0,
           unresolvedRows: 0,
         },
       };
@@ -704,7 +747,7 @@ export class MarketIngestor {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         // Warn is still emitted for live tail-following — the load-bearing
-        // signal is `result.skipped[]` / `status: "partial"` (issue #121).
+        // signal is `result.skipped[]` / `status: "partial"`.
         console.warn(
           "[drainBulkQuotes] enrichQuoteRows failed; skipping batch",
           {
@@ -728,6 +771,11 @@ export class MarketIngestor {
         date,
         rows: rows.length,
       });
+      const computeFailure = computeFailureEntry(enriched.stats, {
+        underlying: resolvedUnderlying,
+        date,
+        rows: rows.length,
+      });
       if (gap) {
         console.warn("[drainBulkQuotes] coverage gap; skipping batch", {
           underlying: resolvedUnderlying,
@@ -736,8 +784,17 @@ export class MarketIngestor {
           resolveRatio: gap.resolveRatio,
         });
         skipped.push(gap);
-        continue;
       }
+      if (computeFailure) {
+        console.warn("[drainBulkQuotes] compute failure; skipping batch", {
+          underlying: resolvedUnderlying,
+          date,
+          rows: rows.length,
+          resolveRatio: computeFailure.resolveRatio,
+        });
+        skipped.push(computeFailure);
+      }
+      if (gap || computeFailure) continue;
       await this.deps.stores.quote.writeQuotes(resolvedUnderlying, date, enriched.rows);
       totalRows += rows.length;
     }
@@ -794,7 +851,7 @@ export class MarketIngestor {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         // Warn is still emitted for live tail-following — the load-bearing
-        // signal is `result.skipped[]` / `status: "partial"` (issue #121).
+        // signal is `result.skipped[]` / `status: "partial"`.
         console.warn(
           "[writeQuotesForTicker] enrichQuoteRows failed; skipping batch",
           {
@@ -821,6 +878,12 @@ export class MarketIngestor {
         ticker,
         rows: rows.length,
       });
+      const computeFailure = computeFailureEntry(enriched.stats, {
+        underlying,
+        date,
+        ticker,
+        rows: rows.length,
+      });
       if (gap) {
         console.warn("[writeQuotesForTicker] coverage gap; skipping batch", {
           underlying,
@@ -830,8 +893,18 @@ export class MarketIngestor {
           resolveRatio: gap.resolveRatio,
         });
         skipped.push(gap);
-        continue;
       }
+      if (computeFailure) {
+        console.warn("[writeQuotesForTicker] compute failure; skipping batch", {
+          underlying,
+          date,
+          ticker,
+          rows: rows.length,
+          resolveRatio: computeFailure.resolveRatio,
+        });
+        skipped.push(computeFailure);
+      }
+      if (gap || computeFailure) continue;
       await this.deps.stores.quote.writeQuotes(underlying, date, enriched.rows);
       rowsWritten += rows.length;
       if (!minDate || date < minDate) minDate = date;

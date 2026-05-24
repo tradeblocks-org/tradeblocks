@@ -14,8 +14,7 @@
  * release only on JS GC, so under sustained read load the driver eventually
  * throws `Failed to execute prepared statement`. Inlining values into the SQL
  * string sends the call through `node_bindings.query()` instead, which is
- * leak-free. See `parquet-quote-store.ts:340` for the full root-cause writeup
- * and the project memory entry `feedback_duckdb_extract_statements_leak.md`.
+ * leak-free. See `parquet-quote-store.ts:340` for the full root-cause writeup.
  *
  * Purity contract (CONTEXT.md D-05, PATTERNS.md "Pure SQL builders"):
  *   - No `this` / no `ctx` / no DB-connection value-level import

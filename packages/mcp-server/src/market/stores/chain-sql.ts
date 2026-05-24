@@ -4,8 +4,7 @@
  * Option chains are partitioned by (underlying, date). A single `readChain`
  * call targets exactly one partition. Values are inlined as SQL literals
  * because `runAndReadAll(sql, params)` leaks C++ handles via DuckDB's
- * `extract_statements` path (see `spot-sql.ts` header for the full writeup
- * and `feedback_duckdb_extract_statements_leak.md`).
+ * `extract_statements` path (see `spot-sql.ts` header for the full writeup).
  *
  * Purity contract (CONTEXT.md D-05): no `this`, no `ctx`, no DuckDB value-level
  * imports. Tests in `tests/unit/market/stores/chain-sql.test.ts`.

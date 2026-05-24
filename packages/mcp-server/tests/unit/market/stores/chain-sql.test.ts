@@ -3,7 +3,7 @@
  *
  * The chain builder targets a single underlying + date partition. Values are
  * inlined as SQL literals to bypass the DuckDB `extract_statements` GC leak
- * (see `spot-sql.ts` header / `feedback_duckdb_extract_statements_leak.md`).
+ * (see `spot-sql.ts` header).
  */
 import { describe, it, expect } from "@jest/globals";
 import { buildReadChainSQL } from "../../../../src/test-exports.js";

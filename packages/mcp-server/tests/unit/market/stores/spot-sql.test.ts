@@ -6,10 +6,8 @@
  * emitted string — no fixture, no connection.
  *
  * Why inline literals: the DuckDB Node-API binding leaks C++ handles on every
- * `runAndReadAll(sql, params)` call (see `spot-sql.ts` header / project
- * memory `feedback_duckdb_extract_statements_leak.md`). The builders moved
- * off positional params on 2026-05-19 (issue #121) to kill the leak at the
- * source.
+ * `runAndReadAll(sql, params)` call (see `spot-sql.ts` header). The builders
+ * use inline literals to kill the leak at the source.
  */
 import { describe, it, expect } from "@jest/globals";
 import {

@@ -26,8 +26,8 @@ describe("MarketIngestor.ingestQuotes", () => {
     // option_chain + option_quote_minutes are not created by ensureMarketDataTables
     // (they're Parquet views in production; tests must create the physical fallback
     // tables directly). option_chain is required because enrichQuoteRows reads it
-    // for every (underlying, date) batch — issue #121 removed the .catch(() => [])
-    // swallow that previously hid the missing-table error here.
+    // for every (underlying, date) batch — the .catch(() => []) swallow that
+    // previously hid the missing-table error here has been removed.
     await conn.run(`
       CREATE TABLE IF NOT EXISTS market.option_chain (
         underlying      VARCHAR NOT NULL,

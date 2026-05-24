@@ -75,9 +75,8 @@ export class ParquetEnrichedStore extends EnrichedStore {
     // Fast path: when the caller doesn't need cross-ticker context or RTH
     // OHLCV joins, read directly from the ticker's parquet file. Avoids
     // the `market.enriched` view glob (~430ms) AND the extract_statements
-    // GC handle leak (see feedback_duckdb_extract_statements_leak memory
-    // and parquet-quote-store.ts:327). Hit on every entry-pipeline date
-    // when an RSI / vol-regime filter is configured.
+    // GC handle leak (see parquet-quote-store.ts:327). Hit on every
+    // entry-pipeline date when an RSI / vol-regime filter is configured.
     const wantsJoins = !!opts.includeContext || !!opts.includeOhlcv;
     if (!wantsJoins) {
       const filePath = path.join(
