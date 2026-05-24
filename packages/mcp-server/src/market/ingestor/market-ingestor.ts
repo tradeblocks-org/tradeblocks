@@ -19,12 +19,46 @@ import type {
   BulkProgressReporter,
 } from "./types.js";
 import type { QuoteRow } from "../stores/types.js";
-import { applyQuoteGreeks } from "../../utils/option-quote-greeks.js";
+import { applyQuoteGreeks, type QuoteGreeksStats } from "../../utils/option-quote-greeks.js";
 
 export interface MarketIngestorDeps {
   stores: MarketStores;
   dataRoot: string;
   providerFactory?: () => MarketDataProvider;
+}
+
+// When `applyQuoteGreeks` fails to resolve the underlying price for more than
+// this fraction of rows visited, the batch is suspected of a coverage gap
+// (partial-day spot bars, missing chain partition, schema-filter mismatch).
+// Such batches are dropped — they'd otherwise persist with intact bid/ask but
+// null greeks, which silently corrupts the option_quotes store.
+// Tunable from telemetry: lower → more conservative (false-positives on
+// genuinely-sparse chain reads); higher → more leakage of null-greeks rows.
+// 0.5 is the initial pick: aggressive enough to catch a partial-day spot
+// outage that leaves the underlying-price map nearly empty (the canonical
+// failure mode this guard targets), conservative enough that a single
+// sparsely-quoted expiration with a few unresolved rows doesn't trip it.
+const COVERAGE_GAP_THRESHOLD = 0.5;
+
+function coverageGapEntry(
+  stats: QuoteGreeksStats,
+  batch: { underlying: string; date: string; ticker?: string; rows: number },
+): IngestSkippedBatch | null {
+  if (stats.rowsVisited <= 0) return null;
+  const ratio = stats.missingUnderlyingRows / stats.rowsVisited;
+  if (ratio <= COVERAGE_GAP_THRESHOLD) return null;
+  const message =
+    `underlying-price coverage gap: ${stats.missingUnderlyingRows}/${stats.rowsVisited} rows ` +
+    `missing underlying price (ratio=${ratio.toFixed(2)}, threshold=${COVERAGE_GAP_THRESHOLD.toFixed(2)})`;
+  return {
+    underlying: batch.underlying,
+    date: batch.date,
+    ...(batch.ticker ? { ticker: batch.ticker } : {}),
+    rows: batch.rows,
+    reason: "coverage_gap",
+    error: message,
+    resolveRatio: ratio,
+  };
 }
 
 function providerErrorMessage(error: unknown): string {
@@ -316,8 +350,20 @@ export class MarketIngestor {
     date: string,
     rows: QuoteRow[],
     defaultProviderSource?: "massive" | "thetadata",
-  ): Promise<QuoteRow[]> {
-    if (rows.length === 0) return rows;
+  ): Promise<{ rows: QuoteRow[]; stats: QuoteGreeksStats }> {
+    if (rows.length === 0) {
+      return {
+        rows,
+        stats: {
+          rowsVisited: 0,
+          existingGreeksRows: 0,
+          computedRows: 0,
+          missingContractRows: 0,
+          missingUnderlyingRows: 0,
+          unresolvedRows: 0,
+        },
+      };
+    }
 
     const [contracts, underlyingBars] = await Promise.all([
       this.deps.stores.chain.readChain(underlying, date),
@@ -336,7 +382,7 @@ export class MarketIngestor {
       }
     }
 
-    applyQuoteGreeks({
+    const stats = applyQuoteGreeks({
       rows,
       getDate: (row) => row.timestamp.slice(0, 10),
       getTime: (row) => row.timestamp.slice(11, 16),
@@ -355,7 +401,7 @@ export class MarketIngestor {
       defaultProviderSource,
     });
 
-    return rows;
+    return { rows, stats };
   }
 
   async ingestQuotes(opts: IngestQuotesOptions): Promise<IngestResult> {
@@ -635,7 +681,7 @@ export class MarketIngestor {
     const skipped: IngestSkippedBatch[] = [];
     for (const [resolvedUnderlying, rows] of bucket) {
       if (rows.length === 0) continue;
-      let enriched: QuoteRow[];
+      let enriched: { rows: QuoteRow[]; stats: QuoteGreeksStats };
       try {
         enriched = await this.enrichQuoteRows(
           resolvedUnderlying,
@@ -660,11 +706,27 @@ export class MarketIngestor {
           underlying: resolvedUnderlying,
           date,
           rows: rows.length,
+          reason: "read_failed",
           error: message,
         });
         continue;
       }
-      await this.deps.stores.quote.writeQuotes(resolvedUnderlying, date, enriched);
+      const gap = coverageGapEntry(enriched.stats, {
+        underlying: resolvedUnderlying,
+        date,
+        rows: rows.length,
+      });
+      if (gap) {
+        console.warn("[drainBulkQuotes] coverage gap; skipping batch", {
+          underlying: resolvedUnderlying,
+          date,
+          rows: rows.length,
+          resolveRatio: gap.resolveRatio,
+        });
+        skipped.push(gap);
+        continue;
+      }
+      await this.deps.stores.quote.writeQuotes(resolvedUnderlying, date, enriched.rows);
       totalRows += rows.length;
     }
     return { rowsWritten: totalRows, skipped };
@@ -709,7 +771,7 @@ export class MarketIngestor {
     let maxDate: string | undefined;
     const skipped: IngestSkippedBatch[] = [];
     for (const [date, rows] of byDate) {
-      let enriched: QuoteRow[];
+      let enriched: { rows: QuoteRow[]; stats: QuoteGreeksStats };
       try {
         enriched = await this.enrichQuoteRows(
           underlying,
@@ -736,11 +798,29 @@ export class MarketIngestor {
           date,
           ticker,
           rows: rows.length,
+          reason: "read_failed",
           error: message,
         });
         continue;
       }
-      await this.deps.stores.quote.writeQuotes(underlying, date, enriched);
+      const gap = coverageGapEntry(enriched.stats, {
+        underlying,
+        date,
+        ticker,
+        rows: rows.length,
+      });
+      if (gap) {
+        console.warn("[writeQuotesForTicker] coverage gap; skipping batch", {
+          underlying,
+          date,
+          ticker,
+          rows: rows.length,
+          resolveRatio: gap.resolveRatio,
+        });
+        skipped.push(gap);
+        continue;
+      }
+      await this.deps.stores.quote.writeQuotes(underlying, date, enriched.rows);
       rowsWritten += rows.length;
       if (!minDate || date < minDate) minDate = date;
       if (!maxDate || date > maxDate) maxDate = date;

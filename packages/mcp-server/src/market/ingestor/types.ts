@@ -2,24 +2,38 @@ export type IngestStatus = "ok" | "partial" | "skipped" | "unsupported" | "error
 
 /**
  * Per-batch failure entry attached to a result when the ingest completed some
- * batches but logged-and-skipped others. The current producer is
- * `MarketIngestor.enrichQuoteRows` failures inside the quote-ingest paths:
- * a transient DuckDB flake or schema mismatch on the enrichment read causes
- * the affected (underlying, date[, ticker]) batch to be skipped instead of
- * abandoning the whole ingest (so a long bulk refresh isn't killed by one
- * bad partition), and the entry surfaces in the result so orchestrators can
- * distinguish "complete" from "complete with N batches dropped".
+ * batches but logged-and-skipped others. Two producers, distinguished by
+ * `reason`:
  *
- * Orchestrated callers MUST treat `status: "partial"` as a non-success
- * signal — `rowsWritten` undercounts when batches are skipped.
+ *   - `"read_failed"`  — `enrichQuoteRows` threw (e.g. transient DuckDB flake,
+ *                        schema mismatch). The affected
+ *                        (underlying, date[, ticker]) batch is dropped
+ *                        instead of abandoning the whole ingest.
+ *   - `"coverage_gap"` — the enrichment read succeeded but returned too few
+ *                        underlying-price/chain rows to resolve greeks for
+ *                        most of the batch (e.g. partial-day spot bars,
+ *                        missing chain partition). Without this guard the
+ *                        batch would persist with intact bid/ask but null
+ *                        greeks. The `resolveRatio` field carries the
+ *                        observed missingUnderlyingRows/rowsVisited fraction
+ *                        that tripped COVERAGE_GAP_THRESHOLD.
+ *
+ * Both reasons escalate the enclosing IngestResult to `status: "partial"`.
+ * Orchestrated callers MUST treat `partial` as a non-success signal —
+ * `rowsWritten` undercounts when batches are skipped.
  */
+export type IngestSkippedReason = "read_failed" | "coverage_gap";
+
 export interface IngestSkippedBatch {
   underlying: string;
   date: string;
   /** Set on the per-ticker quote path; absent on the bulk-by-underlying path. */
   ticker?: string;
   rows: number;
+  reason: IngestSkippedReason;
   error: string;
+  /** Present only when `reason === "coverage_gap"`. */
+  resolveRatio?: number;
 }
 
 export interface IngestResult {

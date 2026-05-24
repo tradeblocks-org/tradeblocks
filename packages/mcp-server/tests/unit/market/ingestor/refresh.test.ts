@@ -506,6 +506,110 @@ describe("MarketIngestor.refresh", () => {
     warnSpy.mockRestore();
   });
 
+  it("skips the batch with reason=coverage_gap when enrichment reads return empty (issue #167)", async () => {
+    // Companion to the throw-path test above: enrichQuoteRows succeeds but
+    // stores.spot.readBars returns [] (e.g. partial-day spot coverage,
+    // missing chain partition). Without the coverage-gap guard, applyQuoteGreeks
+    // would resolve no underlying prices, every row would increment
+    // missingUnderlyingRows, and the batch would silently persist with
+    // intact bid/ask but null greeks. The fix surfaces this as a distinct
+    // reason="coverage_gap" skipped[] entry and refuses to write.
+    const provider: MarketDataProvider = {
+      name: "bulk",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchBulkQuotes: async function* () {
+        yield [
+          { ticker: "SPXW260107C04800000", timestamp: "2026-01-05 09:30", bid: 10.0, ask: 10.5 },
+        ];
+      },
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    // Force the spot read to return empty rows for the enrichment lookup.
+    // The provider still writes daily/minute spot bars upstream of this point
+    // (refresh.spot ingest), but the in-memory readBars used by enrichQuoteRows
+    // is intercepted to simulate the coverage-gap scenario.
+    const readBarsSpy = jest.spyOn(stores.spot, "readBars").mockResolvedValue([]);
+    const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteUnderlyings: ["SPX"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(1);
+    const entry = result.skipped![0];
+    expect(entry).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      rows: 1,
+      reason: "coverage_gap",
+    }));
+    expect(typeof entry.resolveRatio).toBe("number");
+    expect(entry.resolveRatio).toBeGreaterThan(0.5);
+    expect(entry.resolveRatio).toBeLessThanOrEqual(1);
+    expect(entry.error).toMatch(/coverage gap/);
+
+    // writeQuotes must NOT have been called for the affected partition —
+    // that's the whole point: we refuse to persist null-greeks rows.
+    const quotePartitionWrites = writeQuotesSpy.mock.calls.filter(
+      (call) => call[0] === "SPX" && call[1] === "2026-01-05",
+    );
+    expect(quotePartitionWrites).toHaveLength(0);
+
+    readBarsSpy.mockRestore();
+    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const row = quotes.get("SPXW260107C04800000")?.[0];
+    expect(row).toBeUndefined();
+
+    const warnCall = warnSpy.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("coverage gap"),
+    );
+    expect(warnCall).toBeDefined();
+    warnSpy.mockRestore();
+    writeQuotesSpy.mockRestore();
+  });
+
   it("persists provider minute greeks inline when bulk quotes already carry them", async () => {
     const provider: MarketDataProvider = {
       name: "thetadata",
