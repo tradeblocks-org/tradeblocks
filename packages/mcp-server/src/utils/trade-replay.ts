@@ -45,6 +45,12 @@ export interface PnlPoint {
   netVega?: number | null;
   // IVP from canonical market datasets (typically VIX ticker rows in market.enriched)
   ivp?: number | null;
+  // True when all legs have synchronized quotes at this minute; false when one or more
+  // legs lack a fresh quote. Triggers like profitTarget gate hit-counting on this so
+  // unsynchronized bars don't count toward confirmation and don't reset the counter.
+  // When undefined (no producer populates the field) consumers treat the bar as synchronized.
+  // TODO: populated by a future quote-sync detector — currently forward-compat only.
+  allLegsSync?: boolean;
 }
 
 /** Configuration for greeks computation in P&L path. */

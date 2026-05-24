@@ -59,6 +59,8 @@ export interface ExitTriggerConfig {
   spreadWidth?: number;                          // Width of spread in dollars
   contracts?: number;                            // Number of contracts
   multiplier?: number;                           // Default 100
+  // profitTarget confirmation: N synchronized-quote bars at-or-above threshold required before firing (default 2)
+  requiredHits?: number;
   // Internal: set by handler when unit='percent' to compute dollar threshold
   entryCost?: number;                            // D-11: cost/credit of entry (negative = credit received)
   entrySLRatio?: number;                         // Runtime-hydrated opening short/long ratio for slRatioMove
@@ -294,7 +296,7 @@ export function evaluateTrigger(
       case 'profitTarget': {
         // unit='percent' requires entryCost; if missing, cannot compute — no fire
         if (trigger.unit === 'percent' && trigger.entryCost == null) break;
-        const requiredHits = (trigger.requiredHits as number | undefined) ?? 2;
+        const requiredHits = trigger.requiredHits ?? 2;
         const dollarThresholdPT = trigger.unit === 'percent'
           ? threshold * Math.abs(trigger.entryCost!)
           : threshold;
