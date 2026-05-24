@@ -2,9 +2,9 @@
  * Unit-level integration tests for createMarketParquetViews()
  *
  * Tests the view creation function directly (not through getConnection).
- * Post Phase 6 Wave D: covers the v3.0 canonical market data views
- * (spot, spot_daily, enriched, enriched_context, option_chain, option_quote_minutes).
- * Also tests partial file availability, tablesKept tracking, and parquetActive flag.
+ * Covers the canonical market data views (spot, spot_daily, enriched,
+ * enriched_context, option_chain, option_quote_minutes), plus partial file
+ * availability, tablesKept tracking, and the parquetActive flag.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { mkdirSync, rmSync } from "fs";
@@ -31,10 +31,10 @@ describe("createMarketParquetViews", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  // NOTE: Phase 6 Wave D retired the legacy single-file daily/date_context
-  // views and the legacy intraday Hive-partitioned view. v3.0 views (spot,
-  // spot_daily, enriched, enriched_context, option_chain, option_quote_minutes)
-  // are exercised by other tests in this file and by Phase 2 unit tests.
+  // NOTE: the legacy single-file daily/date_context views and the legacy
+  // intraday Hive-partitioned view have been retired. The current canonical
+  // views (spot, spot_daily, enriched, enriched_context, option_chain,
+  // option_quote_minutes) are covered here and in unit tests.
   it("creates views for option_chain and option_quote_minutes Hive-partitioned Parquet", async () => {
     const marketDir = join(tmpDir, "market");
 
@@ -146,9 +146,8 @@ describe("createMarketParquetViews", () => {
 
     expect(result.parquetActive).toBe(false);
     expect(result.viewsCreated).toEqual([]);
-    // Post Phase 6 Wave D: the legacy 3 registration blocks are gone. tablesKept
-    // has 6 entries on an empty market dir: option_chain, option_quote_minutes,
-    // spot, enriched, enriched_context, spot_daily.
+    // tablesKept has 6 entries on an empty market dir: option_chain,
+    // option_quote_minutes, spot, enriched, enriched_context, spot_daily.
     expect(result.tablesKept.length).toBe(6);
   });
 
@@ -159,11 +158,11 @@ describe("createMarketParquetViews", () => {
     expect(result.parquetActive).toBe(false);
     expect(result.viewsCreated).toEqual([]);
     expect(result.tablesKept).toEqual([
-      // Remaining Hive-partitioned views after Wave D hard-cut
+      // Hive-partitioned chain + quote views
       "option_chain", "option_quote_minutes",
-      // Phase 2 new names (D-22, D-24, D-25)
+      // Canonical spot/enriched view names
       "spot", "enriched", "enriched_context",
-      // Phase 6 Plan 06-00 Task 1 — spot_daily bridge view
+      // Daily-bar bridge view backed by spot
       "spot_daily",
     ]);
   });

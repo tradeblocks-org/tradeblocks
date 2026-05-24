@@ -1,26 +1,18 @@
 /**
- * Wave C enrichment-consumer contract tests (Phase 4 Plan 04-05).
+ * Enrichment-consumer contract tests.
  *
- * Exercises the migrated enrichment surface after the surgical cutover to:
+ * Exercises the enrichment surface that flows through:
  *   - utils/market-enricher.ts: enrichment-watermark read/write goes through
  *     `io.watermarkStore` (backed by `getEnrichedThrough` /
- *     `upsertEnrichedThrough` from `db/json-adapters.ts`); the legacy
- *     `market._sync_metadata.enriched_through` SQL read is GONE.
+ *     `upsertEnrichedThrough` from `db/json-adapters.ts`); the tool layer no
+ *     longer reads `market._sync_metadata.enriched_through` directly.
  *   - tools/market-enrichment.ts: `enrich_market_data` handler delegates to
- *     `stores.enriched.compute(...)` and (for VIX family) `computeContext(...)`
- *     instead of calling `runEnrichment(conn, ...)` directly.
+ *     `stores.enriched.compute(...)` and (for the VIX family)
+ *     `computeContext(...)` instead of calling `runEnrichment(conn, ...)`.
  *
- * Math (Tier 1/2/3 indicator computation) is UNCHANGED per Phase 2 D-17.
- *
- * Pre-migration consumers of the symbols touched by this plan (verified at
- * the start of plan 04-05):
- *
- *   src/utils/market-enricher.ts:990         SELECT enriched_through FROM market._sync_metadata
- *   src/tools/market-enrichment.ts:67-68     await runEnrichment(conn, ticker, ...)
- *
- * The plan keeps the enrichment math + the `runEnrichment` export untouched —
- * the wrapper `stores.enriched.compute` injects the JSON-backed watermark IO
- * so the tool layer doesn't reach into `market._sync_metadata` any more.
+ * Tier 1/2/3 indicator math is preserved verbatim — the wrapper
+ * `stores.enriched.compute` injects the JSON-backed watermark IO so the
+ * tool layer doesn't reach into `market._sync_metadata` directly.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import {
@@ -75,10 +67,9 @@ async function seedSpotBars(
 }
 
 /**
- * Seed OHLCV rows for the enricher to consume. Post Phase 6 Wave D, the
- * legacy daily-view is gone; `runEnrichment` reads OHLCV from the v3.0
- * market.spot_daily view (aggregated from market.spot minute bars), or
- * from the injected `io.spotStore`. This helper writes synthetic 09:30
+ * Seed OHLCV rows for the enricher to consume. `runEnrichment` reads OHLCV
+ * from the market.spot_daily view (aggregated from market.spot minute bars)
+ * or from the injected `io.spotStore`. This helper writes synthetic 09:30
  * bars into market.spot so market.spot_daily aggregates one row per date.
  * Deterministic linear ramp guarantees stable Tier 1 indicator outputs
  * (no NaN propagation through the warmup window).
@@ -160,7 +151,7 @@ describe("stores.enriched.compute — Tier 1/2/3 output shape", () => {
     expect(watermark).toBe(to);
 
     // === Assert: market._sync_metadata was NOT touched for enrichment ===
-    // (the legacy path used source='enrichment', target_table='daily')
+    // (the legacy path wrote source='enrichment', target_table='daily')
     const metaRows = await fixture.ctx.conn.runAndReadAll(
       `SELECT COUNT(*) FROM market._sync_metadata
        WHERE source = 'enrichment' AND ticker = 'SPX'`,
@@ -349,11 +340,11 @@ describe("tools/market-enrichment.ts handler — delegates to stores", () => {
   });
 
   it("exports only the registerMarketEnrichmentTools entry point", () => {
-    // After the migration, the tools layer no longer touches enrichment math
-    // directly — every call goes through stores.enriched.{compute, computeContext}.
-    // The runEnrichment / runContextEnrichment exports remain in market-enricher.ts
-    // (the store wrappers call them internally), but the tool module should not
-    // re-export them.
+    // The tools layer no longer touches enrichment math directly — every
+    // call goes through stores.enriched.{compute, computeContext}. The
+    // runEnrichment / runContextEnrichment exports remain in
+    // market-enricher.ts (the store wrappers call them internally), but the
+    // tool module should not re-export them.
     const exportNames = Object.keys(marketEnrichmentTool).filter(
       (k) => k !== "default" && k !== "__esModule",
     );
@@ -368,11 +359,11 @@ describe("tools/market-enrichment.ts handler — delegates to stores", () => {
 // 3. market-enricher module shape — io threading + watermark refactor
 // =============================================================================
 
-describe("market-enricher module shape — post-migration invariants", () => {
+describe("market-enricher module shape — store-wrapper invariants", () => {
   it("runEnrichment + runContextEnrichment are still exported (math preserved)", () => {
-    // The math stays in market-enricher.ts per Phase 2 D-17. We assert the
-    // public exports exist; the wrappers in EnrichedStore.compute call them
-    // with an injected EnrichmentIO.
+    // The math stays in market-enricher.ts. We assert the public exports
+    // exist; the wrappers in EnrichedStore.compute call them with an
+    // injected EnrichmentIO.
     expect(typeof marketEnricher.runEnrichment).toBe("function");
     expect(typeof marketEnricher.runContextEnrichment).toBe("function");
   });
