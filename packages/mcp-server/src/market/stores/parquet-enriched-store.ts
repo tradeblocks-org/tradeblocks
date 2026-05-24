@@ -100,17 +100,15 @@ export class ParquetEnrichedStore extends EnrichedStore {
           .map((row) => Object.fromEntries(names.map((n, i) => [n, row[i]])));
       }
     }
-    const { sql, params } = buildReadEnrichedSQL({
+    // Builder inlines values; unbound runAndReadAll(sql) bypasses extract_statements.
+    const { sql } = buildReadEnrichedSQL({
       ticker: opts.ticker,
       from: opts.from,
       to: opts.to,
       includeContext: !!opts.includeContext,
       includeOhlcv: !!opts.includeOhlcv,
     });
-    const reader = await this.ctx.conn.runAndReadAll(
-      sql,
-      params as (string | number | boolean | null | bigint)[],
-    );
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     const names = reader.columnNames();
     return reader
       .getRows()
@@ -134,9 +132,9 @@ export class ParquetEnrichedStore extends EnrichedStore {
       // is a union), so we return empty early to match Parquet reality.
       return { earliest: null, latest: null, missingDates: [], totalDates: 0 };
     }
+    const tickerLit = ticker.replace(/'/g, "''");
     const reader = await this.ctx.conn.runAndReadAll(
-      `SELECT DISTINCT date FROM market.enriched WHERE ticker = $1 ORDER BY date`,
-      [ticker],
+      `SELECT DISTINCT date FROM market.enriched WHERE ticker = '${tickerLit}' ORDER BY date`,
     );
     const dates = reader.getRows().map((r) => String(r[0]));
     return {

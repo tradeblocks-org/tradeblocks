@@ -138,19 +138,10 @@ export class ParquetSpotStore extends SpotStore {
     to: string,
   ): Promise<BarRow[]> {
     const direct = this.buildDirectParquetReadBarsSQL(ticker, from, to);
-    // Direct path: no params, call runAndReadAll(sql) without 2nd arg to bypass
-    // extract_statements (which leaks C++ handles per call — see
-    // parquet-quote-store.ts:327 for the full root-cause writeup).
-    let reader;
-    if (direct) {
-      reader = await this.ctx.conn.runAndReadAll(direct.sql);
-    } else {
-      const fallback = buildReadBarsSQL(ticker, from, to);
-      reader = await this.ctx.conn.runAndReadAll(
-        fallback.sql,
-        fallback.params as (string | number | boolean | null | bigint)[],
-      );
-    }
+    // Both paths inline values — bound-param runAndReadAll(sql, values) leaks
+    // extract_statements handles (parquet-quote-store.ts:327, spot-sql.ts).
+    const { sql } = direct ?? buildReadBarsSQL(ticker, from, to);
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       ticker: String(r[0]),
       date: String(r[1]),
@@ -171,16 +162,9 @@ export class ParquetSpotStore extends SpotStore {
     to: string,
   ): Promise<BarRow[]> {
     const direct = this.buildDirectParquetReadBarsSQL(ticker, from, to, { dailyAgg: true });
-    let reader;
-    if (direct) {
-      reader = await this.ctx.conn.runAndReadAll(direct.sql);
-    } else {
-      const fallback = buildReadDailyBarsSQL(ticker, from, to);
-      reader = await this.ctx.conn.runAndReadAll(
-        fallback.sql,
-        fallback.params as (string | number | boolean | null | bigint)[],
-      );
-    }
+    // Same leak rationale as readBars — both paths run via unbound query().
+    const { sql } = direct ?? buildReadDailyBarsSQL(ticker, from, to);
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       ticker: String(r[0]),
       date: String(r[1]),

@@ -2,7 +2,9 @@
  * Unit tests for enriched SQL builder (Phase 2 Wave 1 — Plan 02-01).
  *
  * Confirms the four include-flag combinations emit the correct set of
- * JOINs + columns without ever changing the positional parameters.
+ * JOINs + columns. Values are inlined as SQL literals (no positional
+ * placeholders) — see `spot-sql.ts` header for the extract_statements
+ * GC leak rationale.
  */
 import { describe, it, expect } from "@jest/globals";
 import { buildReadEnrichedSQL } from "../../../../src/test-exports.js";
@@ -10,16 +12,16 @@ import { buildReadEnrichedSQL } from "../../../../src/test-exports.js";
 describe("buildReadEnrichedSQL", () => {
   const base = { ticker: "SPX", from: "2025-01-01", to: "2025-01-06" } as const;
 
-  it("queries market.enriched aliased as `e` and orders by date", () => {
+  it("queries market.enriched aliased as `e` with inlined literals and orders by date", () => {
     const { sql } = buildReadEnrichedSQL({ ...base, includeOhlcv: false, includeContext: false });
     expect(sql).toContain("FROM market.enriched e");
-    expect(sql).toContain("WHERE e.ticker = $1");
-    expect(sql).toContain("e.date >= $2");
-    expect(sql).toContain("e.date <= $3");
+    expect(sql).toContain("e.ticker = 'SPX'");
+    expect(sql).toContain("e.date >= '2025-01-01'");
+    expect(sql).toContain("e.date <= '2025-01-06'");
     expect(sql).toContain("ORDER BY e.date");
   });
 
-  it("always binds exactly [ticker, from, to] regardless of include flags", () => {
+  it("inlines [ticker, from, to] in every include-flag variant", () => {
     const variants = [
       { includeOhlcv: false, includeContext: false },
       { includeOhlcv: true, includeContext: false },
@@ -28,8 +30,11 @@ describe("buildReadEnrichedSQL", () => {
     ] as const;
 
     for (const v of variants) {
-      const { params } = buildReadEnrichedSQL({ ...base, ...v });
-      expect(params).toEqual(["SPX", "2025-01-01", "2025-01-06"]);
+      const { sql } = buildReadEnrichedSQL({ ...base, ...v });
+      expect(sql).toContain("'SPX'");
+      expect(sql).toContain("'2025-01-01'");
+      expect(sql).toContain("'2025-01-06'");
+      expect(sql).not.toMatch(/\$\d/);
     }
   });
 
@@ -79,17 +84,16 @@ describe("buildReadEnrichedSQL", () => {
     expect(sql).toContain("c.Vol_Regime");
   });
 
-  it("reuses $1/$2/$3 inside the OHLCV subquery (does not duplicate params)", () => {
-    const { sql, params } = buildReadEnrichedSQL({
+  it("inlines the same ticker/date literals inside the OHLCV subquery", () => {
+    const { sql } = buildReadEnrichedSQL({
       ...base,
       includeOhlcv: true,
       includeContext: false,
     });
-    // The subquery and outer WHERE must both reference $1/$2/$3; no $4.
-    expect(sql).toContain("$1");
-    expect(sql).toContain("$2");
-    expect(sql).toContain("$3");
-    expect(sql).not.toContain("$4");
-    expect(params).toEqual(["SPX", "2025-01-01", "2025-01-06"]);
+    // Subquery and outer WHERE both reference inlined values; no positional params anywhere.
+    expect(sql).not.toMatch(/\$\d/);
+    // The inlined literals appear at least twice (outer + inner) when OHLCV is included.
+    const tickerMatches = sql.match(/'SPX'/g) ?? [];
+    expect(tickerMatches.length).toBeGreaterThanOrEqual(2);
   });
 });

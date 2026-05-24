@@ -9,29 +9,31 @@
  * aggregate — NEVER the window-function equivalents (which cannot be combined
  * with `GROUP BY`).
  *
+ * Values arrive pre-quoted from the caller so the subquery composes cleanly
+ * with the surrounding inline-literal SQL (see `spot-sql.ts` header for why
+ * positional params are off-limits — the extract_statements GC leak).
+ *
  * Used by:
  *   - `enriched-sql.ts::buildReadEnrichedSQL` when `includeOhlcv=true`
  */
 
 export interface RthWindowOpts {
-  /** Index of the positional placeholder bound to the ticker (e.g. 1 → $1). */
-  tickerParamIdx: number;
-  /** Index of the placeholder bound to the `from` date. */
-  fromParamIdx: number;
-  /** Index of the placeholder bound to the `to` date. */
-  toParamIdx: number;
+  /** SQL-literal expression for the ticker (e.g. `'SPX'`). */
+  tickerLit: string;
+  /** SQL-literal expression for the `from` date (e.g. `'2025-01-01'`). */
+  fromLit: string;
+  /** SQL-literal expression for the `to` date (e.g. `'2025-01-31'`). */
+  toLit: string;
 }
 
 /**
  * Emit a derived-table expression that produces daily OHLCV rows by aggregating
- * minute bars in `market.spot` within the RTH window.
- *
- * The caller supplies the positional `$N` indices so the subquery can share the
- * same parameters as the surrounding query (avoiding duplicate bindings when
- * embedded in, e.g., `buildReadEnrichedSQL`).
+ * minute bars in `market.spot` within the RTH window. Inputs are pre-escaped
+ * SQL literals so the subquery embeds directly inside a larger inline-literal
+ * SQL statement (no positional params anywhere in the pipeline).
  */
 export function rthDailyAggregateSubquery(opts: RthWindowOpts): string {
-  const { tickerParamIdx, fromParamIdx, toParamIdx } = opts;
+  const { tickerLit, fromLit, toLit } = opts;
   return `(
     SELECT ticker, date,
            first(open  ORDER BY time) AS open,
@@ -39,8 +41,8 @@ export function rthDailyAggregateSubquery(opts: RthWindowOpts): string {
            min(low)                   AS low,
            last(close  ORDER BY time) AS close
     FROM market.spot
-    WHERE ticker = $${tickerParamIdx}
-      AND date >= $${fromParamIdx} AND date <= $${toParamIdx}
+    WHERE ticker = ${tickerLit}
+      AND date >= ${fromLit} AND date <= ${toLit}
       AND time >= '09:30' AND time <= '16:00'
       -- Defense-in-depth: drop minute bars with zero/null OHLC before
       -- aggregating. Mirrors the same guard on market.spot_daily and the

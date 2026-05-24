@@ -45,6 +45,23 @@ describe("MarketIngestor bulk progress reporter", () => {
     conn = await instance.connect();
     await conn.run(`ATTACH ':memory:' AS market`);
     await ensureMarketDataTables(conn);
+    // option_chain is required because enrichQuoteRows reads it for every
+    // (underlying, date) batch — issue #121 removed the .catch(() => [])
+    // swallow that previously hid the missing-table error here. Without
+    // this fixture the per-ticker quote ingest returns "partial".
+    await conn.run(`
+      CREATE TABLE IF NOT EXISTS market.option_chain (
+        underlying      VARCHAR NOT NULL,
+        date            VARCHAR NOT NULL,
+        ticker          VARCHAR NOT NULL,
+        contract_type   VARCHAR NOT NULL,
+        strike          DOUBLE NOT NULL,
+        expiration      VARCHAR NOT NULL,
+        dte             INTEGER NOT NULL,
+        exercise_style  VARCHAR,
+        PRIMARY KEY (underlying, date, ticker)
+      )
+    `);
     await conn.run(`
       CREATE TABLE IF NOT EXISTS market.option_quote_minutes (
         underlying      VARCHAR NOT NULL,

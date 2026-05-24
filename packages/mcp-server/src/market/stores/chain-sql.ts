@@ -2,13 +2,20 @@
  * Pure SQL builder for ChainStore reads (Market Data 3.0 — Phase 2 Wave 1).
  *
  * Option chains are partitioned by (underlying, date). A single `readChain`
- * call targets exactly one partition, so the builder binds two positional
- * parameters: $1=underlying, $2=date.
+ * call targets exactly one partition. Values are inlined as SQL literals
+ * because `runAndReadAll(sql, params)` leaks C++ handles via DuckDB's
+ * `extract_statements` path (see `spot-sql.ts` header for the full writeup
+ * and `feedback_duckdb_extract_statements_leak.md`).
  *
  * Purity contract (CONTEXT.md D-05): no `this`, no `ctx`, no DuckDB value-level
  * imports. Tests in `tests/unit/market/stores/chain-sql.test.ts`.
  */
+import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.js";
 import type { BuiltSQL } from "./spot-sql.js";
+
+function lit(value: string): string {
+  return `'${escapeSqlLiteral(value)}'`;
+}
 
 /**
  * Build the `SELECT ... FROM market.option_chain` SQL for a single underlying +
@@ -18,13 +25,12 @@ import type { BuiltSQL } from "./spot-sql.js";
 export function buildReadChainSQL(
   underlying: string,
   date: string,
-): BuiltSQL<[string, string]> {
+): BuiltSQL {
   return {
     sql: `SELECT underlying, date, ticker, contract_type, strike, expiration, dte, exercise_style
           FROM market.option_chain
-          WHERE underlying = $1 AND date = $2
+          WHERE underlying = ${lit(underlying)} AND date = ${lit(date)}
           ORDER BY ticker`,
-    params: [underlying, date],
   };
 }
 
@@ -41,16 +47,15 @@ export function buildReadChainSQL(
 export function buildReadChainDatesSQL(
   underlying: string,
   dates: string[],
-): BuiltSQL<string[]> {
+): BuiltSQL {
   if (dates.length === 0) {
     throw new Error("buildReadChainDatesSQL: dates must not be empty");
   }
-  const placeholders = dates.map((_, i) => `$${i + 2}`).join(", ");
+  const dateList = dates.map(lit).join(", ");
   return {
     sql: `SELECT underlying, date, ticker, contract_type, strike, expiration, dte, exercise_style
           FROM market.option_chain
-          WHERE underlying = $1 AND date IN (${placeholders})
+          WHERE underlying = ${lit(underlying)} AND date IN (${dateList})
           ORDER BY date, ticker`,
-    params: [underlying, ...dates],
   };
 }

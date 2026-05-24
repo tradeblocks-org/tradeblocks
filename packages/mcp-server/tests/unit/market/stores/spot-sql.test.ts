@@ -1,9 +1,15 @@
 /**
  * Unit tests for spot SQL builders (Phase 2 Wave 1 — Plan 02-01).
  *
- * These builders are pure: they emit `{ sql, params }` and never touch a
- * DuckDB connection. Tests therefore exercise string assertions and
- * positional-parameter equality only — no fixture is instantiated.
+ * These builders are pure: they emit `{ sql }` with all values inlined as
+ * SQL literals. Tests therefore exercise literal-presence assertions on the
+ * emitted string — no fixture, no connection.
+ *
+ * Why inline literals: the DuckDB Node-API binding leaks C++ handles on every
+ * `runAndReadAll(sql, params)` call (see `spot-sql.ts` header / project
+ * memory `feedback_duckdb_extract_statements_leak.md`). The builders moved
+ * off positional params on 2026-05-19 (issue #121) to kill the leak at the
+ * source.
  */
 import { describe, it, expect } from "@jest/globals";
 import {
@@ -14,13 +20,17 @@ import {
 
 describe("spot-sql builders", () => {
   describe("buildReadBarsSQL", () => {
-    it("binds ticker/from/to positionally and queries market.spot", () => {
-      const { sql, params } = buildReadBarsSQL("SPX", "2025-01-01", "2025-01-06");
+    it("queries market.spot with inlined ticker/from/to literals", () => {
+      const { sql } = buildReadBarsSQL("SPX", "2025-01-01", "2025-01-06");
       expect(sql).toContain("FROM market.spot");
-      expect(sql).toContain("WHERE ticker = $1");
-      expect(sql).toContain("date >= $2");
-      expect(sql).toContain("date <= $3");
-      expect(params).toEqual(["SPX", "2025-01-01", "2025-01-06"]);
+      expect(sql).toContain("ticker = 'SPX'");
+      expect(sql).toContain("date >= '2025-01-01'");
+      expect(sql).toContain("date <= '2025-01-06'");
+    });
+
+    it("emits no positional placeholders (leak-free runAndReadAll path)", () => {
+      const { sql } = buildReadBarsSQL("SPX", "2025-01-01", "2025-01-06");
+      expect(sql).not.toMatch(/\$\d/);
     });
 
     it("orders results deterministically by (date, time)", () => {
@@ -34,6 +44,12 @@ describe("spot-sql builders", () => {
       for (const col of ["ticker", "date", "time", "open", "high", "low", "close", "bid", "ask"]) {
         expect(sql).toContain(col);
       }
+    });
+
+    it("escapes embedded single quotes in ticker/date inputs", () => {
+      const { sql } = buildReadBarsSQL("SP'X", "2025-01-01", "2025-01-06");
+      expect(sql).toContain("ticker = 'SP''X'");
+      expect(sql).not.toMatch(/\$\d/);
     });
   });
 
@@ -49,35 +65,42 @@ describe("spot-sql builders", () => {
     });
 
     it("groups by ticker/date and filters to the RTH window", () => {
-      const { sql, params } = buildReadDailyBarsSQL("SPX", "2025-01-01", "2025-01-06");
+      const { sql } = buildReadDailyBarsSQL("SPX", "2025-01-01", "2025-01-06");
       expect(sql).toContain("GROUP BY ticker, date");
       expect(sql).toContain("time >= '09:30'");
       expect(sql).toContain("time <= '16:00'");
-      expect(params).toEqual(["SPX", "2025-01-01", "2025-01-06"]);
+      expect(sql).toContain("ticker = 'SPX'");
+      expect(sql).toContain("date >= '2025-01-01'");
+      expect(sql).toContain("date <= '2025-01-06'");
     });
 
     it("queries from market.spot (single source of truth)", () => {
       const { sql } = buildReadDailyBarsSQL("SPX", "2025-01-01", "2025-01-06");
       expect(sql).toContain("FROM market.spot");
     });
+
+    it("emits no positional placeholders (leak-free runAndReadAll path)", () => {
+      const { sql } = buildReadDailyBarsSQL("SPX", "2025-01-01", "2025-01-06");
+      expect(sql).not.toMatch(/\$\d/);
+    });
   });
 
   describe("buildReadRthOpensSQL", () => {
     it("projects date+open aggregate over RTH window", () => {
-      const { sql, params } = buildReadRthOpensSQL("VIX", "2025-01-01", "2025-01-31");
+      const { sql } = buildReadRthOpensSQL("VIX", "2025-01-01", "2025-01-31");
       expect(sql).toContain("first(open ORDER BY time)");
       expect(sql).toContain("FROM market.spot");
       expect(sql).toContain("GROUP BY date");
       expect(sql).toContain("time >= '09:30'");
       expect(sql).toContain("time <= '16:00'");
-      expect(params).toEqual(["VIX", "2025-01-01", "2025-01-31"]);
+      expect(sql).toContain("ticker = 'VIX'");
+      expect(sql).toContain("date >= '2025-01-01'");
+      expect(sql).toContain("date <= '2025-01-31'");
     });
 
-    it("binds positional $1 $2 $3 placeholders", () => {
+    it("emits no positional placeholders (leak-free runAndReadAll path)", () => {
       const { sql } = buildReadRthOpensSQL("VIX", "2025-01-01", "2025-01-31");
-      expect(sql).toContain("$1");
-      expect(sql).toContain("$2");
-      expect(sql).toContain("$3");
+      expect(sql).not.toMatch(/\$\d/);
     });
   });
 });

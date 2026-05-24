@@ -1,4 +1,26 @@
-export type IngestStatus = "ok" | "skipped" | "unsupported" | "error";
+export type IngestStatus = "ok" | "partial" | "skipped" | "unsupported" | "error";
+
+/**
+ * Per-batch failure entry attached to a result when the ingest completed some
+ * batches but logged-and-skipped others. The current producer is
+ * `MarketIngestor.enrichQuoteRows` failures inside the quote-ingest paths:
+ * a transient DuckDB flake or schema mismatch on the enrichment read causes
+ * the affected (underlying, date[, ticker]) batch to be skipped instead of
+ * abandoning the whole ingest (so a long bulk refresh isn't killed by one
+ * bad partition), and the entry surfaces in the result so orchestrators can
+ * distinguish "complete" from "complete with N batches dropped".
+ *
+ * Orchestrated callers MUST treat `status: "partial"` as a non-success
+ * signal — `rowsWritten` undercounts when batches are skipped.
+ */
+export interface IngestSkippedBatch {
+  underlying: string;
+  date: string;
+  /** Set on the per-ticker quote path; absent on the bulk-by-underlying path. */
+  ticker?: string;
+  rows: number;
+  error: string;
+}
 
 export interface IngestResult {
   status: IngestStatus;
@@ -6,6 +28,12 @@ export interface IngestResult {
   dateRange?: { from: string; to: string };
   enrichment?: { from: string; to: string } | null;
   error?: string;
+  /**
+   * Batches that the ingest logged-and-skipped instead of aborting on. Present
+   * only when `status === "partial"`. Empty/undefined for clean runs.
+   * See `IngestSkippedBatch` for the producer surface.
+   */
+  skipped?: IngestSkippedBatch[];
   details?: Record<string, unknown>;
 }
 
@@ -23,7 +51,7 @@ export interface IngestQuotesOptions {
   /**
    * Specific OCC tickers to fetch. Per-ticker provider calls (Massive, or
    * ThetaData single-contract quote). Use when you know the exact contracts
-   * you need (e.g. a backtester trade list).
+   * you need (e.g. a downstream trade list).
    *
    * Mutually exclusive with `underlyings`. Exactly one of the two must be
    * non-empty.
@@ -162,4 +190,11 @@ export interface RefreshResult {
   };
   coverage: Record<string, { totalDates: number; dateRange?: { from: string; to: string } }>;
   errors: string[];
+  /**
+   * Aggregated `skipped` entries pulled up from every `perOperation.*` IngestResult.
+   * Present (possibly empty) on every non-skipped refresh so orchestrators can
+   * inspect partial-batch failures without traversing `perOperation`. When
+   * `status === "partial"`, this array has at least one entry.
+   */
+  skipped?: IngestSkippedBatch[];
 }

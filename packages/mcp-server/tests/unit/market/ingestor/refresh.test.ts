@@ -395,14 +395,115 @@ describe("MarketIngestor.refresh", () => {
     const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
     const row = quotes.get("SPXW260107C04800000")?.[0];
     expect(row).toEqual(expect.objectContaining({
+      bid: 10,
+      ask: 10.5,
+      timestamp: "2026-01-05 09:30",
       greeks_source: "computed",
       greeks_revision: 3,
+      rate_type: "sofr",
+      rate_value: expect.any(Number),
+      gamma_source: "computed_sofr_q0",
     }));
+    expect(row?.rate_value).toBeGreaterThan(0);
+    expect(row?.rate_value).toBeLessThan(0.1);
     expect(row?.delta).not.toBeNull();
     expect(row?.gamma).not.toBeNull();
     expect(row?.theta).not.toBeNull();
     expect(row?.vega).not.toBeNull();
     expect(row?.iv).not.toBeNull();
+  });
+
+  it("logs and skips the batch when enrichQuoteRows reads fail (no silent null-greeks persist)", async () => {
+    const provider: MarketDataProvider = {
+      name: "bulk",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchBulkQuotes: async function* () {
+        yield [
+          { ticker: "SPXW260107C04800000", timestamp: "2026-01-05 09:30", bid: 10.0, ask: 10.5 },
+        ];
+      },
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    // Force the enrichment read to fail. Previously this would be swallowed
+    // by .catch(() => []) in enrichQuoteRows and a row with intact bid/ask
+    // but null greeks would silently persist. The fix surfaces the error:
+    // the batch logs a structured warning and is skipped (no row persisted).
+    const readChainSpy = jest.spyOn(stores.chain, "readChain").mockImplementation(async () => {
+      throw new Error("simulated transient DuckDB flake");
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteUnderlyings: ["SPX"],
+      computeVixContext: false,
+    });
+
+    // Partial-status is the load-bearing signal; warn is supplementary.
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped![0]).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      rows: 1,
+      error: "simulated transient DuckDB flake",
+    }));
+    // Restore the real chain reader so the post-condition read isn't itself broken.
+    readChainSpy.mockRestore();
+    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const row = quotes.get("SPXW260107C04800000")?.[0];
+    // The batch must be skipped — no row with null greeks persisted.
+    expect(row).toBeUndefined();
+    // The structured warn is still emitted for live tail-following.
+    const warnCall = warnSpy.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("enrichQuoteRows failed"),
+    );
+    expect(warnCall).toBeDefined();
+    const ctx = warnCall![1] as Record<string, unknown>;
+    expect(ctx).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      error: "simulated transient DuckDB flake",
+    }));
+    warnSpy.mockRestore();
   });
 
   it("persists provider minute greeks inline when bulk quotes already carry them", async () => {
