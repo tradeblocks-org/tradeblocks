@@ -249,6 +249,45 @@ describe("MarketIngestor.refresh", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("requests minute-resolution spot bars", async () => {
+    // Regression guard: refresh() used to hardcode timespan: "1d" for the
+    // spot ingest, which wrote one daily bar per ticker per date. Every
+    // minute after 09:30 was then left without an underlying-price lookup,
+    // tripping coverage_gap on every option-quote partition. Spot ingest
+    // must always request minute resolution.
+    const calls: Array<{ timespan?: string; multiplier?: number; ticker: string }> = [];
+    const provider: MarketDataProvider = {
+      name: "spy",
+      capabilities: () => ({
+        tradeBars: true, quotes: true, greeks: false,
+        flatFiles: false, bulkByRoot: false, perTicker: true,
+        minuteBars: true, dailyBars: true,
+      }),
+      fetchBars: async (opts) => {
+        calls.push({ timespan: opts.timespan, multiplier: opts.multiplier, ticker: opts.ticker });
+        return [];
+      },
+      fetchOptionSnapshot: async () => emptySnapshot(),
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX", "QQQ"],
+      computeVixContext: false,
+    });
+
+    expect(calls).toEqual([
+      expect.objectContaining({ ticker: "SPX", timespan: "minute", multiplier: 1 }),
+      expect.objectContaining({ ticker: "QQQ", timespan: "minute", multiplier: 1 }),
+    ]);
+  });
+
   it("runs ingestBars per spot ticker and reports per-operation results", async () => {
     const bars: BarRow[] = [
       { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },

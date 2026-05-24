@@ -1103,13 +1103,18 @@ export class MarketIngestor {
     const errors: string[] = [];
 
     // Step 1 — spot ingest per ticker (asOf = from = to).
+    // Always request minute-resolution bars: downstream option-quote enrichment
+    // needs the per-minute underlying price to compute greeks and to align
+    // quote rows. A daily bar (single row at implicit 09:30) leaves every
+    // minute after 09:30 without an underlying-price lookup and trips the
+    // coverage_gap guard for the whole partition.
     const spotResults: IngestResult[] = [];
     for (const ticker of opts.spotTickers) {
       const rawResult = await this.ingestBars({
         tickers: [ticker],
         from: opts.asOf,
         to: opts.asOf,
-        timespan: "1d",
+        timespan: "1m",
         provider: opts.provider,
       });
       const result = await this.applyCoverageFallback("spot", ticker, opts.asOf, rawResult);
