@@ -1,25 +1,24 @@
 /**
- * Market Import Tools (Phase 4 Plan 04-07 — INGEST-01 / D-22 / D-23)
+ * Market Import Tools
  *
  * MCP tools for importing market data into the spot dataset via SpotStore.
- * Daily and date_context outputs are now DERIVED from EnrichedStore.compute()
- * + computeContext() — no more `target_table` branching at the tool surface.
+ * Daily and date_context outputs are derived from EnrichedStore.compute() and
+ * computeContext() — there is no `target_table` branching at the tool surface;
+ * the import always writes to spot, then derives downstream tables.
  *
  * Tools registered:
  *   - import_market_csv    — Import minute bars from CSV → SpotStore.writeBars
  *   - import_from_database — Import minute bars from external DuckDB → SpotStore.writeBars
  *
- * Lifecycle (Pitfall 9 — preserved exactly):
+ * RW lifecycle (preserved exactly — DuckDB requires the upgrade for write):
  *   await upgradeToReadWrite(baseDir);
  *   try { ...store writes + enrichment... }
  *   finally { await downgradeToReadOnly(baseDir); }
  *
- * D-22: import_market_csv + import_from_database drop `target_table` from their
- *       Zod schemas. Hard remove, no deprecation shim.
- * D-23: After every successful SpotStore.writeBars(), the tool handler calls
- *       stores.enriched.compute(ticker, minDate, maxDate). For the VIX family
- *       (VIX, VIX9D, VIX3M) it also calls stores.enriched.computeContext(...)
- *       to refresh the cross-ticker date_context output.
+ * After every successful SpotStore.writeBars(), the tool handler calls
+ * stores.enriched.compute(ticker, minDate, maxDate). For the VIX family
+ * (VIX, VIX9D, VIX3M) it also calls stores.enriched.computeContext(...) to
+ * refresh the cross-ticker date_context output.
  */
 
 import { z } from "zod";
@@ -37,7 +36,7 @@ import type { MarketStores } from "../market/stores/index.js";
 import type { BarRow } from "../market/stores/types.js";
 
 // ---------------------------------------------------------------------------
-// VIX family — used to gate stores.enriched.computeContext (D-23)
+// VIX family — used to gate stores.enriched.computeContext after a write
 // ---------------------------------------------------------------------------
 
 const VIX_FAMILY = new Set(["VIX", "VIX9D", "VIX3M"]);
@@ -59,7 +58,7 @@ function groupBarsByDate(bars: BarRow[]): Map<string, BarRow[]> {
 
 /**
  * Run `stores.enriched.compute(ticker, ...)` and (for VIX-family tickers)
- * `stores.enriched.computeContext(...)` AFTER a spot write completes (D-23).
+ * `stores.enriched.computeContext(...)` after a spot write completes.
  *
  * Loud failure: if compute() throws, the caller surfaces an error response
  * (so the user knows the spot write succeeded but the enrichment did not).
@@ -78,8 +77,8 @@ async function autoEnrichAfterWrite(
   if (VIX_FAMILY.has(ticker)) {
     await stores.enriched.computeContext(fromDate, toDate);
   }
-  // D-23: best-effort calendar-date count (one date per partition).
-  // We don't re-walk the calendar here — just span size.
+  // Best-effort calendar-date count (one date per partition). We don't
+  // re-walk the calendar here — just report the span size.
   return { datesEnriched: 1, from: fromDate, to: toDate };
 }
 
@@ -88,7 +87,7 @@ async function autoEnrichAfterWrite(
  *
  * @param server  - McpServer instance to register tools on
  * @param baseDir - Base data directory (passed to connection helpers)
- * @param stores  - MarketStores bundle (Phase 4 CONSUMER-01 — third positional arg)
+ * @param stores  - MarketStores bundle (used for spot writes and auto-enrichment)
  */
 export function registerMarketImportTools(
   server: McpServer,
@@ -96,7 +95,7 @@ export function registerMarketImportTools(
   stores: MarketStores,
 ): void {
   // ---------------------------------------------------------------------------
-  // Tool: import_market_csv (INGEST-01 — no target_table; auto-enrich; D-22/D-23)
+  // Tool: import_market_csv — write spot bars and auto-derive enrichment
   // ---------------------------------------------------------------------------
   server.registerTool(
     "import_market_csv",
@@ -139,8 +138,9 @@ export function registerMarketImportTools(
       }),
     },
     async ({ file_path, ticker, column_mapping, dry_run, skip_enrichment }) => {
-      // V5 input-validation control — preserve existing path resolution from
-      // the legacy handler so threat T-04-07-01 mitigation stays intact.
+      // Path normalization: expand `~` and resolve to absolute form before
+      // handing to the CSV parser. Keeps untrusted relative inputs out of
+      // the working-directory namespace.
       let resolvedPath = file_path;
       if (resolvedPath.startsWith("~")) {
         resolvedPath = path.join(os.homedir(), resolvedPath.slice(1));
@@ -186,7 +186,7 @@ export function registerMarketImportTools(
           rowsWritten += dayBars.length;
         }
 
-        // 3) Auto-enrich (D-23) — compose at handler level, NOT inside writeBars.
+        // 3) Auto-enrich — composed at the handler level, not inside writeBars.
         const enrichment = await autoEnrichAfterWrite(
           stores,
           normalizedTicker,
@@ -226,7 +226,7 @@ export function registerMarketImportTools(
   );
 
   // ---------------------------------------------------------------------------
-  // Tool: import_from_database (INGEST-01 — no target_table; auto-enrich; D-22/D-23)
+  // Tool: import_from_database — write spot bars from external DuckDB query
   // ---------------------------------------------------------------------------
   server.registerTool(
     "import_from_database",
@@ -271,8 +271,9 @@ export function registerMarketImportTools(
       }),
     },
     async ({ db_path, query, ticker, column_mapping, dry_run, skip_enrichment }) => {
-      // V5 input-validation control — preserve existing dbPath resolution from
-      // the legacy handler so threat T-04-07-02 mitigation stays intact.
+      // Path normalization: expand `~` and resolve to absolute form before
+      // handing to DuckDB ATTACH. Keeps untrusted relative inputs out of
+      // the working-directory namespace.
       let resolvedDbPath = db_path;
       if (resolvedDbPath.startsWith("~")) {
         resolvedDbPath = path.join(os.homedir(), resolvedDbPath.slice(1));
@@ -285,8 +286,8 @@ export function registerMarketImportTools(
       await upgradeToReadWrite(baseDir);
       try {
         // 1) ATTACH the external DB on the analytics conn so the user's query
-        //    can reference `ext_import_source.<table>`. Preserves the legacy
-        //    contract — query stability across the INGEST-01 migration.
+        //    can reference `ext_import_source.<table>`. The fixed alias
+        //    keeps caller queries portable across imports.
         const conn = await getConnection(baseDir);
         const escapedDbPath = resolvedDbPath.replace(/'/g, "''");
         await conn.run(`ATTACH '${escapedDbPath}' AS ${EXT_ALIAS} (READ_ONLY)`);

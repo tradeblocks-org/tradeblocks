@@ -173,7 +173,7 @@ export function assessPrecision(
 export async function handleGetGreeksAttribution(
   params: z.infer<typeof getGreeksAttributionSchema>,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<AttributionSummaryResult | AttributionInstanceResult> {
   const { block_id, mode, trade_index, skip_quotes, detailed, strategy } = params;
@@ -194,7 +194,7 @@ async function handleSummaryMode(
   detailed: boolean,
   strategy: string | undefined,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded for Wave 2+ handler-body rewrite.
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<AttributionSummaryResult> {
   const conn = injectedConn ?? await getConnection(baseDir);
@@ -340,7 +340,7 @@ async function handleInstanceMode(
   skip_quotes: boolean,
   detailed: boolean,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded for Wave 2+ handler-body rewrite.
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<AttributionInstanceResult> {
   const conn = injectedConn ?? await getConnection(baseDir);
@@ -378,15 +378,11 @@ async function handleInstanceMode(
   // Build per-step entries from factor step arrays
   const stepCount = result.stepCount;
 
-  // Phase 4 Plan 04-04: weekday iteration replaces the prior raw SQL
-  // `SELECT DISTINCT date FROM market.spot WHERE date BETWEEN ...`.
-  // The handler uses this purely to map step indices → dates, and the
-  // original query returned every trading day with intraday coverage (i.e.
-  // every weekday in the range — SPX has dense coverage). `tradingDays()`
-  // from flatfile-importer is a pure Mon-Fri iterator that delivers the
-  // same set for the 2023+ range this handler operates over.
-  // Note: `conn` is still used above for the trade-row fetch; only this
-  // market-data probe migrated.
+  // Map step indices → dates via a pure Mon-Fri trading-day iterator.
+  // Replays operate over date ranges with dense intraday coverage, so the
+  // weekday iteration matches the set of dates the decomposition produced
+  // (one step per trading day). `conn` is still used above for the trade
+  // row fetch — only the date probe is store-free.
   const tradingDates = tradingDays(tradeDate, closeDate);
   const getStepDate = (i: number): string =>
     i < tradingDates.length ? tradingDates[i] : `day-${i}`;
@@ -468,7 +464,7 @@ function getStepValue(
 export function registerGreeksAttributionTools(
   server: McpServer,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
+  stores: MarketStores,
 ): void {
   server.registerTool(
     "get_greeks_attribution",

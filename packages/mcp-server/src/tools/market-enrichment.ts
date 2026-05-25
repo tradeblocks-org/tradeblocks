@@ -2,23 +2,26 @@
  * Market Enrichment Tools
  *
  * MCP tool for computing technical indicator fields from raw OHLCV data in
- * market.spot_daily (including VIX tickers) and writing derived fields to market.enriched_context.
+ * market.spot_daily (including VIX tickers) and writing derived fields to
+ * market.enriched + market.enriched_context.
  *
  * Tools registered:
- *   - enrich_market_data — Run three-tier enrichment pipeline for a ticker
+ *   - enrich_market_data — Run the three-tier enrichment pipeline for a ticker
  *
  * Follows the RW lifecycle:
  *   upgradeToReadWrite → enrichment → downgradeToReadOnly (in finally)
  *
- * Plan 04-05: handler now delegates to `stores.enriched.compute` (and
- * `stores.enriched.computeContext` for the VIX family) instead of calling
- * the enrichment runner directly. The store layer injects the JSON-backed
- * watermark IO (Phase 2 D-20) — no `market._sync_metadata` SQL is touched
- * from this file any more.
+ * Handler delegates to `stores.enriched.compute` (and
+ * `stores.enriched.computeContext` for the VIX family) — the store layer
+ * owns watermark IO via the JSON adapters in db/json-adapters.ts; no
+ * `market._sync_metadata` SQL is touched from this file.
  *
- * Tier 1: Computes ~20 fields from market.spot_daily OHLCV (RSI, ATR, EMA, SMA, realized vol, etc.) into market.enriched
- * Tier 2: Computes VIX IVR/IVP in market.enriched and derived fields (Vol_Regime, Term_Structure_State) in market.enriched_context
- * Tier 3: Intraday timing fields (High_Time, Low_Time, Reversal_Type) — always skipped until intraday CSV format is updated
+ * Tier 1: Computes ~20 fields from market.spot_daily OHLCV (RSI, ATR, EMA,
+ *   SMA, realized vol, etc.) into market.enriched.
+ * Tier 2: Computes VIX IVR/IVP in market.enriched and derived fields
+ *   (Vol_Regime, Term_Structure_State) in market.enriched_context.
+ * Tier 3: Intraday timing fields (High_Time, Low_Time, Reversal_Type) —
+ *   always skipped until intraday CSV format is updated.
  */
 
 import { z } from "zod";
@@ -34,7 +37,8 @@ const VIX_FAMILY = new Set(["VIX", "VIX9D", "VIX3M"]);
  *
  * @param server  - McpServer instance to register tools on
  * @param baseDir - Base data directory (used by the RW upgrade lifecycle)
- * @param stores  - MarketStores bundle (Phase 4 CONSUMER-01 — handler delegates to stores.enriched.{compute, computeContext})
+ * @param stores  - MarketStores bundle; the handler delegates to
+ *                  stores.enriched.{compute, computeContext}
  */
 export function registerMarketEnrichmentTools(
   server: McpServer,
@@ -63,7 +67,7 @@ export function registerMarketEnrichmentTools(
           .boolean()
           .default(false)
           .describe(
-            "(Currently a no-op against the store-backed compute path — see plan 04-05 SUMMARY.) " +
+            "Currently a no-op against the store-backed compute path. " +
             "Originally cleared the enriched_through watermark and recomputed all rows from scratch."
           ),
       }),
@@ -72,18 +76,19 @@ export function registerMarketEnrichmentTools(
       await upgradeToReadWrite(baseDir);
       try {
         const upperTicker = ticker.toUpperCase();
-        // Plan 04-05: from/to are informational only — ParquetEnrichedStore.compute
-        // ignores them and uses the watermark + 200-day lookback (D-14). Pass
-        // empty strings to satisfy the typed signature; downstream math is unchanged.
+        // from/to are informational only — ParquetEnrichedStore.compute
+        // ignores them and uses the persisted watermark + 200-day lookback
+        // window. Pass empty strings to satisfy the typed signature;
+        // downstream math is unchanged.
         await stores.enriched.compute(upperTicker, "", "");
         let contextComputed = false;
         if (VIX_FAMILY.has(upperTicker)) {
           await stores.enriched.computeContext("", "");
           contextComputed = true;
         }
-        // WR-07: force_full is a documented no-op against the store-backed compute
-        // path. Surface it explicitly in the response so MCP users see that the
-        // flag was ignored (silent acceptance was misleading).
+        // force_full is a documented no-op against the store-backed compute
+        // path. Surface it explicitly in the response so MCP users see that
+        // the flag was ignored (silent acceptance was misleading).
         const warning = force_full
           ? "force_full=true was ignored: the store-backed compute path is watermark-driven. To fully reseed, rerun import_market_csv with reset semantics, then re-run this tool."
           : undefined;

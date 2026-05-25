@@ -150,7 +150,7 @@ export function resolveOODateRange(
 export async function handleReplayTrade(
   params: z.infer<typeof replayTradeSchema>,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 Plan 04-02 — used for underlying spot reads + VIX IVP via EnrichedStore. Option-leg paths migrated by plan 04-04.
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection
 ): Promise<ReplayResult> {
   const {
@@ -273,12 +273,13 @@ export async function handleReplayTrade(
 
   // ----- Fetch minute quotes for each option leg via QuoteStore -----
   // Adapt QuoteRow → BarRow with mid = (bid+ask)/2 as open/high/low/close
-  // (D-14 mid-price contract).
+  // (mid-price is the canonical mark for option-leg pricing).
   //
-  // Pitfall — group OCC tickers by underlying before each readQuotes call
-  // because QuoteStore enforces a single-underlying invariant per call.
-  // Typical replays have all legs under one underlying (single SPX trade);
-  // multi-underlying replays issue one readQuotes per underlying.
+  // Group OCC tickers by underlying before each readQuotes call: the store
+  // enforces a single-underlying invariant per call so partitioned reads
+  // can be served from one parquet partition root. Typical replays have
+  // all legs under one underlying (single SPX trade); multi-underlying
+  // replays issue one readQuotes per underlying.
   //
   // Fallback root logic (SPX→SPXW etc.) is implicit: the QuoteStore's
   // tickers.resolve(extractRoot(...)) maps both SPX and SPXW to underlying
@@ -344,9 +345,10 @@ export async function handleReplayTrade(
   const underlyingTicker = REVERSE_ROOT_MAP[rawRoot] ?? rawRoot;
   const dividendYield = DIVIDEND_YIELDS[rawRoot] ?? 0;
 
-  // Phase 4 Plan 04-02: read underlying minute bars via SpotStore. Falls back
-  // to the daily aggregate (readDailyBars) when minute bars are absent — that
-  // replaces the prior direct daily-table SELECT.
+  // Read underlying minute bars via SpotStore, falling back to the daily
+  // aggregate (readDailyBars) when minute bars are absent. The daily
+  // fallback keeps greeks computable on dates with sparse intraday
+  // coverage.
   let underlyingBars: BarRow[] = await stores.spot.readBars(
     underlyingTicker,
     open_date!,
@@ -387,13 +389,16 @@ export async function handleReplayTrade(
     underlyingPrices.set(ts, markPrice(b));
   }
 
-  // Build sorted timestamps array for tolerant nearest-timestamp lookup (D-07/D-08)
+  // Build sorted timestamps for tolerant nearest-timestamp lookup: when a
+  // leg's quote timestamp doesn't have an exact underlying-price match
+  // (e.g. one source skipped a minute), greeks computation falls back to
+  // the nearest underlying timestamp within tolerance.
   const sortedTimestamps = Array.from(underlyingPrices.keys())
     .filter(k => k.includes(' '))  // Only intraday timestamps, not date-only keys
     .sort();
 
-  // Phase 4 Plan 04-02: VIX IVP lookup via EnrichedStore.read (replaces the
-  // prior raw `SELECT date, ivp ... WHERE ticker = 'VIX'` query).
+  // VIX IVP lookup via EnrichedStore.read — used as an optional input to
+  // the greeks model when implied-vol percentile context is available.
   let ivpByDate: Map<string, number> | undefined;
   try {
     const vixEnriched = await stores.enriched.read({
@@ -444,7 +449,9 @@ export async function handleReplayTrade(
     computeReplayMfeMae(fullPath);
   let totalPnl = fullPath.length > 0 ? fullPath[fullPath.length - 1].strategyPnl : 0;
 
-  // Compute greeks warning (D-12): warn when >50% of leg-timestamps have null greeks
+  // Surface a warning when >50% of leg-timestamps have null greeks — the
+  // most common cause is sparse IV data or 0DTE legs falling outside the
+  // pricing model's valid range.
   let greeksNullCount = 0;
   let greeksTotalCount = 0;
   for (const point of fullPath) {
@@ -518,7 +525,7 @@ export async function handleReplayTrade(
 export function registerReplayTools(
   server: McpServer,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 Plan 04-02 — used by handleReplayTrade for SpotStore underlying reads + EnrichedStore VIX IVP.
+  stores: MarketStores,
 ): void {
   server.registerTool(
     "replay_trade",
