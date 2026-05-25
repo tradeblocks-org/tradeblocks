@@ -1,10 +1,10 @@
 /**
- * Market Data Importer — Stores-based path (Phase 4 INGEST-01 / D-22 / D-23).
+ * Market Data Importer — stores-based ingest surface.
  *
- * This file is the new ingest surface introduced in Plan 04-07. Every spot-bar
- * write flows through `SpotStore.writeBars(ticker, date, BarRow[])`. The
- * `target_table` parameter is GONE — daily / date_context outputs are derived
- * by `EnrichedStore.compute()` + `computeContext()` invoked at the tool-handler
+ * Every spot-bar write flows through `SpotStore.writeBars(ticker, date,
+ * BarRow[])`. The `target_table` parameter from the earlier ingest API has
+ * been removed — daily / date_context outputs are derived by
+ * `EnrichedStore.compute()` + `computeContext()` invoked at the tool-handler
  * layer (see `tools/market-imports.ts`).
  *
  * Exports:
@@ -322,7 +322,7 @@ export function parseDatabaseRowsToBars(
  * Import a CSV file by parsing it into BarRow[] and writing per-date
  * partitions through `stores.spot.writeBars`. Pure orchestration — does NOT
  * call `EnrichedStore.compute()`; the tool-handler layer composes enrichment
- * after the spot write per D-23.
+ * after the spot write.
  */
 export async function importMarketCsvFile(
   stores: MarketStores,

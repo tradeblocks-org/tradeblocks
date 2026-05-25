@@ -1,17 +1,17 @@
 /**
- * sample-date-selector.ts — deterministic sample-date generator for Phase 5
- * enrichment verification.
+ * sample-date-selector.ts — deterministic sample-date generator for
+ * enrichment-rebuild verification.
  *
- * Phase 5 Wave 0 / VALIDATION task 5-00-01. Produces a reproducible list of
- * ~15–20 dates per D-08 sizing. The same seed always yields the same sample
- * so re-runs of Wave C verification produce comparable drift reports.
+ * Produces a reproducible list of ~15–20 dates (sized for fast verification
+ * runs across the supported tickers). The same seed always yields the same
+ * sample so re-runs of the verification harness produce comparable drift
+ * reports.
+ *
+ * Pattern: known-event dates + structural calendar-edge dates + N
+ * pseudo-random weekday draws from a Mulberry32 PRNG.
  *
  * Pure module — no filesystem, no DuckDB, no provider imports. Safe to import
  * from unit tests, operator scripts, and verification harnesses alike.
- *
- * See .planning/phases/05-spot-backfill-enrichment-rebuild/05-RESEARCH.md
- * §Example 2 for the full pattern (Mulberry32 PRNG + known-event + structural +
- * random).
  */
 
 /**
@@ -25,15 +25,16 @@ export interface SampleDate {
 }
 
 /**
- * Phase 5 PRNG seed. Pinned to the Phase 5 kickoff date (2026-04-18 → 20260418)
- * so every invocation of `selectVerificationSampleDates` with default args
- * yields the committed fixture.
+ * PRNG seed. Pinned to a fixed integer so every invocation of
+ * `selectVerificationSampleDates` with default args yields the committed
+ * fixture.
  */
 export const PHASE_5_FIXTURE_SEED = 20260418;
 
 /**
  * Known-event dates — always included in the sample regardless of seed.
- * See 05-CONTEXT.md §Enrichment Verification D-08.
+ * Each is a real high-volatility or calendar-significant trading day used
+ * to stress the enrichment math.
  */
 export const PHASE_5_KNOWN_EVENTS: SampleDate[] = [
   { date: "2024-08-05", category: "known_event", note: "VIX spike, ~65% gap, Japan carry unwind" },
@@ -99,7 +100,7 @@ function enumerateWeekdays(fromDate: string, toDate: string): string[] {
  *
  * Same `(fromDate, toDate, seed, randomCount)` → same output, always.
  *
- * @param fromDate - inclusive lower bound, default Phase 5 floor 2022-01-01
+ * @param fromDate - inclusive lower bound, default 2022-01-01
  * @param toDate - inclusive upper bound, typically "yesterday" at call time
  * @param seed - Mulberry32 PRNG seed, default PHASE_5_FIXTURE_SEED
  * @param randomCount - number of random dates to draw (default 9 → total ~18)

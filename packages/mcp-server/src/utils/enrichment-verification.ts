@@ -1,15 +1,17 @@
 /**
- * enrichment-verification.ts — pure diff helper for Phase 5 Wave C.
+ * enrichment-verification.ts — pure diff helper for enrichment-rebuild
+ * verification.
  *
- * Compares two enriched rows (old from legacy `daily.parquet` / `date_context`,
- * new from rebuilt `market.enriched` / `market.enriched_context`) with per-field
- * tolerance rules and returns a structured diff — not a boolean. The Wave C
- * verification harness consumes the diff, aggregates across the ~15–20 sample
- * dates per ticker, and emits `05-verification-report.{md,json}`.
+ * Compares two enriched rows (old from the legacy
+ * `daily.parquet` / `date_context` files, new from the rebuilt
+ * `market.enriched` / `market.enriched_context` views) with per-field
+ * tolerance rules and returns a structured diff — not a boolean. The
+ * verification harness consumes the diff, aggregates across ~15–20 sample
+ * dates per ticker, and emits a report (markdown + JSON).
  *
  * Pure module — no filesystem, no DuckDB, no provider imports.
  *
- * Tolerance rules (CONTEXT.md §D-09):
+ * Tolerance rules:
  *   - DOUBLE: `|a - b| <= 1e-9` (boundary INCLUSIVE); NaN-vs-NaN passes;
  *             NaN-vs-non-NaN fails.
  *   - INTEGER: strict `Number(a) === Number(b)`.
@@ -17,13 +19,14 @@
  *   - null vs null / undefined vs undefined → pass.
  *   - null vs value (or undefined vs value) → fail.
  *
- * Failure aggregation (D-11): `compareRow(...).anyFailure === true` whenever
- * any field in the row failed its tolerance test. The Wave D deletion commit
- * is blocked unless every compared row returns `anyFailure === false`.
+ * Failure aggregation: `compareRow(...).anyFailure === true` whenever any
+ * field in the row failed its tolerance test. The deletion of the legacy
+ * enriched files is gated on every compared row returning
+ * `anyFailure === false`.
  */
 
 /**
- * Tolerance epsilon for DOUBLE fields (D-09). Locked at 1e-9 — the enrichment
+ * Tolerance epsilon for DOUBLE fields. Locked at 1e-9 — the enrichment
  * math is deterministic on identical OHLCV input, so anything above machine
  * precision is a real semantic change.
  */
@@ -34,10 +37,10 @@ export type FieldType = "double" | "integer" | "varchar";
 
 /**
  * Per-field type classification for rows materialized from
- * `market.enriched` (ticker-first enriched store, Phase 2 D-14/D-15).
+ * `market.enriched` (the ticker-first enriched store).
  *
- * Source: market-enricher.ts::DAILY_ENRICHMENT_COLUMNS (lines 578-611) + D-09
- * classification.
+ * Source: market-enricher.ts::DAILY_ENRICHMENT_COLUMNS + the tolerance-rule
+ * classification documented in the file header.
  *
  * INTEGER fields (exact match): Gap_Filled, Consecutive_Days, High_Before_Low,
  * Reversal_Type, Day_of_Week, Month, Is_Opex.
@@ -86,7 +89,7 @@ export const ENRICHED_FIELD_TYPES: Record<string, FieldType> = {
 
 /**
  * Per-field type classification for rows materialized from
- * `market.enriched_context` (global cross-ticker context, Phase 2 D-14).
+ * `market.enriched_context` (the global cross-ticker context view).
  *
  * Vol_Regime / Term_Structure_State are integers (classification codes per
  * classifyVolRegime / classifyTermStructure).
@@ -119,7 +122,8 @@ export interface FieldDiff {
 
 /**
  * Row-level diff with a precomputed `anyFailure` flag for fast aggregation
- * across many sample rows (D-11: failure blocks the Wave D deletion commit).
+ * across many sample rows — any failure blocks deletion of the legacy
+ * enriched files.
  */
 export interface RowDiff {
   ticker: string;
@@ -209,9 +213,9 @@ export function compareFields(
  * `kind: 'enriched'` uses `ENRICHED_FIELD_TYPES` (per-ticker enriched row).
  * `kind: 'context'` uses `CONTEXT_FIELD_TYPES` (global cross-ticker context row).
  *
- * The resulting `RowDiff.anyFailure` is the aggregation signal Wave D's
- * deletion gate reads — single `true` anywhere in the sample blocks deletion
- * (D-11).
+ * The resulting `RowDiff.anyFailure` is the aggregation signal the deletion
+ * gate reads — a single `true` anywhere in the sample blocks deletion of
+ * the legacy enriched files.
  */
 export function compareRow(
   oldRow: Record<string, unknown>,

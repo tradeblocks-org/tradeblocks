@@ -6,12 +6,10 @@
  * 2. Sync metadata — per-block .sync-meta.json files
  * 3. Market import metadata — single aggregate file
  * 4. Flat import log — single aggregate file
- * 5. Enrichment watermarks — single aggregate file (Market Data 3.0 Phase 2)
+ * 5. Enrichment watermarks — single aggregate file
  *
- * All adapters use json-store.ts for atomic write-then-rename operations (D-03).
- * File paths follow REQUIREMENTS.md layout (D-02).
- *
- * Strategy definitions (backtest-only) are in json-adapters.ext.ts (D-04).
+ * All adapters use json-store.ts for atomic write-then-rename operations.
+ * File paths follow the canonical data-root layout.
  */
 
 import * as fs from "fs/promises";
@@ -407,13 +405,13 @@ export async function upsertFlatImportLogJson(
 }
 
 // =============================================================================
-// 5. Enrichment Watermarks Adapter (Market Data 3.0 — Phase 2 D-18 through D-21)
+// 5. Enrichment Watermarks Adapter
 //    Path: {dataRoot}/market-meta/enrichment-watermarks.json
 //
 //    Tracks per-ticker `enriched_through` watermark for the market enricher.
-//    Replaces `market._sync_metadata.enriched_through` reads/writes (Phase 5
-//    drops the column). Backend-independent per D-19 — the same JSON file is
-//    written whether Parquet mode is true or false.
+//    Replaces the legacy `market._sync_metadata.enriched_through` SQL
+//    reads/writes. Backend-independent — the same JSON file is written
+//    whether Parquet mode is true or false.
 //
 //    Storage shape:
 //      {
@@ -440,7 +438,7 @@ const TickerEntrySchema = z
 
 export const EnrichmentWatermarksSchema = z.object({
   version: z.literal(1),
-  // Defense-in-depth ticker whitelist (T-2-03): mirrors the TICKER_RE used by
+  // Defense-in-depth ticker whitelist: mirrors the TICKER_RE used by
   // src/market/tickers/schemas.ts and rejects anything not shaped like a ticker.
   watermarks: z.record(z.string().regex(/^[A-Z0-9._-]+$/), TickerEntrySchema),
 });
@@ -455,10 +453,10 @@ function watermarksFilePath(dataDir: string): string {
 /**
  * Load the enrichment watermarks file.
  *
- * Missing file resolves to an empty structure (D-18: absent means "nothing
- * enriched yet", not an error). Malformed JSON or schema violations throw a
- * clear error per D-21 — we never silently reset to empty, which would lose
- * data invisibly.
+ * Missing file resolves to an empty structure — absent means "nothing
+ * enriched yet", not an error. Malformed JSON or schema violations throw a
+ * clear error; we never silently reset to empty, which would lose data
+ * invisibly.
  */
 export async function loadEnrichmentWatermarks(
   dataDir: string,
@@ -495,10 +493,10 @@ export async function getEnrichedThrough(
  * Preserves other tickers' entries and any passthrough fields (e.g.,
  * `wilder_state`) already stored on the target ticker.
  *
- * Pitfall 5 note: atomic at the FS level (tmp+rename via writeJsonFile); this
- * is NOT read-modify-write atomic at the application level. Serial callers
- * (the current enricher flow) are safe. If concurrent enrichers of different
- * tickers become real, add an async-mutex in a follow-up plan.
+ * Concurrency note: atomic at the FS level (tmp+rename via writeJsonFile);
+ * this is NOT read-modify-write atomic at the application level. Serial
+ * callers (the current enricher flow) are safe. If concurrent enrichers of
+ * different tickers become real, add an async-mutex.
  */
 export async function upsertEnrichedThrough(
   ticker: string,

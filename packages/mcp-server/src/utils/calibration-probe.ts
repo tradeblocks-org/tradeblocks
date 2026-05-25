@@ -1,22 +1,20 @@
 /**
- * calibration-probe.ts — Wave 0 operator helper that de-risks RESEARCH Pitfall 1
- * (provider-refetch drift vs. the 1e-9 D-09 tolerance).
+ * calibration-probe.ts — operator helper that de-risks provider-refetch drift
+ * against the 1e-9 tolerance used by the enrichment verifier.
  *
- * Invoke BEFORE starting Plan 05-01 (Wave A spot backfill). The probe fetches
- * minute bars for a set of sample dates from the active provider and compares
- * their close prices against whatever is already in `market.spot` for the
- * same (ticker, date). The operator reads the returned `maxCloseDelta` and
- * decides:
+ * Invoke before starting a spot-bar backfill. The probe fetches minute bars
+ * for a set of sample dates from the active provider and compares their close
+ * prices against whatever is already in `market.spot` for the same
+ * (ticker, date). The operator reads the returned `maxCloseDelta` and decides:
  *
- *   maxCloseDelta < 1e-6      → proceed; D-09 is achievable as stated.
- *   1e-6 ≤ delta < 1e-3       → proceed only with Wave C baseline shift OR
- *                               `05-DRIFT-ACK.md` raising tolerance.
- *   maxCloseDelta ≥ 1e-3      → escalate to user; D-09 unachievable without
- *                               design change.
+ *   maxCloseDelta < 1e-6      → proceed; 1e-9 tolerance is achievable.
+ *   1e-6 ≤ delta < 1e-3       → proceed only with an explicit tolerance bump
+ *                               or a documented baseline shift.
+ *   maxCloseDelta ≥ 1e-3      → escalate; the tolerance is unachievable
+ *                               without a design change.
  *
- * This module is manual-only per VALIDATION.md §Manual-Only. It has no unit
- * test — it is purposefully side-effectful (opens a live DuckDB, calls the
- * singleton provider) and exists for operator inspection.
+ * Manual-only — purposefully side-effectful (opens a live DuckDB, calls the
+ * singleton provider). No unit test; exists for operator inspection.
  */
 import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
@@ -79,8 +77,8 @@ export async function calibrateProviderFetch(
         assetClass: "index",
       });
 
-      // Phase 6 Wave D: legacy minute-bar view rewritten to market.spot
-      // (v3.0 canonical minute-bar view; schema unchanged).
+      // Canonical minute-bar view is market.spot — same schema as the
+      // earlier intraday view it replaced.
       const oldReader = await conn.runAndReadAll(
         `SELECT time, close FROM market.spot WHERE ticker = $1 AND date = $2 ORDER BY time`,
         [ticker, date],

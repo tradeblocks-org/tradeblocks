@@ -463,7 +463,7 @@ export function classifyTermStructure(
  * Implied Volatility Rank (IVR) over a rolling window.
  * IVR[i] = (current - min) / (max - min) * 100
  * Returns array same length as input; first `period-1` entries are NaN.
- * Per D-10: Shows where current value sits in its 252-day range.
+ * Shows where the current value sits in its 252-day range.
  * When range is 0 (all values identical), returns 50 (middle).
  */
 export function computeIVR(values: number[], period = 252): number[] {
@@ -485,7 +485,7 @@ export function computeIVR(values: number[], period = 252): number[] {
  * Implied Volatility Percentile (IVP) over a rolling window.
  * IVP[i] = count(prior 251 days where value <= current) / 251 * 100
  * Returns array same length as input; first `period-1` entries are NaN.
- * Per D-10: Shows what percentage of past year was at or below current.
+ * Shows what percentage of the past year was at or below the current value.
  * Note: divides by (period - 1) = 251 because we compare against prior days only.
  */
 export function computeIVP(values: number[], period = 252): number[] {
@@ -513,19 +513,18 @@ export interface EnrichmentOptions {
 }
 
 /**
- * IO abstraction for runEnrichment (Market Data 3.0 — Plan 02-04, D-14 / D-15).
+ * IO abstraction for runEnrichment.
  *
  * When provided, routes specific IO operations through injected stores:
  *   - spotStore:      Tier 2 VIX RTH open, Tier 3 hasData check, Tier 3 minute bars
- *   - watermarkStore: read/write the enrichment watermark via the JSON adapter (D-20)
+ *   - watermarkStore: read/write the enrichment watermark via the JSON adapter
  *
- * Plan 04-05: the legacy SQL watermark path on the metadata sync table is GONE.
- * When `io.watermarkStore` is not supplied, the runner falls back to
+ * The legacy SQL watermark path on the metadata sync table is gone. When
+ * `io.watermarkStore` is not supplied, the runner falls back to
  * `getEnrichedThrough` / `upsertEnrichedThrough` (the same JSON adapter the
  * store wrappers wire) directly using `opts.dataDir`. The fallback is kept
- * optional to support the few transitional callers (market-importer
- * `triggerEnrichment`) that have not been refactored to construct an IO; plan
- * 04-06 / Phase 5 makes `io` required outright.
+ * optional to support transitional callers (e.g. market-importer
+ * `triggerEnrichment`) that have not been refactored to construct an IO.
  */
 export interface EnrichmentIO {
   spotStore?: SpotStore;
@@ -633,21 +632,23 @@ async function alignDailyWorkingTableColumns(
 /**
  * In Parquet mode, create working temp tables from Parquet files.
  * The enricher operates on these temp tables, then copies back to Parquet.
- * Uses timestamp suffix for uniqueness (no user input in table names per T-02-07).
+ * Uses a timestamp suffix for uniqueness — no user input in table names.
  *
- * Seed source priority (Plan 05-04 — post Wave-D deletion safety):
- *   1. Legacy `daily.parquet` / `date_context.parquet` — pre-deletion path
+ * Seed source priority (in order of preference):
+ *   1. Legacy `daily.parquet` / `date_context.parquet` — the pre-migration
+ *      single-file layout, still supported for data roots that have not yet
+ *      been rebuilt.
  *   2. New `enriched/ticker=*\/data.parquet` + `enriched/context/data.parquet`
- *      — post-deletion fallback. After Plan 05-04 retires daily.parquet, the
- *      working table is seeded from the per-ticker enriched layout (UNION ALL
- *      across the 4 Phase 5 tickers); OHLCV columns are NULL in the seed (the
- *      working table only needs OHLCV for legacy callers without io.spotStore;
- *      Tier 2 with io.spotStore reads VIX OHLCV from a separate temp seeded
- *      from spot/, so SPX historical Return_20D is the only enrichment field
- *      the SPX JOIN actually needs from the working table — and that lives
- *      in enriched/ticker=SPX/data.parquet).
- *   3. Empty fallback (`market.enriched WHERE 1=0`) when neither source exists
- *      — preserves the public-repo / fresh-clone behavior unchanged.
+ *      — the canonical per-ticker enriched layout. The working table is
+ *      seeded from a UNION ALL across the existing per-ticker files; OHLCV
+ *      columns are NULL in the seed (the working table only needs OHLCV
+ *      for legacy callers without io.spotStore; Tier 2 with io.spotStore
+ *      reads VIX OHLCV from a separate temp seeded from spot/, so SPX
+ *      historical Return_20D is the only enrichment field the SPX JOIN
+ *      actually needs from the working table — and that lives in
+ *      enriched/ticker=SPX/data.parquet).
+ *   3. Empty fallback (`market.enriched WHERE 1=0`) when neither source
+ *      exists — preserves fresh-clone behavior unchanged.
  */
 async function setupParquetWorkingTables(
   conn: DuckDBConnection,
@@ -665,20 +666,21 @@ async function setupParquetWorkingTables(
 
   // ---- Daily working table seed ---------------------------------------------
   if (existsSync(dailyPath)) {
-    // Legacy seed (pre-Wave-D)
+    // Legacy single-file seed
     await conn.run(`CREATE TEMP TABLE "${dailyTable}" AS SELECT * FROM read_parquet('${dailyPath}')`);
     // Parquet files from fresh imports may lack enrichment columns — add them
     await alignDailyWorkingTableColumns(conn, dailyTable);
   } else if (hasEnrichedTickerFiles(enrichedDir)) {
-    // Post-Wave-D seed: union per-ticker enriched/ticker=*/data.parquet files.
+    // Per-ticker seed: union the existing enriched/ticker=*/data.parquet files.
     // These contain (ticker, date, 28 enrichment cols) — no OHLCV. We add NULL
     // OHLCV columns via ALTER TABLE below so that:
     //   - Callers without io.spotStore reading OHLCV from the working table get
     //     schema-compatible NULLs rather than a SQL error.
-    //   - The io.spotStore canonical path (post-Phase-5) reads OHLCV from spot/
-    //     directly and never touches the working table's OHLCV columns.
-    //   - Tier 2 SPX JOIN reads Return_20D (enrichment, already present from
-    //     the seed) from the working table — the SPX JOIN does NOT use OHLCV.
+    //   - The io.spotStore canonical path reads OHLCV from spot/ directly and
+    //     never touches the working table's OHLCV columns.
+    //   - The Tier 2 SPX JOIN reads Return_20D (enrichment, already present
+    //     from the seed) from the working table — the SPX JOIN does NOT use
+    //     OHLCV.
     await conn.run(
       `CREATE TEMP TABLE "${dailyTable}" AS
        SELECT * FROM read_parquet('${enrichedTickerGlob}', hive_partitioning=true)`,
@@ -695,10 +697,10 @@ async function setupParquetWorkingTables(
     // ALTER TABLE ADD COLUMN is wrapped in try/catch, so idempotent).
     await alignDailyWorkingTableColumns(conn, dailyTable);
   } else {
-    // Phase 6 Wave D: fresh-clone / public-repo seed path. Legacy daily-view
-    // was dropped in this wave; seed the working table from market.enriched
-    // (the v3.0 per-ticker computed-fields view) and ALTER-ADD the OHLCV
-    // columns the Tier 1 math expects. Matches the shape used by the
+    // Fresh-clone seed path. The legacy daily-view no longer exists in the
+    // catalog; seed the working table from `market.enriched` (the canonical
+    // per-ticker computed-fields view) and ALTER-ADD the OHLCV columns the
+    // Tier 1 math expects. Matches the shape used by the
     // enriched-ticker-files branch above.
     await conn.run(
       `CREATE TEMP TABLE "${dailyTable}" AS SELECT * FROM market.enriched WHERE 1=0`,
@@ -713,24 +715,24 @@ async function setupParquetWorkingTables(
     await alignDailyWorkingTableColumns(conn, dailyTable);
   }
 
-  // quick-260421-l63 Rule 2: backfill missing (ticker, date) identity rows from
-  // market.spot_daily so batchUpdateDaily has rows to UPDATE. Applies to ALL
-  // seed paths above:
-  //   - Legacy daily.parquet branch: daily.parquet is historical; any new (ticker,date)
-  //     in market.spot_daily that isn't in the seed needs to be inserted before
-  //     enrichment. Usually a no-op (pre-deletion inventories agreed).
-  //   - Enriched-ticker-files branch: the seed only contains tickers with an
-  //     enriched/ticker=X/data.parquet file. Tickers that have spot data but
-  //     no enriched file yet (e.g. after partial delete — which is the L63
-  //     re-enrichment scenario) will be missed.
-  //   - Fresh branch: working table is empty, so every (ticker, date) in
+  // Backfill missing (ticker, date) identity rows from market.spot_daily so
+  // batchUpdateDaily has rows to UPDATE. Applies to ALL seed paths above:
+  //   - Legacy daily.parquet branch: any new (ticker, date) in
+  //     market.spot_daily that isn't in the seed needs to be inserted before
+  //     enrichment. Usually a no-op when inventories already agree.
+  //   - Per-ticker enriched-files branch: the seed only contains tickers with
+  //     an enriched/ticker=X/data.parquet file. Tickers that have spot data
+  //     but no enriched file yet (e.g. after a partial re-enrichment delete)
+  //     would otherwise be missed.
+  //   - Fresh branch: the working table is empty, so every (ticker, date) in
   //     market.spot_daily is new.
   //
-  // Without this backfill, UPDATE ... WHERE (ticker,date) matches 0 rows and
-  // the enricher silently writes an empty enriched/ticker=X/data.parquet file —
-  // corrupting historical enrichment on the first run after enriched/ is
-  // deleted. OHLCV columns stay NULL (io.spotStore is the canonical OHLCV
-  // source post-Phase-5; Tier 2 SPX JOIN uses enrichment fields, not OHLCV).
+  // Without this backfill, UPDATE ... WHERE (ticker, date) matches 0 rows and
+  // the enricher silently writes an empty enriched/ticker=X/data.parquet
+  // file — corrupting historical enrichment on the first run after
+  // enriched/ is deleted. OHLCV columns stay NULL (io.spotStore is the
+  // canonical OHLCV source; the Tier 2 SPX JOIN uses enrichment fields,
+  // not OHLCV).
   try {
     // CAST date to VARCHAR — market.spot_daily.date is inferred as DATE by
     // DuckDB (hive partition type inference); the working table's date column
@@ -755,10 +757,10 @@ async function setupParquetWorkingTables(
 
   // ---- Date-context working table seed -------------------------------------
   if (existsSync(dateContextPath)) {
-    // Legacy seed (pre-Wave-D)
+    // Legacy single-file seed
     await conn.run(`CREATE TEMP TABLE "${dateContextTable}" AS SELECT * FROM read_parquet('${dateContextPath}')`);
   } else if (existsSync(enrichedContextPath)) {
-    // Post-Wave-D seed from the new MDATA-03 layout
+    // Seed from the per-ticker enriched/context/data.parquet file
     await conn.run(
       `CREATE TEMP TABLE "${dateContextTable}" AS SELECT * FROM read_parquet('${enrichedContextPath}')`,
     );
@@ -800,29 +802,27 @@ function hasEnrichedTickerFiles(dir: string): boolean {
 }
 
 /**
- * Phase 5 Wave B (Plan 05-02 rewrite): write working table contents to the
- * `enriched/` partition layout — `enriched/ticker={ticker}/data.parquet` for
- * per-ticker enrichment columns and `enriched/context/data.parquet` for the
- * cross-ticker context.
+ * Write working-table contents to the `enriched/` partition layout —
+ * `enriched/ticker={ticker}/data.parquet` for per-ticker enrichment columns
+ * and `enriched/context/data.parquet` for the cross-ticker context.
  *
- * Behavior change vs pre-Phase-5: this function NO LONGER writes
- * `daily.parquet` or `date_context.parquet`. Those legacy files retire here;
- * Plan 05-04 deleted them. The `market.enriched` and `market.enriched_context`
- * views are the canonical read surfaces over the per-ticker enriched layout.
+ * This function does NOT write `daily.parquet` or `date_context.parquet`;
+ * those legacy single-file outputs are retired. The `market.enriched` and
+ * `market.enriched_context` views are the canonical read surfaces over the
+ * per-ticker enriched layout.
  *
- * MDATA-02 / D-25: the per-ticker enriched file contains ONLY computed
- * enrichment columns plus (ticker, date) — NO OHLCV. Raw OHLCV stays in spot/.
- *
- * MDATA-03: the context file contains the cross-ticker derived fields written
- * by runTier2 (Vol_Regime, Term_Structure_State, Trend_Direction, VIX_Spike_Pct,
- * VIX_Gap_Pct).
+ * Storage split: the per-ticker enriched file contains ONLY computed
+ * enrichment columns plus (ticker, date) — NO OHLCV. Raw OHLCV stays in
+ * spot/. The context file contains the cross-ticker derived fields written
+ * by runTier2 (Vol_Regime, Term_Structure_State, Trend_Direction,
+ * VIX_Spike_Pct, VIX_Gap_Pct).
  *
  * Filtered to `WHERE ticker = $ticker` so each per-ticker enrichment call only
- * touches its own partition. Other tickers' rows in the working table (carried
- * over from the daily.parquet seed) are not republished here.
+ * touches its own partition. Other tickers' rows in the working table
+ * (carried over from the legacy seed) are not republished here.
  *
- * Paths constructed from dataDir + hardcoded suffixes (T-02-09 — no
- * user-controlled path components; ticker is whitelisted upstream).
+ * Paths constructed from dataDir + hardcoded suffixes — no user-controlled
+ * path components; ticker is whitelisted upstream.
  */
 async function flushEnrichedToParquet(
   conn: DuckDBConnection,
@@ -897,20 +897,19 @@ async function runTier2(
   const dailyTarget = targets?.daily ?? "market.enriched";
   const dateContextTarget = targets?.dateContext ?? "market.enriched_context";
 
-  // Phase 5 Wave B rewire (A8 — Tier 2 part): when `spotStore` is provided,
-  // seed a TEMP table with VIX-family daily OHLCV from spot/ minute bars
-  // (aggregated via SpotStore.readDailyBars). The Tier 2 SQL below reads
-  // VIX/VIX9D/VIX3M from `effectiveDailyTarget` (the TEMP) instead of the
-  // working `dailyTarget` view — which after Plan 05-04 deletes daily.parquet
-  // would no longer contain VIX-family rows.
+  // When `spotStore` is provided, seed a TEMP table with VIX-family daily
+  // OHLCV from spot/ minute bars (aggregated via SpotStore.readDailyBars).
+  // The Tier 2 SQL below reads VIX/VIX9D/VIX3M from `effectiveDailyTarget`
+  // (the TEMP) instead of the working `dailyTarget` view, which after the
+  // legacy daily.parquet retirement no longer contains VIX-family rows.
   //
   // The SPX JOIN (for `Return_20D`) keeps reading from `dailyTarget` because
   // SPX Return_20D is a Tier 1 enriched field written to the working table
   // earlier in the runEnrichment pipeline — spot/ never holds enriched columns.
   //
   // IVR/IVP UPDATEs continue to target `dailyTarget` (legacy write path
-  // unchanged per plan). After Wave D those writes hit a temp table that is
-  // never persisted; Phase 6 will remove the legacy write path.
+  // unchanged). Post-retirement, those writes hit a temp table that is never
+  // persisted; the legacy write path is scheduled for removal.
   let effectiveDailyTarget = dailyTarget;
   let vixTempTable: string | null = null;
   if (spotStore) {
@@ -938,7 +937,7 @@ async function runTier2(
   }
 
   try {
-  // Step 1: Discover VIX-family tickers dynamically (per D-06)
+  // Step 1: Discover VIX-family tickers dynamically
   const tickerResult = await conn.runAndReadAll(
     `SELECT DISTINCT ticker FROM ${effectiveDailyTarget} WHERE ticker LIKE 'VIX%' ORDER BY ticker`
   );
@@ -948,9 +947,9 @@ async function runTier2(
   }
 
   // Step 2: Compute IVR/IVP for each VIX-family ticker and write to daily table.
-  // Phase 6 Wave D: market.enriched has no OHLCV columns (D-25 split). Read
-  // close from the OHLCV source: the spotStore-seeded TEMP table when
-  // io.spotStore is present, else market.spot_daily (RTH-aggregated view).
+  // `market.enriched` no longer carries OHLCV columns (raw bars live in spot/);
+  // read close from the OHLCV source: the spotStore-seeded TEMP table when
+  // io.spotStore is present, else `market.spot_daily` (RTH-aggregated view).
   const closeSource = spotStore ? effectiveDailyTarget : "market.spot_daily";
   for (const ticker of vixTickers) {
     const closeResult = await conn.runAndReadAll(
@@ -997,12 +996,12 @@ async function runTier2(
   // Step 3: Build ContextRow objects from daily VIX tickers for derived fields
   // Query VIX close/open/high, VIX9D close/open, VIX3M close/open, plus Return_20D for Trend_Direction.
   //
-  // Phase 6 Wave D: the VIX-family OHLCV source is `effectiveDailyTarget`
-  // (spotStore-seeded TEMP when io.spotStore is present) or market.spot_daily
-  // when io.spotStore is absent — market.enriched has no OHLCV columns
-  // (D-25 split). The SPX JOIN keeps `dailyTarget` because Return_20D is a
-  // Tier 1 enriched column written to the working table earlier in the
-  // runEnrichment pipeline; spot/ never holds enriched fields.
+  // The VIX-family OHLCV source is `effectiveDailyTarget` (the
+  // spotStore-seeded TEMP when io.spotStore is present) or
+  // `market.spot_daily` when io.spotStore is absent — `market.enriched` no
+  // longer carries OHLCV columns. The SPX JOIN keeps `dailyTarget` because
+  // Return_20D is a Tier 1 enriched column written to the working table
+  // earlier in the runEnrichment pipeline; spot/ never holds enriched fields.
   const vixOhlcvSource = spotStore ? effectiveDailyTarget : "market.spot_daily";
   const contextQuery = `
     SELECT
@@ -1028,10 +1027,10 @@ async function runTier2(
   if (rawRows.length === 0) return { status: "complete", fieldsWritten: 0 };
 
   // Query VIX RTH open from intraday bars.
-  // Plan 02-04 Call Site 5: when spotStore provided, route through
-  // SpotStore.readBars('VIX', ...) and filter to the 09:30–09:32 RTH window
-  // in TypeScript. Result is bit-exact: same ticker filter, same time window,
-  // same "first seen per date" selection (readBars sorts by (date, time)).
+  // When spotStore is provided, route through SpotStore.readBars('VIX', ...)
+  // and filter to the 09:30–09:32 RTH window in TypeScript. Result is
+  // bit-exact: same ticker filter, same time window, same "first seen per
+  // date" selection (readBars sorts by (date, time)).
   const rthOpenByDate = new Map<string, number>();
   if (spotStore) {
     try {
@@ -1058,8 +1057,8 @@ async function runTier2(
     }
   } else {
     try {
-      // Phase 6 Wave D: legacy minute-bar view rewritten to market.spot
-      // (v3.0 canonical minute-bar view; schema preserves ticker/time/open).
+      // Canonical minute-bar view is `market.spot` — same ticker/time/open
+      // schema as the earlier intraday view it replaced.
       // Defense-in-depth: skip zero/null open bars so a 09:30 provider gap
       // doesn't get cached as the day's VIX_RTH_Open. The first non-zero
       // bar in 09:30-09:32 wins.
@@ -1130,9 +1129,9 @@ async function runTier2(
 
   return { status: "complete", fieldsWritten: derivedCols.length - 1 }; // -1 for date
   } finally {
-    // Phase 5 Wave B rewire: drop the spotStore-seeded TEMP unconditionally so
-    // it cannot leak across runEnrichment calls (each call gets a fresh ts-suffixed
-    // table name, but DROP-on-finally keeps DuckDB's TEMP catalog clean).
+    // Drop the spotStore-seeded TEMP unconditionally so it cannot leak across
+    // runEnrichment calls (each call gets a fresh ts-suffixed table name, but
+    // DROP-on-finally keeps DuckDB's TEMP catalog clean).
     if (vixTempTable) {
       try { await conn.run(`DROP TABLE IF EXISTS "${vixTempTable}"`); } catch { /* */ }
     }
@@ -1142,8 +1141,8 @@ async function runTier2(
 /**
  * Check if any intraday data exists for a ticker.
  *
- * Plan 02-04 Call Site 6: when `spotStore` is provided, routes through
- * `SpotStore.getCoverage` instead of a SQL probe against market.spot.
+ * When `spotStore` is provided, routes through `SpotStore.getCoverage`
+ * instead of a SQL probe against `market.spot`.
  */
 async function hasTier3Data(
   conn: DuckDBConnection,
@@ -1154,8 +1153,8 @@ async function hasTier3Data(
     const cov = await spotStore.getCoverage(ticker, "1970-01-01", "9999-12-31");
     return cov.totalDates > 0;
   }
-  // Phase 6 Wave D: legacy minute-bar view rewritten to market.spot
-  // (v3.0 canonical minute-bar view; schema preserves ticker filter).
+  // Canonical minute-bar view is `market.spot` — same ticker-filter schema
+  // as the earlier intraday view it replaced.
   const r = await conn.runAndReadAll(
     `SELECT COUNT(*) FROM market.spot WHERE ticker = $1 LIMIT 1`,
     [ticker]
@@ -1201,8 +1200,8 @@ export async function runContextEnrichment(
  *
  * The watermark is upserted via the JSON adapter (`upsertEnrichedThrough` from
  * `db/json-adapters.ts`) — either the supplied `io.watermarkStore` or, when
- * absent, a direct call using `opts.dataDir`. Plan 04-05 removed the legacy
- * SQL watermark path on the metadata sync table entirely.
+ * absent, a direct call using `opts.dataDir`. The legacy SQL watermark path
+ * on the metadata sync table has been removed.
  *
  * Note: wilder_state column exists but is NOT written (superseded by 200-day lookback).
  *
@@ -1232,8 +1231,8 @@ export async function runEnrichment(
 
   try {
   // 1. Get the persisted enrichment watermark.
-  // Plan 04-05: every read goes through the JSON adapter (D-20). The legacy
-  // SQL SELECT against the metadata sync table is GONE — when callers
+  // Every watermark read goes through the JSON adapter. The legacy SQL
+  // SELECT against the metadata sync table has been removed — when callers
   // don't supply `io.watermarkStore` we fall back to the same JSON adapter
   // the store wrappers wire (`getEnrichedThrough(ticker, dataDir)`).
   let watermark: string | null = null;
@@ -1255,14 +1254,14 @@ export async function runEnrichment(
 
   // 3. Fetch OHLCV rows.
   //
-  // Phase 5 Wave B rewire (A8 closure): when `io.spotStore` is provided, read
-  // daily OHLCV via `SpotStore.readDailyBars` (aggregated from spot/ minute
-  // bars). After Plan 05-04 deletes daily.parquet, this remains functional
-  // because readDailyBars aggregates from spot/ticker=X/date=Y/data.parquet.
+  // When `io.spotStore` is provided, read daily OHLCV via
+  // `SpotStore.readDailyBars` (aggregated from spot/ minute bars). This path
+  // remains functional after the legacy `daily.parquet` retirement because
+  // readDailyBars aggregates from spot/ticker=X/date=Y/data.parquet.
   //
   // Fallback: when `io.spotStore` is absent (legacy callers), retain a SQL
-  // path against `market.enriched`. Phase 6 may remove the fallback entirely
-  // once all callers pass io.
+  // path against `market.spot_daily`. The fallback may be removed once all
+  // callers pass io.
   let rawRows: Array<Array<unknown>>;
   if (io?.spotStore) {
     const startDate = lookbackStart ?? "1970-01-01";
@@ -1270,10 +1269,10 @@ export async function runEnrichment(
     const dailyBars = await io.spotStore.readDailyBars(ticker, startDate, endDate);
     rawRows = dailyBars.map((b) => [b.ticker, b.date, b.open, b.high, b.low, b.close]);
   } else {
-    // Phase 6 Wave D: the legacy daily-view SQL fallback path is gone — the
-    // view no longer exists in the catalog post-cut. Route OHLCV reads through
-    // the v3.0 market.spot_daily view (RTH-aggregated from market.spot). This
-    // bridges callers that have not yet migrated to io.spotStore; post-Wave-D
+    // The legacy daily-view SQL fallback path is gone — the view no longer
+    // exists in the catalog. Route OHLCV reads through the canonical
+    // `market.spot_daily` view (RTH-aggregated from `market.spot`). This
+    // bridges callers that have not yet migrated to io.spotStore; new
     // callers SHOULD pass io.spotStore for parity with the Parquet-direct path.
     let fetchSql = `SELECT ticker, date, open, high, low, close FROM market.spot_daily WHERE ticker = $1`;
     const fetchParams: unknown[] = [ticker];
@@ -1300,12 +1299,12 @@ export async function runEnrichment(
     };
   }
 
-  // 3b. Defensive zero-OHLC filter (quick-260421-l63). Partitions should already
-  // be clean after the L63 cleanup + ParquetSpotStore.writeBars guard, but this
-  // second line of defense catches any future provider-outage bleed and prevents
-  // RSI/ATR/EMA/SMA/RealizedVol from being poisoned by zero closes. Filter at
-  // the rawRows level so date/OHLC alignment is preserved across all five arrays
-  // (dates/opens/highs/lows/closes) constructed below.
+  // 3b. Defensive zero-OHLC filter. Partitions should already be clean after
+  // the ParquetSpotStore.writeBars guard, but this second line of defense
+  // catches any future provider-outage bleed and prevents
+  // RSI/ATR/EMA/SMA/RealizedVol from being poisoned by zero closes. Filter
+  // at the rawRows level so date/OHLC alignment is preserved across all
+  // five arrays (dates/opens/highs/lows/closes) constructed below.
   const filteredRawRows = rawRows.filter((r) => {
     const o = Number(r[2]);
     const h = Number(r[3]);
@@ -1513,16 +1512,17 @@ export async function runEnrichment(
   } : undefined;
   const tier2Result = await runTier2(conn, tier2Targets, io?.spotStore);
 
-  // 10. Tier 3 — intraday timing fields (Plan 02-04: route through io.spotStore when provided)
+  // 10. Tier 3 — intraday timing fields (routes through io.spotStore when provided)
   const tier3Result = await runTier3(conn, ticker, dates, dailyTarget, io?.spotStore);
 
   // 11. Persist the new watermark.
-  // Plan 04-05: every write goes through the JSON adapter (D-20). The legacy
-  // SQL UPSERT against the metadata sync table is GONE — when callers don't
-  // supply `io.watermarkStore` we fall back to `upsertEnrichedThrough(ticker,
-  // val, dataDir)` directly. If neither io nor dataDir is supplied the
-  // watermark simply isn't persisted (math still runs); callers that need
-  // watermark continuity must supply one of the two.
+  // Every watermark write goes through the JSON adapter. The legacy SQL
+  // UPSERT against the metadata sync table has been removed — when callers
+  // don't supply `io.watermarkStore` we fall back to
+  // `upsertEnrichedThrough(ticker, val, dataDir)` directly. If neither io
+  // nor dataDir is supplied the watermark simply isn't persisted (math
+  // still runs); callers that need watermark continuity must supply one of
+  // the two.
   const newWatermark = dates[dates.length - 1];
   if (io?.watermarkStore) {
     await io.watermarkStore.upsert(ticker, newWatermark);
@@ -1530,7 +1530,8 @@ export async function runEnrichment(
     await upsertEnrichedThrough(ticker, newWatermark, opts.dataDir);
   }
 
-  // 12. Parquet mode: write enrichment to enriched/ partition layout (Plan 05-02 rewrite — daily.parquet retired)
+  // 12. Parquet mode: write enrichment to the enriched/ partition layout
+  //     (legacy daily.parquet output retired)
   if (parquetMode && workingTables && opts.dataDir) {
     await flushEnrichedToParquet(conn, opts.dataDir, ticker, workingTables);
   }
@@ -1682,7 +1683,7 @@ async function runTier3(
   spotStore?: SpotStore,
 ): Promise<TierStatus> {
   // Check if intraday data exists for this ticker
-  // Plan 02-04 Call Site 6: routed through spotStore.getCoverage when provided
+  // Routes through spotStore.getCoverage when provided
   const hasData = await hasTier3Data(conn, ticker, spotStore);
   if (!hasData) {
     return {
@@ -1692,7 +1693,7 @@ async function runTier3(
   }
 
   // Query intraday bars for all dates in the enrichment range.
-  // Plan 02-04 Call Site 7: when spotStore provided, route through
+  // When spotStore is provided, route through
   // SpotStore.readBars(ticker, from, to). The downstream group-by-date math
   // is unchanged — we just reshape BarRow[] into the same tuple-index shape
   // the existing math consumes (date, time, open, high, low, close).
@@ -1715,8 +1716,8 @@ async function runTier3(
     lowIdx = 4;
     closeIdx = 5;
   } else {
-    // Phase 6 Wave D: legacy minute-bar view rewritten to market.spot
-    // (v3.0 canonical minute-bar view; schema unchanged for ticker/date/time/ohlcv).
+    // Canonical minute-bar view is `market.spot` — same
+    // ticker/date/time/ohlcv schema as the earlier intraday view it replaced.
     // Defense-in-depth: filter out zero/null minute bars at the SQL layer so
     // Tier 3 timing fields (High_Time, Low_Time, Opening_Drive_Strength) are
     // never seeded with provider-gap timestamps.
