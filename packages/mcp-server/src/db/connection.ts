@@ -694,7 +694,7 @@ export function getCurrentConnection(): DuckDBConnection {
 }
 
 // Note: the legacy intraday write-target getter / module-state variable and
-// the connection.ext.ts override hook have been removed. Every spot write now
-// flows through SpotStore.writeBars (the canonical Hive-partitioned
+// the consumer override hook have been removed. Every spot write now flows
+// through SpotStore.writeBars (the canonical Hive-partitioned
 // `spot/ticker=X/date=Y/` layout); there is no longer a per-process override
 // of the write target.

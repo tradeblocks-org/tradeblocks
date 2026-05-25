@@ -283,7 +283,7 @@ async function migrateFlatImportLog(conn: DuckDBConnection, dataDir: string): Pr
  *   - Skips if DuckDB tables are empty or don't exist
  *   - DuckDB tables are left as-is (not dropped or modified)
  *
- * Strategy definitions are migrated separately via json-migration.ext.ts.
+ * Strategy definitions are migrated separately by consumers.
  *
  * @param conn - Active DuckDB connection (must be read-write)
  * @param dataDir - Root data directory (e.g., ~/tradeblocks-data)
