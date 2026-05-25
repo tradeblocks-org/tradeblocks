@@ -31,6 +31,12 @@ export interface QuoteGreeksStats {
   computedRows: number;
   missingContractRows: number;
   missingUnderlyingRows: number;
+  // Underlying-price lookup succeeded but `computeQuoteGreeks` returned null
+  // (zero/negative option price, corrupt expiration → negative DTE, malformed
+  // strike). Drives the `compute_failure` ingest-skipped reason —
+  // distinguishes BS-math failure from spot/chain coverage gaps so operators
+  // chase the right root cause.
+  mathFailedRows: number;
   unresolvedRows: number;
 }
 
@@ -173,6 +179,7 @@ export function applyQuoteGreeks<T extends QuoteGreekFields>(params: {
     computedRows: 0,
     missingContractRows: 0,
     missingUnderlyingRows: 0,
+    mathFailedRows: 0,
     unresolvedRows: 0,
   };
 
@@ -215,6 +222,7 @@ export function applyQuoteGreeks<T extends QuoteGreekFields>(params: {
       contractType: meta.contract_type,
     });
     if (!greeks) {
+      stats.mathFailedRows++;
       stats.unresolvedRows++;
       continue;
     }

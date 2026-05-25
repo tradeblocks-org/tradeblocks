@@ -61,17 +61,16 @@ export class DuckdbEnrichedStore extends EnrichedStore {
   }
 
   async read(opts: EnrichedReadOpts): Promise<Record<string, unknown>[]> {
-    const { sql, params } = buildReadEnrichedSQL({
+    // Builder inlines values; unbound runAndReadAll(sql) bypasses extract_statements
+    // (see enriched-sql.ts / spot-sql.ts headers).
+    const { sql } = buildReadEnrichedSQL({
       ticker: opts.ticker,
       from: opts.from,
       to: opts.to,
       includeContext: !!opts.includeContext,
       includeOhlcv: !!opts.includeOhlcv,
     });
-    const reader = await this.ctx.conn.runAndReadAll(
-      sql,
-      params as (string | number | boolean | null | bigint)[],
-    );
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     const names = reader.columnNames();
     return reader
       .getRows()
@@ -82,10 +81,10 @@ export class DuckdbEnrichedStore extends EnrichedStore {
 
   async getCoverage(ticker: string): Promise<CoverageReport> {
     // D-27: coverage answers "what rows exist" directly from the enriched
-    // table — not from the watermark JSON.
+    // table — not from the watermark JSON. Inline literal — same leak rationale.
+    const tickerLit = ticker.replace(/'/g, "''");
     const reader = await this.ctx.conn.runAndReadAll(
-      `SELECT DISTINCT date FROM market.enriched WHERE ticker = $1 ORDER BY date`,
-      [ticker],
+      `SELECT DISTINCT date FROM market.enriched WHERE ticker = '${tickerLit}' ORDER BY date`,
     );
     const dates = reader.getRows().map((r) => String(r[0]));
     return {

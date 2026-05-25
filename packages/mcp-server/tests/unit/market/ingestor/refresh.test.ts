@@ -249,6 +249,45 @@ describe("MarketIngestor.refresh", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("requests minute-resolution spot bars", async () => {
+    // Regression guard: refresh() used to hardcode timespan: "1d" for the
+    // spot ingest, which wrote one daily bar per ticker per date. Every
+    // minute after 09:30 was then left without an underlying-price lookup,
+    // tripping coverage_gap on every option-quote partition. Spot ingest
+    // must always request minute resolution.
+    const calls: Array<{ timespan?: string; multiplier?: number; ticker: string }> = [];
+    const provider: MarketDataProvider = {
+      name: "spy",
+      capabilities: () => ({
+        tradeBars: true, quotes: true, greeks: false,
+        flatFiles: false, bulkByRoot: false, perTicker: true,
+        minuteBars: true, dailyBars: true,
+      }),
+      fetchBars: async (opts) => {
+        calls.push({ timespan: opts.timespan, multiplier: opts.multiplier, ticker: opts.ticker });
+        return [];
+      },
+      fetchOptionSnapshot: async () => emptySnapshot(),
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX", "QQQ"],
+      computeVixContext: false,
+    });
+
+    expect(calls).toEqual([
+      expect.objectContaining({ ticker: "SPX", timespan: "minute", multiplier: 1 }),
+      expect.objectContaining({ ticker: "QQQ", timespan: "minute", multiplier: 1 }),
+    ]);
+  });
+
   it("runs ingestBars per spot ticker and reports per-operation results", async () => {
     const bars: BarRow[] = [
       { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
@@ -395,14 +434,877 @@ describe("MarketIngestor.refresh", () => {
     const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
     const row = quotes.get("SPXW260107C04800000")?.[0];
     expect(row).toEqual(expect.objectContaining({
+      bid: 10,
+      ask: 10.5,
+      timestamp: "2026-01-05 09:30",
       greeks_source: "computed",
       greeks_revision: 3,
+      rate_type: "sofr",
+      rate_value: expect.any(Number),
+      gamma_source: "computed_sofr_q0",
     }));
+    expect(row?.rate_value).toBeGreaterThan(0);
+    expect(row?.rate_value).toBeLessThan(0.1);
     expect(row?.delta).not.toBeNull();
     expect(row?.gamma).not.toBeNull();
     expect(row?.theta).not.toBeNull();
     expect(row?.vega).not.toBeNull();
     expect(row?.iv).not.toBeNull();
+  });
+
+  it("logs and skips the batch when enrichQuoteRows reads fail (no silent null-greeks persist)", async () => {
+    const provider: MarketDataProvider = {
+      name: "bulk",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchBulkQuotes: async function* () {
+        yield [
+          { ticker: "SPXW260107C04800000", timestamp: "2026-01-05 09:30", bid: 10.0, ask: 10.5 },
+        ];
+      },
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    // Force the enrichment read to fail. Previously this would be swallowed
+    // by .catch(() => []) in enrichQuoteRows and a row with intact bid/ask
+    // but null greeks would silently persist. The fix surfaces the error:
+    // the batch logs a structured warning and is skipped (no row persisted).
+    const readChainSpy = jest.spyOn(stores.chain, "readChain").mockImplementation(async () => {
+      throw new Error("simulated transient DuckDB flake");
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteUnderlyings: ["SPX"],
+      computeVixContext: false,
+    });
+
+    // Partial-status is the load-bearing signal; warn is supplementary.
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped![0]).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      rows: 1,
+      error: "simulated transient DuckDB flake",
+    }));
+    // Restore the real chain reader so the post-condition read isn't itself broken.
+    readChainSpy.mockRestore();
+    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const row = quotes.get("SPXW260107C04800000")?.[0];
+    // The batch must be skipped — no row with null greeks persisted.
+    expect(row).toBeUndefined();
+    // The structured warn is still emitted for live tail-following.
+    const warnCall = warnSpy.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("enrichQuoteRows failed"),
+    );
+    expect(warnCall).toBeDefined();
+    const ctx = warnCall![1] as Record<string, unknown>;
+    expect(ctx).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      error: "simulated transient DuckDB flake",
+    }));
+    warnSpy.mockRestore();
+  });
+
+  it("skips the batch with reason=coverage_gap when enrichment reads return empty", async () => {
+    // Companion to the throw-path test above: enrichQuoteRows succeeds but
+    // stores.spot.readBars returns [] (e.g. partial-day spot coverage,
+    // missing chain partition). Without the coverage-gap guard, applyQuoteGreeks
+    // would resolve no underlying prices, every row would increment
+    // missingUnderlyingRows, and the batch would silently persist with
+    // intact bid/ask but null greeks. The fix surfaces this as a distinct
+    // reason="coverage_gap" skipped[] entry and refuses to write.
+    const provider: MarketDataProvider = {
+      name: "bulk",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchBulkQuotes: async function* () {
+        yield [
+          { ticker: "SPXW260107C04800000", timestamp: "2026-01-05 09:30", bid: 10.0, ask: 10.5 },
+        ];
+      },
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    // Force the spot read to return empty rows for the enrichment lookup.
+    // The provider still writes daily/minute spot bars upstream of this point
+    // (refresh.spot ingest), but the in-memory readBars used by enrichQuoteRows
+    // is intercepted to simulate the coverage-gap scenario.
+    const readBarsSpy = jest.spyOn(stores.spot, "readBars").mockResolvedValue([]);
+    const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteUnderlyings: ["SPX"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(1);
+    const entry = result.skipped![0];
+    expect(entry).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      rows: 1,
+      reason: "coverage_gap",
+    }));
+    expect(typeof entry.resolveRatio).toBe("number");
+    expect(entry.resolveRatio).toBeGreaterThan(0.5);
+    expect(entry.resolveRatio).toBeLessThanOrEqual(1);
+    expect(entry.error).toMatch(/coverage gap/);
+
+    // writeQuotes must NOT have been called for the affected partition —
+    // that's the whole point: we refuse to persist null-greeks rows.
+    const quotePartitionWrites = writeQuotesSpy.mock.calls.filter(
+      (call) => call[0] === "SPX" && call[1] === "2026-01-05",
+    );
+    expect(quotePartitionWrites).toHaveLength(0);
+
+    readBarsSpy.mockRestore();
+    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const row = quotes.get("SPXW260107C04800000")?.[0];
+    expect(row).toBeUndefined();
+
+    const warnCall = warnSpy.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("coverage gap"),
+    );
+    expect(warnCall).toBeDefined();
+    warnSpy.mockRestore();
+    writeQuotesSpy.mockRestore();
+  });
+
+  it("trips coverage_gap on the bulk path when only the compute-mode subset fails (mixed-source partition)", async () => {
+    // The empty-read case where every row needs compute and every row fails
+    // is one mode; this test covers the proportional leak: when a partition
+    // has rows with provider-supplied greeks (skipped by applyQuoteGreeks
+    // early) AND compute-mode rows that all fail underlying lookup, the old
+    // `missingUnderlyingRows / rowsVisited` denominator diluted the failure
+    // ratio below the 0.5 trip line. With the corrected
+    // `missingUnderlyingRows / (missingUnderlyingRows + computedRows)`
+    // denominator, the ratio reflects "of rows that tried to compute, what
+    // fraction failed" — here 1/1 = 1.0, well above the 0.5 threshold.
+    const provider: MarketDataProvider = {
+      name: "bulk",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+          {
+            ticker: "SPXW260107C04810000",
+            contract_type: "call",
+            strike: 4810,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchBulkQuotes: async function* () {
+        // One row carries full provider greeks (skipped by applyQuoteGreeks early,
+        // increments existingGreeksRows). The other row has none (enters the
+        // compute branch, hits the empty underlying-price map, increments
+        // missingUnderlyingRows). Old denominator: 1/2 = 0.5 → does NOT trip.
+        // New denominator: 1/1 = 1.0 → DOES trip.
+        yield [
+          {
+            ticker: "SPXW260107C04800000",
+            timestamp: "2026-01-05 09:30",
+            bid: 10.0,
+            ask: 10.5,
+            delta: 0.22,
+            gamma: 0.05,
+            theta: -0.12,
+            vega: 0.31,
+            iv: 0.19,
+            greeks_source: "thetadata",
+          },
+          {
+            ticker: "SPXW260107C04810000",
+            timestamp: "2026-01-05 09:30",
+            bid: 5.0,
+            ask: 5.5,
+          },
+        ];
+      },
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    const readBarsSpy = jest.spyOn(stores.spot, "readBars").mockResolvedValue([]);
+    const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteUnderlyings: ["SPX"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(1);
+    const entry = result.skipped![0];
+    expect(entry).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      rows: 2,
+      reason: "coverage_gap",
+    }));
+    // New denominator: 1 compute-mode failure / 1 attempted lookup = 1.0.
+    // Under the old denominator (1/2 = 0.5) this would not have tripped at all.
+    expect(entry.resolveRatio).toBe(1);
+    expect(entry.error).toMatch(/1\/1 rows missing/);
+
+    const quotePartitionWrites = writeQuotesSpy.mock.calls.filter(
+      (call) => call[0] === "SPX" && call[1] === "2026-01-05",
+    );
+    expect(quotePartitionWrites).toHaveLength(0);
+
+    readBarsSpy.mockRestore();
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000", "SPXW260107C04810000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
+    expect(quotes.get("SPXW260107C04800000")?.[0]).toBeUndefined();
+    expect(quotes.get("SPXW260107C04810000")?.[0]).toBeUndefined();
+
+    warnSpy.mockRestore();
+    writeQuotesSpy.mockRestore();
+  });
+
+  it("trips coverage_gap on the per-ticker path when enrichment reads return empty", async () => {
+    // Mirror of the bulk-path coverage_gap test on the per-ticker
+    // writeQuotesForTicker branch. The per-ticker code path emits its own
+    // coverageGapEntry call site; without this test, regressions there would
+    // slip through the bulk-only assertions. Uses fetchQuotes (per-ticker)
+    // rather than fetchBulkQuotes, routed via quoteTickers on refresh.
+    const provider: MarketDataProvider = {
+      name: "perticker",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchQuotes: async () => new Map([
+        ["2026-01-05 09:30", { bid: 10.0, ask: 10.5 }],
+      ]),
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    const readBarsSpy = jest.spyOn(stores.spot, "readBars").mockResolvedValue([]);
+    const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteTickers: ["SPXW260107C04800000"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(1);
+    const entry = result.skipped![0];
+    expect(entry).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      ticker: "SPXW260107C04800000",
+      rows: 1,
+      reason: "coverage_gap",
+    }));
+    expect(typeof entry.resolveRatio).toBe("number");
+    expect(entry.resolveRatio).toBeGreaterThan(0.5);
+    expect(entry.resolveRatio).toBeLessThanOrEqual(1);
+    expect(entry.error).toMatch(/coverage gap/);
+
+    const quotePartitionWrites = writeQuotesSpy.mock.calls.filter(
+      (call) => call[0] === "SPX" && call[1] === "2026-01-05",
+    );
+    expect(quotePartitionWrites).toHaveLength(0);
+
+    readBarsSpy.mockRestore();
+    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const row = quotes.get("SPXW260107C04800000")?.[0];
+    expect(row).toBeUndefined();
+
+    const warnCall = warnSpy.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("coverage gap"),
+    );
+    expect(warnCall).toBeDefined();
+    warnSpy.mockRestore();
+    writeQuotesSpy.mockRestore();
+  });
+
+  it("trips coverage_gap on the per-ticker path when only the compute-mode subset fails (mixed-source partition)", async () => {
+    // Mirror of the bulk-path mixed-source coverage_gap test on the
+    // per-ticker writeQuotesForTicker branch. The canonical per-ticker
+    // test above covers the every-row-fails shape (1/1 = 1.0 under both
+    // numerators); this case proves the sharpened denominator —
+    // `missingUnderlyingRows / (missingUnderlyingRows + computedRows)` —
+    // also routes through the per-ticker call site. One timestamp carries
+    // full provider greeks (skipped early by applyQuoteGreeks, increments
+    // existingGreeksRows); the other has none (enters compute, hits the
+    // empty underlying-price map, increments missingUnderlyingRows). Old
+    // denominator: 1/2 = 0.5 → does NOT trip. New denominator: 1/1 = 1.0
+    // → DOES trip.
+    const provider: MarketDataProvider = {
+      name: "perticker",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchQuotes: async () => new Map([
+        ["2026-01-05 09:30", {
+          bid: 10.0,
+          ask: 10.5,
+          delta: 0.22,
+          gamma: 0.05,
+          theta: -0.12,
+          vega: 0.31,
+          iv: 0.19,
+          greeks_source: "thetadata",
+        }],
+        ["2026-01-05 09:31", { bid: 10.1, ask: 10.6 }],
+      ]),
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    const readBarsSpy = jest.spyOn(stores.spot, "readBars").mockResolvedValue([]);
+    const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteTickers: ["SPXW260107C04800000"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(1);
+    const entry = result.skipped![0];
+    expect(entry).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      ticker: "SPXW260107C04800000",
+      rows: 2,
+      reason: "coverage_gap",
+    }));
+    // New denominator: 1 compute-mode failure / 1 attempted lookup = 1.0.
+    // Under the old denominator (1/2 = 0.5) this would not have tripped at all.
+    expect(entry.resolveRatio).toBe(1);
+    expect(entry.error).toMatch(/1\/1 rows missing/);
+
+    const quotePartitionWrites = writeQuotesSpy.mock.calls.filter(
+      (call) => call[0] === "SPX" && call[1] === "2026-01-05",
+    );
+    expect(quotePartitionWrites).toHaveLength(0);
+
+    readBarsSpy.mockRestore();
+    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const row = quotes.get("SPXW260107C04800000")?.[0];
+    expect(row).toBeUndefined();
+
+    const warnCall = warnSpy.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("coverage gap"),
+    );
+    expect(warnCall).toBeDefined();
+    warnSpy.mockRestore();
+    writeQuotesSpy.mockRestore();
+  });
+
+  it("trips compute_failure on the bulk path when black-scholes fails after lookup succeeds", async () => {
+    // Coverage gap catches the case where the underlying-price lookup itself
+    // fails. compute_failure closes the sibling failure mode: spot is healthy
+    // and the underlying-price lookup succeeds, but the option data is corrupt
+    // (zero option price, negative DTE, malformed strike) and
+    // `computeQuoteGreeks` returns null for the majority of rows. Without this
+    // guard those rows incremented only `unresolvedRows`, so a single
+    // missing-spot row in the same partition would mis-attribute the entire
+    // failure as `coverage_gap` in the operator log. This test forces the
+    // math-only failure path: spot is pre-seeded, the chain is valid, but
+    // bid=ask=0 drives `optionPrice <= 0` in `computeQuoteGreeks` → null
+    // greeks → the new `mathFailedRows` counter increments and
+    // `computeFailureEntry` trips on
+    // `mathFailedRows / (mathFailedRows + computedRows) = 1/1 = 1.0`.
+    const provider: MarketDataProvider = {
+      name: "bulk",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchBulkQuotes: async function* () {
+        // bid=ask=0 → mid=0 → optionPrice<=0 guard in computeQuoteGreeks
+        // returns null. Underlying lookup succeeds (spot pre-seeded at 09:30).
+        yield [
+          { ticker: "SPXW260107C04800000", timestamp: "2026-01-05 09:30", bid: 0, ask: 0 },
+        ];
+      },
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    await stores.spot.writeBars("SPX", "2026-01-05", [
+      { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+    ]);
+    const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteUnderlyings: ["SPX"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(1);
+    const entry = result.skipped![0];
+    expect(entry).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      rows: 1,
+      reason: "compute_failure",
+    }));
+    expect(entry.resolveRatio).toBe(1);
+    expect(entry.error).toMatch(/compute failure.*black-scholes/);
+    expect(entry.error).toMatch(/1\/1 rows failed/);
+
+    const quotePartitionWrites = writeQuotesSpy.mock.calls.filter(
+      (call) => call[0] === "SPX" && call[1] === "2026-01-05",
+    );
+    expect(quotePartitionWrites).toHaveLength(0);
+
+    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    expect(quotes.get("SPXW260107C04800000")?.[0]).toBeUndefined();
+
+    const warnCall = warnSpy.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("compute failure"),
+    );
+    expect(warnCall).toBeDefined();
+    warnSpy.mockRestore();
+    writeQuotesSpy.mockRestore();
+  });
+
+  it("emits both coverage_gap and compute_failure when both failure modes hit the same partition", async () => {
+    // Load-bearing test for the no-dedupe convention (see types.ts on
+    // IngestSkippedReason). When a partition exhibits BOTH failure modes
+    // — some rows fail underlying-price lookup AND some rows clear lookup
+    // but fail black-scholes math — both guards must fire and both entries
+    // must land in skipped[]. Combining them into a single entry would
+    // obscure the second signal from operators chasing root cause; picking
+    // one would mislabel the trip in the operator log. Two rows: one at
+    // 09:30 with bid=ask=0 (spot present, BS math fails — mathFailedRows)
+    // and one at 09:31 (no spot pre-seeded for that minute, underlying
+    // lookup fails — missingUnderlyingRows). Each subset's ratio is 1/1=1.0.
+    const provider: MarketDataProvider = {
+      name: "bulk",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+          {
+            ticker: "SPXW260107C04810000",
+            contract_type: "call",
+            strike: 4810,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchBulkQuotes: async function* () {
+        yield [
+          // BS-math failure: spot pre-seeded at 09:30, but mid=0.
+          { ticker: "SPXW260107C04800000", timestamp: "2026-01-05 09:30", bid: 0, ask: 0 },
+          // Coverage gap: valid mid, but no spot bar at 09:31.
+          { ticker: "SPXW260107C04810000", timestamp: "2026-01-05 09:31", bid: 5.0, ask: 5.5 },
+        ];
+      },
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    // Pre-seed ONLY the 09:30 minute. The 09:31 row's lookup will miss.
+    await stores.spot.writeBars("SPX", "2026-01-05", [
+      { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+    ]);
+    const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteUnderlyings: ["SPX"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(2);
+    const reasons = (result.skipped ?? []).map((s) => s.reason).sort();
+    expect(reasons).toEqual(["compute_failure", "coverage_gap"]);
+
+    const gap = result.skipped!.find((s) => s.reason === "coverage_gap")!;
+    expect(gap).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      rows: 2,
+    }));
+    expect(gap.resolveRatio).toBe(1);
+    expect(gap.error).toMatch(/coverage gap/);
+
+    const compute = result.skipped!.find((s) => s.reason === "compute_failure")!;
+    expect(compute).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      rows: 2,
+    }));
+    expect(compute.resolveRatio).toBe(1);
+    expect(compute.error).toMatch(/compute failure.*black-scholes/);
+
+    // Neither guard tripping → write skipped. Both tripping → still skipped.
+    const quotePartitionWrites = writeQuotesSpy.mock.calls.filter(
+      (call) => call[0] === "SPX" && call[1] === "2026-01-05",
+    );
+    expect(quotePartitionWrites).toHaveLength(0);
+
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000", "SPXW260107C04810000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
+    expect(quotes.get("SPXW260107C04800000")?.[0]).toBeUndefined();
+    expect(quotes.get("SPXW260107C04810000")?.[0]).toBeUndefined();
+
+    warnSpy.mockRestore();
+    writeQuotesSpy.mockRestore();
+  });
+
+  it("trips compute_failure on the per-ticker path when black-scholes fails after lookup succeeds", async () => {
+    // Per-ticker mirror of the bulk-path compute_failure test. The
+    // writeQuotesForTicker call site emits its own computeFailureEntry call;
+    // without this test, regressions on that branch would slip past the
+    // bulk-only assertion. Mirrors the structure of the per-ticker
+    // coverage_gap mirrors — same shape, distinct reason channel.
+    const provider: MarketDataProvider = {
+      name: "perticker",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async (options) => options.timespan === "minute"
+        ? [
+            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+          ]
+        : [
+            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          ],
+      fetchOptionSnapshot: async () => emptySnapshot(),
+      fetchContractList: async () => ({
+        underlying: "SPX",
+        contracts: [
+          {
+            ticker: "SPXW260107C04800000",
+            contract_type: "call",
+            strike: 4800,
+            expiration: "2026-01-07",
+            exercise_style: "european",
+          },
+        ],
+      }),
+      fetchQuotes: async () => new Map([
+        // bid=ask=0 → mid=0 → BS math returns null. Spot is pre-seeded.
+        ["2026-01-05 09:30", { bid: 0, ask: 0 }],
+      ]),
+    };
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    await stores.spot.writeBars("SPX", "2026-01-05", [
+      { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+    ]);
+    const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-01-05",
+      spotTickers: ["SPX"],
+      chainUnderlyings: ["SPX"],
+      quoteTickers: ["SPXW260107C04800000"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.skipped).toBeDefined();
+    expect(result.skipped).toHaveLength(1);
+    const entry = result.skipped![0];
+    expect(entry).toEqual(expect.objectContaining({
+      underlying: "SPX",
+      date: "2026-01-05",
+      ticker: "SPXW260107C04800000",
+      rows: 1,
+      reason: "compute_failure",
+    }));
+    expect(entry.resolveRatio).toBe(1);
+    expect(entry.error).toMatch(/compute failure.*black-scholes/);
+    expect(entry.error).toMatch(/1\/1 rows failed/);
+
+    const quotePartitionWrites = writeQuotesSpy.mock.calls.filter(
+      (call) => call[0] === "SPX" && call[1] === "2026-01-05",
+    );
+    expect(quotePartitionWrites).toHaveLength(0);
+
+    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    expect(quotes.get("SPXW260107C04800000")?.[0]).toBeUndefined();
+
+    const warnCall = warnSpy.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("compute failure"),
+    );
+    expect(warnCall).toBeDefined();
+    warnSpy.mockRestore();
+    writeQuotesSpy.mockRestore();
   });
 
   it("persists provider minute greeks inline when bulk quotes already carry them", async () => {

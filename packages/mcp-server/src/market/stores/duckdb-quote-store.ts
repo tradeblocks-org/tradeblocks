@@ -363,11 +363,14 @@ export class DuckdbQuoteStore extends QuoteStore {
     from: string,
     to: string,
   ): Promise<CoverageReport> {
+    // Inline literal path — same leak rationale (see spot-sql.ts header).
+    const underlyingLit = underlying.replace(/'/g, "''");
+    const fromLit = from.replace(/'/g, "''");
+    const toLit = to.replace(/'/g, "''");
     const reader = await this.ctx.conn.runAndReadAll(
       `SELECT DISTINCT date FROM market.option_quote_minutes
-         WHERE underlying = $1 AND date >= $2 AND date <= $3
+         WHERE underlying = '${underlyingLit}' AND date >= '${fromLit}' AND date <= '${toLit}'
          ORDER BY date`,
-      [underlying, from, to],
     );
     const dates = reader.getRows().map((r) => String(r[0]));
     return {
