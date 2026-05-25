@@ -16,11 +16,11 @@
  * Table naming: market.spot resolves to catalog=market, schema=main, table=spot
  * after ATTACH '...' AS market. Do NOT create a schema within market.duckdb.
  *
- * Phase 6 Wave D (SQL-02 closure): the legacy fallback CREATE TABLE blocks
- * for daily / date_context / intraday / option_chain / option_quote_minutes
- * have been DELETED. option_chain + option_quote_minutes live only as Parquet
- * views (no physical fallback); spot / enriched / enriched_context are the
- * only physical fallback tables that remain.
+ * The legacy fallback CREATE TABLE blocks for daily / date_context / intraday /
+ * option_chain / option_quote_minutes have been removed. option_chain and
+ * option_quote_minutes live only as Parquet views (no physical fallback);
+ * spot / enriched / enriched_context are the only physical fallback tables
+ * that remain.
  */
 
 import type { DuckDBConnection } from "@duckdb/node-api";
@@ -40,7 +40,7 @@ import type { DuckDBConnection } from "@duckdb/node-api";
 export async function ensureMutableMarketTables(
   conn: DuckDBConnection,
 ): Promise<void> {
-  // D-11: legacy coverage-tracking table CREATE removed — grep-verified zero readers/writers today.
+  // Legacy coverage-tracking table CREATE removed — grep-verified zero readers/writers today.
   // Coverage is now derived from store.getCoverage() (Parquet: readdirSync; DuckDB: SELECT DISTINCT).
 
   // Sync state tracking for market data imports
@@ -72,26 +72,25 @@ export async function ensureMutableMarketTables(
  * (public repo, fresh clones without Parquet files).
  *
  * Must be called AFTER `ATTACH '...' AS market` in openReadWriteConnection.
- * Creates all columns upfront so later phases can write data without ALTER TABLE.
+ * Creates all columns upfront so writers do not need ALTER TABLE.
  *
- * Phase 6 Wave D retired the legacy fallback CREATE TABLE blocks for daily /
- * date_context / intraday / option_chain / option_quote_minutes; only the
- * three v3.0 canonical tables remain below.
+ * The legacy fallback CREATE TABLE blocks for daily / date_context / intraday /
+ * option_chain / option_quote_minutes have been retired; only the three
+ * canonical tables remain below.
  *
  * @param conn - Active DuckDB connection with market catalog attached
  */
 export async function ensureMarketDataTables(conn: DuckDBConnection): Promise<void> {
   // ============================================================================
-  // Phase 6 Wave D — one-time cleanup: drop legacy physical tables that
-  // persisted from pre-v3.0 runs. Idempotent (IF EXISTS). Mirrors Phase 2 D-12
-  // precheck pattern for option_quote_minutes.
+  // One-time cleanup: drop legacy physical tables that persist from pre-v3.0
+  // runs. Idempotent (IF EXISTS).
   //
-  // After the atomic hard-cut commit (Plan 06-04), the legacy CREATE TABLE
-  // blocks are gone — but existing market.duckdb files still contain these
-  // physical tables from earlier sessions. Drop them here so SELECTs against
-  // market.(daily|intraday|date_context) error cleanly per SQL-02 "no aliases".
-  // data_coverage is dropped as well per Phase 2 D-11 (coverage moved to
-  // store.getCoverage()).
+  // The legacy CREATE TABLE blocks have been removed, but existing
+  // market.duckdb files may still contain these physical tables from earlier
+  // sessions. Drop them here so SELECTs against
+  // market.(daily|intraday|date_context) error cleanly instead of returning
+  // stale data. data_coverage is dropped as well — coverage is now derived
+  // from store.getCoverage().
   // ============================================================================
   // NOTE: option_chain + option_quote_minutes are NOT in this list — those names
   // are still valid in v3.0 as Parquet-backed VIEWs (registered by
@@ -103,9 +102,9 @@ export async function ensureMarketDataTables(conn: DuckDBConnection): Promise<vo
   }
 
   // ============================================================================
-  // Market Data 3.0 — Phase 2 tables (D-24, D-25). Post Phase 6 Wave D, these
-  // are the ONLY physical fallback tables created for market data.
-  // Schemas match Parquet schemas exactly per spec §Schemas lines 338-427.
+  // Canonical physical fallback tables for market data — the only physical
+  // fallback tables created. Schemas match the corresponding Parquet schemas
+  // exactly.
   // ============================================================================
 
   // market.spot — raw minute bars, ticker-first.
@@ -125,7 +124,7 @@ export async function ensureMarketDataTables(conn: DuckDBConnection): Promise<vo
     )
   `);
 
-  // market.enriched — per-ticker computed fields, NO OHLCV (D-25).
+  // market.enriched — per-ticker computed fields, NO OHLCV.
   // PK: (ticker, date). OHLCV is joined at read time from market.spot.
   await conn.run(`
     CREATE TABLE IF NOT EXISTS market.enriched (
@@ -164,7 +163,6 @@ export async function ensureMarketDataTables(conn: DuckDBConnection): Promise<vo
   `);
 
   // market.enriched_context — cross-ticker derived context fields, one row per date.
-  // New canonical cross-ticker derived-context table (D-25).
   // PK: (date)
   await conn.run(`
     CREATE TABLE IF NOT EXISTS market.enriched_context (

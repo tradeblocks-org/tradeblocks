@@ -119,11 +119,18 @@ export function registerMarketFetchTools(
           tickers, underlyings, from, to, provider, dryRun: dry_run, onProgress,
         });
         const mode = underlyings ? `bulk (${underlyings.join(",")})` : `per-ticker (${tickers?.length ?? 0})`;
+        // `partial` means some batches were logged-and-skipped. The structured
+        // `skipped[]` array on the result body carries the details; we surface
+        // the count in the summary so console callers see it.
+        const partialSuffix =
+          result.status === "partial" && result.skipped
+            ? ` — ${result.skipped.length} batch(es) skipped (see result.skipped[])`
+            : "";
         const summary =
           result.status === "unsupported" ? `Unsupported: ${result.error}` :
           result.status === "error" ? `Error: ${result.error}` :
           dry_run ? `[DRY RUN] Would fetch quotes: ${mode}` :
-          `${result.status}: wrote ${result.rowsWritten} quote rows (${mode})`;
+          `${result.status}: wrote ${result.rowsWritten} quote rows (${mode})${partialSuffix}`;
         return createToolOutput(summary, result);
       } finally {
         await downgradeToReadOnly(baseDir);
@@ -328,13 +335,21 @@ export function registerMarketFetchTools(
           ...(result.perOperation.vixContext ? [result.perOperation.vixContext] : []),
         ];
         const unsupportedCount = operationResults.filter((item) => item.status === "unsupported").length;
-        const skippedCount = operationResults.filter((item) => item.status === "skipped").length;
+        const skippedOpCount = operationResults.filter((item) => item.status === "skipped").length;
+        // `partial` surfaces enrichQuoteRows batch-skip details. The structured
+        // skipped[] array lives on the refresh result body; we surface the count
+        // here so console operators don't miss it in CI logs.
+        const partialBatchCount = result.skipped?.length ?? 0;
+        const partialSuffix =
+          result.status === "partial" && partialBatchCount > 0
+            ? ` — ${partialBatchCount} batch(es) skipped on enrichment (see result.skipped[])`
+            : "";
         const summary =
           result.status === "error"
             ? `Refresh completed with ${result.errors.length} error(s): ${result.errors.join("; ")}`
-            : unsupportedCount > 0 || skippedCount > 0
-              ? `Refresh completed for ${asOf} with ${unsupportedCount} unsupported and ${skippedCount} skipped operation(s): ${result.perOperation.spot.length} spot, ${result.perOperation.chain.length} chain, ${result.perOperation.quotes.length} quote operation(s)`
-              : `Refresh complete for ${asOf}: ${result.perOperation.spot.length} spot, ${result.perOperation.chain.length} chain, ${result.perOperation.quotes.length} quote operation(s)`;
+            : unsupportedCount > 0 || skippedOpCount > 0
+              ? `Refresh completed for ${asOf} with ${unsupportedCount} unsupported and ${skippedOpCount} skipped operation(s): ${result.perOperation.spot.length} spot, ${result.perOperation.chain.length} chain, ${result.perOperation.quotes.length} quote operation(s)${partialSuffix}`
+              : `Refresh complete for ${asOf}: ${result.perOperation.spot.length} spot, ${result.perOperation.chain.length} chain, ${result.perOperation.quotes.length} quote operation(s)${partialSuffix}`;
         return createToolOutput(summary, result);
       } finally {
         await downgradeToReadOnly(baseDir);

@@ -59,9 +59,9 @@ export interface WriteParquetAtomicOpts {
  * 4. COUNT(*) for rowCount
  * 5. DROP staging in finally block
  *
- * Threat mitigation (T-02-01): targetPath is always constructed by callers via
+ * Path-traversal mitigation: targetPath is always constructed by callers via
  * path.join(dataDir, 'market', ...) with no user-supplied path components.
- * Threat mitigation (T-02-02): Staging table names use Date.now() -- no user input.
+ * Identifier-injection mitigation: staging table names use Date.now() — no user input.
  *
  * @param conn - Active DuckDB connection
  * @param opts - Write options
@@ -139,7 +139,7 @@ export interface WriteParquetPartitionOpts {
 }
 
 /**
- * New generic multi-level Hive partition writer options (Market Data 3.0 Phase 1).
+ * Generic multi-level Hive partition writer options.
  *
  * Insertion order of `partitions` determines the Hive directory component order.
  * ES2015 guarantees string-keyed object insertion order is preserved by `Object.entries`.
@@ -164,10 +164,10 @@ export interface WriteParquetPartitionOptsV3 {
   filename?: string;
 }
 
-// Partition-value whitelist — defense-in-depth Layer 3 for T-1-01 (path traversal).
-// Allows uppercase/lowercase alnum, dot, underscore, hyphen. Rejects / \ .. null
-// whitespace and newlines. This is the deepest boundary (writer); Zod (Layer 1)
-// and the ticker registry (Layer 2) also validate upstream.
+// Partition-value whitelist — deepest defense-in-depth boundary against path
+// traversal. Allows uppercase/lowercase alnum, dot, underscore, hyphen.
+// Rejects / \ .. null whitespace and newlines. Zod schemas and the ticker
+// registry also validate upstream.
 const PARTITION_VALUE_RE = /^[A-Za-z0-9._-]+$/;
 // Partition-key whitelist — keys become `key=` prefix in directory names.
 // Must start with letter or underscore (no leading digit), then alnum/underscore.
@@ -177,28 +177,28 @@ const PARTITION_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * Write a single Hive partition to the correct directory layout.
  *
  * Two supported shapes (via TypeScript overloads):
- *   1. New generic (Market Data 3.0):
+ *   1. Generic multi-level:
  *        writeParquetPartition(conn, { baseDir, partitions: {ticker,date}, selectQuery })
  *        → baseDir/ticker=X/date=Y/data.parquet
- *   2. Legacy single-{date} shim (retained for 7 existing callers, deleted in Phase 4):
+ *   2. Legacy single-{date} shim (retained for existing callers):
  *        writeParquetPartition(conn, { baseDir, date, selectQuery })
- *        → baseDir/date=Y/data.parquet  (byte-identical to pre-3.0 behavior)
+ *        → baseDir/date=Y/data.parquet  (byte-identical to historical behavior)
  *
- * Overwrites existing partition file (idempotent per D-03).
+ * Overwrites existing partition file (idempotent — safe to re-run).
  *
- * Security (T-1-01): partition keys and values are validated against strict
- * whitelists BEFORE any filesystem operation. Unsafe input throws immediately.
+ * Security: partition keys and values are validated against strict whitelists
+ * BEFORE any filesystem operation. Unsafe input throws immediately.
  *
  * @param conn - Active DuckDB connection
  * @param opts - Partition write options (either shape)
  * @returns Object with rowCount of written rows
  */
-// Overload: new generic signature (Market Data 3.0)
+// Overload: generic multi-level signature
 export function writeParquetPartition(
   conn: DuckDBConnection,
   opts: WriteParquetPartitionOptsV3,
 ): Promise<{ rowCount: number }>;
-// Overload: legacy single-{date} signature (7 existing callers — Phase 3 deletes)
+// Overload: legacy single-{date} signature
 export function writeParquetPartition(
   conn: DuckDBConnection,
   opts: WriteParquetPartitionOpts,
@@ -208,8 +208,8 @@ export async function writeParquetPartition(
   conn: DuckDBConnection,
   opts: WriteParquetPartitionOpts | WriteParquetPartitionOptsV3,
 ): Promise<{ rowCount: number }> {
-  // Runtime dispatch — Pitfall 2: this boolean is load-bearing.
-  // The legacy shape has `date` but no `partitions`; the new shape has `partitions`.
+  // Runtime dispatch — this boolean is load-bearing.
+  // The legacy shape has `date` but no `partitions`; the generic shape has `partitions`.
   const isLegacy = "date" in opts && !("partitions" in opts);
   const partitions: Record<string, string> = isLegacy
     ? { date: (opts as WriteParquetPartitionOpts).date }
@@ -218,8 +218,8 @@ export async function writeParquetPartition(
     ? "data.parquet"
     : ((opts as WriteParquetPartitionOptsV3).filename ?? "data.parquet");
 
-  // T-1-01 mitigation: whitelist every partition key and value BEFORE composing
-  // any path. Reject unsafe input (path traversal, separators, whitespace, nulls).
+  // Path-traversal mitigation: whitelist every partition key and value BEFORE
+  // composing any path. Reject unsafe input (separators, whitespace, nulls).
   for (const [k, v] of Object.entries(partitions)) {
     if (!PARTITION_KEY_RE.test(k)) {
       throw new Error(

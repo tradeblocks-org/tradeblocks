@@ -29,7 +29,7 @@ export abstract class SpotStore {
     from: string,
     to: string,
     opts?: { rthOnly?: boolean; dailyAgg?: boolean },
-  ): { sql: string; params: [] } | null {
+  ): { sql: string } | null {
     const tickerDir = path.join(resolveMarketDir(this.ctx.dataDir), "spot", `ticker=${ticker}`);
     if (!existsSync(tickerDir)) return null;
     const allDates = listPartitionValues(tickerDir, "date");
@@ -66,7 +66,6 @@ export abstract class SpotStore {
                 AND close IS NOT NULL AND close > 0
               GROUP BY date
               ORDER BY date`,
-        params: [],
       };
     }
     const rthClause = opts?.rthOnly ? "AND time >= '09:30' AND time <= '16:00'" : "";
@@ -75,7 +74,6 @@ export abstract class SpotStore {
             FROM read_parquet([${fileList}], hive_partitioning=true)
             WHERE 1=1 ${rthClause}
             ORDER BY date, time`,
-      params: [],
     };
   }
 

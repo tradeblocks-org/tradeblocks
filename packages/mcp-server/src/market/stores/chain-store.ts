@@ -36,11 +36,14 @@ export abstract class ChainStore {
    * check matters.
    */
   async hasChain(underlying: string, date: string): Promise<boolean> {
+    // Inline literals — bound-param path leaks extract_statements handles
+    // (see chain-sql.ts / spot-sql.ts headers).
+    const underlyingLit = underlying.replace(/'/g, "''");
+    const dateLit = date.replace(/'/g, "''");
     const reader = await this.ctx.conn.runAndReadAll(
       `SELECT 1 FROM market.option_chain
-        WHERE underlying = $1 AND date = $2
+        WHERE underlying = '${underlyingLit}' AND date = '${dateLit}'
         LIMIT 1`,
-      [underlying, date] as (string | number | boolean | null | bigint)[],
     );
     return reader.getRows().length > 0;
   }
@@ -57,11 +60,9 @@ export abstract class ChainStore {
     dates: string[],
   ): Promise<ContractRow[]> {
     if (dates.length === 0) return [];
-    const built = buildReadChainDatesSQL(underlying, dates);
-    const reader = await this.ctx.conn.runAndReadAll(
-      built.sql,
-      built.params as (string | number | boolean | null | bigint)[],
-    );
+    // Builder inlines values; unbound runAndReadAll(sql) bypasses extract_statements.
+    const { sql } = buildReadChainDatesSQL(underlying, dates);
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       underlying: String(r[0]),
       date: String(r[1]),

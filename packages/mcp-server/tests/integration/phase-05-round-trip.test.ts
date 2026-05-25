@@ -1,22 +1,23 @@
 /**
- * Phase 5 round-trip integration test (VALIDATION task 5-00-04).
+ * Round-trip integration test for spot backfill → enriched layout →
+ * verification.
  *
  * Drives a small-scale backfill-compute-verify cycle end-to-end against a
- * tmp Parquet fixture with a mocked provider. Asserts:
- *   - MDATA-01: spot/ticker=X/date=Y/data.parquet exists after SpotStore.writeBars
- *   - MDATA-02: enriched/ticker=X/data.parquet exists, no OHLCV columns
- *               (via writeEnrichedTickerFile — the V3 target write primitive
- *                Wave B will wire `EnrichedStore.compute` into; the current
- *                thin wrapper still writes to legacy daily.parquet per
- *                RESEARCH Pitfall 2, a state Plan 05-02 fixes)
- *   - MDATA-03: enriched/context/data.parquet exists with cross-ticker fields
- *               (via writeEnrichedContext — same rationale)
- *   - D-11: compareRow.anyFailure=true when Gap_Pct drift exceeds 1e-9
- *   - MIG-03 in-process: MockProvider.fetchBars → SpotStore.writeBars end-to-end
+ * tmp Parquet fixture with a mocked provider. Asserts that:
+ *   - spot/ticker=X/date=Y/data.parquet exists after SpotStore.writeBars
+ *   - enriched/ticker=X/data.parquet exists, no OHLCV columns (via
+ *     writeEnrichedTickerFile — the canonical write primitive that the
+ *     stores-based `EnrichedStore.compute` is wired through; some legacy
+ *     daily.parquet plumbing remains and is exercised separately)
+ *   - enriched/context/data.parquet exists with cross-ticker fields (via
+ *     writeEnrichedContext)
+ *   - compareRow.anyFailure=true when Gap_Pct drift exceeds 1e-9
+ *   - In-process round-trip: MockProvider.fetchBars → SpotStore.writeBars
+ *     surfaces as coverage and via the canonical view
  *
  * Pattern adapted from tests/unit/quote-backfill.test.ts (MockProvider +
- * buildStoreFixture) and tests/integration/parquet-read-layer.test.ts (Parquet
- * COPY / DESCRIBE verification).
+ * buildStoreFixture) and tests/integration/parquet-read-layer.test.ts
+ * (Parquet COPY / DESCRIBE verification).
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { existsSync } from "fs";
@@ -102,7 +103,7 @@ class MockProvider implements MarketDataProvider {
 // Test suite
 // ---------------------------------------------------------------------------
 
-describe("Phase 5 round-trip — spot backfill → enriched layout → verification", () => {
+describe("market data round-trip — spot backfill → enriched layout → verification", () => {
   let handle: FixtureHandle;
   let stores: MarketStores;
   const mockProvider = new MockProvider();
@@ -110,7 +111,7 @@ describe("Phase 5 round-trip — spot backfill → enriched layout → verificat
   beforeEach(async () => {
     handle = await buildStoreFixture({ parquetMode: true });
     stores = createMarketStores(handle.ctx);
-    // Phase 2 D-22: register views so market.spot / market.enriched /
+    // Register views so market.spot / market.enriched /
     // market.enriched_context resolve when their partitions exist.
     await createMarketParquetViews(handle.ctx.conn, handle.ctx.dataDir);
   });
@@ -119,7 +120,7 @@ describe("Phase 5 round-trip — spot backfill → enriched layout → verificat
     handle.cleanup();
   });
 
-  it("MDATA-01: spot layout — spot/ticker=X/date=Y/data.parquet exists after writeBars", async () => {
+  it("spot layout — spot/ticker=X/date=Y/data.parquet exists after writeBars", async () => {
     const bars = await mockProvider.fetchBars({
       ticker: "SPX",
       from: "2024-08-05",
@@ -136,19 +137,18 @@ describe("Phase 5 round-trip — spot backfill → enriched layout → verificat
     );
     expect(existsSync(expected)).toBe(true);
 
-    // Coverage reflects the write (MIG-03 proof).
+    // Coverage reflects the write end-to-end.
     const cov = await stores.spot.getCoverage("SPX", "2024-08-05", "2024-08-05");
     expect(cov.totalDates).toBe(1);
     expect(cov.earliest).toBe("2024-08-05");
     expect(cov.latest).toBe("2024-08-05");
   });
 
-  it("MDATA-02: enriched layout — enriched/ticker=X/data.parquet exists, no OHLCV columns", async () => {
-    // Stage an enriched row via the V3 write primitive. Wave B (Plan 05-02)
-    // rewires `stores.enriched.compute` to call this helper; in Wave 0 we
-    // exercise the helper directly to prove the target layout is buildable
-    // (RESEARCH Pitfall 2 — the thin-wrapper `compute()` still writes to the
-    // legacy daily.parquet path).
+  it("enriched layout — enriched/ticker=X/data.parquet exists, no OHLCV columns", async () => {
+    // Stage an enriched row via the canonical write primitive. Eventually
+    // `stores.enriched.compute` calls this helper directly; here we exercise
+    // it on its own to prove the target layout is buildable independent of
+    // any legacy daily.parquet plumbing.
     await handle.ctx.conn.run(
       `CREATE TEMP TABLE _enriched_stage AS
         SELECT 'SPX' AS ticker, '2024-08-05' AS date,
@@ -169,8 +169,8 @@ describe("Phase 5 round-trip — spot backfill → enriched layout → verificat
     );
     expect(existsSync(expected)).toBe(true);
 
-    // Assert the enriched file schema does NOT include OHLCV (Phase 2 D-14 /
-    // MDATA-02: enriched holds computed fields only).
+    // Assert the enriched file schema does NOT include OHLCV — enriched
+    // holds computed fields only.
     const schema = await handle.ctx.conn.runAndReadAll(
       `DESCRIBE SELECT * FROM read_parquet('${expected}')`,
     );
@@ -184,7 +184,7 @@ describe("Phase 5 round-trip — spot backfill → enriched layout → verificat
     expect(cols).toContain("gap_pct");
   });
 
-  it("MDATA-03: context layout — enriched/context/data.parquet exists with cross-ticker fields", async () => {
+  it("context layout — enriched/context/data.parquet exists with cross-ticker fields", async () => {
     await handle.ctx.conn.run(
       `CREATE TEMP TABLE _context_stage AS
         SELECT '2024-08-05' AS date,
@@ -214,7 +214,7 @@ describe("Phase 5 round-trip — spot backfill → enriched layout → verificat
     expect(cols).toContain("Trend_Direction");
   });
 
-  it("D-11: drift detection — Gap_Pct delta 5e-8 exceeds 1e-9 tolerance", () => {
+  it("drift detection — Gap_Pct delta 5e-8 exceeds 1e-9 tolerance", () => {
     const oldRow = { Gap_Pct: 0.01 };
     const newRow = { Gap_Pct: 0.01 + 5e-8 };
     const diff = compareRow(
@@ -232,7 +232,7 @@ describe("Phase 5 round-trip — spot backfill → enriched layout → verificat
     expect(ENRICHED_FIELD_TYPES.Gap_Pct).toBe("double");
   });
 
-  it("MIG-03 in-process: backfill via MockProvider writes spot/ partition and coverage reports it", async () => {
+  it("in-process backfill via MockProvider writes spot/ partition and coverage reports it", async () => {
     // Small 3-date backfill — first 3 sample dates that are ≥ 2024 so MockProvider's
     // deterministic close values are reasonable.
     const allSamples = selectVerificationSampleDates(

@@ -1,12 +1,11 @@
 /**
- * Integration tests for `validateColumnMapping` (Plan 04-07 boundary).
+ * Integration tests for `validateColumnMapping`.
  *
- * Pre-Phase-4 this file also tested `importMarketCsvFile(conn, options)` and
- * `importFromDatabase(conn, options)` — both signatures were DELETED in
- * Plan 04-07 Task 2 alongside the legacy `target_table`-driven write path.
- * The new contract (stores-based, no `target_table`) is exercised by the
- * companion `market-imports-v2.test.ts` integration suite + the
- * `tests/unit/market-imports.test.ts` unit suite (both per D-27).
+ * Earlier iterations of this file also tested `importMarketCsvFile(conn, ...)`
+ * and `importFromDatabase(conn, ...)` directly, but both signatures were
+ * removed alongside the legacy `target_table`-driven write path. The new
+ * stores-based contract is exercised by `market-imports-v2.test.ts`
+ * (integration) and `tests/unit/market-imports.test.ts` (unit).
  *
  * `validateColumnMapping` survives unchanged — pure helper, still useful for
  * any future caller that wants to fail fast on a missing schema field.

@@ -7,14 +7,14 @@
  *                        VIX-family fields (Vol_Regime, Term_Structure_State,
  *                        Trend_Direction, VIX_Spike_Pct, VIX_Gap_Pct)
  *
- * Both subqueries/joins share the outer query's positional parameters
- * (`$1=ticker`, `$2=from`, `$3=to`) — the builder never duplicates params
- * just because a flag is flipped.
+ * Values are inlined as SQL literals — see `spot-sql.ts` header for the
+ * extract_statements GC leak that ruled out positional parameters.
  *
  * Purity contract (PATTERNS.md "Pure SQL builders"; CONTEXT.md D-05): no `this`,
  * no `ctx`, no DB-connection value-level imports. Tests live in
  * `tests/unit/market/stores/enriched-sql.test.ts`.
  */
+import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.js";
 import { rthDailyAggregateSubquery } from "./rth-aggregation.js";
 import type { BuiltSQL } from "./spot-sql.js";
 
@@ -26,6 +26,10 @@ export interface BuildReadEnrichedArgs {
   includeOhlcv: boolean;
 }
 
+function lit(value: string): string {
+  return `'${escapeSqlLiteral(value)}'`;
+}
+
 /**
  * Build the `SELECT ... FROM market.enriched ...` SQL, optionally joined with
  * the RTH daily aggregate from `market.spot` and the `market.enriched_context`
@@ -33,17 +37,18 @@ export interface BuildReadEnrichedArgs {
  */
 export function buildReadEnrichedSQL(
   args: BuildReadEnrichedArgs,
-): BuiltSQL<[string, string, string]> {
+): BuiltSQL {
   const { ticker, from, to, includeContext, includeOhlcv } = args;
 
-  // The subquery reuses the OUTER $1/$2/$3 placeholders — do not duplicate
-  // params. If consumers later need different date ranges for the inner and
-  // outer queries, revisit; for the current call-site map they always match.
+  const tickerLit = lit(ticker);
+  const fromLit = lit(from);
+  const toLit = lit(to);
+
   const ohlcvJoin = includeOhlcv
     ? `LEFT JOIN ${rthDailyAggregateSubquery({
-        tickerParamIdx: 1,
-        fromParamIdx: 2,
-        toParamIdx: 3,
+        tickerLit,
+        fromLit,
+        toLit,
       })} s_daily
          ON s_daily.ticker = e.ticker AND s_daily.date = e.date`
     : "";
@@ -65,9 +70,9 @@ export function buildReadEnrichedSQL(
     FROM market.enriched e
     ${ohlcvJoin}
     ${ctxJoin}
-    WHERE e.ticker = $1 AND e.date >= $2 AND e.date <= $3
+    WHERE e.ticker = ${tickerLit} AND e.date >= ${fromLit} AND e.date <= ${toLit}
     ORDER BY e.date
   `;
 
-  return { sql, params: [ticker, from, to] };
+  return { sql };
 }

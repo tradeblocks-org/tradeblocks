@@ -60,11 +60,10 @@ export class DuckdbChainStore extends ChainStore {
     underlying: string,
     date: string,
   ): Promise<ContractRow[]> {
-    const { sql, params } = buildReadChainSQL(underlying, date);
-    const reader = await this.ctx.conn.runAndReadAll(
-      sql,
-      params as (string | number | boolean | null | bigint)[],
-    );
+    // Builder inlines values; unbound runAndReadAll(sql) bypasses
+    // extract_statements (chain-sql.ts header).
+    const { sql } = buildReadChainSQL(underlying, date);
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       underlying: String(r[0]),
       date: String(r[1]),
@@ -82,11 +81,14 @@ export class DuckdbChainStore extends ChainStore {
     from: string,
     to: string,
   ): Promise<CoverageReport> {
+    // Inline literals — same leak rationale as readChain.
+    const underlyingLit = underlying.replace(/'/g, "''");
+    const fromLit = from.replace(/'/g, "''");
+    const toLit = to.replace(/'/g, "''");
     const reader = await this.ctx.conn.runAndReadAll(
       `SELECT DISTINCT date FROM market.option_chain
-         WHERE underlying = $1 AND date >= $2 AND date <= $3
+         WHERE underlying = '${underlyingLit}' AND date >= '${fromLit}' AND date <= '${toLit}'
          ORDER BY date`,
-      [underlying, from, to],
     );
     const dates = reader.getRows().map((r) => String(r[0]));
     return {

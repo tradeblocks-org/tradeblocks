@@ -7,9 +7,9 @@
  *
  * Idempotency: Each sub-migration checks if JSON files already exist for that store.
  * If yes, skips. If DuckDB table is empty, skips. Only migrates when DuckDB has data
- * and JSON doesn't. (D-01, D-01a)
+ * and JSON doesn't.
  *
- * DuckDB tables are left as-is after migration (D-01b).
+ * DuckDB tables are left as-is after migration.
  */
 
 import type { DuckDBConnection } from "@duckdb/node-api";
@@ -283,7 +283,7 @@ async function migrateFlatImportLog(conn: DuckDBConnection, dataDir: string): Pr
  *   - Skips if DuckDB tables are empty or don't exist
  *   - DuckDB tables are left as-is (not dropped or modified)
  *
- * Strategy definitions are migrated separately via json-migration.ext.ts (D-04).
+ * Strategy definitions are migrated separately via json-migration.ext.ts.
  *
  * @param conn - Active DuckDB connection (must be read-write)
  * @param dataDir - Root data directory (e.g., ~/tradeblocks-data)

@@ -371,14 +371,15 @@ export class ThetaDataProvider implements MarketDataProvider {
             } catch (error) {
               // ThetaData returns NOT_FOUND for (root, expiration, right)
               // combos that have no quotes on this date (e.g., zero-volume
-              // expirations near the current month boundary). Skip the
-              // expiration instead of aborting the whole bulk fetch.
+              // expirations near the current month boundary). Treat as an
+              // empty result and fall through to the per-iteration notify
+              // so the final expiration in a group still emits a
+              // phase="complete" event when it NOT_FOUNDs.
               const msg = error instanceof Error ? error.message : String(error);
-              if (/NOT_FOUND|No data found/i.test(msg)) {
-                completedExpirations += 1;
-                continue;
+              if (!/NOT_FOUND|No data found/i.test(msg)) {
+                throw error;
               }
-              throw error;
+              quotes = [];
             }
             for (const q of quotes) {
               // Drop rows missing bid or ask; the parquet schema is DOUBLE
