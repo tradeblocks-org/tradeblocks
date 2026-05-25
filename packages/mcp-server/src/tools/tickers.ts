@@ -1,5 +1,5 @@
 /**
- * Ticker Registry MCP Tools (Market Data 3.0 — Phase 1, Plan 05)
+ * Ticker Registry MCP Tools (Market Data 3.0)
  *
  * Four MCP tools for CRUD operations on the underlying→roots mapping registry:
  *   - register_underlying     Create or update a user entry; persists to
@@ -11,19 +11,19 @@
  *   - resolve_root            Debug helper: returns {root, underlying, source}
  *                             for any bare-root or full OCC ticker input.
  *
- * SHARED CODE per CONTEXT.md D-10. Wired into createServer() in src/index.ts
- * (NOT index.ext.ts) — the registry itself is storage infrastructure shared
- * between the public and private repos.
+ * Shared code. Wired into createServer() in src/index.ts — the registry
+ * itself is storage infrastructure shared between the public and consumer
+ * (private) repos.
  *
- * Security (T-1-02 layer 1 — defense in depth):
+ * Security (defense in depth):
  *   Zod schemas from ../market/tickers/schemas.ts enforce the TICKER_RE whitelist
  *   on `underlying` and each `root` BEFORE any handler runs. Layer 2 (registry
  *   constructor / register) and layer 3 (writer partition-value whitelist) apply
  *   the same regex at their own boundaries.
  *
- * Singleton contract (T-1-07 / Pitfall 5):
+ * Singleton contract:
  *   The `TickerRegistry` instance is constructed ONCE in src/index.ts via
- *   loadRegistry(), and the same reference is passed here AND (Phase 2) into
+ *   loadRegistry(), and the same reference is passed here AND into
  *   StoreContext.tickers. Two instances would diverge on register/unregister.
  */
 import type { z } from "zod";
@@ -127,7 +127,7 @@ export async function handleResolveRoot(
  *
  * @param server   - McpServer instance.
  * @param registry - The SAME TickerRegistry singleton used by every other
- *                   consumer in the process (Pitfall 5 / T-1-07 mitigation).
+ *                   consumer in the process.
  * @param dataDir  - Base data directory; user override persists at
  *                   {dataDir}/market/underlyings.json.
  */

@@ -2,11 +2,11 @@
  * JSON Store Utility
  *
  * Provides atomic JSON file operations for metadata storage.
- * Used by json-adapters.ts and json-adapters.ext.ts to persist
+ * Used by json-adapters.ts (and consumer-side adapters) to persist
  * strategy profiles, sync metadata, market import metadata,
  * flat import logs, and strategy definitions as JSON files.
  *
- * Write Atomicity (D-03): All writes use write-then-rename pattern.
+ * Write atomicity: all writes use write-then-rename pattern.
  * Write to {path}.tmp, then rename() to final path. This prevents
  * partial writes from being picked up by Syncthing or concurrent readers.
  *

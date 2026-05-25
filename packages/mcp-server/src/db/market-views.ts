@@ -163,7 +163,7 @@ export async function createMarketParquetViews(
     }
   }
 
-  // --- Option quote minutes view (moved from connection.ext.ts) ---
+  // --- Option quote minutes view ---
   //
   // Accepts both the legacy date-only layout (`date=Y/...`) and the canonical
   // underlying-first layout (`underlying=X/date=Y/...`) produced by the
