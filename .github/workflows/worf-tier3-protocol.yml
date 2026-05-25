@@ -1,0 +1,70 @@
+name: Worf Tier 3 protocol gate
+
+# Mechanical audit signal for public-repo Tier 3 PRs. This does not replace
+# subagent-Worf's semantic review; it checks that Picard recorded Worf clearance
+# and actually requested the non-author Admiral as reviewer.
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited, reopened, labeled, unlabeled, review_requested, review_request_removed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  worf-clear-staleness:
+    # On `synchronize` (new commits pushed), strip the `worf-cleared` label so
+    # Tier 3 PRs must re-Worf after a push. Mirrors `dismiss-stale-reviews` on
+    # the cross-Admiral side: pushed code invalidates the prior approval.
+    # No-op when the label isn't present.
+    name: Strip worf-cleared on push
+    if: ${{ github.event.action == 'synchronize' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove stale worf-cleared label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --remove-label worf-cleared 2>/dev/null || true
+
+  tier3-protocol:
+    name: Tier 3 PR-open protocol signals
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect declared tier
+        id: detect-tier
+        env:
+          PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -e
+          pr_body=$(printf '%s' "$PR_BODY" | tr -d '\r')
+          tier_line=$(printf '%s\n' "$pr_body" | grep -m 1 -E '^\*{0,2}Tier:[[:space:]]+[0-3]([[:space:]]|$|—|\*)' || true)
+          if [ -z "$tier_line" ]; then
+            if [ "$PR_AUTHOR_LOGIN" = "dependabot[bot]" ] || [ "$PR_AUTHOR_LOGIN" = "app/dependabot" ]; then
+              echo "No Tier line found on Dependabot PR; public-repo Tier 3 protocol gate skipped."
+              echo "tier=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::Public-repo PRs must declare a tier with a line starting 'Tier: N'. Dependabot PRs are the only no-tier short-circuit."
+            echo "tier=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          tier=$(printf '%s\n' "$tier_line" | sed -E 's/^\*{0,2}Tier:[[:space:]]+([0-3]).*/\1/')
+          echo "tier=$tier" >> "$GITHUB_OUTPUT"
+          echo "Tier detected: $tier"
+
+      - name: Check Worf clear label and cross-Admiral reviewer
+        env:
+          PR_TIER: ${{ steps.detect-tier.outputs.tier }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
+          PR_REVIEWERS_JSON: ${{ toJson(github.event.pull_request.requested_reviewers) }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 .github/scripts/tier3_protocol_gate.py
