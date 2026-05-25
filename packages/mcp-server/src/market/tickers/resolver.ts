@@ -9,7 +9,7 @@
  * cannot import it). If the OCC-ticker regex is ever updated in one place,
  * update the other as well.
  */
-import type { TickerRegistry } from "./registry.js"; // TYPE-ONLY — break runtime cycle (Pitfall 10)
+import type { TickerRegistry } from "./registry.js"; // TYPE-ONLY — break runtime cycle with registry.ts
 
 // OCC-like option ticker shape: root + YYMMDD + C/P + 6-11 digit strike.
 // Standard OCC encodes strike × 1000 in 8 digits, but ThetaData emits wider
@@ -40,9 +40,9 @@ export function extractRoot(input: string): string {
 
 /**
  * Resolve any OCC ticker or bare root to its underlying.
- * Unknown roots return themselves (identity fallback per CONTEXT.md D-05) —
- * this is how leveraged ETFs (SPXL/SPXS/SPXU/SPXC) and any new symbol stay
- * correct without explicit registry entries.
+ * Unknown roots return themselves (identity fallback) — this is how
+ * leveraged ETFs (SPXL/SPXS/SPXU/SPXC) and any new symbol stay correct
+ * without explicit registry entries.
  */
 export function rootToUnderlying(input: string, registry: TickerRegistry): string {
   const root = extractRoot(input);

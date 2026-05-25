@@ -1,13 +1,13 @@
 /**
- * Pure SQL builder for ChainStore reads (Market Data 3.0 — Phase 2 Wave 1).
+ * Pure SQL builder for ChainStore reads.
  *
  * Option chains are partitioned by (underlying, date). A single `readChain`
  * call targets exactly one partition. Values are inlined as SQL literals
  * because `runAndReadAll(sql, params)` leaks C++ handles via DuckDB's
  * `extract_statements` path (see `spot-sql.ts` header for the full writeup).
  *
- * Purity contract (CONTEXT.md D-05): no `this`, no `ctx`, no DuckDB value-level
- * imports. Tests in `tests/unit/market/stores/chain-sql.test.ts`.
+ * Purity contract: no `this`, no `ctx`, no DuckDB value-level imports. Tests
+ * in `tests/unit/market/stores/chain-sql.test.ts`.
  */
 import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.js";
 import type { BuiltSQL } from "./spot-sql.js";

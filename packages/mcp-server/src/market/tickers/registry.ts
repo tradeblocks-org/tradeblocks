@@ -4,14 +4,14 @@
  * Seeded from bundled defaults (defaults.json). User-added entries via register()
  * persist to {dataRoot}/market/underlyings.json via saveUserOverride (loader.ts).
  *
- * Identity of this class (`TickerRegistry`, `TickerEntry`, `EntrySource`) is preserved
- * from the Plan 01-01 forward-declaration stub so `src/market/stores/types.ts` keeps
- * its type-only import intact.
+ * `src/market/stores/types.ts` imports `TickerRegistry`, `TickerEntry`, and
+ * `EntrySource` as types — keep those exported names stable.
  *
- * Defense-in-depth security layer 2 per RESEARCH.md Pitfall 3: every stored value is
- * validated against TICKER_RE at construction and at register() time. The MCP-tool
- * layer (Plan 05) applies the same regex at the Zod boundary; the writer (Plan 03)
- * applies its own whitelist at the partition-value boundary.
+ * Defense-in-depth: every stored value is validated against TICKER_RE at
+ * construction and at register() time. The MCP-tool layer applies the same
+ * regex at the Zod boundary; the writer applies its own whitelist at the
+ * partition-value boundary. Each layer is independently sufficient; together
+ * they prevent malformed/injected ticker strings from reaching DuckDB.
  */
 import { TICKER_RE } from "./schemas.js";
 
@@ -85,7 +85,9 @@ export class TickerRegistry {
 
   /**
    * Resolve a root symbol to its underlying.
-   * Identity fallback (returns the root unchanged) when unknown — per CONTEXT.md D-05.
+   * Identity fallback (returns the root unchanged) when unknown — unknown
+   * roots are treated as their own underlying so single-symbol tickers
+   * (e.g. leveraged ETFs) keep working without explicit registration.
    */
   resolve(root: string): string {
     return this.rootMap.get(root)?.underlying ?? root;
@@ -96,7 +98,7 @@ export class TickerRegistry {
    * - New underlying (not a bundled default): source = "user"
    * - Overriding a bundled default: source = "user-override"
    *
-   * @throws on invalid characters in `underlying` or any `root` (T-1-02 defense layer 2).
+   * @throws on invalid characters in `underlying` or any `root` (defense-in-depth — see file header).
    */
   register(entry: { underlying: string; roots: string[] }): TickerEntry {
     validate(entry.underlying, entry.roots);

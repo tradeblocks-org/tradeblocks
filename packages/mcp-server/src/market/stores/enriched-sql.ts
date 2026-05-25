@@ -1,5 +1,5 @@
 /**
- * Pure SQL builder for EnrichedStore reads (Market Data 3.0 — Phase 2 Wave 1).
+ * Pure SQL builder for EnrichedStore reads.
  *
  * The enriched read supports two optional joins controlled by flags:
  *   - `includeOhlcv`   → LEFT JOIN a daily RTH aggregate of `market.spot`
@@ -10,9 +10,8 @@
  * Values are inlined as SQL literals — see `spot-sql.ts` header for the
  * extract_statements GC leak that ruled out positional parameters.
  *
- * Purity contract (PATTERNS.md "Pure SQL builders"; CONTEXT.md D-05): no `this`,
- * no `ctx`, no DB-connection value-level imports. Tests live in
- * `tests/unit/market/stores/enriched-sql.test.ts`.
+ * Purity contract: no `this`, no `ctx`, no DB-connection value-level imports.
+ * Tests live in `tests/unit/market/stores/enriched-sql.test.ts`.
  */
 import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.js";
 import { rthDailyAggregateSubquery } from "./rth-aggregation.js";
