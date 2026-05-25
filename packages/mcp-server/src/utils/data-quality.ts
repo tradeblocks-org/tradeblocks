@@ -13,25 +13,24 @@
  *
  * Design principles:
  *   - scoreDataQuality and formatCoverageReport are pure functions (no I/O)
- *   - queryCoverage handles all store access (Phase 4 / CONSUMER-02 — flows
- *     through `stores.spot.getCoverage` + `stores.quote.getCoverage` only;
- *     no raw `FROM market.*` SQL remains)
+ *   - queryCoverage handles all store access — flows through
+ *     `stores.spot.getCoverage` + `stores.quote.getCoverage` only; no raw
+ *     `FROM market.*` SQL remains.
  *   - Confidence scoring uses avgBarsPerDay as proxy for data density:
  *       >= 200 bars/day = dense quotes (high confidence)
  *       50-199 bars/day = sparse trade bars (medium confidence)
  *       < 50 bars/day  = very sparse data (low confidence)
  *   - Missing data (> 10% of trading days) caps confidence at medium
  *
- * Note on `barCount` post-Phase-4:
- *   The legacy `queryCoverage` returned per-date `COUNT(*)` row counts from
- *   the pre-Phase-6 intraday view / `market.option_quote_minutes`. The Phase 2 store layer
- *   exposes coverage as `{ earliest, latest, totalDates }` — date-level
- *   granularity only. We map "covered date" → `barCount = 1` so downstream
- *   `scoreDataQuality` consumers continue to see a non-zero density signal,
- *   and `hasQuotes` reflects whether the date is covered by the quote store
- *   (which is the new "dense data" signal in Market Data 3.0). True per-date
- *   density is no longer exposed by the store layer; Plan 04-06 will rewire
- *   the data-quality consumer fully.
+ * Note on `barCount`:
+ *   The earlier `queryCoverage` returned per-date `COUNT(*)` row counts from
+ *   the legacy intraday view / `market.option_quote_minutes`. The current
+ *   store layer exposes coverage as `{ earliest, latest, totalDates }` —
+ *   date-level granularity only. We map "covered date" → `barCount = 1` so
+ *   downstream `scoreDataQuality` consumers continue to see a non-zero
+ *   density signal, and `hasQuotes` reflects whether the date is covered by
+ *   the quote store (the current "dense data" signal). True per-date
+ *   density is no longer exposed by the store layer.
  */
 
 import type { MarketStores } from "../market/stores/index.js";
@@ -146,7 +145,7 @@ export function scoreDataQuality(input: DataQualityInput): DataQuality {
 /**
  * Aggregate spot + quote store coverage for an underlying over a date range.
  *
- * Phase 4 / CONSUMER-02: all reads flow through `stores.spot.getCoverage` and
+ * All reads flow through `stores.spot.getCoverage` and
  * `stores.quote.getCoverage`. The pre-migration LIKE pattern (e.g., 'SPX%') is
  * gone — callers pass the underlying ticker directly. Quote-store coverage
  * already aggregates over every OCC chain under the underlying.
@@ -166,7 +165,7 @@ export async function queryCoverage(
   const spotCov = await stores.spot.getCoverage(underlying, fromDate, toDate);
 
   // Quote coverage — every OCC quote-minute under this underlying. The store
-  // returns date-level coverage; "covered = dense" in the post-Phase-4 model.
+  // returns date-level coverage; "covered = dense" in the current model.
   const quoteCov = await stores.quote.getCoverage(underlying, fromDate, toDate);
 
   // Build covered-date set.
@@ -191,7 +190,7 @@ export async function queryCoverage(
     // Per-date row counts are no longer exposed by the store; treat each
     // covered date as 1 unit of "bars" so callers that compute density still
     // see a positive signal. hasQuotes flips when the quote store covers the
-    // date (the post-Phase-4 "dense data" predicate).
+    // date (the current "dense data" predicate).
     const barCount = 1;
     totalBars += barCount;
     dateBreakdown.push({ date, barCount, hasQuotes: quoteDateSet.has(date) });
@@ -209,7 +208,8 @@ export async function queryCoverage(
 
 /**
  * Enumerate the inclusive date range between two ISO dates. Returns [] when
- * either bound is null (the D-09 silent-empty contract). Pure function — no IO.
+ * either bound is null — coverage probes use null bounds to signal "no
+ * data found" without throwing. Pure function — no IO.
  */
 function enumerateCoveredDates(from: string | null, to: string | null): string[] {
   if (!from || !to) return [];

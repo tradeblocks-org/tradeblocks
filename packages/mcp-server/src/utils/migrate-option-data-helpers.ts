@@ -1,13 +1,13 @@
 /**
- * Pure helpers for migrate-option-data.mjs (Phase 3).
+ * Pure helpers for the option-data migration script.
  *
- * No IO, no DuckDB, no filesystem — these functions are the unit-test target
- * for Phase 3 (CONTEXT.md D-24). The .mjs script that consumes them is not
- * unit-testable due to filesystem effects; these helpers carry the safety net.
+ * No IO, no DuckDB, no filesystem — these functions are the unit-test
+ * target. The .mjs script that consumes them is not unit-testable due to
+ * filesystem effects; these helpers carry the safety net.
  */
 import type { TickerRegistry } from "../market/tickers/registry.js";
 
-/** Hardcoded skip list for leveraged-ETF roots (CONTEXT.md D-09 — verbatim list, audit-friendly). */
+/** Hardcoded skip list for leveraged-ETF roots — verbatim list, audit-friendly. */
 export const LEVERAGED_ETFS = new Set(["SPXL", "SPXS", "SPXU", "SPXC"]);
 
 export interface GroupResult {
@@ -42,8 +42,9 @@ export function groupTickersByUnderlying(
 
 /**
  * Build the SELECT for option_chain rewrite. Uses `* EXCLUDE (underlying)`
- * per CONTEXT.md D-05 — the underlying lives in the partition path post-migration.
- * sourceGlob is interpolated raw; caller must pass a trusted, migrator-composed path.
+ * because the underlying lives in the partition path post-migration, not in
+ * a row-level column. sourceGlob is interpolated raw; caller must pass a
+ * trusted, migrator-composed path.
  */
 export function buildOptionChainSelectQuery(
   sourceGlob: string,
@@ -55,8 +56,8 @@ export function buildOptionChainSelectQuery(
 }
 
 /**
- * Build the SELECT for option_quote_minutes rewrite. NO EXCLUDE — body has no
- * `underlying` column (CONTEXT.md D-08). Filters by root via regexp_extract.
+ * Build the SELECT for option_quote_minutes rewrite. NO EXCLUDE — the body
+ * has no `underlying` column. Filters by root via regexp_extract.
  */
 export function buildOptionQuoteSelectQuery(
   sourceGlob: string,

@@ -1,17 +1,16 @@
 /**
- * Tool Dependency Registry (RESOLVE-02).
+ * Tool Dependency Registry.
  *
  * Maps each MCP tool name to its required spot tickers. A `[]` entry means
  * "target ticker is dynamic" — the caller passes `targetTicker` to
  * `unionTickerDeps(...)` and the registry substitutes it in.
  *
- * Intentionally static (Phase 4 CONTEXT D-21): adding a new tool means editing
- * this file. Consistent with how MCP tools are registered in src/index.ts /
- * src/index.ext.ts.
+ * Intentionally static: adding a new tool means editing this file,
+ * consistent with how MCP tools are registered.
  *
- * Downstream: Phase 4 Wave D (`utils/data-pipeline.ts::buildFetchPlan`)
- * replaces the hardcoded `SPX -> ['SPX','VIX','VIX9D']` branch with
- * `unionTickerDeps(requestedTools, strategy.underlying)`.
+ * Consumed by `utils/data-pipeline.ts::buildFetchPlan` —
+ * `unionTickerDeps(requestedTools, strategy.underlying)` replaces the
+ * hardcoded per-underlying branch in the fetch planner.
  */
 export const TOOL_TICKER_DEPS: Record<string, string[]> = {
   backtester:         ['SPX', 'VIX', 'VIX9D'],

@@ -6,18 +6,16 @@
  *   - extractRoot OCC tail-strip
  *   - extractRoot error on no leading alpha
  *   - rootToUnderlying across SPX family, QQQ family
- *   - Identity fallback for leveraged ETFs (D-05 correctness rule)
+ *   - Identity fallback for leveraged ETFs (leveraged ETFs must NOT fold
+ *     into the parent index)
  *   - Identity fallback for arbitrary unknown roots
- *
- * Tests will run once Plan 01-06 wires test-exports for the tickers module.
- * Until then `npm run build` must succeed and imports must compile cleanly.
  */
 import { describe, it, expect } from "@jest/globals";
 // Imported directly from source files rather than via test-exports.
 import { extractRoot, rootToUnderlying } from "../../../../src/market/tickers/resolver.js";
 import { TickerRegistry } from "../../../../src/market/tickers/registry.js";
 
-// A registry seeded with D-07 defaults (the one the production loader builds).
+// A registry seeded with the bundled defaults the production loader builds.
 const defaults = [
   { underlying: "SPX", roots: ["SPX", "SPXW", "SPXQ"] },
   { underlying: "QQQ", roots: ["QQQ", "QQQX"] },
@@ -79,7 +77,7 @@ describe("rootToUnderlying — QQQ family", () => {
   });
 });
 
-describe("rootToUnderlying — leveraged ETFs (identity fallback, per D-05)", () => {
+describe("rootToUnderlying — leveraged ETFs (identity fallback)", () => {
   const registry = new TickerRegistry(defaults);
   it("returns SPXL / SPXS / SPXU / SPXC as themselves — never folded into SPX", () => {
     expect(rootToUnderlying("SPXL", registry)).toBe("SPXL");

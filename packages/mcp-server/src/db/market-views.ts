@@ -19,9 +19,9 @@
  * View surface registered over these files: market.spot, market.spot_daily (RTH aggregation),
  * market.enriched, market.enriched_context, market.option_chain, market.option_quote_minutes.
  *
- * Phase 6 Wave D (SQL-02 closure): the legacy view-registration blocks for
- * the retired daily / date_context / intraday names have been DELETED; reads
- * against those names now fail with a DuckDB Binder/Catalog error by design.
+ * The legacy view-registration blocks for the retired daily / date_context /
+ * intraday names have been removed; reads against those names now fail with
+ * a DuckDB Binder/Catalog error by design.
  */
 
 import type { DuckDBConnection } from "@duckdb/node-api";
@@ -114,9 +114,9 @@ function hasEnrichedContextFile(dir: string): boolean {
  *   - If the Parquet file/directory exists: DROP any existing physical TABLE, then CREATE VIEW
  *   - If missing: record in tablesKept (caller should create physical table as fallback)
  *
- * Phase 6 Wave D retired the legacy single-file (daily, date_context) and
- * Hive-partitioned (intraday) view registrations; reads against those names
- * now fail with a DuckDB Binder/Catalog error by design.
+ * The legacy single-file (daily, date_context) and Hive-partitioned
+ * (intraday) view registrations have been retired; reads against those
+ * names now fail with a DuckDB Binder/Catalog error by design.
  *
  * @param conn - Active DuckDB connection with market catalog attached
  * @param dataDir - Base data directory (parent of market/ subdirectory)
@@ -132,9 +132,9 @@ export async function createMarketParquetViews(
   // --- Hive-partitioned views ---
 
   // `option_chain` accepts either the legacy date-only layout
-  // (`option_chain/date=Y/...`) or the Market Data 3.0 underlying-first layout
-  // (`option_chain/underlying=X/date=Y/...`) — the new store writers
-  // (Plan 02-03) produce the underlying-first layout.
+  // (`option_chain/date=Y/...`) or the canonical underlying-first layout
+  // (`option_chain/underlying=X/date=Y/...`) — the current store writers
+  // produce the underlying-first layout.
   const hiveViews: Array<{ name: string; subdir: string; partitionKey: string }> = [
     { name: "option_chain", subdir: resolveCanonicalMarketPartitionDir(dataDir, "option_chain"), partitionKey: "underlying" },
   ];
@@ -165,11 +165,11 @@ export async function createMarketParquetViews(
 
   // --- Option quote minutes view (moved from connection.ext.ts) ---
   //
-  // Accepts both the legacy date-only layout (`date=Y/...`) and the Market
-  // Data 3.0 underlying-first layout (`underlying=X/date=Y/...`) produced by
-  // Plan 02-03 Parquet writers. The view projects the canonical quote schema
-  // explicitly so older partitions without greeks columns still read with null
-  // greeks instead of failing at bind time.
+  // Accepts both the legacy date-only layout (`date=Y/...`) and the canonical
+  // underlying-first layout (`underlying=X/date=Y/...`) produced by the
+  // current Parquet writers. The view projects the canonical quote schema
+  // explicitly so older partitions without greeks columns still read with
+  // null greeks instead of failing at bind time.
 
   const optionMinuteQuoteDir = resolveCanonicalMarketPartitionDir(dataDir, "option_quote_minutes");
   const optionQuoteHasNewLayout = hasParquetPartitions(optionMinuteQuoteDir, "underlying");
@@ -207,10 +207,9 @@ export async function createMarketParquetViews(
   try { await conn.run("DROP TABLE IF EXISTS market.option_delta_index"); } catch { /* wrong type */ }
 
   // ============================================================================
-  // Market Data 3.0 — Phase 2 + Phase 6 new views (D-22 / Phase 6 D-01)
-  // Added alongside the existing view code. Old views stay active for Phase 4
-  // consumer migration; removal of legacy daily / intraday / date_context views
-  // is Phase 6 / EXT-01. No changes to connection.ext.ts (D-23).
+  // Canonical store views (spot, enriched, enriched_context, spot_daily).
+  // These coexist with legacy view registrations elsewhere while consumer
+  // migration is ongoing.
   // ============================================================================
 
   // market.spot — ticker-first Hive partitioning: spot/ticker=X/date=Y/data.parquet
@@ -258,20 +257,19 @@ export async function createMarketParquetViews(
     tablesKept.push("enriched_context");
   }
 
-  // market.spot_daily — view over market.spot with RTH aggregation. Bridge for
-  // SQL callers that need daily OHLCV after the legacy-daily-view retirement
-  // (Phase 6 D-01; see PATTERNS.md §market-views.ts for the exact SQL contract).
-  // Semantics match SpotStore.readDailyBars: first(open), max(high), min(low),
-  // last(close), first(bid), last(ask), RTH 09:30–16:00, GROUP BY ticker+date.
-  // Unconditional registration — DuckDB view over table-or-view works when
-  // market.spot exists as either a Parquet view or fallback table (Pitfall 3).
-  // However, CREATE VIEW binds the underlying reference immediately, so if
-  // market.spot exists in NEITHER form (empty dir AND no pre-existing fallback
-  // table — see Phase 2 "empty market/ dir" test), we skip the registration
-  // and push to tablesKept. In production, connection.ts calls
-  // ensureMarketDataTables() which creates a market.spot fallback table when
-  // the view is absent, so this skip branch applies only to unit-test fixtures
-  // that deliberately avoid BOTH paths.
+  // market.spot_daily — view over market.spot with RTH aggregation. Bridge
+  // for SQL callers that need daily OHLCV after the legacy-daily-view
+  // retirement. Semantics match SpotStore.readDailyBars: first(open),
+  // max(high), min(low), last(close), first(bid), last(ask),
+  // RTH 09:30–16:00, GROUP BY ticker+date.
+  //
+  // CREATE VIEW binds the underlying reference immediately, so if
+  // market.spot exists in NEITHER form (empty dir AND no pre-existing
+  // fallback table) we skip the registration and push to tablesKept. In
+  // production, connection.ts calls ensureMarketDataTables() which creates
+  // a market.spot fallback table when the view is absent, so this skip
+  // branch applies only to unit-test fixtures that deliberately avoid
+  // BOTH paths.
   const spotExists = await (async () => {
     try {
       await conn.run("SELECT * FROM market.spot WHERE 1=0");

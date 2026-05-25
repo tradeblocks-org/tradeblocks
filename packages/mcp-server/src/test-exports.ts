@@ -17,7 +17,7 @@ export {
   type ImportCsvOptions,
 } from './utils/block-loader.js';
 
-// Export CSV discovery utilities for unit testing (Phase 63)
+// Export CSV discovery utilities for unit testing
 export { detectCsvType, discoverCsvFiles, logCsvDiscoveryWarning, type CsvType } from './utils/csv-discovery.js';
 
 // Export PortfolioStatsCalculator for testing block_diff logic
@@ -84,7 +84,7 @@ export {
   type CoverageResult,
 } from './utils/data-quality.js';
 
-// Export intraday timing utilities for testing (Plan 64-03)
+// Export intraday timing utilities for testing
 export { computeIntradayTimingFields } from './utils/market-enricher.js';
 
 // Export schema metadata for classification completeness tests
@@ -103,14 +103,14 @@ export {
   type ImportSpotResult,
 } from './utils/market-importer.js';
 
-// Export Phase 60 market import metadata helpers for integration testing
+// Export market import metadata helpers for integration testing
 export {
   type MarketImportMetadata,
   getMarketImportMetadata,
   upsertMarketImportMetadata,
 } from './sync/metadata.js';
 
-// Export Phase 62 market enricher indicator functions for unit testing
+// Export market enricher indicator functions for unit testing
 export {
   computeRSI,
   computeATR,
@@ -139,7 +139,7 @@ export {
   type TierStatus,
 } from './utils/market-enricher.js';
 
-// Export strategy profile types and CRUD functions for integration testing (Phase 60)
+// Export strategy profile types and CRUD functions for integration testing
 export type {
   StrategyProfile,
   StrategyProfileRow,
@@ -157,11 +157,11 @@ export {
   deleteProfile,
 } from './db/profile-schemas.js';
 
-// Export Phase 62 analysis utility modules for unit testing
+// Export analysis utility modules for unit testing
 export { computeSliceStats, type SliceStats } from './utils/analysis-stats.js';
 export { buildFilterPredicate, type FilterPredicate } from './utils/filter-predicates.js';
 
-// Export Phase 61 profile tool handlers and schemas for integration testing
+// Export profile tool handlers and schemas for integration testing
 export {
   handleProfileStrategy,
   handleGetStrategyProfile,
@@ -173,7 +173,7 @@ export {
   deleteProfileSchema,
 } from './tools/profiles.js';
 
-// Export Phase 62 profile analysis tool handlers and schemas for integration testing
+// Export profile analysis tool handlers and schemas for integration testing
 export {
   handleAnalyzeStructureFit,
   handleValidateEntryFilters,
@@ -183,7 +183,7 @@ export {
   portfolioStructureMapSchema,
 } from './tools/profile-analysis.js';
 
-// Export Phase 65 regime advisor tool handler and schema for integration testing
+// Export regime advisor tool handler and schema for integration testing
 export {
   handleRegimeAllocationAdvisor,
   regimeAllocationAdvisorSchema,
@@ -230,7 +230,7 @@ export {
   type MassiveQuotesResponse,
 } from './utils/providers/massive.js';
 
-// Export trade replay utilities for unit testing (Phase 68)
+// Export trade replay utilities for unit testing
 export {
   parseLegsString,
   buildOccTicker,
@@ -246,14 +246,14 @@ export {
   type GreeksConfig,
 } from './utils/trade-replay.js';
 
-// Export trade replay tool handler and schema for integration testing (Phase 68)
+// Export trade replay tool handler and schema for integration testing
 export {
   handleReplayTrade,
   replayTradeSchema,
   resolveOODateRange,
 } from './tools/replay.js';
 
-// Export Black-Scholes and Bachelier greeks computation for unit testing (Phase 69 / Phase 73-01)
+// Export Black-Scholes and Bachelier greeks computation for unit testing
 export {
   pdf,
   cdf,
@@ -288,10 +288,10 @@ export {
   readParquetFilesSql,
 } from './utils/quote-parquet-projection.js';
 
-// Export parquet-writer utility functions for unit testing (Phase 02-01)
+// Export parquet-writer utility functions for unit testing
 export { isParquetMode, writeParquetAtomic, writeParquetPartition, resolveMarketDir } from './db/parquet-writer.js';
 
-// Export json-store utility for unit testing (Phase 03-01)
+// Export json-store utility for unit testing
 export {
   readJsonFile,
   writeJsonFile,
@@ -300,19 +300,19 @@ export {
   toFileSlug,
 } from './db/json-store.js';
 
-// Export Massive snapshot schemas for unit testing (Phase 70)
+// Export Massive snapshot schemas for unit testing
 export {
   MassiveSnapshotResponseSchema,
   MassiveSnapshotContractSchema,
 } from './utils/providers/massive.js';
 
-// Export snapshot tool handler and schema for integration testing (Phase 70)
+// Export snapshot tool handler and schema for integration testing
 export {
   handleGetOptionSnapshot,
   getOptionSnapshotSchema,
 } from './tools/snapshot.js';
 
-// Export greeks decomposition utilities for unit testing (Phase 71)
+// Export greeks decomposition utilities for unit testing
 export {
   decomposeGreeks,
   computeTimeDeltaDays,
@@ -324,7 +324,7 @@ export {
   type FactorName,
 } from './utils/greeks-decomposition.js';
 
-// Export exit trigger analysis utilities for unit testing (Phase 71)
+// Export exit trigger analysis utilities for unit testing
 export {
   evaluateTrigger,
   analyzeExitTriggers,
@@ -336,7 +336,7 @@ export {
   type LegGroupResult,
 } from './utils/exit-triggers.js';
 
-// Export exit analysis tool handlers and schemas for integration testing (Phase 71)
+// Export exit analysis tool handlers and schemas for integration testing
 export {
   handleAnalyzeExitTriggers,
   handleDecomposeGreeks,
@@ -344,7 +344,7 @@ export {
   decomposeGreeksSchema,
 } from './tools/exit-analysis.js';
 
-// Export batch exit analysis engine for unit testing (Phase 72)
+// Export batch exit analysis engine for unit testing
 export {
   analyzeBatch,
   computeAggregateStats,
@@ -358,7 +358,7 @@ export {
   type BaselineMode,
 } from './utils/batch-exit-analysis.js';
 
-// Export batch exit analysis tool handler and schema for integration testing (Phase 72)
+// Export batch exit analysis tool handler and schema for integration testing
 export {
   handleBatchExitAnalysis,
   batchExitAnalysisSchema,
@@ -457,7 +457,7 @@ export {
   filterSparseSteps,
 } from './tools/greeks-attribution.js';
 
-// Export json-adapters for integration testing (Phase 03-01)
+// Export json-adapters for integration testing
 export {
   upsertProfileJson,
   getProfileJson,
@@ -474,16 +474,16 @@ export {
 } from './db/json-adapters.js';
 export type { FlatImportLogEntry } from './db/json-adapters.js';
 
-// Export json-migration for integration testing (Phase 03-03)
+// Export json-migration for integration testing
 export { migrateMetadataToJson, type MigrationResult } from './db/json-migration.js';
 
 // ============================================================================
-// Market Data 3.0 — Phase 1 exports
+// Market Data — store interfaces, registry, datasets
 //
-// Per CONTEXT.md D-19: all Phase 1 modules are SHARED code; they re-export here.
+// All modules below are shared code, re-exported here for test access.
 // ============================================================================
 
-// Store interfaces + factory (Plan 01)
+// Store interfaces + factory
 export {
   SpotStore,
   EnrichedStore,
@@ -500,7 +500,7 @@ export type {
 } from './market/stores/index.js';
 export type { BarRow as MarketStoreBarRow, ContractRow } from './market/stores/index.js';
 
-// Ticker registry + resolver + loader + schemas (Plan 02)
+// Ticker registry + resolver + loader + schemas
 export { extractRoot, rootToUnderlying } from './market/tickers/resolver.js';
 export { TickerRegistry } from './market/tickers/registry.js';
 export type { TickerEntry, EntrySource } from './market/tickers/registry.js';
@@ -514,13 +514,13 @@ export {
   TICKER_RE,
 } from './market/tickers/schemas.js';
 
-// Parquet writer new multi-level options type (Plan 03)
-// Note: the existing value-level parquet-writer re-exports above at line ~277
-// already cover the runtime symbols; here we only add the new type alias for
-// the multi-level overload so tests can type-check against the V3 shape.
+// Parquet writer multi-level options type
+// Note: the value-level parquet-writer re-exports above already cover the
+// runtime symbols; this line adds the type alias for the multi-level
+// overload so tests can type-check against the V3 shape.
 export type { WriteParquetPartitionOptsV3 } from './db/parquet-writer.js';
 
-// 3.0 Dataset registry + per-dataset helpers (Plan 04)
+// Dataset registry + per-dataset helpers
 export {
   DATASETS_V3,
   writeSpotPartition,
@@ -531,7 +531,7 @@ export {
 } from './db/market-datasets.js';
 export type { DatasetDef } from './db/market-datasets.js';
 
-// Ticker MCP tool handlers (Plan 05) — schemas re-exported from tickers/schemas.ts above
+// Ticker MCP tool handlers — schemas re-exported from tickers/schemas.ts above
 export {
   registerTickerTools,
   handleRegisterUnderlying,
@@ -541,18 +541,13 @@ export {
 } from './tools/tickers.js';
 
 // ============================================================================
-// End of Phase 1 block
-// ============================================================================
-
-// ============================================================================
-// Market Data 3.0 — Phase 2 Wave 1 exports (pure helpers + watermark adapter)
+// Pure helpers + watermark adapter
 //
-// Wave 1 deliverables: pure SQL builders, RTH aggregation helper, partition
-// enumerator, and the enrichment watermark JSON adapter. Concrete store
-// classes ship in Waves 2-3 and will re-export below in later plans.
+// Pure SQL builders, RTH aggregation helper, partition enumerator, and the
+// enrichment watermark JSON adapter.
 // ============================================================================
 
-// Pure SQL builders (Plan 02-01)
+// Pure SQL builders
 export {
   buildReadBarsSQL,
   buildReadDailyBarsSQL,
@@ -566,10 +561,10 @@ export { buildReadQuotesSQL } from './market/stores/quote-sql.js';
 export { rthDailyAggregateSubquery } from './market/stores/rth-aggregation.js';
 export type { RthWindowOpts } from './market/stores/rth-aggregation.js';
 
-// Shared coverage helper (Plan 02-01)
+// Shared coverage helper
 export { listPartitionValues } from './market/stores/coverage.js';
 
-// Enrichment watermark adapter (Plan 02-01)
+// Enrichment watermark adapter
 export {
   EnrichmentWatermarksSchema,
   loadEnrichmentWatermarks,
@@ -578,64 +573,47 @@ export {
 } from './db/json-adapters.js';
 export type { EnrichmentWatermarks } from './db/json-adapters.js';
 
-// Schema ensure functions (consumed by Plan 02-02 schemas.test.ts and views.test.ts).
-// These functions exist today in src/db/market-schemas.ts; Plan 02-02 modifies their
-// bodies (removes data_coverage CREATE, adds spot/enriched tables, drops+recreates
-// option_quote_minutes). They are already re-exported earlier in this file (see
-// the `ensureMutableMarketTables, ensureMarketDataTables` line near the top); we
-// intentionally do NOT re-export them here to avoid duplicate-export errors. Plan
-// 02-02 will rely on the existing top-of-file export.
+// Schema ensure functions are re-exported earlier in this file via
+// `ensureMutableMarketTables, ensureMarketDataTables` near the top; do NOT
+// re-export them here to avoid duplicate-export errors.
 
 // ============================================================================
-// End of Phase 2 Wave 1 block
-// ============================================================================
-
-// ============================================================================
-// Market Data 3.0 — Phase 2 Wave 2 exports (concrete Spot/Chain/Quote stores)
+// Concrete Spot/Chain/Quote stores
 //
-// Concrete classes ship one task at a time per Plan 02-03. Each task's
-// subset of exports is added here so tests can import the concrete class
-// names directly via `../../../src/test-exports.js`.
+// Tests import the concrete class names directly via
+// `../../../src/test-exports.js`.
 // ============================================================================
 
-// Concrete Spot store pair (Plan 02-03 Task 1)
+// Concrete Spot store pair
 export { ParquetSpotStore } from './market/stores/parquet-spot-store.js';
 export { DuckdbSpotStore } from './market/stores/duckdb-spot-store.js';
 
-// Concrete Chain store pair (Plan 02-03 Task 2)
+// Concrete Chain store pair
 export { ParquetChainStore } from './market/stores/parquet-chain-store.js';
 export { DuckdbChainStore } from './market/stores/duckdb-chain-store.js';
 
-// Concrete Quote store pair (Plan 02-03 Task 3)
+// Concrete Quote store pair
 export { ParquetQuoteStore } from './market/stores/parquet-quote-store.js';
 export { DuckdbQuoteStore } from './market/stores/duckdb-quote-store.js';
 
 // ============================================================================
-// End of Phase 2 Wave 2 block
-// ============================================================================
-
-// ============================================================================
-// Market Data 3.0 — Phase 2 Wave 3 exports (concrete Enriched stores)
+// Concrete Enriched stores
 //
-// Plan 02-04 delivers the EnrichedStore pair as thin wrappers around the
-// existing runEnrichment pipeline (D-14 / D-15). Both classes extend the
-// Phase 1 abstract EnrichedStore and accept an injected SpotStore in their
-// constructors so that the enricher's IO boundaries (minute-bar reads,
-// watermark get/upsert) are satisfied without reimplementing the math.
+// Thin wrappers around the existing runEnrichment pipeline. Both classes
+// extend the abstract EnrichedStore and accept an injected SpotStore so
+// that the enricher's IO boundaries (minute-bar reads, watermark
+// get/upsert) are satisfied without reimplementing the math.
 // ============================================================================
 
-// Concrete Enriched store pair (Plan 02-04 Task 2)
+// Concrete Enriched store pair
 export { ParquetEnrichedStore } from './market/stores/parquet-enriched-store.js';
 export { DuckdbEnrichedStore } from './market/stores/duckdb-enriched-store.js';
 
 // ============================================================================
-// End of Phase 2 Wave 3 block
-// ============================================================================
-
-// ============================================================================
-// Market Data 3.0 — Ingestor exports (Plan 01-06)
+// Ingestor exports
 //
-// Market ingestor class + types exposed for integration tests that import from dist/
+// Market ingestor class + types exposed for integration tests that import
+// from dist/.
 // ============================================================================
 
 // Market ingestor — exposed for integration tests that import from dist/
@@ -654,16 +632,12 @@ export type {
 } from "./market/ingestor/index.js";
 
 // ============================================================================
-// End of Ingestor block
-// ============================================================================
-
-// ============================================================================
-// Market Data 3.0 — Phase 3 exports (migration helpers)
+// Option-data migration helpers
 //
-// Plan 03-01 delivers pure helpers for the in-place option-data migration script.
-// The .mjs script itself is NOT re-exported (CONTEXT.md D-26 — scripts with
-// filesystem effects cannot be unit-tested cleanly via test-exports; unit tests
-// target the pure helpers).
+// Pure helpers for the in-place option-data migration script. The .mjs
+// script itself is NOT re-exported — scripts with filesystem effects
+// cannot be unit-tested cleanly via test-exports; unit tests target these
+// pure helpers.
 // ============================================================================
 
 export {
@@ -675,22 +649,15 @@ export {
 export type { GroupResult } from './utils/migrate-option-data-helpers.js';
 
 // ============================================================================
-// End of Phase 3 block
-// ============================================================================
-
-// ============================================================================
-// Market Data 3.0 — Phase 4 exports (Consumer Migration)
-//
-// RESOLVE-02: Tool Dependency Registry
-// SEP-01: pipeline-side backfill helper (plan 04-06)
+// Tool dependency registry
 // ============================================================================
 export { TOOL_TICKER_DEPS, unionTickerDeps } from './utils/tool-ticker-deps.js';
 // ============================================================================
 
 // ============================================================================
-// Market Data 3.0 — Phase 5 exports (Spot Backfill + Enrichment Rebuild)
+// Spot backfill + enrichment-rebuild support
 //
-// D-17/D-19: verification helper, sample-date selector, calibration probe.
+// Verification helper, sample-date selector, calibration probe.
 // ============================================================================
 export {
   selectVerificationSampleDates,

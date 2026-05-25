@@ -2,28 +2,43 @@
  * Pure SQL builders for SpotStore reads.
  *
  * Every export is a pure function: given primitive inputs, it returns
- * `{ sql, params }` where `params` are positional bindings for DuckDB's
- * `$1`/`$2`/`$3` placeholders.
+ * `{ sql }` where the SQL string already has every partition-selector value
+ * inlined as a SQL literal. Callers MUST invoke `runAndReadAll(sql)` with no
+ * second argument.
+ *
+ * Why no positional parameters: the DuckDB Node-API binding routes
+ * `runAndReadAll(sql, values)` through `node_bindings.extract_statements`,
+ * which allocates a C++ handle with no JS-side destroy method (the wrapper
+ * `DuckDBExtractedStatements` only has a constructor — see
+ * `node_modules/@duckdb/node-api/lib/DuckDBExtractedStatements.js`). Handles
+ * release only on JS GC, so under sustained read load the driver eventually
+ * throws `Failed to execute prepared statement`. Inlining values into the SQL
+ * string sends the call through `node_bindings.query()` instead, which is
+ * leak-free. See `parquet-quote-store.ts:340` for the full root-cause writeup.
  *
  * Purity contract:
  *   - No `this` / no `ctx` / no DB-connection value-level import
  *   - No side effects; no IO
  *   - Composable — concrete stores feed the result to `conn.run()`
  *
- * Security note: user-controlled values (ticker, from, to) are bound
- * positionally. The SQL strings never interpolate untrusted text. Partition-
- * value whitelisting at higher layers plus positional binding here together
- * mitigate SQL injection.
+ * Security note: user-controlled values (ticker, from, to) are
+ * single-quote-escaped via `escapeSqlLiteral` before interpolation. Inputs
+ * arrive from typed config / partition-resolved registries (no untrusted
+ * free-text), and the escape closes the residual injection vector.
  */
 
+import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.js";
+
 /**
- * Shape returned by every SQL builder: the SQL text plus the positional params
- * in $1/$2/$... order. Generic `P` lets tests assert exact tuple types when
- * useful.
+ * Shape returned by every SQL builder. Just the SQL text — values are inlined
+ * as SQL literals (see file header for the why).
  */
-export interface BuiltSQL<P extends unknown[] = unknown[]> {
+export interface BuiltSQL {
   sql: string;
-  params: P;
+}
+
+function lit(value: string): string {
+  return `'${escapeSqlLiteral(value)}'`;
 }
 
 /**
@@ -34,13 +49,12 @@ export function buildReadBarsSQL(
   ticker: string,
   from: string,
   to: string,
-): BuiltSQL<[string, string, string]> {
+): BuiltSQL {
   return {
     sql: `SELECT ticker, date, time, open, high, low, close, bid, ask
           FROM market.spot
-          WHERE ticker = $1 AND date >= $2 AND date <= $3
+          WHERE ticker = ${lit(ticker)} AND date >= ${lit(from)} AND date <= ${lit(to)}
           ORDER BY date, time`,
-    params: [ticker, from, to],
   };
 }
 
@@ -55,7 +69,7 @@ export function buildReadDailyBarsSQL(
   ticker: string,
   from: string,
   to: string,
-): BuiltSQL<[string, string, string]> {
+): BuiltSQL {
   return {
     sql: `SELECT
             ticker,
@@ -67,8 +81,8 @@ export function buildReadDailyBarsSQL(
             first(bid   ORDER BY time) AS bid,
             last(ask    ORDER BY time) AS ask
           FROM market.spot
-          WHERE ticker = $1
-            AND date >= $2 AND date <= $3
+          WHERE ticker = ${lit(ticker)}
+            AND date >= ${lit(from)} AND date <= ${lit(to)}
             AND time >= '09:30' AND time <= '16:00'
             -- Defense-in-depth: drop minute bars with zero/null OHLC
             -- before aggregating. Mirrors market.spot_daily and the direct-
@@ -80,7 +94,6 @@ export function buildReadDailyBarsSQL(
             AND close IS NOT NULL AND close > 0
           GROUP BY ticker, date
           ORDER BY date`,
-    params: [ticker, from, to],
   };
 }
 
@@ -94,12 +107,12 @@ export function buildReadRthOpensSQL(
   ticker: string,
   from: string,
   to: string,
-): BuiltSQL<[string, string, string]> {
+): BuiltSQL {
   return {
     sql: `SELECT date, first(open ORDER BY time) AS open
           FROM market.spot
-          WHERE ticker = $1
-            AND date >= $2 AND date <= $3
+          WHERE ticker = ${lit(ticker)}
+            AND date >= ${lit(from)} AND date <= ${lit(to)}
             AND time >= '09:30' AND time <= '16:00'
             -- Defense-in-depth: drop bars with zero/null open before
             -- aggregating; first(open) could otherwise return 0 if a bad
@@ -107,6 +120,5 @@ export function buildReadRthOpensSQL(
             AND open IS NOT NULL AND open > 0
           GROUP BY date
           ORDER BY date`,
-    params: [ticker, from, to],
   };
 }

@@ -80,7 +80,7 @@ const legSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const analyzeExitTriggersSchema = z.object({
-  // Replay inputs (same as replay_trade per D-02)
+  // Replay inputs (same shape as replay_trade)
   legs: z.array(legSchema).optional(),
   block_id: z.string().optional(),
   trade_index: z.number().optional(),
@@ -88,15 +88,12 @@ export const analyzeExitTriggersSchema = z.object({
   close_date: z.string().optional(),
   multiplier: z.number().default(100),
 
-  // Trigger configs per D-03
   triggers: z.array(triggerConfigSchema)
     .describe("Exit triggers to evaluate against the P&L path"),
 
-  // Per D-05
   actual_exit_timestamp: z.string().optional()
     .describe("Actual exit time for comparison (format: YYYY-MM-DD HH:MM)"),
 
-  // Per D-06
   leg_groups: z.array(z.object({
     label: z.string(),
     leg_indices: z.array(z.number()),
@@ -120,7 +117,6 @@ export const decomposeGreeksSchema = z.object({
   close_date: z.string().optional(),
   multiplier: z.number().default(100),
 
-  // Per D-08
   leg_groups: z.array(z.object({
     label: z.string(),
     leg_indices: z.array(z.number()),
@@ -155,10 +151,12 @@ function extractUnderlyingTicker(occTicker: string): string {
 
 /**
  * Read VIX, VIX9D, or underlying minute bars via SpotStore and build a
- * timestamp->price map. Phase 4 / SEP-01: reads NEVER trigger provider calls.
- * Falls back to daily aggregates when minute bars are absent (mirrors the
- * pattern in tools/replay.ts:343-358). Empty map on cache miss is the
- * silent-empty contract — callers treat absent data as "trigger inactive."
+ * timestamp->price map. Reads NEVER trigger provider calls — bars are
+ * served from the local store, with a daily-aggregate fallback when
+ * minute bars are absent (same pattern used in replay.ts for underlying
+ * fetches). An empty map on cache miss is the silent-empty contract —
+ * callers treat absent data as "trigger inactive" rather than as an
+ * error.
  */
 async function fetchPriceMap(
   stores: MarketStores,
@@ -205,7 +203,7 @@ async function fetchPriceMap(
 export async function handleAnalyzeExitTriggers(
   params: z.infer<typeof analyzeExitTriggersSchema>,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<ReturnType<typeof analyzeExitTriggers>> {
   const {
@@ -235,7 +233,7 @@ export async function handleAnalyzeExitTriggers(
   const pnlPath = replayResult.pnlPath;
   const replayLegs = replayResult.legs;
 
-  // Compute entry cost for percentage-based triggers (D-11)
+  // Compute entry cost for percentage-based triggers
   const entryCost = replayLegs.reduce((sum, leg) => {
     return sum + leg.entryPrice * leg.quantity * leg.multiplier;
   }, 0);
@@ -344,7 +342,7 @@ export async function handleAnalyzeExitTriggers(
 export async function handleDecomposeGreeks(
   params: z.infer<typeof decomposeGreeksSchema>,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<import("../utils/greeks-decomposition.js").GreeksDecompositionResult> {
   const {
@@ -446,7 +444,7 @@ export async function handleDecomposeGreeks(
 export function registerExitAnalysisTools(
   server: McpServer,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
+  stores: MarketStores,
 ): void {
   server.registerTool(
     "analyze_exit_triggers",

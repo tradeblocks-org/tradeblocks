@@ -65,11 +65,10 @@ export class DuckdbSpotStore extends SpotStore {
     from: string,
     to: string,
   ): Promise<BarRow[]> {
-    const { sql, params } = buildReadBarsSQL(ticker, from, to);
-    const reader = await this.ctx.conn.runAndReadAll(
-      sql,
-      params as (string | number | boolean | null | bigint)[],
-    );
+    // Builders inline values as SQL literals; the unbound runAndReadAll(sql)
+    // path bypasses extract_statements (see spot-sql.ts header).
+    const { sql } = buildReadBarsSQL(ticker, from, to);
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       ticker: String(r[0]),
       date: String(r[1]),
@@ -89,11 +88,8 @@ export class DuckdbSpotStore extends SpotStore {
     from: string,
     to: string,
   ): Promise<BarRow[]> {
-    const { sql, params } = buildReadDailyBarsSQL(ticker, from, to);
-    const reader = await this.ctx.conn.runAndReadAll(
-      sql,
-      params as (string | number | boolean | null | bigint)[],
-    );
+    const { sql } = buildReadDailyBarsSQL(ticker, from, to);
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       ticker: String(r[0]),
       date: String(r[1]),
@@ -113,11 +109,14 @@ export class DuckdbSpotStore extends SpotStore {
     from: string,
     to: string,
   ): Promise<CoverageReport> {
+    // Inline literals — same leak rationale as readBars (spot-sql.ts header).
+    const tickerLit = ticker.replace(/'/g, "''");
+    const fromLit = from.replace(/'/g, "''");
+    const toLit = to.replace(/'/g, "''");
     const reader = await this.ctx.conn.runAndReadAll(
       `SELECT DISTINCT date FROM market.spot
-         WHERE ticker = $1 AND date >= $2 AND date <= $3
+         WHERE ticker = '${tickerLit}' AND date >= '${fromLit}' AND date <= '${toLit}'
          ORDER BY date`,
-      [ticker, from, to],
     );
     const dates = reader.getRows().map((r) => String(r[0]));
     return {

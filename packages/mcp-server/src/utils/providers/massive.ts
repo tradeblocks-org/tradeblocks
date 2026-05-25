@@ -6,11 +6,11 @@
  * (option chain snapshots) into a single provider adapter.
  *
  * Key design decisions:
- * - D-01/D-02/D-03: API key read at call site via process.env.MASSIVE_API_KEY
- * - D-05: Pagination loop guard with seen-cursor Set + MAX_PAGES=500 safety net
- * - D-06: adjusted=false and limit=50000 in all aggregate API calls
- * - D-07: 429 retry with Retry-After header or exponential backoff
- * - D-09/D-10/D-11: Ticker prefixes (I: for indices, O: for options)
+ * - API key read at call site via process.env.MASSIVE_API_KEY
+ * - Pagination loop guard with seen-cursor Set + MAX_PAGES=500 safety net
+ * - adjusted=false and limit=50000 in all aggregate API calls
+ * - 429 retry with Retry-After header or exponential backoff
+ * - Ticker prefixes: I: for indices, O: for options
  * - Timestamps are Unix milliseconds from the Massive aggregates API
  */
 

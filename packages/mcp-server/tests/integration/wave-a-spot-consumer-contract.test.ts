@@ -1,5 +1,5 @@
 /**
- * Wave A spot-consumer contract tests.
+ * Spot-consumer contract tests.
  *
  * Exercises the `checkDataAvailability`, `queryCoverage`, and
  * `importFlatFileDay` consumers against a real `MarketStores` bundle backed by
@@ -46,7 +46,7 @@ async function seedEnriched(
   });
 }
 
-describe("Wave A spot-consumer contract: checkDataAvailability", () => {
+describe("spot-consumer contract: checkDataAvailability", () => {
   let fixture: FixtureHandle;
   let stores: MarketStores;
 
@@ -87,7 +87,7 @@ describe("Wave A spot-consumer contract: checkDataAvailability", () => {
   });
 });
 
-describe("Wave A spot-consumer contract: queryCoverage", () => {
+describe("spot-consumer contract: queryCoverage", () => {
   let fixture: FixtureHandle;
   let stores: MarketStores;
 
@@ -127,7 +127,7 @@ describe("Wave A spot-consumer contract: queryCoverage", () => {
   });
 });
 
-describe("Wave A spot-consumer contract: importFlatFileDay (parsed-row write path)", () => {
+describe("spot-consumer contract: importFlatFileDay (parsed-row write path)", () => {
   let fixture: FixtureHandle;
   let stores: MarketStores;
 
@@ -141,9 +141,10 @@ describe("Wave A spot-consumer contract: importFlatFileDay (parsed-row write pat
   });
 
   it("writes parsed rows through stores.spot.writeBars and round-trips via readBars", async () => {
-    // Direct write-bars round-trip — the importFlatFileDay flow groups by ticker/date
-    // and calls stores.spot.writeBars under the hood. This contract test simulates
-    // the post-parse step (the parse step is unit-tested separately).
+    // Direct write-bars round-trip — importFlatFileDay groups by ticker/date
+    // and calls stores.spot.writeBars under the hood. This contract test
+    // simulates the post-parse step (the parse step is unit-tested
+    // separately).
     const bars = makeBars("SPX", "2025-01-06");
     await stores.spot.writeBars("SPX", "2025-01-06", bars);
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
@@ -154,8 +155,8 @@ describe("Wave A spot-consumer contract: importFlatFileDay (parsed-row write pat
   });
 
   it("getCoverage skip-check returns totalDates>0 once a date is written", async () => {
-    // The migrated importFlatFileDay uses stores.spot.getCoverage(ticker, date, date)
-    // as the per-day "already imported" skip check. Verify that contract directly.
+    // importFlatFileDay uses stores.spot.getCoverage(ticker, date, date) as
+    // the per-day "already imported" skip check. Verify that contract directly.
     await stores.spot.writeBars("SPX", "2025-01-06", makeBars("SPX", "2025-01-06"));
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
 
@@ -165,9 +166,8 @@ describe("Wave A spot-consumer contract: importFlatFileDay (parsed-row write pat
   });
 });
 
-// Sanity reference — keep the concrete classes referenced in this file so they
-// remain part of the migration's public test surface and ts-jest does not
-// drop them as unused.
+// Sanity reference — keep the concrete classes referenced in this file so
+// ts-jest does not drop them as unused.
 void ParquetSpotStore;
 void ParquetQuoteStore;
 void ParquetEnrichedStore;

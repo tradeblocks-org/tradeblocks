@@ -204,11 +204,6 @@ function recordsByTickerDate(
   return mapped;
 }
 
-// `buildRequestedPairsClause` was the SQL-builder for the enrich_trades intraday
-// JOIN against `WITH requested(ticker, date) AS (VALUES ...)`. Removed in
-// Phase 4 Plan 04-02 — the intraday read now flows through SpotStore.readBars
-// per (ticker, date) pair, which makes the VALUES clause unnecessary.
-
 /**
  * Get volatility regime label
  */
@@ -264,7 +259,7 @@ function getDayLabel(dow: number): string {
 export function registerMarketDataTools(
   server: McpServer,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 — checkDataAvailability call sites + enrich_trades / compute_orb read via SpotStore.
+  stores: MarketStores,
 ): void {
   // ---------------------------------------------------------------------------
   // analyze_regime_performance - Break down performance by market regime
@@ -642,10 +637,10 @@ export function registerMarketDataTools(
           { name: "Skip Mondays", field: "Day_of_Week", operator: "==", value: 2, test: (m) => getNum(m, "Day_of_Week") === 2, lagged: false },
           // OPEX
           { name: "Skip OPEX days", field: "Is_Opex", operator: "==", value: 1, test: (m) => getNum(m, "Is_Opex") === 1, lagged: false },
-          // VIX_Open filters (new, BIAS-05)
+          // VIX_Open filters (open-known)
           { name: "Skip when VIX_Open > 25", field: "VIX_Open", operator: ">", value: 25, test: (m) => getNum(m, "VIX_Open") > 25, lagged: false },
           { name: "Skip when VIX_Open > 30", field: "VIX_Open", operator: ">", value: 30, test: (m) => getNum(m, "VIX_Open") > 30, lagged: false },
-          // VIX_Gap_Pct filters (new, BIAS-05)
+          // VIX_Gap_Pct filters (open-known)
           { name: "Skip when |VIX_Gap_Pct| > 10%", field: "VIX_Gap_Pct", operator: ">", value: 10, test: (m) => Math.abs(getNum(m, "VIX_Gap_Pct")) > 10, lagged: false },
           { name: "Skip when |VIX_Gap_Pct| > 15%", field: "VIX_Gap_Pct", operator: ">", value: 15, test: (m) => Math.abs(getNum(m, "VIX_Gap_Pct")) > 15, lagged: false },
 
@@ -978,11 +973,9 @@ export function registerMarketDataTools(
         let intradayBarsByKey: Map<string, Array<{time: string, open: number, high: number, low: number, close: number}>> | null = null;
 
         if (includeIntradayContext) {
-          // Phase 4 Plan 04-02: read intraday bars per (ticker, date) via SpotStore
-          // instead of a raw-SQL JOIN against the spot view.
-          // The store reads partitioned spot data and returns BarRow[] in (date, time)
-          // order; we group by ticker+date to preserve the prior shape used by the
-          // downstream consumer.
+          // Read intraday bars per (ticker, date) via SpotStore. The store
+          // returns BarRow[] in (date, time) order; we group by ticker+date
+          // so the downstream consumer can index by trade key.
           intradayBarsByKey = new Map<string, Array<{time: string, open: number, high: number, low: number, close: number}>>();
           for (const key of tradeKeys) {
             const bars = await stores.spot.readBars(key.ticker, key.date, key.date);
@@ -1187,11 +1180,9 @@ export function registerMarketDataTools(
         // Check data availability
         const availability = await checkDataAvailability(stores, normalizedTicker, { checkIntraday: true });
 
-        // Phase 4 Plan 04-02: data availability + bar reads now flow through SpotStore
-        // (replaces the prior `COUNT(*)` data-availability probe, the auto-detect
-        // distinct-time SQL, and the ORB CTE pair). The window aggregation &
-        // breakout-detection logic is computed in TypeScript over the BarRow[]
-        // returned by readBars.
+        // Data availability + bar reads flow through SpotStore; the window
+        // aggregation and breakout-detection logic runs in TypeScript over
+        // the BarRow[] returned by readBars.
 
         // Quick check: is there any spot data for this ticker over the requested range?
         // Use a wide bracket so the "no data at all" case is distinguishable from
@@ -1255,8 +1246,7 @@ export function registerMarketDataTools(
         }
 
         // Read all in-range bars and group by date for ORB computation. The
-        // `useHighLow` toggle picks raw high/low vs close-of-bar high/low — same
-        // semantics the previous SQL CTE used.
+        // `useHighLow` toggle picks raw high/low vs close-of-bar high/low.
         const allBars = await stores.spot.readBars(normalizedTicker, startDate, end);
 
         // Group by date, preserving (time)-ascending order from readBars.
@@ -1291,7 +1281,8 @@ export function registerMarketDataTools(
           entry_triggered: boolean;
         }
 
-        // Compute ORB window + breakouts per date (replaces the SQL CTE pair).
+        // Compute ORB window + breakouts per date in TypeScript over the
+        // grouped bars.
         const days: OrbDayResult[] = [];
         const sortedDates = [...barsByDate.keys()].sort();
         for (const date of sortedDates) {

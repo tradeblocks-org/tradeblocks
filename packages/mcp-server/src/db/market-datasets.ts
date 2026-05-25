@@ -60,20 +60,18 @@ export function canonicalMarketTableName(dataset: CanonicalMarketDataset): strin
 }
 
 // ============================================================================
-// Market Data 3.0 — Declarative dataset registry (Phase 1)
+// Declarative dataset registry — canonical Parquet layout
 //
-// Describes the 3.0 target Parquet layout:
 //   spot:                 spot/ticker=X/date=Y/data.parquet
 //   enriched:             enriched/ticker=X/data.parquet
 //   enriched_context:     enriched/context/data.parquet
 //   option_chain:         option_chain/underlying=X/date=Y/data.parquet
 //   option_quote_minutes: option_quote_minutes/underlying=X/date=Y/data.parquet
+//
 // This registry is SEPARATE from the legacy CanonicalPartitionedDataset enum
-// and PARTITIONED_DATASETS map above. Both coexist per CONTEXT.md D-15:
-// legacy resolvers serve existing callers (date-only paths) until Phase 3/5
-// deletes them (option_chain/option_quote_minutes in Phase 3; intraday/
-// daily/date_context in Phase 5 after Phase 4 consumer migration);
-// the new DATASETS_V3 describes only the 3.0 target state.
+// and PARTITIONED_DATASETS map above. Both coexist while consumer migration
+// is ongoing: legacy resolvers serve existing callers (date-only paths) and
+// DATASETS_V3 describes the canonical target state.
 // ============================================================================
 
 export interface DatasetDef {
@@ -98,7 +96,8 @@ export const DATASETS_V3: Record<string, DatasetDef> = {
 //
 // Security note: writeParquetPartition applies a whitelist to every partition
 // key and value — /^[A-Za-z0-9._-]+$/ on values, /^[A-Za-z_][A-Za-z0-9_]*$/ on keys.
-// That is the deepest defense-in-depth layer (T-1-01). Helpers do not re-validate.
+// That is the deepest defense-in-depth layer against path traversal. Helpers
+// do not re-validate.
 
 export async function writeSpotPartition(
   conn: DuckDBConnection,
@@ -184,7 +183,6 @@ export async function writeEnrichedTickerFile(
  * SPECIAL CASE: partitionKeys=[] would cause writeParquetPartition's partition
  * loop to no-op and compose {baseDir}/data.parquet (one directory too shallow).
  * Bypass the generic writer and call writeParquetAtomic directly with the full target path.
- * Per RESEARCH.md Pattern 7 note (line 709).
  */
 export async function writeEnrichedContext(
   conn: DuckDBConnection,

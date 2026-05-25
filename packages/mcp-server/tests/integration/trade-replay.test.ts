@@ -3,14 +3,10 @@ import { jest } from "@jest/globals";
 /**
  * Integration tests for replay_trade MCP tool (handleReplayTrade)
  *
- * Tests both hypothetical and tradelog replay modes with:
- *   - Real in-memory DuckDB seeded via stores.spot.writeBars +
- *     in-memory option_quote_minutes INSERTs (Phase 4 Plan 04-04 — option-leg
- *     reads now flow through stores.quote.readQuotes; the legacy mockFetch
- *     pattern only remains for non-option side effects, e.g., decompose_greeks
- *     option-leg fetches that haven't yet been migrated).
- *
- * Requirements: TST-04, RPL-01, RPL-05, RPL-06
+ * Tests both hypothetical and tradelog replay modes with a real in-memory
+ * DuckDB seeded via stores.spot.writeBars and direct option_quote_minutes
+ * INSERTs; option-leg reads flow through stores.quote.readQuotes so the
+ * full path is store-backed.
  */
 
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
@@ -105,11 +101,10 @@ describe("replay_trade integration", () => {
       )
     `);
 
-    // Phase 4 Plan 04-04: handleReplayTrade reads option-leg quotes via
-    // stores.quote.readQuotes which queries market.option_quote_minutes.
-    // Schema mirrors the production market-schemas.ts shape (PK underlying,
-    // date, ticker, time + bid/ask/mid columns). Tests seed via
-    // seedOptionQuotes() below.
+    // handleReplayTrade reads option-leg quotes via stores.quote.readQuotes
+    // which queries market.option_quote_minutes. Schema mirrors the
+    // production market-schemas.ts shape (PK underlying, date, ticker, time
+    // + bid/ask/mid columns). Tests seed via seedOptionQuotes() below.
     await conn.run(`
       CREATE TABLE market.option_quote_minutes (
         underlying      VARCHAR NOT NULL,
@@ -137,11 +132,11 @@ describe("replay_trade integration", () => {
     conn.closeSync();
   });
 
-  // Phase 4 Plan 04-04: seed option_quote_minutes for the 4 unskipped tests.
-  // Bar inputs come from the existing SPY_470C_BARS / SPY_475C_BARS fixtures
-  // (UTC-millisecond timestamps); we convert to ET wallclock and persist as
-  // (bid, ask) so the (bid+ask)/2 mid in handleReplayTrade matches the
-  // pre-04-04 close-based marks within rounding tolerance.
+  // Seed option_quote_minutes for the option-leg tests. Bar inputs come from
+  // the SPY_470C_BARS / SPY_475C_BARS fixtures (UTC-millisecond timestamps);
+  // we convert to ET wallclock and persist as (bid, ask) so the (bid+ask)/2
+  // mid in handleReplayTrade matches the bar close within rounding
+  // tolerance.
   const seedOptionQuotes = async (
     occTicker: string,
     underlying: string,
@@ -174,9 +169,8 @@ describe("replay_trade integration", () => {
   // ---------------------------------------------------------------------------
 
   describe("hypothetical mode", () => {
-    // Phase 4 Plan 04-04 — un-skipped: option-leg path migrated to
-    // stores.quote.readQuotes; option quotes seeded via seedOptionQuotes()
-    // (replaces the prior mockFetch on option tickers).
+    // Option-leg path is store-backed via stores.quote.readQuotes; option
+    // quotes are seeded via seedOptionQuotes() (no provider fetch).
     test("single-leg replay returns P&L path with MFE/MAE", async () => {
       await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
 
@@ -219,8 +213,7 @@ describe("replay_trade integration", () => {
       expect(typeof result.totalPnl).toBe("number");
     });
 
-    // Phase 4 Plan 04-04 — un-skipped: option-leg quotes seeded directly into
-    // market.option_quote_minutes (replaces mockFetch on option tickers).
+    // Option-leg quotes seeded directly into market.option_quote_minutes.
     test("multi-leg spread replay combines legs correctly", async () => {
       await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
       await seedOptionQuotes("SPY250117C00475000", "SPY", SPY_475C_BARS);
@@ -263,8 +256,8 @@ describe("replay_trade integration", () => {
 
       // Verify spread P&L combines both legs (not just one)
       // Entry: long 470C at 5.0, short 475C at 3.0 → net debit 2.0
-      // Phase 4 Plan 04-04: mark = (bid+ask)/2 where bid=c-0.05, ask=c+0.05
-      // (per seedOptionQuotes spread anchor) → mid = c (the bar close).
+      // mark = (bid+ask)/2 where bid=c-0.05, ask=c+0.05 (per
+      // seedOptionQuotes spread anchor) → mid = c (the bar close).
       // At minute 0: 470C mid=5.1 (c=5.1); 475C mid=3.05 (c=3.05)
       // Long leg: (5.1-5.0)*1*100=10, Short leg: (3.05-3.0)*-1*100=-5
       // Combined: 5
@@ -294,11 +287,11 @@ describe("replay_trade integration", () => {
       ).rejects.toThrow("open_date and close_date are required");
     });
 
-    // Phase 4 Plan 04-04 — un-skipped: handleReplayTrade reads option-leg
-    // quotes via stores.quote.readQuotes; seed both underlying spot bars
-    // (for greeks underlying-price map) and option_quote_minutes (for the
-    // 470C option leg) directly into the in-memory DuckDB. No provider
-    // fetch is issued at all — the path is fully store-backed end-to-end.
+    // handleReplayTrade reads option-leg quotes via stores.quote.readQuotes;
+    // seed both underlying spot bars (for the greeks underlying-price map)
+    // and option_quote_minutes (for the 470C option leg) directly into the
+    // in-memory DuckDB. No provider fetch is issued at all — the path is
+    // fully store-backed end-to-end.
     test("decompose_greeks reuses replay underlying prices and honors skip_quotes", async () => {
       process.env.MASSIVE_DATA_TIER = "quotes";
 
@@ -346,7 +339,7 @@ describe("replay_trade integration", () => {
 
       expect(result.totalPnlChange).not.toBeNaN();
       // No provider fetches should occur — replay.ts and the underlying
-      // path both flow through stores now (D-05 / SEP-01).
+      // path both flow through stores now.
       expect(fetchSpy).not.toHaveBeenCalled();
     });
   });
@@ -356,8 +349,8 @@ describe("replay_trade integration", () => {
   // ---------------------------------------------------------------------------
 
   describe("tradelog mode", () => {
-    // Phase 4 Plan 04-04 — un-skipped: option-leg quotes seeded directly into
-    // market.option_quote_minutes via seedOptionQuotes (replaces mockFetch).
+    // Option-leg quotes seeded directly into market.option_quote_minutes via
+    // seedOptionQuotes.
     test("resolves trade from block and replays it", async () => {
       // Insert a test trade
       await conn.run(`

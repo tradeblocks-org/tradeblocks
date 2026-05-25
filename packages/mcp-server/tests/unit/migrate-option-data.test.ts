@@ -1,15 +1,14 @@
 /**
- * Unit tests for migrate-option-data pure helpers (Phase 3 Wave 0).
+ * Unit tests for the migrate-option-data pure helpers.
  *
- * Covers (CONTEXT.md D-24):
+ * Covers:
  *   - groupTickersByUnderlying: SPX-family grouping, leveraged-ETF exclusion,
  *     unknown-root identity fallback, empty input, custom skipSet override.
- *   - buildOptionChainSelectQuery: EXCLUDE (underlying) per D-05, WHERE filter,
+ *   - buildOptionChainSelectQuery: EXCLUDE (underlying), WHERE filter,
  *     glob interpolation.
- *   - buildOptionQuoteSelectQuery: regexp_extract IN-list, no EXCLUDE (D-08),
+ *   - buildOptionQuoteSelectQuery: regexp_extract IN-list, no EXCLUDE
+ *     (quote-minute partitions don't carry an underlying column),
  *     empty-roots throw.
- *
- * Imports from the compiled test-exports.js (3 levels up — matches resolver.test.ts).
  */
 import { describe, it, expect } from "@jest/globals";
 import {
@@ -93,7 +92,7 @@ describe("groupTickersByUnderlying — edge cases", () => {
 });
 
 describe("buildOptionChainSelectQuery", () => {
-  it("includes EXCLUDE (underlying) per D-05", () => {
+  it("includes EXCLUDE (underlying) to avoid duplicating the partition column", () => {
     const sql = buildOptionChainSelectQuery("/tmp/dir/data*.parquet", "SPX");
     expect(sql).toContain("* EXCLUDE (underlying)");
   });
@@ -117,7 +116,7 @@ describe("buildOptionQuoteSelectQuery", () => {
     const sql = buildOptionQuoteSelectQuery("/tmp/dir/data*.parquet", ["SPX", "SPXW"]);
     expect(sql).toContain("IN ('SPX', 'SPXW')");
   });
-  it("does NOT include EXCLUDE (body has no underlying column per D-08)", () => {
+  it("does NOT include EXCLUDE (quote-minute body has no underlying column)", () => {
     const sql = buildOptionQuoteSelectQuery("/tmp/dir/data*.parquet", ["SPX"]);
     expect(sql).not.toContain("EXCLUDE");
   });

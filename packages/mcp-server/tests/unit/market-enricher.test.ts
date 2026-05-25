@@ -810,7 +810,7 @@ describe('computeIVP', () => {
 });
 
 // =============================================================================
-// runEnrichment injected IO path (Plan 02-04 Task 1)
+// runEnrichment injected IO path
 //
 // Tests that runEnrichment accepts an optional `io` parameter and routes the
 // 5 IO call sites (watermark get/upsert, Tier 2 VIX RTH open, Tier 3 hasData
@@ -819,15 +819,15 @@ describe('computeIVP', () => {
 // =============================================================================
 
 /**
- * Seed the minimal fixture required to drive runEnrichment (post Phase 6
- * Wave D). Writes daily OHLCV rows into market.spot (one synthetic 09:30 bar
- * per date); the v3.0 legacy-fallback path in runEnrichment reads from
- * market.spot_daily which aggregates market.spot. For IO-routing tests we
- * seed a short window and assert on routing, not math correctness — the
- * pure-function tests above already cover the math.
+ * Seed the minimal fixture required to drive runEnrichment. Writes daily
+ * OHLCV rows into market.spot (one synthetic 09:30 bar per date); the
+ * fallback path in runEnrichment reads from market.spot_daily which
+ * aggregates market.spot. For IO-routing tests we seed a short window and
+ * assert on routing, not math correctness — the pure-function tests above
+ * already cover the math.
  *
- * The enrichment write-target table (dailyTarget) defaults to market.enriched
- * in the v3.0 codepath, so ensureMarketDataTables provides the write surface.
+ * The enrichment write-target table (dailyTarget) defaults to
+ * market.enriched, so ensureMarketDataTables provides the write surface.
  * No watermark row — runEnrichment treats this as a fresh ticker.
  */
 async function seedDailyFixture(conn: DuckDBConnection, ticker: string, dates: string[]): Promise<void> {
@@ -848,7 +848,7 @@ async function seedDailyFixture(conn: DuckDBConnection, ticker: string, dates: s
   }
 }
 
-describe('runEnrichment injected IO path (Plan 02-04)', () => {
+describe('runEnrichment injected IO path', () => {
   let tmpDir: string;
   let db: DuckDBInstanceType;
   let conn: DuckDBConnection;
@@ -861,9 +861,9 @@ describe('runEnrichment injected IO path (Plan 02-04)', () => {
     await conn.run(`ATTACH ':memory:' AS market`);
     await ensureMutableMarketTables(conn);
     await ensureMarketDataTables(conn);
-    // Phase 6 Wave D: the no-spotStore fallback path in runEnrichment reads
-    // from market.spot_daily (the RTH-aggregated v3.0 view). Register the
-    // view locally over the fixture's market.spot table so tests that do not
+    // The no-spotStore fallback path in runEnrichment reads from
+    // market.spot_daily (the RTH-aggregated view). Register the view
+    // locally over the fixture's market.spot table so tests that do not
     // inject io.spotStore still have a readable daily OHLCV source.
     await conn.run(`
       CREATE OR REPLACE VIEW market.spot_daily AS
@@ -924,10 +924,10 @@ describe('runEnrichment injected IO path (Plan 02-04)', () => {
   test('with io.spotStore provided, Tier 3 hasData check routes through spotStore.getCoverage', async () => {
     const coverageCalls: string[] = [];
     const readBarsCalls: string[] = [];
-    // Plan 05-02 Wave B rewire (A8): Tier 1 now reads via spotStore.readDailyBars
-    // when io.spotStore is provided. To drive Tier 1 to completion (so Tier 3
-    // gets dates and the hasData/getCoverage check runs), the fake spotStore
-    // must return non-empty daily bars — matching the new read path.
+    // Tier 1 reads via spotStore.readDailyBars when io.spotStore is
+    // provided. To drive Tier 1 to completion (so Tier 3 gets dates and
+    // the hasData/getCoverage check runs), the fake spotStore must return
+    // non-empty daily bars — matching that read path.
     const fakeSpot: FakeSpotStore = {
       readBars: async (t: string) => { readBarsCalls.push(t); return []; },
       readDailyBars: async (t: string) => {
@@ -963,9 +963,9 @@ describe('runEnrichment injected IO path (Plan 02-04)', () => {
        VALUES ('SPX', '2025-01-06', '09:30', 100, 101, 99, 100, NULL, NULL)`,
     );
     let receivedReadBarsTicker: string | null = null;
-    // Plan 05-02 Wave B rewire (A8): Tier 1 now reads via spotStore.readDailyBars
-    // when io.spotStore is provided. Provide non-empty daily bars so Tier 1 completes
-    // and Tier 3 gets driven to call readBars.
+    // Tier 1 reads via spotStore.readDailyBars when io.spotStore is
+    // provided. Provide non-empty daily bars so Tier 1 completes and Tier 3
+    // gets driven to call readBars.
     const fakeSpot: FakeSpotStore = {
       readBars: async (t: string) => { receivedReadBarsTicker = t; return []; },
       readDailyBars: async (t: string) => {
@@ -988,11 +988,10 @@ describe('runEnrichment injected IO path (Plan 02-04)', () => {
     expect(receivedReadBarsTicker).toBe('SPX');
   });
 
-  test('without io but with dataDir, runEnrichment completes and writes watermark via JSON adapter (Plan 04-05)', async () => {
-    // Plan 04-05: the legacy `market._sync_metadata.enriched_through` SQL path
-    // is GONE. When `io` is not supplied, runEnrichment falls back to the JSON
+  test('without io but with dataDir, runEnrichment completes and writes watermark via JSON adapter', async () => {
+    // When `io` is not supplied, runEnrichment falls back to the JSON
     // adapter (`getEnrichedThrough` / `upsertEnrichedThrough`) directly,
-    // keyed off `opts.dataDir`. Verify the new fallback writes the watermark
+    // keyed off `opts.dataDir`. Verify the fallback writes the watermark
     // there and does NOT touch market._sync_metadata for enrichment.
     const { getEnrichedThrough } = await import('../../src/db/json-adapters.js');
     await seedDailyFixture(conn, 'SPX', ['2025-01-06', '2025-01-07', '2025-01-08']);
@@ -1002,11 +1001,11 @@ describe('runEnrichment injected IO path (Plan 02-04)', () => {
     // Result should be defined (not error) and reference the seeded ticker.
     expect(result.ticker).toBe('SPX');
     expect(result.tier1.status).toBe('complete');
-    // New JSON-adapter watermark was written (D-20)
+    // JSON-adapter watermark was written
     const watermark = await getEnrichedThrough('SPX', tmpDir);
     expect(watermark).toBe('2025-01-08');
-    // Legacy market._sync_metadata path is GONE — no enrichment row should
-    // have been written by the runner.
+    // No market._sync_metadata enrichment row should have been written by
+    // the runner — the legacy SQL watermark path is retired.
     const metaRows = await conn.runAndReadAll(
       `SELECT source FROM market._sync_metadata
        WHERE source = 'enrichment' AND ticker = 'SPX' AND target_table = 'daily'`,
@@ -1030,20 +1029,17 @@ describe('runEnrichment injected IO path (Plan 02-04)', () => {
 });
 
 // =============================================================================
-// Phase 5 Wave B rewire (A8) — io.spotStore is the canonical read path
+// io.spotStore as the canonical OHLCV read path
 //
-// Plan 05-02 closes RESEARCH §Assumption A8: after Wave D deletes daily.parquet,
-// runEnrichment must be able to read OHLCV from spot/ via io.spotStore.readDailyBars
-// (Tier 1) and via a TEMP table seeded from spotStore (Tier 2 VIX-family joins).
-//
-// Phase 6 Wave D: the legacy daily-view SQL fallback is retired. Callers MUST
-// pass io.spotStore (or rely on the spot_daily Parquet view resolved via
-// createMarketParquetViews). The "falls back to legacy SQL when io is undefined"
-// test has been DELETED here accordingly.
+// runEnrichment reads OHLCV from spot/ via io.spotStore.readDailyBars (Tier
+// 1) and via a TEMP table seeded from spotStore (Tier 2 VIX-family joins).
+// Callers MUST pass io.spotStore (or rely on the spot_daily Parquet view
+// resolved via createMarketParquetViews); the legacy daily-view SQL
+// fallback is retired.
 //
 // These tests prove the io.spotStore path works:
-//   - io.spotStore present → Tier 1 reads via readDailyBars, Tier 2 VIX-family
-//     reads via the TEMP seeded from spotStore
+//   - io.spotStore present → Tier 1 reads via readDailyBars, Tier 2
+//     VIX-family reads via the TEMP seeded from spotStore
 // =============================================================================
 
 /** Build a fake SpotStore that returns the given daily-bar map (ticker → BarRow[]). */
@@ -1117,7 +1113,7 @@ function syntheticDailyBars(
   return bars;
 }
 
-describe('Phase 5 Wave B rewire (A8) — io.spotStore is the canonical OHLCV read path', () => {
+describe('io.spotStore is the canonical OHLCV read path', () => {
   let tmpDir: string;
   let db: DuckDBInstanceType;
   let conn: DuckDBConnection;
@@ -1130,9 +1126,9 @@ describe('Phase 5 Wave B rewire (A8) — io.spotStore is the canonical OHLCV rea
     await conn.run(`ATTACH ':memory:' AS market`);
     await ensureMutableMarketTables(conn);
     await ensureMarketDataTables(conn);
-    // Phase 6 Wave D: the no-spotStore fallback path in runEnrichment reads
-    // from market.spot_daily (the RTH-aggregated v3.0 view). Register the
-    // view locally over the fixture's market.spot table so tests that do not
+    // The no-spotStore fallback path in runEnrichment reads from
+    // market.spot_daily (the RTH-aggregated view). Register the view
+    // locally over the fixture's market.spot table so tests that do not
     // inject io.spotStore still have a readable daily OHLCV source.
     await conn.run(`
       CREATE OR REPLACE VIEW market.spot_daily AS
@@ -1174,9 +1170,9 @@ describe('Phase 5 Wave B rewire (A8) — io.spotStore is the canonical OHLCV rea
     expect(result.enrichedThrough).toBe(spxBars[spxBars.length - 1].date);
   });
 
-  // Phase 6 Wave D: the "Tier 1 falls back to legacy daily-view SQL when io is
-  // undefined" test has been DELETED. The legacy daily-view fallback no longer
-  // exists in the catalog; io.spotStore is the canonical read path.
+  // The "Tier 1 falls back to legacy daily-view SQL when io is undefined"
+  // case is intentionally absent — that fallback no longer exists in the
+  // catalog; io.spotStore is the canonical read path.
 
   test('Tier 2: uses spotStore for VIX-family daily when io.spotStore is provided (no daily.parquet)', async () => {
     // Synthesize VIX/VIX9D/VIX3M daily bars in the fake spotStore. market.spot has no VIX data.

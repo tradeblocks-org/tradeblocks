@@ -1,16 +1,14 @@
 /**
- * Unit tests for the new pure helpers in src/utils/market-importer.ts:
+ * Unit tests for the pure helpers in src/utils/market-importer.ts:
  *
  *   - parseCsvToBars(filePath, ticker, columnMapping)  → Promise<BarRow[]>
  *   - parseDatabaseRowsToBars(rows, ticker, mapping)   → BarRow[]
  *   - validateColumnMapping(mapping, targetTable)      → { valid, missingFields }
  *
- * These helpers form the input edge of INGEST-01 (D-22). Coverage here
- * complements the integration suite (`tests/integration/market-imports-v2`)
- * + the auto-enrich composition suite (`tests/unit/market-imports.test.ts`).
- *
- * Plan 04-07 Task 2 adds these helpers; the project's testing rule requires
- * unit tests for every exported pure function.
+ * These helpers form the input edge of the market-import tools. Coverage
+ * here complements the integration suite
+ * (`tests/integration/market-imports-v2`) and the auto-enrich composition
+ * suite (`tests/unit/market-imports.test.ts`).
  */
 import * as fs from "fs/promises";
 import * as os from "os";
