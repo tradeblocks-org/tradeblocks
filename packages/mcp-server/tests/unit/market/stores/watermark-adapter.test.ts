@@ -1,6 +1,5 @@
 /**
- * Unit tests for the enrichment-watermark JSON adapter
- * (Market Data 3.0 — Phase 2 Wave 1, Plan 02-01 Task 2).
+ * Unit tests for the enrichment-watermark JSON adapter.
  *
  * Exercises:
  *   - Missing file → empty structure (not an error)
@@ -8,8 +7,9 @@
  *   - Multi-ticker preservation on update
  *   - Passthrough preservation of unknown extension fields (forward compat)
  *   - Unknown ticker returns null
- *   - Malformed JSON → clear thrown error (D-21)
- *   - Zod schema edge cases: invalid ticker key / invalid date format / null date accepted
+ *   - Malformed JSON → clear thrown error
+ *   - Zod schema edge cases: invalid ticker key / invalid date format /
+ *     null date accepted
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
@@ -82,7 +82,7 @@ describe("enrichment watermarks adapter", () => {
     expect(await getEnrichedThrough("QQQ", dataDir)).toBeNull();
   });
 
-  it("malformed JSON throws clear error (D-21)", async () => {
+  it("malformed JSON throws clear error", async () => {
     mkdirSync(join(dataDir, "market-meta"), { recursive: true });
     writeFileSync(
       join(dataDir, "market-meta", "enrichment-watermarks.json"),

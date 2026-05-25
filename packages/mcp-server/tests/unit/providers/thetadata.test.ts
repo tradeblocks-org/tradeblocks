@@ -322,6 +322,85 @@ describe("ThetaDataProvider.fetchBulkQuotes", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ ticker: "NDX240823C19000000" });
   });
+
+  it("emits phase=complete when the final expiration in a (root, right) group NOT_FOUNDs", async () => {
+    // Regression guard: the per-(root, right) loop previously took a
+    // `continue` path on NOT_FOUND that bypassed the per-iteration
+    // notifyGroupComplete call. When the FINAL expiration in a non-empty
+    // group NOT_FOUNDed, MCP progress consumers never saw a phase="complete"
+    // event for that group even though the bulk fetch completed normally.
+    // The fix treats NOT_FOUND as an empty result and falls through to the
+    // existing per-iteration notify; the final-iteration completion check
+    // naturally upgrades the event to phase="complete".
+    const client = createClient();
+    const contractListEndpoint = jest.fn<ContractListEndpoint>(
+      async (): Promise<ThetaContractListRow[]> => [
+        { symbol: "NDX", expiration: "2024-08-16", strike: 19000, right: "call" },
+        { symbol: "NDX", expiration: "2024-08-23", strike: 19000, right: "call" },
+        { symbol: "NDX", expiration: "2024-08-30", strike: 19000, right: "call" },
+        { symbol: "NDX", expiration: "2024-08-16", strike: 19000, right: "put" },
+      ],
+    );
+    const quoteEndpoint = jest.fn<QuoteEndpoint>(
+      async (_client, params): Promise<ThetaQuoteRow[]> => {
+        if (params.strike !== "*") return [];
+        // FINAL call expiration NOT_FOUNDs; earlier two succeed.
+        if (params.right === "call" && params.expiration === "2024-08-30") {
+          throw new Error("NOT_FOUND: No data found for the specified request");
+        }
+        return [
+          quoteRow({
+            symbol: "NDX",
+            expiration: params.expiration,
+            strike: 19000,
+            right: params.right,
+            timestamp: "2024-08-05 09:30",
+          }),
+        ];
+      },
+    );
+    const firstOrderEndpoint = jest.fn<FirstOrderEndpoint>().mockResolvedValue([]);
+    const firstOrderBandEndpoint = jest.fn<FirstOrderBandEndpoint>().mockResolvedValue([]);
+    const onGroupComplete = jest.fn();
+    const provider = createProvider({
+      client,
+      quoteEndpoint,
+      firstOrderEndpoint,
+      firstOrderBandEndpoint,
+      contractListEndpoint,
+    });
+
+    const rows: unknown[] = [];
+    for await (const chunk of provider.fetchBulkQuotes({
+      underlying: "NDX",
+      date: "2024-08-05",
+      onGroupComplete,
+    })) {
+      rows.push(...chunk);
+    }
+
+    // 2 successful call expirations + 1 put = 3 rows; the NOT_FOUND
+    // expiration contributes none.
+    expect(rows).toHaveLength(3);
+
+    // The load-bearing assertion: the NDX/call group emits THREE events
+    // — two checkpoints for the successful expirations, then a complete
+    // for the final NOT_FOUND iteration. Pre-fix this group only emitted
+    // two checkpoints; the complete was dropped.
+    const callEvents = onGroupComplete.mock.calls
+      .map(([info]) => info)
+      .filter((info) => info.root === "NDX" && info.right === "call");
+    expect(callEvents).toHaveLength(3);
+    expect(callEvents[0]).toMatchObject({ phase: "checkpoint", completedContracts: 1, totalContracts: 3 });
+    expect(callEvents[1]).toMatchObject({ phase: "checkpoint", completedContracts: 2, totalContracts: 3 });
+    expect(callEvents[2]).toMatchObject({ phase: "complete", completedContracts: 3, totalContracts: 3 });
+
+    const putEvents = onGroupComplete.mock.calls
+      .map(([info]) => info)
+      .filter((info) => info.root === "NDX" && info.right === "put");
+    expect(putEvents).toHaveLength(1);
+    expect(putEvents[0]).toMatchObject({ phase: "complete", completedContracts: 1, totalContracts: 1 });
+  });
 });
 
 describe("ThetaDataProvider.fetchContractList", () => {

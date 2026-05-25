@@ -1,22 +1,22 @@
 /**
- * Wave-A Tool Consumer Contract Tests (Phase 4 Plan 04-02).
+ * Tool/consumer contract tests for the stores-backed spot/enriched reads.
  *
- * Per CONTEXT.md D-28: each migrated consumer gets a contract-style integration
- * test that runs the consumer against a fixture and asserts its output matches
- * pre-migration behavior. This file covers the four files migrated in plan 04-02:
+ * Each migrated consumer gets a contract-style integration test that runs
+ * the consumer against a fixture and asserts its output matches expected
+ * post-migration behavior. This file covers four consumers:
  *
- *   1. tools/market-data.ts        — ORB + regime + enrich_trades raw SQL → stores
+ *   1. tools/market-data.ts        — ORB + regime + enrich_trades reads
  *   2. tools/replay.ts             — underlying bar read + VIX IVP via stores
  *   3. backtest/loading/data-prep.ts        — spot bar reads via stores
  *   4. backtest/loading/market-data-loader.ts — spot portion + filter intraday
  *
- * Pattern (PATTERNS.md §Pattern 7):
+ * Pattern:
  *   - Tmp data dir + getConnection (registers schemas including market.spot)
  *   - buildTestStores → MarketStores bundle
  *   - Seed fixture via stores.spot.writeBars / stores.enriched.compute
  *   - Register the tool / call the handler / assert shape against golden
  *
- * Plan 04-00 Task 3 created the shared fixture helper at
+ * The shared fixture helper lives at
  * tests/fixtures/market-stores/build-stores.ts — used here unchanged.
  */
 import * as fs from "fs/promises";
@@ -38,7 +38,7 @@ import type { MarketStores } from "../../src/market/stores/index.js";
 // ---------------------------------------------------------------------------
 
 /**
- * Seed a deterministic SPX fixture for the wave-A consumers.
+ * Seed a deterministic SPX fixture for the stores-backed consumers.
  *
  * SPX 2025-01-02 spot bars:
  *   09:30 → open=5800 high=5810 low=5795 close=5805
@@ -110,13 +110,13 @@ async function seedSpxFixture(stores: MarketStores): Promise<void> {
 // `market.spot` table that ensureMarketDataTables created at getConnection().
 // ---------------------------------------------------------------------------
 
-describe("wave-a tool/consumer contract — Phase 4 Plan 04-02", () => {
+describe("tool/consumer contract — stores-backed spot/enriched reads", () => {
   let tempDir: string;
   let stores: MarketStores;
 
   beforeEach(async () => {
     await closeConnection();
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tb-phase4-wave-a-"));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tb-tool-consumer-"));
     // Initial getConnection registers schemas (market.spot etc.) and downgrades
     // to RO. We need RW for the writeBars seeding step.
     await getConnection(tempDir);
@@ -142,8 +142,8 @@ describe("wave-a tool/consumer contract — Phase 4 Plan 04-02", () => {
   // 1. tools/market-data.ts — ORB + regime
   // -----------------------------------------------------------------------
   describe("tools/market-data.ts — ORB + regime", () => {
-    it("stores.spot.readBars returns the fixture bars used by the migrated ORB path", async () => {
-      // Underlying-store contract that calculate_orb depends on after migration.
+    it("stores.spot.readBars returns the fixture bars used by the ORB path", async () => {
+      // Underlying-store contract that calculate_orb depends on.
       const bars = await stores.spot.readBars(
         "SPX",
         "2025-01-02",
@@ -155,16 +155,16 @@ describe("wave-a tool/consumer contract — Phase 4 Plan 04-02", () => {
       expect(bars[0].low).toBe(5795);
     });
 
-    it("ORB computation logic (post-migration TypeScript aggregation) computes the right window/range", async () => {
-      // The migrated calculate_orb handler reads bars via stores.spot.readBars
-      // and aggregates the ORB high/low/range + breakout times in TypeScript
-      // (replacing the prior `WITH orb_range / breakout_events` SQL CTEs).
-      // We verify the aggregation here by replicating the in-memory math over
+    it("ORB computation logic computes the right window/range", async () => {
+      // The calculate_orb handler reads bars via stores.spot.readBars and
+      // aggregates the ORB high/low/range + breakout times in TypeScript. We
+      // verify the aggregation here by replicating the in-memory math over
       // the fixture bars — the handler-internal logic is byte-identical.
-      // (Direct handler invocation is gated by withFullSync's connection-mode
-      // upgrade lifecycle, which is incompatible with the test's captured
-      // `stores` reference; the contract-style test is sufficient because the
-      // SQL→TS migration semantics are deterministic over readBars output.)
+      // (Direct handler invocation is gated by withFullSync's
+      // connection-mode upgrade lifecycle, which is incompatible with the
+      // test's captured `stores` reference; the contract-style test is
+      // sufficient because the aggregation is deterministic over readBars
+      // output.)
       const bars = await stores.spot.readBars(
         "SPX",
         "2025-01-02",
@@ -221,11 +221,10 @@ describe("wave-a tool/consumer contract — Phase 4 Plan 04-02", () => {
   // -----------------------------------------------------------------------
   describe("backtest/loading/data-prep.ts — spot window read", () => {
     it("stores.spot.readBars returns the full 3-bar fixture for the entry-date range", async () => {
-      // Task 3 migrates data-prep.ts:119 + :165 (legacy minute-bar view spot
-      // SELECTs) onto stores.spot.readBars. The handler-level test would
-      // require constructing a full StrategyDefinition + chain map; here we
-      // assert the underlying store-call shape that the migrated function
-      // depends on.
+      // data-prep.ts now reads spot windows via stores.spot.readBars. The
+      // handler-level test would require constructing a full
+      // StrategyDefinition + chain map; here we assert the underlying
+      // store-call shape that the function depends on.
       const bars = await stores.spot.readBars(
         "SPX",
         "2025-01-02",
@@ -233,7 +232,7 @@ describe("wave-a tool/consumer contract — Phase 4 Plan 04-02", () => {
       );
       expect(bars.length).toBe(3);
       // data-prep.ts uses the bars to find the entry-time bar — assert the
-      // open/high/low/close shape stays intact through readBars.
+      // OHLC shape stays intact through readBars.
       const opens = bars.map((b) => b.open);
       expect(opens).toEqual([5800, 5805, 5808]);
     });
@@ -243,12 +242,10 @@ describe("wave-a tool/consumer contract — Phase 4 Plan 04-02", () => {
   // 4. backtest/loading/market-data-loader.ts — spot portion
   // -----------------------------------------------------------------------
   describe("backtest/loading/market-data-loader.ts — spot portion", () => {
-    it("stores.spot.readBars provides the underlying-bars source (replaces legacy minute-bar SELECT at line 687)", async () => {
-      // Task 4 migrates market-data-loader.ts:687 (underlying bulk query) +
-      // :989 (filter intraday CTE) + :1036/:1070 (daily OHLC + RSI CTE) onto
-      // stores. The duplicated helpers `intradayDateSource` (~241) get deleted
-      // (only `optionQuoteMinuteSource` stays — plan 04-04 deletes it). Here
-      // we assert the readBars contract the migrated loader depends on.
+    it("stores.spot.readBars provides the underlying-bars source for the loader", async () => {
+      // The loader reads underlying bulk bars, filter-intraday windows, and
+      // daily OHLC + RSI inputs through stores.spot. Here we assert the
+      // readBars contract the loader depends on.
       const bars = await stores.spot.readBars(
         "SPX",
         "2025-01-02",

@@ -1,20 +1,17 @@
 /**
- * Phase 2 Plan 02 — market-views.ts changes.
+ * Tests for market-views.ts Parquet-view registration.
  *
- * Covers the three new Parquet views registered alongside the existing 5:
+ * Covers the three primary Parquet views:
  *   - market.spot               (Hive: ticker=X/date=Y/data.parquet)
  *   - market.enriched           (per-ticker file: ticker=X/data.parquet)
  *   - market.enriched_context   (global single file: context/data.parquet)
  *
  * Ensures:
- *   - Empty market/ dir → all three land in tablesKept, not viewsCreated (Pitfall 2)
+ *   - Empty market/ dir → all three land in tablesKept, not viewsCreated
  *   - Populated dirs → view is registered and selectable
- *   - Existing views (intraday, daily, date_context, option_chain, option_quote_minutes)
- *     still resolve to tablesKept when their files are absent (D-22 preservation)
- *   - Idempotency: calling createMarketParquetViews twice does not error (Pitfall 9)
- *
- * Imports directly from src/db/market-views.ts + src/db/market-schemas.ts (source paths)
- * — Plan 01 owns all Wave 1 test-exports edits.
+ *   - Hive-partitioned views (option_chain, option_quote_minutes) still
+ *     resolve to tablesKept when their files are absent
+ *   - Idempotency: calling createMarketParquetViews twice does not error
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
@@ -128,9 +125,9 @@ async function writeLegacyOptionQuoteFixture(): Promise<void> {
 }
 
 /**
- * Phase 6 Plan 06-00 Task 1 — multi-bar fixture for RTH aggregation tests.
- * Writes N minute bars for a given (ticker, date) so the market.spot_daily
- * view's GROUP BY ticker+date + RTH window 09:30–16:00 can be exercised.
+ * Multi-bar fixture for RTH aggregation tests. Writes N minute bars for a
+ * given (ticker, date) so the market.spot_daily view's GROUP BY
+ * ticker+date + RTH window 09:30–16:00 can be exercised.
  */
 async function writeSpotMinuteBarsFixture(
   ticker: string,
@@ -167,8 +164,8 @@ async function writeSpotMinuteBarsFixture(
   `);
 }
 
-describe("Phase 2 market-views registration", () => {
-  it("empty market/ dir: spot/enriched/enriched_context land in tablesKept, not viewsCreated (Pitfall 2)", async () => {
+describe("market-views registration", () => {
+  it("empty market/ dir: spot/enriched/enriched_context land in tablesKept, not viewsCreated", async () => {
     const result = await createMarketParquetViews(conn, tmpDir);
     expect(result.viewsCreated).not.toContain("spot");
     expect(result.viewsCreated).not.toContain("enriched");
@@ -221,7 +218,7 @@ describe("Phase 2 market-views registration", () => {
     expect(read.getRows()).toEqual([[null, null, null, null, null, null, null]]);
   });
 
-  it("view-vs-table transparency: same SELECT works against view as against physical table (Pattern 2)", async () => {
+  it("view-vs-table transparency: same SELECT works against view as against physical table", async () => {
     await writeSpotPartitionFixture("SPX", "2025-01-06");
     await createMarketParquetViews(conn, tmpDir);
     const viaView = await conn.runAndReadAll(
@@ -230,7 +227,7 @@ describe("Phase 2 market-views registration", () => {
     expect(viaView.getRows().length).toBeGreaterThan(0);
   });
 
-  it("v3.0 views (option_chain, option_quote_minutes, spot, enriched, enriched_context) resolve in tablesKept on empty dir (D-22 post Phase 6 Wave D)", async () => {
+  it("canonical views (option_chain, option_quote_minutes, spot, enriched, enriched_context, spot_daily) resolve in tablesKept on empty dir", async () => {
     const result = await createMarketParquetViews(conn, tmpDir);
     expect(result.tablesKept).toContain("option_chain");
     expect(result.tablesKept).toContain("option_quote_minutes");
@@ -240,7 +237,7 @@ describe("Phase 2 market-views registration", () => {
     expect(result.tablesKept).toContain("spot_daily");
   });
 
-  it("second call is idempotent — re-registering views does not error (Pitfall 9)", async () => {
+  it("second call is idempotent — re-registering views does not error", async () => {
     await writeSpotPartitionFixture("SPX", "2025-01-06");
     await createMarketParquetViews(conn, tmpDir);
     await createMarketParquetViews(conn, tmpDir);
@@ -252,17 +249,17 @@ describe("Phase 2 market-views registration", () => {
 });
 
 // =============================================================================
-// Phase 6 Plan 06-00 Task 1 — market.spot_daily view
+// market.spot_daily view
 //
 // The view RTH-aggregates market.spot into ticker+date daily bars. Semantics
 // MUST match SpotStore.readDailyBars: first(open ORDER BY time), max(high),
 // min(low), last(close ORDER BY time), first(bid ORDER BY time),
 // last(ask ORDER BY time), RTH window 09:30–16:00 inclusive, GROUP BY
-// ticker+date. Registration is unconditional — a view over table-or-view works
-// whether market.spot resolves to a Parquet view or a fallback table (Pitfall 3).
+// ticker+date. Registration is unconditional — a view over table-or-view
+// works whether market.spot resolves to a Parquet view or a fallback table.
 // =============================================================================
 
-describe("Phase 6 market.spot_daily view", () => {
+describe("market.spot_daily view", () => {
   it("RTH aggregation correctness: open=first, close=last, high=max, low=min within 09:30–16:00", async () => {
     // 5 bars: 09:29 (pre-RTH, excluded), 09:30 (first RTH), 10:00,
     // 16:00 (last RTH), 16:30 (post-RTH, excluded).
@@ -298,7 +295,7 @@ describe("Phase 6 market.spot_daily view", () => {
     expect(Number(askVal)).toBe(626.0); // last RTH tick ask
   });
 
-  it("unconditional registration: view is registered even when market.spot is a fallback table (Pitfall 3)", async () => {
+  it("unconditional registration: view is registered even when market.spot is a fallback table", async () => {
     // Do NOT write any Parquet partitions — market.spot resolves to tablesKept.
     // Pre-create a physical fallback table so the view has something to bind to.
     await conn.run(`
@@ -338,9 +335,10 @@ describe("Phase 6 market.spot_daily view", () => {
   });
 
   it("DROP dance handles pre-existing table of same name — view replaces table without throwing", async () => {
-    // Pre-create a physical TABLE named market.spot_daily BEFORE createMarketParquetViews
-    // registers the view. The DROP VIEW IF EXISTS + DROP TABLE IF EXISTS pattern
-    // (Pattern 2 in market-views.ts) must tolerate the type mismatch gracefully.
+    // Pre-create a physical TABLE named market.spot_daily BEFORE
+    // createMarketParquetViews registers the view. The DROP VIEW IF EXISTS +
+    // DROP TABLE IF EXISTS dance in market-views.ts must tolerate the type
+    // mismatch gracefully.
     await conn.run(`
       CREATE TABLE market.spot_daily (
         ticker VARCHAR, date VARCHAR, open DOUBLE

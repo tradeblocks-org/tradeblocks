@@ -62,11 +62,11 @@ describe("get_greeks_attribution integration", () => {
       )
     `);
 
-    // Phase 4 Plan 04-02: handleReplayTrade (called by greeks-attribution)
-    // now reads underlying bars via stores.spot.readBars + VIX IVP via
-    // stores.enriched.read. Create the minimal market schema in this in-memory
-    // DuckDB so the migrated handler-body store calls succeed (empty data
-    // matches the prior-fetch-based behavior since the test mocks fetch).
+    // handleReplayTrade (called by greeks-attribution) reads underlying bars
+    // via stores.spot.readBars + VIX IVP via stores.enriched.read. Create the
+    // minimal market schema in this in-memory DuckDB so the store-backed
+    // handler calls succeed (empty data matches the prior fetch-based
+    // behavior since the test mocks fetch).
     await conn.run(`CREATE SCHEMA IF NOT EXISTS market`);
     await conn.run(`
       CREATE TABLE market.spot (
@@ -91,9 +91,9 @@ describe("get_greeks_attribution integration", () => {
       )
     `);
 
-    // Phase 4 Plan 04-04: option-leg reads now flow through
-    // stores.quote.readQuotes → market.option_quote_minutes. Schema mirrors
-    // production market-schemas.ts (PK underlying, date, ticker, time).
+    // Option-leg reads flow through stores.quote.readQuotes →
+    // market.option_quote_minutes. Schema mirrors production market-schemas.ts
+    // (PK underlying, date, ticker, time).
     await conn.run(`
       CREATE TABLE market.option_quote_minutes (
         underlying      VARCHAR NOT NULL,
@@ -120,10 +120,10 @@ describe("get_greeks_attribution integration", () => {
     conn.closeSync();
   });
 
-  // Phase 4 Plan 04-02: seed SPY underlying bars directly into market.spot
-  // since handleReplayTrade now reads underlying via stores.spot (not fetch).
-  // ET wallclock: 2025-01-17 is in EST (UTC-5). SPY_UNDERLYING_DAY1_BARS use
-  // UTC ms aligned to 14:30 UTC = 09:30 ET.
+  // Seed SPY underlying bars directly into market.spot since handleReplayTrade
+  // reads underlying via stores.spot (not fetch). ET wallclock: 2025-01-17 is
+  // in EST (UTC-5). SPY_UNDERLYING_DAY1_BARS use UTC ms aligned to
+  // 14:30 UTC = 09:30 ET.
   const seedSpyUnderlying = async (
     bars: Array<{ t: number; o: number; h: number; l: number; c: number }>,
   ) => {
@@ -141,9 +141,9 @@ describe("get_greeks_attribution integration", () => {
     }
   };
 
-  // Phase 4 Plan 04-04: seed option_quote_minutes for the unskipped option-leg
-  // tests. Mirrors trade-replay.test.ts seedOptionQuotes (HL2-anchored
-  // bid/ask split with 0.05 spread → mid = bar.close).
+  // Seed option_quote_minutes for the option-leg tests. Mirrors
+  // trade-replay.test.ts seedOptionQuotes (HL2-anchored bid/ask split with
+  // 0.05 spread → mid = bar.close).
   const seedOptionQuotes = async (
     occTicker: string,
     underlying: string,
@@ -167,8 +167,8 @@ describe("get_greeks_attribution integration", () => {
     }
   };
 
-  // Phase 4 Plan 04-04 — un-skipped: option-leg quotes seeded directly into
-  // market.option_quote_minutes via seedOptionQuotes (replaces mockFetch).
+  // Option-leg quotes seeded directly into market.option_quote_minutes via
+  // seedOptionQuotes (replaces mockFetch).
   test("summary mode keeps raw factor P&Ls and reports execution edge separately", async () => {
     await conn.run(`
       INSERT INTO trades.trade_data
@@ -230,8 +230,8 @@ describe("get_greeks_attribution integration", () => {
     `);
 
     await seedSpyUnderlying([...SPY_UNDERLYING_DAY1_BARS, ...SPY_UNDERLYING_DAY2_BARS]);
-    // Phase 4 Plan 04-04: option-leg quotes seeded directly into
-    // market.option_quote_minutes (replaces mockFetch on option tickers).
+    // Option-leg quotes seeded directly into market.option_quote_minutes
+    // (replaces mockFetch on option tickers).
     await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
     await seedOptionQuotes("SPY250118C00475000", "SPY", SPY_475C_BARS);
 

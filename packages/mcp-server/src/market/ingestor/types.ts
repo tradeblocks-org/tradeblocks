@@ -1,4 +1,60 @@
-export type IngestStatus = "ok" | "skipped" | "unsupported" | "error";
+export type IngestStatus = "ok" | "partial" | "skipped" | "unsupported" | "error";
+
+/**
+ * Per-batch failure entry attached to a result when the ingest completed some
+ * batches but logged-and-skipped others. Three producers, distinguished by
+ * `reason`:
+ *
+ *   - `"read_failed"`     — `enrichQuoteRows` threw (e.g. transient DuckDB
+ *                           flake, schema mismatch). The affected
+ *                           (underlying, date[, ticker]) batch is dropped
+ *                           instead of abandoning the whole ingest.
+ *   - `"coverage_gap"`    — the enrichment read succeeded but returned too few
+ *                           underlying-price/chain rows to resolve greeks for
+ *                           most of the batch (e.g. partial-day spot bars,
+ *                           missing chain partition). Without this guard the
+ *                           batch would persist with intact bid/ask but null
+ *                           greeks. The `resolveRatio` field carries the
+ *                           observed missingUnderlyingRows / attemptedRows
+ *                           fraction (where attemptedRows =
+ *                           missingUnderlyingRows + computedRows — only rows
+ *                           that reached the underlying-lookup branch) that
+ *                           tripped COVERAGE_GAP_THRESHOLD.
+ *   - `"compute_failure"` — the underlying-price lookup succeeded but
+ *                           black-scholes math failed for most of the
+ *                           compute-mode rows (zero/negative option price,
+ *                           corrupt expiration → negative DTE, malformed
+ *                           strike grid). Sibling to coverage_gap on a
+ *                           distinct failure mode: spot is healthy but the
+ *                           chain/quote data is corrupt. Without this guard
+ *                           those rows mis-attribute as coverage_gap in the
+ *                           operator log. The `resolveRatio` field carries
+ *                           mathFailedRows / (mathFailedRows + computedRows)
+ *                           — the fraction of attempted math that failed —
+ *                           that tripped COMPUTE_FAILURE_THRESHOLD.
+ *
+ * All reasons escalate the enclosing IngestResult to `status: "partial"`.
+ * Orchestrated callers MUST treat `partial` as a non-success signal —
+ * `rowsWritten` undercounts when batches are skipped.
+ *
+ * Both guards can fire on the same partition (lookup-failure subset AND
+ * math-failure subset both above their respective thresholds). The skipped[]
+ * array carries one entry per tripped guard — operators benefit from seeing
+ * both signals; no dedupe.
+ */
+export type IngestSkippedReason = "read_failed" | "coverage_gap" | "compute_failure";
+
+export interface IngestSkippedBatch {
+  underlying: string;
+  date: string;
+  /** Set on the per-ticker quote path; absent on the bulk-by-underlying path. */
+  ticker?: string;
+  rows: number;
+  reason: IngestSkippedReason;
+  error: string;
+  /** Present on `"coverage_gap"` and `"compute_failure"`. */
+  resolveRatio?: number;
+}
 
 export interface IngestResult {
   status: IngestStatus;
@@ -6,6 +62,12 @@ export interface IngestResult {
   dateRange?: { from: string; to: string };
   enrichment?: { from: string; to: string } | null;
   error?: string;
+  /**
+   * Batches that the ingest logged-and-skipped instead of aborting on. Present
+   * only when `status === "partial"`. Empty/undefined for clean runs.
+   * See `IngestSkippedBatch` for the producer surface.
+   */
+  skipped?: IngestSkippedBatch[];
   details?: Record<string, unknown>;
 }
 
@@ -23,7 +85,7 @@ export interface IngestQuotesOptions {
   /**
    * Specific OCC tickers to fetch. Per-ticker provider calls (Massive, or
    * ThetaData single-contract quote). Use when you know the exact contracts
-   * you need (e.g. a backtester trade list).
+   * you need (e.g. a downstream trade list).
    *
    * Mutually exclusive with `underlyings`. Exactly one of the two must be
    * non-empty.
@@ -162,4 +224,11 @@ export interface RefreshResult {
   };
   coverage: Record<string, { totalDates: number; dateRange?: { from: string; to: string } }>;
   errors: string[];
+  /**
+   * Aggregated `skipped` entries pulled up from every `perOperation.*` IngestResult.
+   * Present (possibly empty) on every non-skipped refresh so orchestrators can
+   * inspect partial-batch failures without traversing `perOperation`. When
+   * `status === "partial"`, this array has at least one entry.
+   */
+  skipped?: IngestSkippedBatch[];
 }

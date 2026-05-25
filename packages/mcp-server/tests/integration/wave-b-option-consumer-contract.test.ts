@@ -1,29 +1,20 @@
 /**
- * Wave B option-consumer contract tests (Phase 4 Plan 04-04).
+ * Option-consumer contract tests.
  *
- * Exercises the migrated option-quote read paths after the surgical
- * cutover to `stores.quote.readQuotes` / `stores.chain.readChain` /
+ * Exercises the option-quote read paths that flow through
+ * `stores.quote.readQuotes` / `stores.chain.readChain` /
  * `stores.quote.writeQuotes` in:
  *
- *   - tools/replay.ts                     (option-leg reads)
- *   - tools/greeks-attribution.ts         (SELECT DISTINCT date)
- *   - utils/sql-pnl.ts                    (market.option_quote_minutes
- *                                          with `mid` fallback + underlying filter)
+ *   - tools/replay.ts                         (option-leg reads)
+ *   - tools/greeks-attribution.ts             (trading-days coverage)
  *   - backtest/loading/market-data-loader.ts  (per-date option-quote bulk read)
- *   - utils/quote-minute-cache.ts         (chain read + queue-drain writes)
+ *   - utils/quote-minute-cache.ts             (chain read + queue-drain writes)
  *
- * Pattern (PATTERNS.md §Pattern 7):
- *   - parquet-mode store fixture so chain.writeChain/readChain + quote.writeQuotes
- *     hit a real Parquet directory and createMarketParquetViews registers a
- *     market.option_chain / market.option_quote_minutes view backed by it.
- *
- * Pre-migration external consumers of the symbols touched by this plan:
- *   - tools/replay.ts:284,302         option-leg reads
- *   - tools/greeks-attribution.ts:382 SELECT DISTINCT date FROM the retired legacy minute-bar view
- *   - utils/sql-pnl.ts:103            retired legacy minute-bar SELECT + close fallback
- *   - backtest/loading/market-data-loader.ts:498-523  optionQuoteMinuteSource(date)
- *   - utils/quote-minute-cache.ts:210 SELECT DISTINCT ticker FROM market.option_chain UNION retired legacy minute-bar view
- *   - utils/quote-minute-cache.ts:535 upsertQuoteRowsForDate (writeParquetPartition direct)
+ * Pattern:
+ *   - parquet-mode store fixture so chain.writeChain/readChain +
+ *     quote.writeQuotes hit a real Parquet directory and
+ *     createMarketParquetViews registers a market.option_chain /
+ *     market.option_quote_minutes view backed by it.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import {
@@ -129,8 +120,8 @@ describe("tools/replay.ts — option-leg reads", () => {
     const lastMid = (quotes[4].bid + quotes[4].ask) / 2;
     expect(lastMid).toBeCloseTo(4.60, 2);
 
-    // Per replay.ts target shape — each QuoteRow adapts to BarRow with
-    // mid as open/high/low/close. Verify the timestamp split works.
+    // Per replay.ts: each QuoteRow adapts to BarRow with mid as
+    // open/high/low/close. Verify the timestamp split works.
     for (const q of quotes) {
       const [date, time] = q.timestamp.split(" ");
       expect(date).toBe(SPX_DATE);
@@ -145,7 +136,7 @@ describe("tools/replay.ts — option-leg reads", () => {
       SPX_DATE,
       SPX_DATE,
     );
-    // No partitions exist → empty Map (the new D-09 silent-empty signal).
+    // No partitions exist → empty Map (silent-empty signal).
     expect(result.size).toBe(0);
   });
 });
@@ -168,9 +159,9 @@ describe("tools/greeks-attribution.ts — trading-days coverage", () => {
   });
 
   it("stores.spot.getCoverage returns the seeded date as coverage", async () => {
-    // greeks-attribution post-migration sources trading dates from spot
-    // coverage (or pure tradingDays() weekday iteration). Seed two SPX bars
-    // on different dates and assert coverage reports both.
+    // greeks-attribution sources trading dates from spot coverage (or pure
+    // tradingDays() weekday iteration). Seed two SPX bars on different
+    // dates and assert coverage reports both.
     await stores.spot.writeBars("SPX", "2025-01-02", [
       { ticker: "SPX", date: "2025-01-02", time: "09:30",
         open: 5800, high: 5810, low: 5795, close: 5805,
@@ -243,7 +234,7 @@ describe("backtest/loading/market-data-loader.ts — per-date option-quote bulk 
     expect(result.get(SPX_5100C_OCC)!.length).toBe(1);
   });
 
-  it("Pitfall 4: mixed-underlying batch throws a clear error", async () => {
+  it("mixed-underlying batch throws a clear error", async () => {
     // QQQ vs SPX in the same batch should fail loudly with both tickers named.
     await expect(
       stores.quote.readQuotes(
@@ -272,7 +263,7 @@ describe("utils/quote-minute-cache.ts — chain read + quote write via stores", 
     fixture.cleanup();
   });
 
-  it("chain.readChain returns the seeded contracts (replaces SELECT DISTINCT ticker FROM market.option_chain)", async () => {
+  it("chain.readChain returns the seeded contracts", async () => {
     const seed = await seedSpxChain(stores);
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
 
@@ -284,7 +275,7 @@ describe("utils/quote-minute-cache.ts — chain read + quote write via stores", 
     expect(tickers.has(SPX_5100C_OCC)).toBe(true);
   });
 
-  it("quote.writeQuotes round-trips via quote.readQuotes (replaces upsertQuoteRowsForDate Parquet write)", async () => {
+  it("quote.writeQuotes round-trips via quote.readQuotes", async () => {
     const quotes: QuoteRow[] = [
       { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 4.20, ask: 4.40 },
       { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:31`, bid: 4.30, ask: 4.50 },

@@ -1,9 +1,9 @@
 /**
- * Wave D Plan 04-07 — INGEST-01 integration test scaffold.
+ * Integration tests for the `import_market_csv` and `import_from_database`
+ * MCP tool handlers (stores-backed contract).
  *
- * Exercises the rewritten `import_market_csv` and `import_from_database` MCP
- * tool handlers after `target_table` is dropped from the Zod schema (D-22) and
- * the auto-enrich composition (D-23) is wired at the tool-handler level.
+ * The Zod input schemas no longer accept `target_table`; auto-enrichment is
+ * composed into the tool handlers themselves.
  *
  * Pattern (mirrors tests/integration/wave-c-enrichment-contract.test.ts):
  *   - `buildStoreFixture({ parquetMode: false })` — builds an in-memory
@@ -14,10 +14,10 @@
  *   - Tool-handler capture via `makeServer()` mirrors the harness in
  *     `tests/integration/data-pipeline-tools.test.ts:21-31`.
  *
- * The legacy test at `tests/integration/market-import.test.ts` calls the
- * importer functions directly (`importMarketCsvFile(conn, ...)`); this file
- * exercises the MCP tool surface end-to-end so we catch handler-level
- * regressions (RW lifecycle, Zod rejection, auto-enrich composition).
+ * The sibling test at `tests/integration/market-import.test.ts` exercises
+ * `validateColumnMapping` directly; this file exercises the MCP tool surface
+ * end-to-end so we catch handler-level regressions (RW lifecycle, Zod
+ * rejection, auto-enrich composition).
  */
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -114,10 +114,10 @@ const COLUMN_MAPPING_FULL: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// 1. import_market_csv (INGEST-01)
+// 1. import_market_csv
 // ---------------------------------------------------------------------------
 
-describe("import_market_csv (INGEST-01)", () => {
+describe("import_market_csv", () => {
   let fixture: FixtureHandle;
   let stores: MarketStores;
   let csvPath: string;
@@ -135,7 +135,7 @@ describe("import_market_csv (INGEST-01)", () => {
     fixture.cleanup();
   });
 
-  it("Test 1.1 — writes SPX bars via stores.spot (no target_table)", async () => {
+  it("writes SPX bars via stores.spot (no target_table)", async () => {
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, fixture.ctx.dataDir, stores);
 
@@ -150,7 +150,7 @@ describe("import_market_csv (INGEST-01)", () => {
       skip_enrichment: true, // isolate the spot-write assertion
     });
     if (out.isError) {
-      console.error("Test 1.1 unexpected isError:", out.content);
+      console.error("import_market_csv unexpected isError:", out.content);
     }
     expect(out.isError).toBeFalsy();
 
@@ -167,7 +167,7 @@ describe("import_market_csv (INGEST-01)", () => {
     expect(bars.length).toBe(3);
   });
 
-  it("Test 1.2 — auto-enrich SPX after import (skip_enrichment=false)", async () => {
+  it("auto-enriches SPX after import when skip_enrichment=false", async () => {
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, fixture.ctx.dataDir, stores);
     const captured = tools.get("import_market_csv")!;
@@ -180,7 +180,7 @@ describe("import_market_csv (INGEST-01)", () => {
       skip_enrichment: false,
     });
     if (out.isError) {
-      console.error("Test 1.2 unexpected isError:", out.content);
+      console.error("import_market_csv unexpected isError:", out.content);
     }
     expect(out.isError).toBeFalsy();
 
@@ -196,7 +196,7 @@ describe("import_market_csv (INGEST-01)", () => {
     expect(data.enrichment).not.toBeNull();
   });
 
-  it("Test 1.3 — VIX ticker triggers enriched.computeContext", async () => {
+  it("triggers enriched.computeContext for the VIX ticker", async () => {
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, fixture.ctx.dataDir, stores);
     const captured = tools.get("import_market_csv")!;
@@ -217,7 +217,7 @@ describe("import_market_csv (INGEST-01)", () => {
       skip_enrichment: false,
     });
     if (out.isError) {
-      console.error("Test 1.3 unexpected isError:", out.content);
+      console.error("import_market_csv unexpected isError:", out.content);
     }
     expect(out.isError).toBeFalsy();
 
@@ -227,10 +227,10 @@ describe("import_market_csv (INGEST-01)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. import_market_csv rejects target_table (Zod schema D-22)
+// 2. import tools reject the removed `target_table` field
 // ---------------------------------------------------------------------------
 
-describe("import_market_csv rejects target_table (D-22)", () => {
+describe("import tools reject target_table", () => {
   let fixture: FixtureHandle;
   let stores: MarketStores;
 
@@ -245,7 +245,7 @@ describe("import_market_csv rejects target_table (D-22)", () => {
     fixture.cleanup();
   });
 
-  it("Test 2.1 — Zod schema has no `target_table` field for import_market_csv", () => {
+  it("import_market_csv Zod schema has no `target_table` field", () => {
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, fixture.ctx.dataDir, stores);
 
@@ -254,7 +254,7 @@ describe("import_market_csv rejects target_table (D-22)", () => {
     expect(Object.keys(shapeOf(captured!))).not.toContain("target_table");
   });
 
-  it("Test 2.2 — import_from_database also drops target_table", () => {
+  it("import_from_database Zod schema has no `target_table` field", () => {
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, fixture.ctx.dataDir, stores);
 
@@ -266,10 +266,10 @@ describe("import_market_csv rejects target_table (D-22)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. import_from_database (INGEST-01)
+// 3. import_from_database
 // ---------------------------------------------------------------------------
 
-describe("import_from_database (INGEST-01)", () => {
+describe("import_from_database", () => {
   let fixture: FixtureHandle;
   let stores: MarketStores;
   let extDbPath: string;
@@ -301,7 +301,7 @@ describe("import_from_database (INGEST-01)", () => {
     fixture.cleanup();
   });
 
-  it("Test 3.1 — writes via stores.spot (no target_table)", async () => {
+  it("writes via stores.spot (no target_table)", async () => {
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, fixture.ctx.dataDir, stores);
 
@@ -325,7 +325,7 @@ describe("import_from_database (INGEST-01)", () => {
       skip_enrichment: true,
     });
     if (out.isError) {
-      console.error("Test 3.1 unexpected isError:", out.content);
+      console.error("import_from_database unexpected isError:", out.content);
     }
     expect(out.isError).toBeFalsy();
 
@@ -337,7 +337,7 @@ describe("import_from_database (INGEST-01)", () => {
     expect(coverage.totalDates).toBe(1);
   });
 
-  it("Test 3.2 — auto-enrich runs after a database import", async () => {
+  it("auto-enrich runs after a database import", async () => {
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, fixture.ctx.dataDir, stores);
     const captured = tools.get("import_from_database")!;
@@ -359,7 +359,7 @@ describe("import_from_database (INGEST-01)", () => {
       skip_enrichment: false,
     });
     if (out.isError) {
-      console.error("Test 3.2 unexpected isError:", out.content);
+      console.error("import_from_database unexpected isError:", out.content);
     }
     expect(out.isError).toBeFalsy();
 
@@ -391,7 +391,7 @@ describe("dry_run preserves behavior", () => {
     fixture.cleanup();
   });
 
-  it("Test 4.1 — dry_run=true writes nothing; coverage remains empty", async () => {
+  it("dry_run=true writes nothing; coverage remains empty", async () => {
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, fixture.ctx.dataDir, stores);
     const captured = tools.get("import_market_csv")!;
@@ -404,7 +404,7 @@ describe("dry_run preserves behavior", () => {
       skip_enrichment: false,
     });
     if (out.isError) {
-      console.error("Test 4.1 unexpected isError:", out.content);
+      console.error("import_market_csv unexpected isError:", out.content);
     }
     expect(out.isError).toBeFalsy();
 

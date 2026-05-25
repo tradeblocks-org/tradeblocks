@@ -1,9 +1,9 @@
 /**
- * Unit tests for tools/market-imports.ts auto-enrich composition (W5 / D-27).
+ * Unit tests for tools/market-imports.ts auto-enrich composition.
  *
- * Plan 04-07 Task 4 — covers the tool-handler-level composition contract that
- * the integration suite at `tests/integration/market-imports-v2.test.ts`
- * exercises end-to-end:
+ * Covers the tool-handler-level composition contract that the integration
+ * suite at `tests/integration/market-imports-v2.test.ts` exercises
+ * end-to-end:
  *
  *   1. spot.writeBars BEFORE enriched.compute (composition order)
  *   2. VIX-family triggers enriched.computeContext AFTER compute (compose order)
@@ -14,16 +14,15 @@
  *   7. Error propagation: compute throws AFTER writeBars succeeds → isError:true
  *      (loud failure — spot data was written but enrichment failed)
  *
- * Both this unit suite AND the integration suite are required per D-27.
- *
  * Mocking strategy: every store method is replaced with a jest.fn() spy that
  * appends a typed marker into a shared `calls` array. We assert composition by
  * inspecting the array — no real DuckDB I/O.
  *
- * The tool handler still calls `upgradeToReadWrite(baseDir)` / `downgradeToReadOnly`
- * which act on a real `<baseDir>/analytics.duckdb` file. We give it a tmp baseDir
- * so the lifecycle is harmless. The store conns are independent (mocked) so the
- * RW lifecycle does not invalidate them.
+ * The tool handler still calls `upgradeToReadWrite(baseDir)` /
+ * `downgradeToReadOnly` which act on a real `<baseDir>/analytics.duckdb`
+ * file. We give it a tmp baseDir so the lifecycle is harmless. The store
+ * conns are independent (mocked) so the RW lifecycle does not invalidate
+ * them.
  */
 import * as fs from "fs/promises";
 import * as os from "os";
@@ -123,7 +122,7 @@ const COLUMN_MAPPING: Record<string, string> = {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
+describe("tools/market-imports — auto-enrich composition", () => {
   let baseDir: string;
   let csvPath: string;
 
@@ -139,7 +138,7 @@ describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
     await fs.rm(baseDir, { recursive: true, force: true });
   });
 
-  it("Test 1 — calls writeBars BEFORE enriched.compute", async () => {
+  it("calls writeBars BEFORE enriched.compute", async () => {
     const { stores, calls, spotWriteBars, enrichedCompute } = makeMockStores();
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, baseDir, stores);
@@ -161,7 +160,7 @@ describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
     expect(computeIdx).toBeGreaterThan(writeIdx);
   });
 
-  it("Test 2 — VIX ticker calls enriched.computeContext AFTER enriched.compute", async () => {
+  it("VIX ticker calls enriched.computeContext AFTER enriched.compute", async () => {
     const { stores, calls, enrichedComputeContext } = makeMockStores();
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, baseDir, stores);
@@ -183,7 +182,7 @@ describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
     expect(ctxIdx).toBeGreaterThan(computeIdx);
   });
 
-  it("Test 3 — non-VIX ticker does NOT call enriched.computeContext", async () => {
+  it("non-VIX ticker does NOT call enriched.computeContext", async () => {
     const { stores, enrichedCompute, enrichedComputeContext } = makeMockStores();
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, baseDir, stores);
@@ -201,7 +200,7 @@ describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
     expect(enrichedComputeContext).not.toHaveBeenCalled();
   });
 
-  it("Test 4 — skip_enrichment=true → writeBars only, no compute or computeContext", async () => {
+  it("skip_enrichment=true → writeBars only, no compute or computeContext", async () => {
     const { stores, spotWriteBars, enrichedCompute, enrichedComputeContext } = makeMockStores();
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, baseDir, stores);
@@ -220,7 +219,7 @@ describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
     expect(enrichedComputeContext).not.toHaveBeenCalled();
   });
 
-  it("Test 5 — dry_run=true → neither writeBars nor compute / computeContext", async () => {
+  it("dry_run=true → neither writeBars nor compute / computeContext", async () => {
     const { stores, spotWriteBars, enrichedCompute, enrichedComputeContext } = makeMockStores();
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, baseDir, stores);
@@ -239,7 +238,7 @@ describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
     expect(enrichedComputeContext).not.toHaveBeenCalled();
   });
 
-  it("Test 6 — writeBars throws → handler returns isError:true, compute NOT called", async () => {
+  it("writeBars throws → handler returns isError:true, compute NOT called", async () => {
     const { stores, enrichedCompute, enrichedComputeContext } = makeMockStores({
       writeBarsRejects: new Error("disk full"),
     });
@@ -262,7 +261,7 @@ describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
     expect(text?.text ?? "").toMatch(/disk full/i);
   });
 
-  it("Test 7 — compute throws AFTER writeBars succeeds → handler returns isError:true (loud failure per D-23)", async () => {
+  it("compute throws AFTER writeBars succeeds → handler returns isError:true (loud failure)", async () => {
     const { stores, spotWriteBars, enrichedCompute } = makeMockStores({
       computeRejects: new Error("enrichment math broke"),
     });
@@ -277,8 +276,8 @@ describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
       dry_run: false,
       skip_enrichment: false,
     });
-    // Spot data was written, but enrichment failed — handler must surface
-    // the failure (not silently swallow) per D-23 + Pattern 4 contract.
+    // Spot data was written, but enrichment failed — the handler must
+    // surface the failure (not silently swallow).
     expect(spotWriteBars).toHaveBeenCalled();
     expect(enrichedCompute).toHaveBeenCalled();
     expect(out.isError).toBe(true);
@@ -292,7 +291,7 @@ describe("tools/market-imports — auto-enrich composition (W5 / D-27)", () => {
   // groupByDate → writeBars wiring without touching enrichment.
   // ---------------------------------------------------------------------------
 
-  it("Test 8 — writeBars receives normalized ticker + ISO date + parsed bars", async () => {
+  it("writeBars receives normalized ticker + ISO date + parsed bars", async () => {
     const { stores, spotWriteBars } = makeMockStores();
     const { server, tools } = makeServer();
     registerMarketImportTools(server as never, baseDir, stores);

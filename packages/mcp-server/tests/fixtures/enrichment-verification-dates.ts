@@ -1,16 +1,16 @@
 /**
- * Phase 5 sample-date canonical fixture.
+ * Canonical sample-date fixture for enrichment verification.
  *
- * This is the committed reference list Wave C verification consumes. It was
- * generated once by running:
+ * This is the committed reference list the verification path consumes. It
+ * was generated once by running:
  *
  *   selectVerificationSampleDates('2022-01-01', '2026-04-17', 20260418, 9)
  *
- * and pasted verbatim below. Wave C re-runs the selector to produce a fresh
- * list and then compares against this constant — any drift here would mean
- * the PRNG implementation (or one of the hardcoded known/structural date sets)
- * changed, which is a real regression that requires operator ACK before
- * proceeding.
+ * and pasted verbatim below. The verification path re-runs the selector to
+ * produce a fresh list and then compares against this constant — any drift
+ * here would mean the PRNG implementation (or one of the hardcoded
+ * known/structural date sets) changed, which is a real regression that
+ * requires operator ACK before proceeding.
  *
  * Regenerate via:
  *

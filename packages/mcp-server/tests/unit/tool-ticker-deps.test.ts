@@ -1,13 +1,10 @@
 /**
- * Unit tests for the Tool Dependency Registry (RESOLVE-02 / Phase 4 Plan 04-00).
+ * Unit tests for the Tool Dependency Registry.
  *
- * Mirrors `tests/unit/data-pipeline.test.ts` structure per PATTERNS.md §Pattern
- * 8 (Contract-style unit test). Covers CONTEXT.md D-20 assertions plus two
- * additional edge cases (no targetTicker, registry shape).
- *
- * Project convention: import via `../../src/test-exports.js` (PATTERNS.md
- * §Pattern 6). Plan 04-00 Task 1 surfaces TOOL_TICKER_DEPS + unionTickerDeps
- * through test-exports.ts.
+ * Mirrors the contract-style unit test pattern used elsewhere in this tree.
+ * Covers the registry shape, unionTickerDeps composition, and a handful of
+ * edge cases (targetTicker substitution, deterministic sorting, unknown
+ * tool errors).
  */
 import { describe, it, expect } from '@jest/globals';
 import {
@@ -15,7 +12,7 @@ import {
   unionTickerDeps,
 } from '../../src/test-exports.js';
 
-describe('TOOL_TICKER_DEPS registry (D-18 shape)', () => {
+describe('TOOL_TICKER_DEPS registry shape', () => {
   it('declares backtester as [SPX, VIX, VIX9D]', () => {
     expect(TOOL_TICKER_DEPS.backtester).toEqual(['SPX', 'VIX', 'VIX9D']);
   });

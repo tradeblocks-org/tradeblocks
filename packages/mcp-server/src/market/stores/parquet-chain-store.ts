@@ -138,11 +138,9 @@ export class ParquetChainStore extends ChainStore {
         exercise_style: String(r[7]),
       }));
     }
-    const { sql, params } = buildReadChainSQL(underlying, date);
-    const reader = await this.ctx.conn.runAndReadAll(
-      sql,
-      params as (string | number | boolean | null | bigint)[],
-    );
+    // Builder inlines values; unbound runAndReadAll(sql) bypasses extract_statements.
+    const { sql } = buildReadChainSQL(underlying, date);
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       underlying: String(r[0]),
       date: String(r[1]),
