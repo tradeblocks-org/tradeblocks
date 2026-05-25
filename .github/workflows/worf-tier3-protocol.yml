@@ -10,9 +10,26 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 jobs:
+  worf-clear-staleness:
+    # On `synchronize` (new commits pushed), strip the `worf-cleared` label so
+    # Tier 3 PRs must re-Worf after a push. Mirrors `dismiss-stale-reviews` on
+    # the cross-Admiral side: pushed code invalidates the prior approval.
+    # No-op when the label isn't present.
+    name: Strip worf-cleared on push
+    if: ${{ github.event.action == 'synchronize' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove stale worf-cleared label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --remove-label worf-cleared 2>/dev/null || true
+
   tier3-protocol:
     name: Tier 3 PR-open protocol signals
     runs-on: ubuntu-latest
