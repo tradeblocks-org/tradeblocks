@@ -1,7 +1,7 @@
 /**
- * Reporting trade model represents backtested strategy executions coming from the
- * strategy-trade-log.csv export. These records are used to align theoretical
- * performance with the real trade log for a block.
+ * Reporting trade model represents live trading executions coming from the
+ * strategy-trade-log.csv export. These records are the actual OO trade log,
+ * used to compare live performance against backtested results for a block.
  */
 export interface ReportingTrade {
   strategy: string
