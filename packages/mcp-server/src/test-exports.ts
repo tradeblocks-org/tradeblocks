@@ -35,8 +35,8 @@ export {
 } from './sync/index.ts';
 
 // Export DuckDB connection utilities for integration testing
-export { getConnection, getReadOnlyConnection, closeConnection, isConnected, getConnectionMode, upgradeToReadWrite, downgradeToReadOnly, getCurrentConnection, openMarketOnlyConnection } from './db/connection.ts';
-export type { MarketOnlyConnection } from './db/connection.ts';
+export { getConnection, getReadOnlyConnection, closeConnection, isConnected, getConnectionMode, upgradeToReadWrite, downgradeToReadOnly, getCurrentConnection, openMarketOnlyConnection, openMarketReadOnlyConnection } from './db/connection.ts';
+export type { MarketOnlyConnection, MarketReadOnlyConnection } from './db/connection.ts';
 export { setDataRoot, getDataRoot, resetDataRoot } from './db/data-root.ts';
 export { yesterdayET } from './utils/trading-dates.ts';
 export {
