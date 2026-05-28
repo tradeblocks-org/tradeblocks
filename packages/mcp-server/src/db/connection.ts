@@ -714,6 +714,88 @@ export async function openMarketOnlyConnection(
 }
 
 /**
+ * Open a market-data connection scoped to READS, backed entirely by the
+ * canonical parquet partitions and WITHOUT attaching the shared market
+ * database file. No host file is opened against the analytics database
+ * either.
+ *
+ * Shape: in-memory host instance, a `market` schema created in-memory, and
+ * the market parquet views registered on that schema. Reads against the
+ * `market.*` views are served directly from the canonical parquet files under
+ * `<dataRoot>/market/`. Nothing is attached, so no OS-level file lock is taken
+ * on the shared market database — multiple readers (and a concurrent market
+ * writer) coexist without contention.
+ *
+ * Why this helper exists: the read path's only inputs are the parquet
+ * partitions. The shared market database file is never the source of truth on
+ * this path, so attaching it is pure liability — it makes a reader block (or
+ * be blocked by) a concurrent market writer that holds the database file lock.
+ * Routing reads through a `:memory:` host with parquet views registered leaves
+ * the shared market database completely untouched, so a reader can run while a
+ * writer ingests. This is the read-side mirror of `openMarketOnlyConnection`;
+ * the one structural difference is that this path must CREATE the `market`
+ * schema itself (no attach creates it) before registering the views.
+ *
+ * Important: the returned connection is NOT shared via the module-level
+ * singleton. `getCurrentConnection()` is not affected. The caller owns the
+ * lifecycle and must call `close()`.
+ *
+ * @param baseDir - Directory passed to the rest of the db/ module (the same
+ *   directory that `getConnection(baseDir)` would receive). Used as the
+ *   fallback for `getDataRoot()` when neither `--data-root` nor the data-root
+ *   env var is set.
+ */
+export interface MarketReadOnlyConnection {
+  /** The active DuckDB connection. Backed by a `:memory:` host with `market.*` parquet views. */
+  conn: DuckDBConnection;
+  /** Resolved data root the parquet views were registered against (for logging/parity). */
+  dataRoot: string;
+  /**
+   * Close the connection + in-memory host instance. Best-effort on each step.
+   * Nothing is attached on this path, so there is no WAL to flush and no
+   * catalog to detach. Safe to call multiple times (subsequent calls are
+   * no-ops).
+   */
+  close(): Promise<void>;
+}
+
+export async function openMarketReadOnlyConnection(
+  baseDir: string,
+): Promise<MarketReadOnlyConnection> {
+  // `:memory:` host means the connection does not open any on-disk database as
+  // the catalog root — neither the analytics database nor the shared market
+  // database file is touched by this code path. `enable_external_access:
+  // "true"` is required at instance creation to permit reads of local parquet
+  // files (DuckDB 1.4+ otherwise blocks all filesystem operations from within
+  // the connection).
+  const memoryInstance = await DuckDBInstance.create(":memory:", {
+    enable_external_access: "true",
+  });
+  const conn = await memoryInstance.connect();
+
+  // The `market.*` views target the `market` schema. On the attach-based
+  // paths the ATTACH creates that schema; here there is no attach, so we must
+  // create it before registering the views or every CREATE VIEW market.* fails
+  // with a catalog error.
+  await conn.run("CREATE SCHEMA IF NOT EXISTS market");
+
+  // Register views over the canonical market parquet partitions. These are the
+  // source of truth for reads; no physical market tables are consulted.
+  const dataRoot = getDataRoot(baseDir);
+  await createMarketParquetViews(conn, dataRoot);
+
+  let closed = false;
+  const close = async (): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    try { conn.closeSync(); } catch { /* non-fatal */ }
+    try { memoryInstance.closeSync(); } catch { /* non-fatal */ }
+  };
+
+  return { conn, dataRoot, close };
+}
+
+/**
  * Open a fresh read-only connection without going through `getConnection()`'s
  * RW-init phase. The standard `getConnection()` flow always opens RW briefly
  * to create schemas + parquet views before downgrading; that brief RW window
