@@ -5,7 +5,8 @@
  * (analytics.duckdb) and the market database (market.duckdb).
  */
 
-export { getConnection, closeConnection, isConnected, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode, getCurrentConnection } from "./connection.ts";
+export { getConnection, closeConnection, isConnected, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode, getCurrentConnection, openMarketOnlyConnection } from "./connection.ts";
+export type { MarketOnlyConnection } from "./connection.ts";
 export {
   ensureSyncTables,
   ensureTradeDataTable,
