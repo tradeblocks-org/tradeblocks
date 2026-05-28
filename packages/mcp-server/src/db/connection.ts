@@ -622,6 +622,98 @@ export async function downgradeToReadOnly(dataDir: string): Promise<void> {
 }
 
 /**
+ * Open a DuckDB connection scoped to writes against market.duckdb only, with
+ * NO host file opened against analytics.duckdb.
+ *
+ * Shape: in-memory host instance, market.duckdb ATTACHed as `market` in
+ * READ_WRITE mode, market parquet views registered on the connection. Writes
+ * resolve to the attached market catalog; reads against the `market.*` views
+ * are served from the canonical parquet files under `<dataRoot>/market/`.
+ *
+ * Why this helper exists: callers whose only job is to write market data
+ * (intraday bar ingest, option-chain refresh, quote backfill) should not
+ * acquire any lock on analytics.duckdb. Holding analytics RW for a
+ * long-running market refresh blocks every parallel reader (other shells,
+ * dashboards, evaluation processes) from even opening analytics READ_ONLY —
+ * DuckDB rejects RO opens against a file that has an active WAL written by
+ * another process. Routing market writes through a `:memory:` host with
+ * market attached RW leaves analytics.duckdb completely untouched for the
+ * duration of the ingest, so concurrent processes keep their normal RO
+ * access. Market writes are still single-writer (the OS-level file lock on
+ * market.duckdb is unchanged) — this helper trades only the analytics lock.
+ *
+ * Important: the returned connection is NOT shared via the module-level
+ * singleton. `getCurrentConnection()` is not affected. The caller owns the
+ * lifecycle and must call `close()` to flush the market WAL and release the
+ * market.duckdb file lock.
+ *
+ * @param baseDir - Directory passed to the rest of the db/ module (the same
+ *   directory that `getConnection(baseDir)` would receive). Used as the
+ *   fallback parent for market.duckdb when neither `--market-db` nor
+ *   `MARKET_DB_PATH` is set, and as the fallback for `getDataRoot()`.
+ */
+export interface MarketOnlyConnection {
+  /** The active DuckDB connection. Backed by a `:memory:` host with `market` attached RW. */
+  conn: DuckDBConnection;
+  /** Resolved path to the market.duckdb file that was attached. */
+  marketDbPath: string;
+  /**
+   * Flush the market WAL, detach the market catalog, and close the connection
+   * + in-memory host instance. Best-effort on each step — surfaces no errors;
+   * the goal is to release the market.duckdb file lock for the next writer.
+   * Safe to call multiple times (subsequent calls are no-ops).
+   */
+  close(): Promise<void>;
+}
+
+export async function openMarketOnlyConnection(
+  baseDir: string,
+): Promise<MarketOnlyConnection> {
+  const marketDbPath = resolveMarketDbPath(baseDir);
+
+  // `:memory:` host means the connection does not open any on-disk database
+  // as the catalog root — analytics.duckdb is never touched by this code
+  // path. `enable_external_access: "true"` is required at instance creation
+  // to permit the ATTACH of a local file (DuckDB 1.4+ otherwise blocks all
+  // filesystem operations from within the connection).
+  const memoryInstance = await DuckDBInstance.create(":memory:", {
+    enable_external_access: "true",
+  });
+  const conn = await memoryInstance.connect();
+
+  // ATTACH market.duckdb as RW. Reuses the same path-resolution +
+  // corruption-recovery logic as the regular RW path so callers see
+  // consistent behavior.
+  await attachMarketDb(conn, marketDbPath, "read_write");
+
+  // Register views over the canonical market parquet partitions on this
+  // fresh connection. Without this, `SELECT ... FROM market.option_chain`
+  // (and friends) resolve only against the physical tables inside the
+  // attached market.duckdb — which is empty in the parquet-mode deployment
+  // where the partition files are the source of truth. createMarketParquetViews
+  // uses CREATE OR REPLACE so this is idempotent against pre-existing views
+  // inside market.duckdb.
+  const dataRoot = getDataRoot(baseDir);
+  await createMarketParquetViews(conn, dataRoot);
+
+  let closed = false;
+  const close = async (): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    // Flush the market WAL before detach so the file on disk is consistent
+    // for the next reader. DETACH is best-effort — if it fails (e.g. an
+    // in-flight statement still references the catalog), we still want to
+    // close the handle so subsequent processes can acquire the RW lock.
+    try { await conn.run("CHECKPOINT market"); } catch { /* non-fatal */ }
+    try { await detachMarketDb(conn); } catch { /* non-fatal */ }
+    try { conn.closeSync(); } catch { /* non-fatal */ }
+    try { memoryInstance.closeSync(); } catch { /* non-fatal */ }
+  };
+
+  return { conn, marketDbPath, close };
+}
+
+/**
  * Open a fresh read-only connection without going through `getConnection()`'s
  * RW-init phase. The standard `getConnection()` flow always opens RW briefly
  * to create schemas + parquet views before downgrading; that brief RW window
