@@ -18,7 +18,7 @@
  *   - numContracts ← Qty (spreads), NOT ContractCount (total legs)
  */
 
-import type { ReportingTrade } from '../models/reporting-trade'
+import type { ReportingTrade } from '../models/reporting-trade.ts'
 
 /**
  * TAT-specific required headers for format detection.

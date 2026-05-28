@@ -5,7 +5,7 @@
  * Converts raw CSV data to validated DailyLogEntry objects.
  */
 
-import { DailyLogEntry, REQUIRED_DAILY_LOG_COLUMNS, DAILY_LOG_COLUMN_MAPPING } from '../models/daily-log'
+import { type DailyLogEntry, REQUIRED_DAILY_LOG_COLUMNS, DAILY_LOG_COLUMN_MAPPING } from '../models/daily-log.ts'
 
 /**
  * Set of known daily log column names (canonical names from DAILY_LOG_COLUMN_MAPPING)
@@ -15,11 +15,11 @@ const KNOWN_DAILY_LOG_COLUMNS = new Set([
   ...Object.keys(DAILY_LOG_COLUMN_MAPPING),
   'Withdrawn', // Optional column that may not be in REQUIRED but is known
 ])
-import { ValidationError, ProcessingError } from '../models'
-import { rawDailyLogDataSchema, dailyLogEntrySchema } from '../models/validators'
-import { CSVParser, ParseProgress } from './csv-parser'
-import { findMissingHeaders } from '../utils/csv-headers'
-// import { CSVParseResult } from './csv-parser'
+import type { ValidationError, ProcessingError } from '../models/index.ts'
+import { rawDailyLogDataSchema, dailyLogEntrySchema } from '../models/validators.ts'
+import { CSVParser, type ParseProgress } from './csv-parser.ts'
+import { findMissingHeaders } from '../utils/csv-headers.ts'
+// import { CSVParseResult } from './csv-parser.ts'
 
 /**
  * Daily log processing configuration

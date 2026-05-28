@@ -5,8 +5,8 @@
  * Uses first trade or daily log data as appropriate.
  */
 
-import { Trade } from '../models/trade'
-import { DailyLogEntry } from '../models/daily-log'
+import type { Trade } from '../models/trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
 
 /**
  * Calculate initial capital from trades data

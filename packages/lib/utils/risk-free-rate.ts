@@ -8,8 +8,8 @@
  * Rates are stored as annual percentages (e.g., 4.32 = 4.32% annual)
  */
 
-import { TREASURY_RATES } from "../data/treasury-rates";
-import { SOFR_RATES } from "../data/sofr-rates";
+import { TREASURY_RATES } from "../data/treasury-rates.ts";
+import { SOFR_RATES } from "../data/sofr-rates.ts";
 
 // Cache sorted keys for efficient lookup
 let sortedKeys: string[] | null = null;

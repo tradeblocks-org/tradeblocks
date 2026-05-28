@@ -1,7 +1,7 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as path from "path";
-import { getDataRoot } from "./data-root.js";
-import { writeParquetAtomic, writeParquetPartition } from "./parquet-writer.js";
+import { getDataRoot } from "./data-root.ts";
+import { writeParquetAtomic, writeParquetPartition } from "./parquet-writer.ts";
 
 export type CanonicalSingleFileDataset = "daily" | "date_context";
 export type CanonicalPartitionedDataset =

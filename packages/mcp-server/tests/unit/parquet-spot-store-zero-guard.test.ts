@@ -23,13 +23,13 @@
  * Parquet write path (writeSpotPartition) end-to-end.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import { ParquetSpotStore } from "../../src/test-exports.js";
+import { ParquetSpotStore } from "../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.js";
-import { createMarketParquetViews } from "../../src/db/market-views.js";
-import type { BarRow } from "../../src/market/stores/types.js";
+} from "../fixtures/market-stores/build-fixture.ts";
+import { createMarketParquetViews } from "../../src/db/market-views.ts";
+import type { BarRow } from "../../src/market/stores/types.ts";
 
 function zeroBar(time: string): BarRow {
   return {

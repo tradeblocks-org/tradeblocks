@@ -20,10 +20,10 @@
  * The parsed object is module-scope and cached for the process lifetime.
  */
 import * as path from "path";
-import { readJsonFile, writeJsonFile } from "../../db/json-store.js";
-import { resolveMarketDir } from "../../db/market-datasets.js";
-import { UnderlyingsFileSchema } from "./schemas.js";
-import { TickerRegistry } from "./registry.js";
+import { readJsonFile, writeJsonFile } from "../../db/json-store.ts";
+import { resolveMarketDir } from "../../db/market-datasets.ts";
+import { UnderlyingsFileSchema } from "./schemas.ts";
+import { TickerRegistry } from "./registry.ts";
 import defaultsData from "./defaults.json" with { type: "json" };
 
 function userOverridePath(dataDir: string): string {

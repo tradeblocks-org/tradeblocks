@@ -16,19 +16,19 @@
  */
 import { existsSync } from "fs";
 import * as path from "path";
-import { QuoteStore } from "./quote-store.js";
+import { QuoteStore } from "./quote-store.ts";
 import type {
   QuoteRow,
   CoverageReport,
   ReadWindowParams,
   WindowQuoteRow,
-} from "./types.js";
-import { listPartitionValues } from "./coverage.js";
+} from "./types.ts";
+import { listPartitionValues } from "./coverage.ts";
 import {
   resolveMarketDir,
   writeQuoteMinutesPartition,
-} from "../../db/market-datasets.js";
-import { extractRoot } from "../tickers/resolver.js";
+} from "../../db/market-datasets.ts";
+import { extractRoot } from "../tickers/resolver.ts";
 import {
   describeQueryColumns,
   describeReadParquetColumns,
@@ -36,7 +36,7 @@ import {
   quoteParquetCanonicalProjection,
   quoteParquetCanonicalWriteProjection,
   readParquetFilesSql,
-} from "../../utils/quote-parquet-projection.js";
+} from "../../utils/quote-parquet-projection.ts";
 
 function parseQuoteRow(row: unknown[]): QuoteRow {
   const occ = String(row[2]);

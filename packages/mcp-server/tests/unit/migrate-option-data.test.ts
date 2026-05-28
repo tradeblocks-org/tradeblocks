@@ -17,7 +17,7 @@ import {
   buildOptionQuoteSelectQuery,
   LEVERAGED_ETFS,
   TickerRegistry,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 // Fixture mirrors the production defaults so tests align with real ticker semantics.
 const defaults = [

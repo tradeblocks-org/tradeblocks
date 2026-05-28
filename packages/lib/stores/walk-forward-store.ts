@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { WalkForwardAnalyzer } from '../calculations/walk-forward-analyzer'
-import {
+import { WalkForwardAnalyzer } from '../calculations/walk-forward-analyzer.ts'
+import type {
   WalkForwardAnalysis,
   WalkForwardConfig,
   WalkForwardParameterRangeTuple,
@@ -13,10 +13,10 @@ import {
   PerformanceFloorConfig,
   StrategyWeightConfig,
   StrategyWeightMode,
-  StrategyWeightSweepConfig,
-} from '../models/walk-forward'
-import { toCsvRow } from '../utils/export-helpers'
-import { Trade } from '../models/trade'
+  StrategyWeightSweepConfig
+} from '../models/walk-forward.ts'
+import { toCsvRow } from '../utils/export-helpers.ts'
+import type { Trade } from '../models/trade.ts'
 
 type WalkForwardPresetKey = 'conservative' | 'moderate' | 'aggressive'
 
@@ -591,7 +591,7 @@ export const useWalkForwardStore = create<WalkForwardStore>((set, get) => ({
     }
 
     try {
-      const db = await import('../db')
+      const db = await import('../db/index.ts')
       const trades = await db.getTradesByBlock(blockId)
 
       if (!trades || trades.length < 2) {
@@ -635,8 +635,8 @@ export const useWalkForwardStore = create<WalkForwardStore>((set, get) => ({
     set({ isRunning: true, progress: null, error: null })
 
     try {
-      const db = await import('../db')
-      const { normalizeTradesToOneLot } = await import('../utils/trade-normalization')
+      const db = await import('../db/index.ts')
+      const { normalizeTradesToOneLot } = await import('../utils/trade-normalization.ts')
 
       const storedTrades = await db.getTradesByBlock(blockId)
       const dailyLogs = await db.getDailyLogsByBlock(blockId)
@@ -755,7 +755,7 @@ export const useWalkForwardStore = create<WalkForwardStore>((set, get) => ({
   loadHistory: async (blockId: string) => {
     if (!blockId) return
     try {
-      const db = await import('../db')
+      const db = await import('../db/index.ts')
       const analyses = await db.getWalkForwardAnalysesByBlock(blockId)
       set({
         history: analyses,
@@ -781,7 +781,7 @@ export const useWalkForwardStore = create<WalkForwardStore>((set, get) => ({
   deleteAnalysis: async (analysisId: string) => {
     if (!analysisId) return
     try {
-      const db = await import('../db')
+      const db = await import('../db/index.ts')
       await db.deleteWalkForwardAnalysis(analysisId)
 
       set((state) => {
@@ -865,7 +865,7 @@ export const useWalkForwardStore = create<WalkForwardStore>((set, get) => ({
     }
 
     try {
-      const db = await import('../db')
+      const db = await import('../db/index.ts')
       const trades = await db.getTradesByBlock(blockId)
 
       const uniqueStrategies = [

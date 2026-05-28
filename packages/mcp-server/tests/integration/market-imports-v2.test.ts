@@ -24,16 +24,16 @@ import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 
-import { registerMarketImportTools } from "../../src/tools/market-imports.js";
+import { registerMarketImportTools } from "../../src/tools/market-imports.ts";
 import {
   closeConnection,
   createMarketStores,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.js";
-import type { MarketStores } from "../../src/market/stores/index.js";
+} from "../fixtures/market-stores/build-fixture.ts";
+import type { MarketStores } from "../../src/market/stores/index.ts";
 
 // ---------------------------------------------------------------------------
 // Tool-handler capture harness — same pattern as data-pipeline-tools.test.ts

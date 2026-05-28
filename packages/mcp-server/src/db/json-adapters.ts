@@ -21,10 +21,10 @@ import {
   deleteJsonFile,
   listJsonFiles,
   toFileSlug,
-} from "./json-store.js";
-import { getDataRoot } from "./data-root.js";
-import type { StrategyProfile } from "../models/strategy-profile.js";
-import type { BlockSyncMetadata, MarketImportMetadata } from "../sync/metadata.js";
+} from "./json-store.ts";
+import { getDataRoot } from "./data-root.ts";
+import type { StrategyProfile } from "../models/strategy-profile.ts";
+import type { BlockSyncMetadata, MarketImportMetadata } from "../sync/metadata.ts";
 
 // =============================================================================
 // 1. Profile Adapter

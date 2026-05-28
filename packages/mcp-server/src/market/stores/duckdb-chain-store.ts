@@ -9,9 +9,9 @@
  *
  * D-02 reminder: no method body inspects `ctx.parquetMode`.
  */
-import { ChainStore } from "./chain-store.js";
-import type { ContractRow, CoverageReport } from "./types.js";
-import { buildReadChainSQL } from "./chain-sql.js";
+import { ChainStore } from "./chain-store.ts";
+import type { ContractRow, CoverageReport } from "./types.ts";
+import { buildReadChainSQL } from "./chain-sql.ts";
 
 export class DuckdbChainStore extends ChainStore {
   async writeChain(

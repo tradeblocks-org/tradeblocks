@@ -1,4 +1,4 @@
-import { PortfolioStats } from './portfolio-stats'
+import type { PortfolioStats } from './portfolio-stats.ts'
 
 export type WalkForwardOptimizationTarget =
   | 'netPl'

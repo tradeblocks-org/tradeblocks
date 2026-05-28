@@ -8,7 +8,7 @@ import {
   type ReplayLeg,
   type PnlPoint,
   type BarRow,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 
 describe('markPrice', () => {
   it('returns bid/ask midpoint when both are positive and well-formed', () => {

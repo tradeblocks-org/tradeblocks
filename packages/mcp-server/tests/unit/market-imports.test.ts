@@ -28,10 +28,10 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
-import { registerMarketImportTools } from "../../src/tools/market-imports.js";
-import { closeConnection } from "../../src/test-exports.js";
-import type { MarketStores } from "../../src/market/stores/index.js";
-import type { BarRow } from "../../src/market/stores/types.js";
+import { registerMarketImportTools } from "../../src/tools/market-imports.ts";
+import { closeConnection } from "../../src/test-exports.ts";
+import type { MarketStores } from "../../src/market/stores/index.ts";
+import type { BarRow } from "../../src/market/stores/types.ts";
 
 // ---------------------------------------------------------------------------
 // Tool capture harness

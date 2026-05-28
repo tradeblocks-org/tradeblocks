@@ -12,7 +12,7 @@ import {
   optionHistoryQuoteBand,
   optionListContracts,
   thetaRequestRight,
-} from "../../../../src/utils/providers/thetadata/endpoints.js";
+} from "../../../../src/utils/providers/thetadata/endpoints.ts";
 
 function encodeRows(headers: string[], dataTable: Array<{ values: unknown[] }>) {
   const root = protobuf.loadSync(resolve(process.cwd(), "src/utils/providers/thetadata/mdds.proto"));

@@ -1,5 +1,5 @@
-import { Trade } from '../models/trade'
-import { normalCDF } from './statistical-utils'
+import type { Trade } from '../models/trade.ts'
+import { normalCDF } from './statistical-utils.ts'
 
 export interface StreakData {
   type: 'win' | 'loss'

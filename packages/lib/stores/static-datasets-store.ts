@@ -6,27 +6,27 @@
  */
 
 import { create } from 'zustand'
-import type { StaticDataset, StaticDatasetRow, MatchStrategy } from '../models/static-dataset'
+import type { StaticDataset, StaticDatasetRow, MatchStrategy } from '../models/static-dataset.ts'
 import {
   getAllStaticDatasets,
   createStaticDataset,
   updateStaticDatasetMatchStrategy,
   updateStaticDatasetName,
   isDatasetNameTaken,
-} from '../db/static-datasets-store'
+} from '../db/static-datasets-store.ts'
 import {
   addStaticDatasetRows,
   getStaticDatasetRows,
   deleteStaticDatasetWithRows,
-} from '../db/static-dataset-rows-store'
+} from '../db/static-dataset-rows-store.ts'
 import {
   processStaticDatasetFile,
   validateDatasetName,
-} from '../processing/static-dataset-processor'
-import { calculateMatchStats } from '../calculations/static-dataset-matcher'
-import type { ParseProgress } from '../processing/csv-parser'
-import type { Trade } from '../models/trade'
-import type { DatasetMatchStats } from '../models/static-dataset'
+} from '../processing/static-dataset-processor.ts'
+import { calculateMatchStats } from '../calculations/static-dataset-matcher.ts'
+import type { ParseProgress } from '../processing/csv-parser.ts'
+import type { Trade } from '../models/trade.ts'
+import type { DatasetMatchStats } from '../models/static-dataset.ts'
 
 /**
  * Cache key format: datasetId:blockId:matchStrategy

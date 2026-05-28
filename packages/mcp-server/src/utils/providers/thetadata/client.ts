@@ -1,5 +1,5 @@
 import * as grpc from "@grpc/grpc-js";
-import { authenticateThetaData, resolveThetaCredentials, thetaConcurrencyForTier } from "./auth.js";
+import { authenticateThetaData, resolveThetaCredentials, thetaConcurrencyForTier } from "./auth.ts";
 
 export interface ThetaMddsConfig {
   target: string;
@@ -71,14 +71,21 @@ export class ThetaMddsClient {
   private inFlight = 0;
   private waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
 
+  private readonly env: NodeJS.ProcessEnv;
+  private readonly fetchImpl: typeof fetch;
+  private readonly loadGrpcPackage: () => Promise<unknown>;
   constructor(
-    private readonly env: NodeJS.ProcessEnv = process.env,
-    private readonly fetchImpl: typeof fetch = fetch,
-    private readonly loadGrpcPackage: () => Promise<unknown> = async () => {
-      const { loadMddsGrpcPackage } = await import("./proto.js");
+    env: NodeJS.ProcessEnv = process.env,
+    fetchImpl: typeof fetch = fetch,
+    loadGrpcPackage: () => Promise<unknown> = async () => {
+      const { loadMddsGrpcPackage } = await import("./proto.ts");
       return loadMddsGrpcPackage();
     },
-  ) {}
+  ) {
+    this.env = env;
+    this.fetchImpl = fetchImpl;
+    this.loadGrpcPackage = loadGrpcPackage;
+  }
 
   async connect(): Promise<void> {
     if (this.stub) return;

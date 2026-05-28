@@ -4,16 +4,16 @@
  * Provides a unified interface for all CSV processing operations.
  */
 
-export * from './csv-parser'
-export * from './trade-processor'
-export * from './daily-log-processor'
-export * from './reporting-trade-processor'
-export * from './tat-adapter'
-export * from './static-dataset-processor'
-export * from './data-loader'
+export * from './csv-parser.ts'
+export * from './trade-processor.ts'
+export * from './daily-log-processor.ts'
+export * from './reporting-trade-processor.ts'
+export * from './tat-adapter.ts'
+export * from './static-dataset-processor.ts'
+export * from './data-loader.ts'
 // Note: capital-calculator exports calculateInitialCapital which conflicts with utils/equity-curve
 // Use explicit imports: import { calculateInitialCapitalFromDailyLog, calculateInitialCapitalFromTrades } from '@tradeblocks/lib/processing/capital-calculator'
-export { calculateInitialCapitalFromDailyLog, calculateInitialCapitalFromTrades } from './capital-calculator'
+export { calculateInitialCapitalFromDailyLog, calculateInitialCapitalFromTrades } from './capital-calculator.ts'
 
 // Re-export validation schemas from validators (but not the Raw* types which are in models)
 export {
@@ -26,7 +26,7 @@ export {
   type ValidatedTrade,
   type ValidatedDailyLogEntry,
   type ValidatedReportingTrade,
-} from '../models/validators'
+} from '../models/validators.ts'
 
 // Unified processing types
 export interface FileProcessingResult {

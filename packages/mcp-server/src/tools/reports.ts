@@ -10,4 +10,4 @@
  * - slippage.ts: analyze_discrepancies, suggest_strategy_matches, slippage_trends
  */
 
-export { registerReportTools } from "./reports/index.js";
+export { registerReportTools } from "./reports/index.ts";

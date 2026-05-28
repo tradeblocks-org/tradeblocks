@@ -29,7 +29,7 @@ import {
   // Flat import log adapter
   getFlatImportLogJson,
   upsertFlatImportLogJson,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers

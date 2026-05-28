@@ -12,9 +12,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 // @ts-expect-error - importing from src (not bundled output)
-import { attachBacktestsDb, ensureBacktestsTables, detachBacktestsDb, TEMPLATE_BLOCK_ID } from "../../src/db/backtest-schemas.js";
+import { attachBacktestsDb, ensureBacktestsTables, detachBacktestsDb, TEMPLATE_BLOCK_ID } from "../../src/db/backtest-schemas.ts";
 // @ts-expect-error - importing from src (not bundled output)
-import { ensureSyncTables, ensureTradeDataTable } from "../../src/db/schemas.js";
+import { ensureSyncTables, ensureTradeDataTable } from "../../src/db/schemas.ts";
 
 /**
  * Set up the trades schema and tables that ensureBacktestsTables depends on.

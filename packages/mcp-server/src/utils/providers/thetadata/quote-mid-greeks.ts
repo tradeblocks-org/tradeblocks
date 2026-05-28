@@ -1,13 +1,13 @@
 import { getSofrRateByKey } from "@tradeblocks/lib";
-import type { BulkQuoteRow } from "../../market-provider.js";
-import { computeLegGreeks } from "../../black-scholes.js";
-import { computeFractionalDte } from "../../option-time.js";
+import type { BulkQuoteRow } from "../../market-provider.ts";
+import { computeLegGreeks } from "../../black-scholes.ts";
+import { computeFractionalDte } from "../../option-time.ts";
 import {
   OPTION_QUOTE_GREEKS_DIVIDEND_YIELD,
   OPTION_QUOTE_GREEKS_RATE_TYPE,
-} from "../../option-quote-greeks.js";
-import { buildTicker } from "./join.js";
-import type { ThetaQuoteRow } from "./types.js";
+} from "../../option-quote-greeks.ts";
+import { buildTicker } from "./join.ts";
+import type { ThetaQuoteRow } from "./types.ts";
 
 export const OPTION_QUOTE_MID_GREEKS_REVISION = 5;
 export const OPTION_QUOTE_MID_GREEKS_DIVIDEND_YIELD = OPTION_QUOTE_GREEKS_DIVIDEND_YIELD;

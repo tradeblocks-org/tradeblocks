@@ -7,8 +7,8 @@
  * All functions are pure — no fetch, no DuckDB.
  */
 
-import type { BarRow } from './market-provider.js';
-import { computeLegGreeks, type GreeksResult } from './black-scholes.js';
+import type { BarRow } from './market-provider.ts';
+import { computeLegGreeks, type GreeksResult } from './black-scholes.ts';
 
 // ---------------------------------------------------------------------------
 // Types

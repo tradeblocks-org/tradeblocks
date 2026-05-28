@@ -1,6 +1,6 @@
 import * as path from "path";
 import { describe, it, expect } from "@jest/globals";
-import { validateQuery, isUnderDataRoot } from "../../src/test-exports.js";
+import { validateQuery, isUnderDataRoot } from "../../src/test-exports.ts";
 
 const DATA_ROOT = path.resolve("/tmp/tb-test-data-root");
 

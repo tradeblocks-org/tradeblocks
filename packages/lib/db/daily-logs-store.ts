@@ -2,8 +2,8 @@
  * Daily Logs Store - CRUD operations for daily log data
  */
 
-import { DailyLogEntry } from '../models/daily-log'
-import { STORES, INDEXES, withReadTransaction, withWriteTransaction, promisifyRequest } from './index'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import { STORES, INDEXES, withReadTransaction, withWriteTransaction, promisifyRequest } from './index.ts'
 
 /**
  * Extended daily log entry with block association

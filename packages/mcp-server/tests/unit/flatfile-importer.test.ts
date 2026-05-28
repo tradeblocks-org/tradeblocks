@@ -5,7 +5,7 @@
  * All functions are deterministic given the same input.
  */
 
-import { nanosToET, parseFlatFileLine, tradingDays } from "../../src/utils/flatfile-importer.js";
+import { nanosToET, parseFlatFileLine, tradingDays } from "../../src/utils/flatfile-importer.ts";
 
 // ---------------------------------------------------------------------------
 // nanosToET

@@ -5,11 +5,11 @@ import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/serv
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { OAuthClientInformationFull, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
-import { InMemoryClientsStore } from './clients-store.js';
-import { AuthCodeStore } from './code-store.js';
-import { issueAccessToken, verifyAccessToken as verifyJwt } from './token.js';
-import { renderLoginPage } from './login-page.js';
-import type { AuthConfig } from './config.js';
+import { InMemoryClientsStore } from './clients-store.ts';
+import { AuthCodeStore } from './code-store.ts';
+import { issueAccessToken, verifyAccessToken as verifyJwt } from './token.ts';
+import { renderLoginPage } from './login-page.ts';
+import type { AuthConfig } from './config.ts';
 
 interface AuthorizationParams {
   state?: string;

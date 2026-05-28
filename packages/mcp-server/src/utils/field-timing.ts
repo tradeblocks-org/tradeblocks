@@ -23,8 +23,8 @@
  * to ensure trade-entry queries only use data available at the time of trade entry.
  */
 
-import { DEFAULT_MARKET_TICKER } from "./ticker.js";
-import { SCHEMA_DESCRIPTIONS } from "./schema-metadata.js";
+import { DEFAULT_MARKET_TICKER } from "./ticker.ts";
+import { SCHEMA_DESCRIPTIONS } from "./schema-metadata.ts";
 
 const dailyColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched.columns;
 const derivedColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched_context.columns;

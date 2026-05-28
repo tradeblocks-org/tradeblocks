@@ -1,4 +1,4 @@
-import { buildOccTicker } from "../trade-replay.js";
+import { buildOccTicker } from "../trade-replay.ts";
 import {
   ThetaMddsClient,
   indexHistoryEod,
@@ -16,7 +16,7 @@ import {
   type ThetaRight,
   type ThetaStockEodRow,
   type ThetaStockOhlcRow,
-} from "./thetadata/index.js";
+} from "./thetadata/index.ts";
 import type {
   BarRow,
   BulkQuoteRow,
@@ -30,7 +30,7 @@ import type {
   MarketDataProvider,
   MinuteQuote,
   ProviderCapabilities,
-} from "../market-provider.js";
+} from "../market-provider.ts";
 
 const BULK_YIELD_CHUNK = 50_000;
 const BULK_GREEKS_STRIKE_RANGE = 20;

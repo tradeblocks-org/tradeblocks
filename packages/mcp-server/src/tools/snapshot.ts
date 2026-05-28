@@ -11,7 +11,7 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getProvider } from "../utils/market-provider.js";
+import { getProvider } from "../utils/market-provider.ts";
 
 // ---------------------------------------------------------------------------
 // Zod schema

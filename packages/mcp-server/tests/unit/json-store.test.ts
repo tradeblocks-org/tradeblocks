@@ -15,7 +15,7 @@ import {
   deleteJsonFile,
   listJsonFiles,
   toFileSlug,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 const TEST_DIR = path.join(os.tmpdir(), "json-store-test-" + Date.now());
 

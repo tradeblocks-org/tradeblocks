@@ -1,4 +1,4 @@
-import { loadAuthConfig } from '../../../src/auth/config.js';
+import { loadAuthConfig } from '../../../src/auth/config.ts';
 
 describe('loadAuthConfig', () => {
   const ORIG_ENV = process.env;

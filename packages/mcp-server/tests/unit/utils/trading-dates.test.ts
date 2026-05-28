@@ -1,4 +1,4 @@
-import { yesterdayET } from "../../../src/utils/trading-dates.js";
+import { yesterdayET } from "../../../src/utils/trading-dates.ts";
 
 describe("yesterdayET", () => {
   it("returns yesterday's ET calendar date when host is UTC mid-afternoon", () => {

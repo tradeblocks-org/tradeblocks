@@ -46,12 +46,12 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { promisify } from "util";
-import { ensureSyncTables, ensureTradeDataTable, ensureReportingDataTable } from "./schemas.js";
-import { ensureMutableMarketTables, ensureMarketDataTables } from "./market-schemas.js";
-import { ensureProfilesSchema } from "./profile-schemas.js";
-import { createMarketParquetViews } from "./market-views.js";
-import { migrateMetadataToJson } from "./json-migration.js";
-import { getDataRoot } from "./data-root.js";
+import { ensureSyncTables, ensureTradeDataTable, ensureReportingDataTable } from "./schemas.ts";
+import { ensureMutableMarketTables, ensureMarketDataTables } from "./market-schemas.ts";
+import { ensureProfilesSchema } from "./profile-schemas.ts";
+import { createMarketParquetViews } from "./market-views.ts";
+import { migrateMetadataToJson } from "./json-migration.ts";
+import { getDataRoot } from "./data-root.ts";
 
 // Module-level singleton state
 let instance: DuckDBInstance | null = null;
@@ -370,7 +370,7 @@ async function openReadWriteConnection(
   // Runs only when TRADEBLOCKS_PARQUET=true and JSON files don't yet exist.
   // Must run AFTER all DuckDB tables are created (profiles, sync, market schemas).
   try {
-    const blocksDir = (await import("../sync/index.js")).getBlocksDir(dataRoot);
+    const blocksDir = (await import("../sync/index.ts")).getBlocksDir(dataRoot);
     await migrateMetadataToJson(connection, dataRoot, blocksDir);
   } catch (err) {
     console.warn("[json-migration] Migration failed (non-fatal):", err instanceof Error ? err.message : err);

@@ -16,7 +16,7 @@ import {
   pdf,
   cdf,
   type GreeksResult,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 
 describe('bsPrice', () => {
   const S = 100, K = 100, T = 1.0, r = 0.045, q = 0.015, sigma = 0.20;

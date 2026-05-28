@@ -27,10 +27,10 @@ import * as path from "path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DuckDBConnection } from "@duckdb/node-api";
-import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.js";
-import { getDataRoot } from "../db/data-root.js";
-import { withFullSync } from "./middleware/sync-middleware.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
+import { getDataRoot } from "../db/data-root.ts";
+import { withFullSync } from "./middleware/sync-middleware.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
 
 /**
  * Available tables for reference in error messages

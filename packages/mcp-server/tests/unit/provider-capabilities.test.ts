@@ -5,8 +5,8 @@
  * flags, including env-var-driven behavior (MASSIVE_DATA_TIER for quotes).
  */
 
-import { MassiveProvider } from "../../src/utils/providers/massive.js";
-import { ThetaDataProvider } from "../../src/utils/providers/thetadata.js";
+import { MassiveProvider } from "../../src/utils/providers/massive.ts";
+import { ThetaDataProvider } from "../../src/utils/providers/thetadata.ts";
 
 const ORIG_ENV = process.env;
 

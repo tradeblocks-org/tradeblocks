@@ -11,10 +11,10 @@
  * All outputs are factual numbers -- no interpretive labels.
  */
 
-import { Trade } from '../models/trade'
-import { PortfolioStatsCalculator } from './portfolio-stats'
-import { calculateKellyMetrics } from './kelly'
-import { computeTrends, type TrendAnalysis } from './trend-detection'
+import type { Trade } from '../models/trade.ts'
+import { PortfolioStatsCalculator } from './portfolio-stats.ts'
+import { calculateKellyMetrics } from './kelly.ts'
+import { computeTrends, type TrendAnalysis } from './trend-detection.ts'
 
 // ---------------------------------------------------------------------------
 // Interfaces

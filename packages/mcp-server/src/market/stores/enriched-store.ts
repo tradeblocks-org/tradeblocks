@@ -12,7 +12,7 @@
  *
  * `read(opts)` composes enriched + (optional) context + (optional) OHLCV.
  */
-import type { StoreContext, CoverageReport } from "./types.js";
+import type { StoreContext, CoverageReport } from "./types.ts";
 
 export interface EnrichedReadOpts {
   ticker: string;
@@ -23,7 +23,10 @@ export interface EnrichedReadOpts {
 }
 
 export abstract class EnrichedStore {
-  constructor(protected readonly ctx: StoreContext) {}
+  protected readonly ctx: StoreContext;
+  constructor(ctx: StoreContext) {
+    this.ctx = ctx;
+  }
 
   abstract compute(ticker: string, from: string, to: string): Promise<void>;
   abstract computeContext(from: string, to: string): Promise<void>;

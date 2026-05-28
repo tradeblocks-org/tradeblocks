@@ -17,14 +17,14 @@ import {
   isTatFormat,
   convertTatRowToReportingTrade,
 } from "@tradeblocks/lib";
-import { getConnection } from "../db/connection.js";
-import { isParquetMode } from "../db/parquet-writer.js";
-import { getSyncMetadataJson } from "../db/json-adapters.js";
-import { getBlocksDir } from "../sync/index.js";
+import { getConnection } from "../db/connection.ts";
+import { isParquetMode } from "../db/parquet-writer.ts";
+import { getSyncMetadataJson } from "../db/json-adapters.ts";
+import { getBlocksDir } from "../sync/index.ts";
 
 // Re-export CSV discovery types and functions from shared module
-export { type CsvMappings, type CsvType, detectCsvType, discoverCsvFiles, logCsvDiscoveryWarning } from "./csv-discovery.js";
-import { type CsvType, discoverCsvFiles } from "./csv-discovery.js";
+export { type CsvMappings, type CsvType, detectCsvType, discoverCsvFiles, logCsvDiscoveryWarning } from "./csv-discovery.ts";
+import { type CsvType, discoverCsvFiles } from "./csv-discovery.ts";
 
 function resolveBlocksBaseDir(baseDir: string): string {
   return getBlocksDir(baseDir);

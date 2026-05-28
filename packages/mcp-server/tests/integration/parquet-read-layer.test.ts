@@ -16,7 +16,7 @@ import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
 import {
   createMarketParquetViews,
   ensureMutableMarketTables,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 describe("Parquet Read Layer (end-to-end)", () => {
   let tmpDir: string;

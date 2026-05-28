@@ -12,14 +12,14 @@
  */
 import { existsSync } from "fs";
 import * as path from "path";
-import { SpotStore } from "./spot-store.js";
-import type { BarRow, CoverageReport } from "./types.js";
-import { buildReadBarsSQL, buildReadDailyBarsSQL } from "./spot-sql.js";
-import { listPartitionValues } from "./coverage.js";
+import { SpotStore } from "./spot-store.ts";
+import type { BarRow, CoverageReport } from "./types.ts";
+import { buildReadBarsSQL, buildReadDailyBarsSQL } from "./spot-sql.ts";
+import { listPartitionValues } from "./coverage.ts";
 import {
   resolveMarketDir,
   writeSpotPartition,
-} from "../../db/market-datasets.js";
+} from "../../db/market-datasets.ts";
 
 export class ParquetSpotStore extends SpotStore {
   async writeBars(

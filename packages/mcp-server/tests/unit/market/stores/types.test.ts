@@ -2,7 +2,7 @@ import type {
   LegEnvelope,
   ReadWindowParams,
   WindowQuoteRow,
-} from "../../../../src/market/stores/types.js";
+} from "../../../../src/market/stores/types.ts";
 
 describe("readWindow types", () => {
   it("LegEnvelope accepts contract_type/dte range/optional strike range", () => {

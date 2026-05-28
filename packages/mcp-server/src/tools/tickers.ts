@@ -31,16 +31,16 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   TickerRegistry,
   TickerEntry,
-} from "../market/tickers/registry.js";
+} from "../market/tickers/registry.ts";
 import {
   registerUnderlyingSchema,
   unregisterUnderlyingSchema,
   listUnderlyingsSchema,
   resolveRootSchema,
-} from "../market/tickers/schemas.js";
-import { saveUserOverride } from "../market/tickers/loader.js";
-import { extractRoot } from "../market/tickers/resolver.js";
-import { createToolOutput, type ToolOutput } from "../utils/output-formatter.js";
+} from "../market/tickers/schemas.ts";
+import { saveUserOverride } from "../market/tickers/loader.ts";
+import { extractRoot } from "../market/tickers/resolver.ts";
+import { createToolOutput, type ToolOutput } from "../utils/output-formatter.ts";
 
 // ---------------------------------------------------------------------------
 // Handlers (exported for unit testing without spinning up an MCP server)

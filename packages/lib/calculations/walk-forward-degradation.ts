@@ -11,9 +11,9 @@
  * Consumed by the MCP tool in Plan 02 and by verdict synthesis in Phase 50.
  */
 
-import { Trade } from '../models/trade'
-import { PortfolioStatsCalculator } from './portfolio-stats'
-import { computeTrends, type TrendResult } from './trend-detection'
+import type { Trade } from '../models/trade.ts'
+import { PortfolioStatsCalculator } from './portfolio-stats.ts'
+import { computeTrends, type TrendResult } from './trend-detection.ts'
 
 // ---------------------------------------------------------------------------
 // Types

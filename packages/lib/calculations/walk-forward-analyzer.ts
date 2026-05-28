@@ -1,6 +1,6 @@
-import { Trade } from '../models/trade'
-import { DailyLogEntry } from '../models/daily-log'
-import {
+import type { Trade } from '../models/trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import type {
   WalkForwardConfig,
   WalkForwardComputation,
   WalkForwardParameterRanges,
@@ -12,18 +12,18 @@ import {
   PerformanceFloorConfig,
   DiversificationConfig,
   PeriodDiversificationMetrics,
-  SkippedWindow,
-} from '../models/walk-forward'
-import { PortfolioStatsCalculator } from './portfolio-stats'
-import { calculateKellyMetrics } from './kelly'
-import { PortfolioStats } from '../models/portfolio-stats'
+  SkippedWindow
+} from '../models/walk-forward.ts'
+import { PortfolioStatsCalculator } from './portfolio-stats.ts'
+import { calculateKellyMetrics } from './kelly.ts'
+import type { PortfolioStats } from '../models/portfolio-stats.ts'
 import {
   calculateCorrelationMatrix,
   calculateCorrelationAnalytics,
-  CorrelationOptions,
-} from './correlation'
-import { performTailRiskAnalysis } from './tail-risk-analysis'
-import { TailRiskAnalysisOptions } from '../models/tail-risk'
+  type CorrelationOptions
+} from './correlation.ts'
+import { performTailRiskAnalysis } from './tail-risk-analysis.ts'
+import type { TailRiskAnalysisOptions } from '../models/tail-risk.ts'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_MIN_IN_SAMPLE_TRADES = 10

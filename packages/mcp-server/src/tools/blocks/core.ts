@@ -10,24 +10,24 @@ import {
   loadBlock,
   listBlocks,
   loadReportingLog,
-} from "../../utils/block-loader.js";
+} from "../../utils/block-loader.ts";
 import {
   createToolOutput,
   formatCurrency,
   formatPercent,
   formatRatio,
-} from "../../utils/output-formatter.js";
+} from "../../utils/output-formatter.ts";
 import {
   PortfolioStatsCalculator,
   calculateDailyExposure,
 } from "@tradeblocks/lib";
 import type { Trade, PeakExposure, EquityCurvePoint } from "@tradeblocks/lib";
-import { resolveTradeTicker } from "../../utils/ticker.js";
-import { filterByStrategy, filterByDateRange, filterDailyLogsByDateRange } from "../shared/filters.js";
+import { resolveTradeTicker } from "../../utils/ticker.ts";
+import { filterByStrategy, filterByDateRange, filterDailyLogsByDateRange } from "../shared/filters.ts";
 import {
   withSyncedBlock,
   withFullSync,
-} from "../middleware/sync-middleware.js";
+} from "../middleware/sync-middleware.ts";
 
 /**
  * Calculate peak daily exposure using the shared sweep-line algorithm.

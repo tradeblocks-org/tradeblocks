@@ -18,7 +18,7 @@
  */
 import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { getProvider } from "./market-provider.js";
+import { getProvider } from "./market-provider.ts";
 
 /** Per-date probe result returned alongside the summary deltas. */
 export interface CalibrationProbeDateResult {

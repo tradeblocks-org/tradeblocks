@@ -13,7 +13,7 @@
  * partition-value boundary. Each layer is independently sufficient; together
  * they prevent malformed/injected ticker strings from reaching DuckDB.
  */
-import { TICKER_RE } from "./schemas.js";
+import { TICKER_RE } from "./schemas.ts";
 
 export type EntrySource = "default" | "user" | "user-override";
 

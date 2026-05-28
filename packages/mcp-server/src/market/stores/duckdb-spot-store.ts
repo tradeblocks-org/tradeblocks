@@ -10,9 +10,9 @@
  *
  * D-02 reminder: no method body inspects `ctx.parquetMode`.
  */
-import { SpotStore } from "./spot-store.js";
-import type { BarRow, CoverageReport } from "./types.js";
-import { buildReadBarsSQL, buildReadDailyBarsSQL } from "./spot-sql.js";
+import { SpotStore } from "./spot-store.ts";
+import type { BarRow, CoverageReport } from "./types.ts";
+import { buildReadBarsSQL, buildReadDailyBarsSQL } from "./spot-sql.ts";
 
 export class DuckdbSpotStore extends SpotStore {
   async writeBars(

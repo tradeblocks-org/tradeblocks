@@ -9,8 +9,8 @@
  * Purity contract: no `this`, no `ctx`, no DuckDB value-level imports. Tests
  * in `tests/unit/market/stores/chain-sql.test.ts`.
  */
-import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.js";
-import type { BuiltSQL } from "./spot-sql.js";
+import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.ts";
+import type { BuiltSQL } from "./spot-sql.ts";
 
 function lit(value: string): string {
   return `'${escapeSqlLiteral(value)}'`;

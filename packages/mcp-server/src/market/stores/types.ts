@@ -12,7 +12,7 @@
  *   downstream plans import these from `src/market/stores/types.js`.
  */
 import type { DuckDBConnection } from "@duckdb/node-api";
-import type { TickerRegistry } from "../tickers/registry.js";
+import type { TickerRegistry } from "../tickers/registry.ts";
 
 /**
  * StoreContext — one per MCP process (or standalone script).
@@ -73,8 +73,8 @@ export interface CoverageReport {
 
 // Re-export existing shared types so downstream store files (and Phase 2 concrete
 // stores) have a single import path: `./types.js`.
-export type { BarRow } from "../../utils/market-provider.js";
-export type { ContractRow } from "../../utils/chain-loader.js";
+export type { BarRow } from "../../utils/market-provider.ts";
+export type { ContractRow } from "../../utils/chain-loader.ts";
 
 /**
  * Per-leg envelope for QuoteStore.readWindow. Compiled from the strategy's

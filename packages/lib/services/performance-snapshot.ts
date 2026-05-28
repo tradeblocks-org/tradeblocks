@@ -1,12 +1,12 @@
-import { Trade } from '../models/trade'
-import { DailyLogEntry } from '../models/daily-log'
-import { PortfolioStats } from '../models/portfolio-stats'
-import { PortfolioStatsCalculator } from '../calculations/portfolio-stats'
+import type { Trade } from '../models/trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import type { PortfolioStats } from '../models/portfolio-stats.ts'
+import { PortfolioStatsCalculator } from '../calculations/portfolio-stats.ts'
 import {
   calculatePremiumEfficiencyPercent,
   computeTotalPremium,
-  EfficiencyBasis
-} from '../metrics/trade-efficiency'
+  type EfficiencyBasis
+} from '../metrics/trade-efficiency.ts'
 import {
   calculateMFEMAEDataAsync,
   calculateMFEMAEStats,
@@ -15,11 +15,11 @@ import {
   type MFEMAEStats,
   type DistributionBucket,
   type NormalizationBasis
-} from '../calculations/mfe-mae'
-import { calculateDailyExposure as calculateDailyExposureShared } from '../calculations/daily-exposure'
-import { normalizeTradesToOneLot } from '../utils/trade-normalization'
-import { yieldToMain, checkCancelled } from '../utils/async-helpers'
-import { calculateRunsTest } from '../calculations/streak-analysis'
+} from '../calculations/mfe-mae.ts'
+import { calculateDailyExposure as calculateDailyExposureShared } from '../calculations/daily-exposure.ts'
+import { normalizeTradesToOneLot } from '../utils/trade-normalization.ts'
+import { yieldToMain, checkCancelled } from '../utils/async-helpers.ts'
+import { calculateRunsTest } from '../calculations/streak-analysis.ts'
 
 export interface SnapshotDateRange {
   from?: Date

@@ -6,7 +6,7 @@
  * extract_statements GC leak rationale).
  */
 import { describe, it, expect } from "@jest/globals";
-import { buildReadQuotesSQL } from "../../../../src/test-exports.js";
+import { buildReadQuotesSQL } from "../../../../src/test-exports.ts";
 
 describe("buildReadQuotesSQL", () => {
   it("queries market.option_quote_minutes with inlined underlying + date range", () => {

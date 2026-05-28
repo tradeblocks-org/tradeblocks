@@ -2,8 +2,8 @@
  * Static Dataset Rows Store - CRUD operations for static dataset data rows
  */
 
-import type { StaticDatasetRow, StoredStaticDatasetRow } from '../models/static-dataset'
-import { STORES, INDEXES, withReadTransaction, withWriteTransaction, promisifyRequest } from './index'
+import type { StaticDatasetRow, StoredStaticDatasetRow } from '../models/static-dataset.ts'
+import { STORES, INDEXES, withReadTransaction, withWriteTransaction, promisifyRequest } from './index.ts'
 
 /**
  * Add rows for a static dataset (batch operation with chunking)

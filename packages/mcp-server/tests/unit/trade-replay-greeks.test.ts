@@ -3,7 +3,7 @@ import {
   type ReplayLeg,
   type BarRow,
   type GreeksConfig,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 
 /**
  * Tests for greeks integration in the P&L path computation.

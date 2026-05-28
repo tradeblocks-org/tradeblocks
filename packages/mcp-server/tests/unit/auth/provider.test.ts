@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TradeBlocksAuthProvider } from '../../../src/auth/provider.js';
-import type { AuthConfig } from '../../../src/auth/config.js';
+import { TradeBlocksAuthProvider } from '../../../src/auth/provider.ts';
+import type { AuthConfig } from '../../../src/auth/config.ts';
 
 const TEST_CONFIG: AuthConfig = {
   username: 'admin',

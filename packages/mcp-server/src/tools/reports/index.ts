@@ -8,9 +8,9 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerFieldTools } from "./fields.js";
-import { registerPredictiveTools } from "./predictive.js";
-import { registerSlippageTools } from "./slippage.js";
+import { registerFieldTools } from "./fields.ts";
+import { registerPredictiveTools } from "./predictive.ts";
+import { registerSlippageTools } from "./slippage.ts";
 
 /**
  * Register all report-related MCP tools

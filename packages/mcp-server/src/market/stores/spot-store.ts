@@ -8,16 +8,19 @@
  */
 import { existsSync } from "fs";
 import * as path from "path";
-import type { StoreContext, BarRow, CoverageReport } from "./types.js";
-import { resolveMarketDir } from "../../db/market-datasets.js";
-import { listPartitionValues } from "./coverage.js";
+import type { StoreContext, BarRow, CoverageReport } from "./types.ts";
+import { resolveMarketDir } from "../../db/market-datasets.ts";
+import { listPartitionValues } from "./coverage.ts";
 
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");
 }
 
 export abstract class SpotStore {
-  constructor(protected readonly ctx: StoreContext) {}
+  protected readonly ctx: StoreContext;
+  constructor(ctx: StoreContext) {
+    this.ctx = ctx;
+  }
 
   /**
    * Return `read_parquet([...])` SQL over exact `ticker=X/date=Y/data.parquet`

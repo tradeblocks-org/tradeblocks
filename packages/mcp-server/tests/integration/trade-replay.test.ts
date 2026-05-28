@@ -10,10 +10,10 @@ import { jest } from "@jest/globals";
  */
 
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
-import { handleReplayTrade } from "../../src/tools/replay.js";
-import { handleDecomposeGreeks } from "../../src/tools/exit-analysis.js";
-import { buildTestStores } from "../fixtures/market-stores/build-stores.js";
-import type { MarketStores } from "../../src/market/stores/index.js";
+import { handleReplayTrade } from "../../src/tools/replay.ts";
+import { handleDecomposeGreeks } from "../../src/tools/exit-analysis.ts";
+import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
+import type { MarketStores } from "../../src/market/stores/index.ts";
 
 // Minute bars for SPY 470C — 3 minutes starting at 09:30 ET on 2025-01-17
 // 2025-01-17 is in EST (UTC-5): 09:30 ET = 14:30 UTC = 1737124200000 ms

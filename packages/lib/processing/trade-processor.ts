@@ -5,11 +5,11 @@
  * Converts raw CSV data to validated Trade objects.
  */
 
-import { Trade, TRADE_COLUMN_ALIASES, REQUIRED_TRADE_COLUMNS, TRADE_COLUMN_MAPPING } from '../models/trade'
-import { ValidationError, ProcessingError } from '../models'
-import { rawTradeDataSchema, tradeSchema } from '../models/validators'
-import { CSVParser, ParseProgress } from './csv-parser'
-import { findMissingHeaders, normalizeHeaders } from '../utils/csv-headers'
+import { type Trade, TRADE_COLUMN_ALIASES, REQUIRED_TRADE_COLUMNS, TRADE_COLUMN_MAPPING } from '../models/trade.ts'
+import type { ValidationError, ProcessingError } from '../models/index.ts'
+import { rawTradeDataSchema, tradeSchema } from '../models/validators.ts'
+import { CSVParser, type ParseProgress } from './csv-parser.ts'
+import { findMissingHeaders, normalizeHeaders } from '../utils/csv-headers.ts'
 
 /**
  * Set of known trade column names (canonical names from TRADE_COLUMN_MAPPING)

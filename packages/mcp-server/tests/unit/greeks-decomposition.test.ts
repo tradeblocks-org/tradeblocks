@@ -2,9 +2,9 @@ import {
   decomposeGreeks,
   computeTimeDeltaDays,
   type GreeksDecompositionConfig,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 
-import type { PnlPoint, ReplayLeg } from '../../src/test-exports.js';
+import type { PnlPoint, ReplayLeg } from '../../src/test-exports.ts';
 
 // ---------------------------------------------------------------------------
 // Test fixture helpers

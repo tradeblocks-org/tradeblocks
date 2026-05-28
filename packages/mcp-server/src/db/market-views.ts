@@ -30,12 +30,12 @@ import * as path from "path";
 import {
   resolveCanonicalMarketPartitionDir,
   resolveMarketDir,
-} from "./market-datasets.js";
+} from "./market-datasets.ts";
 import {
   describeReadParquetColumns,
   quoteParquetCanonicalProjection,
   readParquetGlobSql,
-} from "../utils/quote-parquet-projection.js";
+} from "../utils/quote-parquet-projection.ts";
 
 export interface ViewCreationResult {
   viewsCreated: string[];

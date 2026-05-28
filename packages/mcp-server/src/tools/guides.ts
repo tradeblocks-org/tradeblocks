@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { createToolOutput } from "../utils/output-formatter.ts";
 
 // ============================================================================
 // Topic content

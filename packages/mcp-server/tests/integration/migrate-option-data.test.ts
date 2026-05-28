@@ -30,8 +30,8 @@ import {
   buildOptionQuoteSelectQuery,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   LEVERAGED_ETFS,
-} from "../../src/test-exports.js";
-import { createMarketParquetViews } from "../../src/db/market-views.js";
+} from "../../src/test-exports.ts";
+import { createMarketParquetViews } from "../../src/db/market-views.ts";
 
 const REGISTRY_DEFAULTS = [
   { underlying: "SPX", roots: ["SPX", "SPXW", "SPXQ"] },

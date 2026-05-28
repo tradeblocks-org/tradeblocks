@@ -9,13 +9,13 @@
  */
 
 import { z } from "zod";
-import { getConnection } from "../db/connection.js";
-import { handleDecomposeGreeks } from "./exit-analysis.js";
-import type { FactorContribution } from "../utils/greeks-decomposition.js";
+import { getConnection } from "../db/connection.ts";
+import { handleDecomposeGreeks } from "./exit-analysis.ts";
+import type { FactorContribution } from "../utils/greeks-decomposition.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import { tradingDays } from "../utils/flatfile-importer.js";
-import type { MarketStores } from "../market/stores/index.js";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import { tradingDays } from "../utils/flatfile-importer.ts";
+import type { MarketStores } from "../market/stores/index.ts";
 
 // ---------------------------------------------------------------------------
 // Types

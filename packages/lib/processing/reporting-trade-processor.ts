@@ -5,12 +5,12 @@
  * ReportingTrade objects ready for strategy alignment.
  */
 
-import { ReportingTrade, RawReportingTradeData, REQUIRED_REPORTING_TRADE_COLUMNS, REPORTING_TRADE_COLUMN_ALIASES } from '../models/reporting-trade'
-import { CSVParser, ParseProgress } from './csv-parser'
-import { findMissingHeaders, normalizeHeaders } from '../utils/csv-headers'
-import { ProcessingError, ValidationError } from '../models'
-import { rawReportingTradeDataSchema, reportingTradeSchema } from '../models/validators'
-import { isTatFormat, convertTatRowToReportingTrade } from './tat-adapter'
+import { type ReportingTrade, type RawReportingTradeData, REQUIRED_REPORTING_TRADE_COLUMNS, REPORTING_TRADE_COLUMN_ALIASES } from '../models/reporting-trade.ts'
+import { CSVParser, type ParseProgress } from './csv-parser.ts'
+import { findMissingHeaders, normalizeHeaders } from '../utils/csv-headers.ts'
+import type { ProcessingError, ValidationError } from '../models/index.ts'
+import { rawReportingTradeDataSchema, reportingTradeSchema } from '../models/validators.ts'
+import { isTatFormat, convertTatRowToReportingTrade } from './tat-adapter.ts'
 
 export interface ReportingTradeProcessingConfig {
   maxRows?: number

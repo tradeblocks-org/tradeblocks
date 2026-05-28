@@ -5,14 +5,14 @@
  * to avoid expensive recalculation on every page load.
  */
 
-import { CombinedTrade } from "../utils/combine-leg-groups";
+import type { CombinedTrade } from "../utils/combine-leg-groups.ts";
 import {
   INDEXES,
   promisifyRequest,
   STORES,
   withReadTransaction,
   withWriteTransaction,
-} from "./index";
+} from "./index.ts";
 
 /**
  * Cache entry for combined trades

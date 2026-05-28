@@ -20,8 +20,8 @@
 
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as fs from "fs/promises";
-import { normalizeTicker } from "./ticker.js";
-import type { MarketStores, BarRow } from "../market/stores/index.js";
+import { normalizeTicker } from "./ticker.ts";
+import type { MarketStores, BarRow } from "../market/stores/index.ts";
 
 // =============================================================================
 // Constants + types (kept local — duplicated in market-importer-api.ts so neither

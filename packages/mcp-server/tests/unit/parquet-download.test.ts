@@ -23,7 +23,7 @@ describe("MassiveProvider.downloadBulkData", () => {
   });
 
   it("skips download if output Parquet already exists", async () => {
-    const { MassiveProvider } = await import("../../src/utils/providers/massive.js");
+    const { MassiveProvider } = await import("../../src/utils/providers/massive.ts");
     const provider = new MassiveProvider();
     const outputPath = join(tmpDir, "data.parquet");
     writeFileSync(outputPath, "dummy");

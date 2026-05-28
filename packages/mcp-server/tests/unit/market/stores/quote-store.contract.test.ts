@@ -22,13 +22,13 @@ import {
 import {
   ParquetQuoteStore,
   DuckdbQuoteStore,
-} from "../../../../src/test-exports.js";
+} from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../../../fixtures/market-stores/build-fixture.js";
-import { makeQuotes } from "../../../fixtures/market-stores/quotes-fixture.js";
-import { createMarketParquetViews } from "../../../../src/db/market-views.js";
+} from "../../../fixtures/market-stores/build-fixture.ts";
+import { makeQuotes } from "../../../fixtures/market-stores/quotes-fixture.ts";
+import { createMarketParquetViews } from "../../../../src/db/market-views.ts";
 
 const SPX_CALL = "SPXW250106C05000000"; // root SPXW → underlying SPX
 const SPX_PUT = "SPXW250106P05000000"; // root SPXW → underlying SPX

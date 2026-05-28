@@ -13,9 +13,9 @@
  * Purity contract: no `this`, no `ctx`, no DB-connection value-level imports.
  * Tests live in `tests/unit/market/stores/enriched-sql.test.ts`.
  */
-import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.js";
-import { rthDailyAggregateSubquery } from "./rth-aggregation.js";
-import type { BuiltSQL } from "./spot-sql.js";
+import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.ts";
+import { rthDailyAggregateSubquery } from "./rth-aggregation.ts";
+import type { BuiltSQL } from "./spot-sql.ts";
 
 export interface BuildReadEnrichedArgs {
   ticker: string;

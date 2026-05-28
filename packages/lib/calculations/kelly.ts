@@ -2,7 +2,7 @@
  * Kelly Criterion calculations for position sizing
  */
 
-import { Trade } from "../models/trade";
+import type { Trade } from "../models/trade.ts";
 
 export interface KellyMetrics {
   fraction: number;

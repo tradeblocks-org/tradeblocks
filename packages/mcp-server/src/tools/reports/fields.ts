@@ -8,17 +8,17 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock } from "../../utils/block-loader.js";
-import { createToolOutput } from "../../utils/output-formatter.js";
-import { filterByStrategy, filterByDateRange } from "../shared/filters.js";
+import { loadBlock } from "../../utils/block-loader.ts";
+import { createToolOutput } from "../../utils/output-formatter.ts";
+import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
 import {
   enrichTrades,
   getTradeFieldValue,
   percentile,
   stdDev,
   generateHistogram,
-} from "./helpers.js";
-import { withSyncedBlock } from "../middleware/sync-middleware.js";
+} from "./helpers.ts";
+import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 
 /**
  * Register field-related report tools

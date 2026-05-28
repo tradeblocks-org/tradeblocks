@@ -17,12 +17,12 @@
  */
 
 import { std, mean, min, max } from 'mathjs'
-import { Trade } from '../models/trade'
-import { DailyLogEntry } from '../models/daily-log'
-import { PortfolioStats, StrategyStats, AnalysisConfig } from '../models/portfolio-stats'
-import type { NormalizedPortfolioStats } from '../models/portfolio-stats-normalized'
-import { asDecimal01 } from '../types/percentage'
-import { getRiskFreeRate } from '../utils/risk-free-rate'
+import type { Trade } from '../models/trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import type { PortfolioStats, StrategyStats, AnalysisConfig } from '../models/portfolio-stats.ts'
+import type { NormalizedPortfolioStats } from '../models/portfolio-stats-normalized.ts'
+import { asDecimal01 } from '../types/percentage.ts'
+import { getRiskFreeRate } from '../utils/risk-free-rate.ts'
 
 /**
  * Daily return with associated date for date-based risk-free rate calculations.

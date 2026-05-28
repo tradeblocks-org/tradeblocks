@@ -27,7 +27,7 @@ import {
   CONTEXT_FIELD_TYPES,
   type FieldDiff,
   type RowDiff,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 describe("compareFields tolerance gate (D-09)", () => {
   it("DOUBLE_EPSILON is exactly 1e-9", () => {

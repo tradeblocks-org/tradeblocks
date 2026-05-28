@@ -11,7 +11,7 @@
  * any future caller that wants to fail fast on a missing schema field.
  */
 // @ts-expect-error - importing from bundled output
-import { validateColumnMapping } from "../../src/test-exports.js";
+import { validateColumnMapping } from "../../src/test-exports.ts";
 
 // =============================================================================
 // validateColumnMapping — pure function, no DB needed

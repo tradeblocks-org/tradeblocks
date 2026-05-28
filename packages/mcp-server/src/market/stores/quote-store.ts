@@ -22,11 +22,14 @@ import type {
   CoverageReport,
   ReadWindowParams,
   WindowQuoteRow,
-} from "./types.js";
-import { extractRoot } from "../tickers/resolver.js";
+} from "./types.ts";
+import { extractRoot } from "../tickers/resolver.ts";
 
 export abstract class QuoteStore {
-  constructor(protected readonly ctx: StoreContext) {}
+  protected readonly ctx: StoreContext;
+  constructor(ctx: StoreContext) {
+    this.ctx = ctx;
+  }
 
   /**
    * Public accessor for the underlying TickerRegistry (WR-03).

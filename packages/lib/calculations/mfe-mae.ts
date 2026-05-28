@@ -1,6 +1,6 @@
-import { Trade } from '../models/trade'
-import { computeTotalMaxProfit, computeTotalMaxLoss, computeTotalPremium, type EfficiencyBasis } from '../metrics/trade-efficiency'
-import { yieldToMain, checkCancelled } from '../utils/async-helpers'
+import type { Trade } from '../models/trade.ts'
+import { computeTotalMaxProfit, computeTotalMaxLoss, computeTotalPremium, type EfficiencyBasis } from '../metrics/trade-efficiency.ts'
+import { yieldToMain, checkCancelled } from '../utils/async-helpers.ts'
 
 export type NormalizationBasis = 'premium' | 'margin'
 export const NORMALIZATION_BASES: NormalizationBasis[] = ['premium', 'margin']

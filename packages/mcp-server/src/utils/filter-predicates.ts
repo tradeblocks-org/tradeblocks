@@ -9,8 +9,8 @@
  * entry filters against market data rows.
  */
 
-import { CLOSE_KNOWN_FIELDS } from "./field-timing.js";
-import type { EntryFilter } from "../models/strategy-profile.js";
+import { CLOSE_KNOWN_FIELDS } from "./field-timing.ts";
+import type { EntryFilter } from "../models/strategy-profile.ts";
 
 /**
  * A compiled filter predicate with metadata about the field key used.

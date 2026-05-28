@@ -5,9 +5,9 @@
  * queryCoverage's canonical quote-cache aggregation behavior.
  */
 
-import { queryCoverage, scoreDataQuality, formatCoverageReport } from '../../src/test-exports.js';
-import type { DataQualityInput, CoverageResult } from '../../src/test-exports.js';
-import type { MarketStores } from '../../src/test-exports.js';
+import { queryCoverage, scoreDataQuality, formatCoverageReport } from '../../src/test-exports.ts';
+import type { DataQualityInput, CoverageResult } from '../../src/test-exports.ts';
+import type { MarketStores } from '../../src/test-exports.ts';
 
 interface CoverageInput {
   earliest: string | null;

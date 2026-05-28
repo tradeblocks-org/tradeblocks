@@ -5,14 +5,14 @@
  * Used for correlating trades with market data (VIX, SPX, etc.) at trade entry time.
  */
 
-import type { Trade } from '../models/trade'
+import type { Trade } from '../models/trade.ts'
 import type {
   StaticDataset,
   StaticDatasetRow,
   MatchStrategy,
   DatasetMatchResult,
   DatasetMatchStats,
-} from '../models/static-dataset'
+} from '../models/static-dataset.ts'
 
 /**
  * Combine trade date and time into a single timestamp

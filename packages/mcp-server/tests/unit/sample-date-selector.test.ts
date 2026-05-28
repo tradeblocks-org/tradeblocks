@@ -21,7 +21,7 @@ import {
   PHASE_5_KNOWN_EVENTS,
   PHASE_5_STRUCTURAL_DATES,
   type SampleDate,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 describe("selectVerificationSampleDates (D-08 deterministic seeding)", () => {
   it("returns the SAME list on repeat calls with the same seed", () => {

@@ -30,9 +30,9 @@ import type {
   BulkDownloadOptions,
   BulkDownloadResult,
   MinuteQuote,
-} from "../market-provider.js";
-import { computeLegGreeks } from "../black-scholes.js";
-import { resolveMassiveDataTier } from "../massive-tier.js";
+} from "../market-provider.ts";
+import { computeLegGreeks } from "../black-scholes.ts";
+import { resolveMassiveDataTier } from "../massive-tier.ts";
 
 // ===========================================================================
 // Zod Schemas — Aggregates (OHLCV Bars)

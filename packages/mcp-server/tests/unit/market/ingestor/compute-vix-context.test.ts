@@ -3,9 +3,9 @@ import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { MarketIngestor } from "../../../../src/market/ingestor/index.js";
-import { createMarketStores } from "../../../../src/market/stores/index.js";
-import { ensureMarketDataTables } from "../../../../src/db/market-schemas.js";
+import { MarketIngestor } from "../../../../src/market/ingestor/index.ts";
+import { createMarketStores } from "../../../../src/market/stores/index.ts";
+import { ensureMarketDataTables } from "../../../../src/db/market-schemas.ts";
 
 describe("MarketIngestor.computeVixContext", () => {
   let dataDir: string;

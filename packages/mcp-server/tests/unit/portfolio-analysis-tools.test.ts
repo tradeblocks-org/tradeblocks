@@ -13,7 +13,7 @@ import {
   computeSliceStats,
   type SliceStats,
   regimeAllocationAdvisorSchema,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 // =============================================================================
 // Helper: Regime Classification Logic (mirrors handler logic from regime-advisor.ts)

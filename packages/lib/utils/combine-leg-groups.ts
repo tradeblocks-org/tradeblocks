@@ -8,9 +8,9 @@
  * This utility groups trades by entry timestamp and combines them into single trade records.
  */
 
-import { Trade } from '../models/trade'
-import { ReportingTrade } from '../models/reporting-trade'
-import { yieldToMain, checkCancelled } from './async-helpers'
+import type { Trade } from '../models/trade.ts'
+import type { ReportingTrade } from '../models/reporting-trade.ts'
+import { yieldToMain, checkCancelled } from './async-helpers.ts'
 
 /**
  * Key used to group trades that were opened at the same time

@@ -1,4 +1,4 @@
-import { QuoteStore } from "../../../../src/market/stores/quote-store.js";
+import { QuoteStore } from "../../../../src/market/stores/quote-store.ts";
 
 describe("QuoteStore abstract surface", () => {
   it("subclass that omits readWindow fails type-check (runtime check: abstract method present)", () => {

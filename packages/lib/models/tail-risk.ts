@@ -6,7 +6,7 @@
  * correlation is low.
  */
 
-import { CorrelationDateBasis, CorrelationNormalization } from "../calculations/correlation";
+import type { CorrelationDateBasis, CorrelationNormalization } from "../calculations/correlation.ts";
 
 /**
  * Options for tail risk analysis

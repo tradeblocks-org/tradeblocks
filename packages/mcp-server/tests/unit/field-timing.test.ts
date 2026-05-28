@@ -24,7 +24,7 @@ import {
   buildOutcomeQuery,
   buildVixJoinClause,
   SCHEMA_DESCRIPTIONS,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 
 const dailyColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched.columns;
 const dateContextColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched_context.columns;

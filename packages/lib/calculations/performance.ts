@@ -5,10 +5,10 @@
  * Based on legacy Python performance calculations.
  */
 
-import { Trade } from '../models/trade'
-import { DailyLogEntry } from '../models/daily-log'
-import { PerformanceMetrics, TimePeriod } from '../models/portfolio-stats'
-import { getRiskFreeRateByKey } from '../utils/risk-free-rate'
+import type { Trade } from '../models/trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import type { PerformanceMetrics, TimePeriod } from '../models/portfolio-stats.ts'
+import { getRiskFreeRateByKey } from '../utils/risk-free-rate.ts'
 
 /**
  * Performance calculator for chart data and visualizations

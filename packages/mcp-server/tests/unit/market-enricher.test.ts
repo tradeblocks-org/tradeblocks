@@ -35,7 +35,7 @@ import {
   runEnrichment,
   ensureMutableMarketTables,
   ensureMarketDataTables,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 import type { DuckDBConnection, DuckDBInstance as DuckDBInstanceType } from '@duckdb/node-api';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { existsSync, mkdirSync, rmSync } from 'fs';
@@ -993,7 +993,7 @@ describe('runEnrichment injected IO path', () => {
     // adapter (`getEnrichedThrough` / `upsertEnrichedThrough`) directly,
     // keyed off `opts.dataDir`. Verify the fallback writes the watermark
     // there and does NOT touch market._sync_metadata for enrichment.
-    const { getEnrichedThrough } = await import('../../src/db/json-adapters.js');
+    const { getEnrichedThrough } = await import('../../src/db/json-adapters.ts');
     await seedDailyFixture(conn, 'SPX', ['2025-01-06', '2025-01-07', '2025-01-08']);
     // Insert a VIX ticker so Tier 2 doesn't bail with "no VIX data"
     await seedDailyFixture(conn, 'VIX', ['2025-01-06', '2025-01-07', '2025-01-08']);

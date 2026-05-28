@@ -15,8 +15,8 @@
  * Pure logic module — no I/O, no DuckDB, no fetch.
  */
 
-import type { PnlPoint, ReplayLeg } from './trade-replay.js';
-import { bsPrice, bachelierPrice, BACHELIER_DTE_THRESHOLD } from './black-scholes.js';
+import type { PnlPoint, ReplayLeg } from './trade-replay.ts';
+import { bsPrice, bachelierPrice, BACHELIER_DTE_THRESHOLD } from './black-scholes.ts';
 
 // ---------------------------------------------------------------------------
 // Types

@@ -5,7 +5,7 @@
  * target. The .mjs script that consumes them is not unit-testable due to
  * filesystem effects; these helpers carry the safety net.
  */
-import type { TickerRegistry } from "../market/tickers/registry.js";
+import type { TickerRegistry } from "../market/tickers/registry.ts";
 
 /** Hardcoded skip list for leveraged-ETF roots — verbatim list, audit-friendly. */
 export const LEVERAGED_ETFS = new Set(["SPXL", "SPXS", "SPXU", "SPXC"]);

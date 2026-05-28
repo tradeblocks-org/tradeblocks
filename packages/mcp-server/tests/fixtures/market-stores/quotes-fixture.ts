@@ -4,7 +4,7 @@
  * Produces three minute-resolution quotes across an RTH session so the
  * timestamp-sorted return ordering can be asserted directly.
  */
-import type { QuoteRow } from "../../../src/market/stores/types.js";
+import type { QuoteRow } from "../../../src/market/stores/types.ts";
 
 /**
  * Build 3 minute quotes for a single OCC ticker on a given date:

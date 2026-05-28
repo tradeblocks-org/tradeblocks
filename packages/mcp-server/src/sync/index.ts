@@ -8,17 +8,17 @@
 import { existsSync } from "fs";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { getConnection } from "../db/connection.js";
+import { getConnection } from "../db/connection.ts";
 import {
   syncBlockInternal,
   detectBlockChanges,
   cleanupDeletedBlocks,
   type BlockSyncResult,
-} from "./block-sync.js";
-import { getSyncMetadata } from "./metadata.js";
+} from "./block-sync.ts";
+import { getSyncMetadata } from "./metadata.ts";
 
 // Re-export hasher utilities
-export { hashFileContent } from "./hasher.js";
+export { hashFileContent } from "./hasher.ts";
 
 // Re-export metadata operations and types
 export {
@@ -27,10 +27,10 @@ export {
   deleteSyncMetadata,
   getAllSyncedBlockIds,
   type BlockSyncMetadata,
-} from "./metadata.js";
+} from "./metadata.ts";
 
 // Re-export block sync types and internal functions (for testing)
-export { type BlockSyncResult } from "./block-sync.js";
+export { type BlockSyncResult } from "./block-sync.ts";
 
 // --- Result Types ---
 

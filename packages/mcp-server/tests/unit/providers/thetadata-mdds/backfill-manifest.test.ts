@@ -19,7 +19,7 @@ import {
   makeBackfillRunId,
   parseBackfillOccTicker,
   projectBackfillWallTimeHours,
-} from "../../../../src/utils/providers/thetadata/backfill.js";
+} from "../../../../src/utils/providers/thetadata/backfill.ts";
 
 describe("ThetaData MDDS backfill manifest helpers", () => {
   it("builds the manifest path under the ThetaData MDDS backfill manifest directory", () => {

@@ -8,13 +8,13 @@ import type {
   ThetaRight,
   ThetaStockEodRow,
   ThetaStockOhlcRow,
-} from "./types.js";
+} from "./types.ts";
 import {
   decodeThetaResponseData,
   thetaTimestampToEtMinute,
   type ThetaCellValue,
-} from "./decode.js";
-import type { ThetaMddsClient } from "./client.js";
+} from "./decode.ts";
+import type { ThetaMddsClient } from "./client.ts";
 
 type ThetaResponseData = {
   compressedData: Buffer | Uint8Array;

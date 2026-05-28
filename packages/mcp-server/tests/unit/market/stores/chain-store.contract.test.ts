@@ -16,13 +16,13 @@ import {
 import {
   ParquetChainStore,
   DuckdbChainStore,
-} from "../../../../src/test-exports.js";
+} from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../../../fixtures/market-stores/build-fixture.js";
-import { makeContracts } from "../../../fixtures/market-stores/contracts-fixture.js";
-import { createMarketParquetViews } from "../../../../src/db/market-views.js";
+} from "../../../fixtures/market-stores/build-fixture.ts";
+import { makeContracts } from "../../../fixtures/market-stores/contracts-fixture.ts";
+import { createMarketParquetViews } from "../../../../src/db/market-views.ts";
 
 async function makeParquetChain(): Promise<{
   store: ParquetChainStore;

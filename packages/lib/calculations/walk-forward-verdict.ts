@@ -1,4 +1,4 @@
-import type { WalkForwardResults, WalkForwardPeriodResult } from '../models/walk-forward'
+import type { WalkForwardResults, WalkForwardPeriodResult } from '../models/walk-forward.ts'
 
 export type Assessment = 'good' | 'moderate' | 'concerning'
 

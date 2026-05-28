@@ -8,17 +8,17 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { hashFileContent } from "./hasher.js";
+import { hashFileContent } from "./hasher.ts";
 import {
   getSyncMetadata,
   upsertSyncMetadata,
   deleteSyncMetadata,
   getAllSyncedBlockIds,
   type BlockSyncMetadata,
-} from "./metadata.js";
-import { resolveTickerFromCsvRow } from "../utils/ticker.js";
-import { convertToReportingTrade } from "../utils/block-loader.js";
-import { discoverCsvFiles } from "../utils/csv-discovery.js";
+} from "./metadata.ts";
+import { resolveTickerFromCsvRow } from "../utils/ticker.ts";
+import { convertToReportingTrade } from "../utils/block-loader.ts";
+import { discoverCsvFiles } from "../utils/csv-discovery.ts";
 import type { ReportingTrade } from "@tradeblocks/lib";
 
 /**

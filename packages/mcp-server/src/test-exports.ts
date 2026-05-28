@@ -15,10 +15,10 @@ export {
   type CsvMappings,
   type ImportCsvResult,
   type ImportCsvOptions,
-} from './utils/block-loader.js';
+} from './utils/block-loader.ts';
 
 // Export CSV discovery utilities for unit testing
-export { detectCsvType, discoverCsvFiles, logCsvDiscoveryWarning, type CsvType } from './utils/csv-discovery.js';
+export { detectCsvType, discoverCsvFiles, logCsvDiscoveryWarning, type CsvType } from './utils/csv-discovery.ts';
 
 // Export PortfolioStatsCalculator for testing block_diff logic
 export { PortfolioStatsCalculator } from '@tradeblocks/lib';
@@ -32,29 +32,29 @@ export {
   syncBlock,
   type SyncResult,
   type BlockSyncResult,
-} from './sync/index.js';
+} from './sync/index.ts';
 
 // Export DuckDB connection utilities for integration testing
-export { getConnection, getReadOnlyConnection, closeConnection, isConnected, getConnectionMode, upgradeToReadWrite, downgradeToReadOnly, getCurrentConnection } from './db/connection.js';
-export { setDataRoot, getDataRoot, resetDataRoot } from './db/data-root.js';
-export { yesterdayET } from './utils/trading-dates.js';
+export { getConnection, getReadOnlyConnection, closeConnection, isConnected, getConnectionMode, upgradeToReadWrite, downgradeToReadOnly, getCurrentConnection } from './db/connection.ts';
+export { setDataRoot, getDataRoot, resetDataRoot } from './db/data-root.ts';
+export { yesterdayET } from './utils/trading-dates.ts';
 export {
   resolveCanonicalMarketFile,
   resolveCanonicalMarketPartitionDir,
   resolveCanonicalMarketPartitionPath,
   resolveCanonicalMarketPartitionFile,
   canonicalMarketTableName,
-} from './db/market-datasets.js';
+} from './db/market-datasets.ts';
 
 // Export market schema utilities for integration testing
-export { ensureMutableMarketTables, ensureMarketDataTables } from './db/market-schemas.js';
+export { ensureMutableMarketTables, ensureMarketDataTables } from './db/market-schemas.ts';
 
 // Export shared filter utilities for testing
 export {
   filterByStrategy,
   filterByDateRange,
   filterDailyLogsByDateRange,
-} from './tools/shared/filters.js';
+} from './tools/shared/filters.ts';
 
 // Export field timing utilities for testing
 export {
@@ -69,27 +69,27 @@ export {
   buildLookaheadFreeQuery,
   buildOutcomeQuery,
   buildVixJoinClause,
-} from './utils/field-timing.js';
+} from './utils/field-timing.ts';
 
 // Export data availability helper for testing
 export {
   checkDataAvailability,
   type DataAvailabilityReport,
-} from './utils/data-availability.js';
+} from './utils/data-availability.ts';
 export {
   queryCoverage,
   scoreDataQuality,
   formatCoverageReport,
   type DataQualityInput,
   type CoverageResult,
-} from './utils/data-quality.js';
+} from './utils/data-quality.ts';
 
 // Export intraday timing utilities for testing
-export { computeIntradayTimingFields } from './utils/market-enricher.js';
+export { computeIntradayTimingFields } from './utils/market-enricher.ts';
 
 // Export schema metadata for classification completeness tests
-export { SCHEMA_DESCRIPTIONS } from './utils/schema-metadata.js';
-export type { ColumnDescription } from './utils/schema-metadata.js';
+export { SCHEMA_DESCRIPTIONS } from './utils/schema-metadata.ts';
+export type { ColumnDescription } from './utils/schema-metadata.ts';
 
 // Export market import utilities for integration testing
 export {
@@ -101,14 +101,14 @@ export {
   type ImportMarketCsvParams,
   type ImportFromDatabaseParams,
   type ImportSpotResult,
-} from './utils/market-importer.js';
+} from './utils/market-importer.ts';
 
 // Export market import metadata helpers for integration testing
 export {
   type MarketImportMetadata,
   getMarketImportMetadata,
   upsertMarketImportMetadata,
-} from './sync/metadata.js';
+} from './sync/metadata.ts';
 
 // Export market enricher indicator functions for unit testing
 export {
@@ -128,7 +128,7 @@ export {
   computeIVP,
   type ContextRow,
   type EnrichedContextRow,
-} from './utils/market-enricher.js';
+} from './utils/market-enricher.ts';
 
 // Export market enrichment utilities for integration testing
 export {
@@ -137,7 +137,7 @@ export {
   type EnrichmentResult,
   type EnrichmentOptions,
   type TierStatus,
-} from './utils/market-enricher.js';
+} from './utils/market-enricher.ts';
 
 // Export strategy profile types and CRUD functions for integration testing
 export type {
@@ -148,18 +148,18 @@ export type {
   ExitRule,
   KeyMetrics,
   PositionSizing,
-} from './models/strategy-profile.js';
+} from './models/strategy-profile.ts';
 export {
   ensureProfilesSchema,
   upsertProfile,
   getProfile,
   listProfiles,
   deleteProfile,
-} from './db/profile-schemas.js';
+} from './db/profile-schemas.ts';
 
 // Export analysis utility modules for unit testing
-export { computeSliceStats, type SliceStats } from './utils/analysis-stats.js';
-export { buildFilterPredicate, type FilterPredicate } from './utils/filter-predicates.js';
+export { computeSliceStats, type SliceStats } from './utils/analysis-stats.ts';
+export { buildFilterPredicate, type FilterPredicate } from './utils/filter-predicates.ts';
 
 // Export profile tool handlers and schemas for integration testing
 export {
@@ -171,7 +171,7 @@ export {
   getStrategyProfileSchema,
   listProfilesSchema,
   deleteProfileSchema,
-} from './tools/profiles.js';
+} from './tools/profiles.ts';
 
 // Export profile analysis tool handlers and schemas for integration testing
 export {
@@ -181,13 +181,13 @@ export {
   analyzeStructureFitSchema,
   validateEntryFiltersSchema,
   portfolioStructureMapSchema,
-} from './tools/profile-analysis.js';
+} from './tools/profile-analysis.ts';
 
 // Export regime advisor tool handler and schema for integration testing
 export {
   handleRegimeAllocationAdvisor,
   regimeAllocationAdvisorSchema,
-} from './tools/regime-advisor.js';
+} from './tools/regime-advisor.ts';
 
 // Export market data provider interface and types
 export {
@@ -200,14 +200,14 @@ export {
   type FetchSnapshotOptions,
   type FetchSnapshotResult,
   type MarketDataProvider,
-} from './utils/market-provider.js';
+} from './utils/market-provider.ts';
 export {
   resolveMassiveDataTier,
   resolveProviderCapabilities,
   getResolvedProviderCapabilities,
   type MassiveDataTier,
   type ResolvedProviderCapabilities,
-} from './utils/provider-capabilities.js';
+} from './utils/provider-capabilities.ts';
 
 // Export Massive provider internals for provider-specific tests
 export {
@@ -228,7 +228,7 @@ export {
   type MassiveAggregateResponse,
   type MassiveQuote,
   type MassiveQuotesResponse,
-} from './utils/providers/massive.js';
+} from './utils/providers/massive.ts';
 
 // Export trade replay utilities for unit testing
 export {
@@ -244,14 +244,14 @@ export {
   type ParsedLeg,
   type ParsedLegOO,
   type GreeksConfig,
-} from './utils/trade-replay.js';
+} from './utils/trade-replay.ts';
 
 // Export trade replay tool handler and schema for integration testing
 export {
   handleReplayTrade,
   replayTradeSchema,
   resolveOODateRange,
-} from './tools/replay.js';
+} from './tools/replay.ts';
 
 // Export Black-Scholes and Bachelier greeks computation for unit testing
 export {
@@ -272,24 +272,24 @@ export {
   BACHELIER_DTE_THRESHOLD,
   computeLegGreeks,
   type GreeksResult,
-} from './utils/black-scholes.js';
+} from './utils/black-scholes.ts';
 
-export { computeFractionalDte } from './utils/option-time.js';
+export { computeFractionalDte } from './utils/option-time.ts';
 export {
   applyQuoteGreeks,
   hasQuoteGreeks,
   OPTION_QUOTE_GREEKS_REVISION,
   type QuoteGreeksMode,
   type QuoteGreeksSource,
-} from './utils/option-quote-greeks.js';
+} from './utils/option-quote-greeks.ts';
 export {
   describeReadParquetColumns,
   quoteParquetCanonicalProjection,
   readParquetFilesSql,
-} from './utils/quote-parquet-projection.js';
+} from './utils/quote-parquet-projection.ts';
 
 // Export parquet-writer utility functions for unit testing
-export { isParquetMode, writeParquetAtomic, writeParquetPartition, resolveMarketDir } from './db/parquet-writer.js';
+export { isParquetMode, writeParquetAtomic, writeParquetPartition, resolveMarketDir } from './db/parquet-writer.ts';
 
 // Export json-store utility for unit testing
 export {
@@ -298,19 +298,19 @@ export {
   deleteJsonFile,
   listJsonFiles,
   toFileSlug,
-} from './db/json-store.js';
+} from './db/json-store.ts';
 
 // Export Massive snapshot schemas for unit testing
 export {
   MassiveSnapshotResponseSchema,
   MassiveSnapshotContractSchema,
-} from './utils/providers/massive.js';
+} from './utils/providers/massive.ts';
 
 // Export snapshot tool handler and schema for integration testing
 export {
   handleGetOptionSnapshot,
   getOptionSnapshotSchema,
-} from './tools/snapshot.js';
+} from './tools/snapshot.ts';
 
 // Export greeks decomposition utilities for unit testing
 export {
@@ -322,7 +322,7 @@ export {
   type LegGroupVega,
   type LegGroupDef,
   type FactorName,
-} from './utils/greeks-decomposition.js';
+} from './utils/greeks-decomposition.ts';
 
 // Export exit trigger analysis utilities for unit testing
 export {
@@ -334,7 +334,7 @@ export {
   type TriggerType,
   type LegGroupConfig,
   type LegGroupResult,
-} from './utils/exit-triggers.js';
+} from './utils/exit-triggers.ts';
 
 // Export exit analysis tool handlers and schemas for integration testing
 export {
@@ -342,7 +342,7 @@ export {
   handleDecomposeGreeks,
   analyzeExitTriggersSchema,
   decomposeGreeksSchema,
-} from './tools/exit-analysis.js';
+} from './tools/exit-analysis.ts';
 
 // Export batch exit analysis engine for unit testing
 export {
@@ -356,26 +356,26 @@ export {
   type AggregateStats,
   type TriggerAttribution,
   type BaselineMode,
-} from './utils/batch-exit-analysis.js';
+} from './utils/batch-exit-analysis.ts';
 
 // Export batch exit analysis tool handler and schema for integration testing
 export {
   handleBatchExitAnalysis,
   batchExitAnalysisSchema,
-} from './tools/batch-exit-analysis.js';
+} from './tools/batch-exit-analysis.ts';
 
 // Export quote enricher pure functions for unit testing
-export { shouldSkipEnrichment, buildEnrichmentPlan } from './utils/quote-enricher.js';
-export type { EnrichmentPlanInput } from './utils/quote-enricher.js';
+export { shouldSkipEnrichment, buildEnrichmentPlan } from './utils/quote-enricher.ts';
+export type { EnrichmentPlanInput } from './utils/quote-enricher.ts';
 
 // SQL tool validator — unit-tested for path-gate + hard-block rules
-export { validateQuery, isUnderDataRoot } from './tools/sql.js';
+export { validateQuery, isUnderDataRoot } from './tools/sql.ts';
 
 // Chain loader pure functions (unit testing)
-export { filterChain } from './utils/chain-loader.js';
+export { filterChain } from './utils/chain-loader.ts';
 
 // Provider classes for capability-resolution testing
-export { ThetaDataProvider } from './utils/providers/thetadata.js';
+export { ThetaDataProvider } from './utils/providers/thetadata.ts';
 
 // ThetaData MDDS provider internals (unit testing)
 export {
@@ -402,7 +402,7 @@ export {
   stockHistoryEod,
   stockHistoryOhlc,
   thetaTimestampToEtMinute,
-} from './utils/providers/thetadata/index.js';
+} from './utils/providers/thetadata/index.ts';
 
 // ThetaData MDDS backfill preflight helpers
 export {
@@ -421,7 +421,7 @@ export {
   makeBackfillRunId,
   parseBackfillOccTicker,
   projectBackfillWallTimeHours,
-} from './utils/providers/thetadata/backfill.js';
+} from './utils/providers/thetadata/backfill.ts';
 export type {
   BackfillBandRequestCountInput,
   BackfillConcreteFallback,
@@ -434,10 +434,10 @@ export type {
   BackfillRequestCountInput,
   BackfillRewriteSelectInput,
   BackfillStagedGreekRow,
-} from './utils/providers/thetadata/backfill.js';
+} from './utils/providers/thetadata/backfill.ts';
 
 // Parquet view registration (integration testing)
-export { createMarketParquetViews } from './db/market-views.js';
+export { createMarketParquetViews } from './db/market-views.ts';
 
 // Greeks attribution (v2.3)
 export {
@@ -449,13 +449,13 @@ export {
   type AttributionSummaryResult,
   type AttributionInstanceResult,
   type AttributionStepEntry,
-} from './tools/greeks-attribution.js';
+} from './tools/greeks-attribution.ts';
 
 export {
   handleGetGreeksAttribution,
   getGreeksAttributionSchema,
   filterSparseSteps,
-} from './tools/greeks-attribution.js';
+} from './tools/greeks-attribution.ts';
 
 // Export json-adapters for integration testing
 export {
@@ -471,11 +471,11 @@ export {
   upsertMarketImportMetadataJson,
   getFlatImportLogJson,
   upsertFlatImportLogJson,
-} from './db/json-adapters.js';
-export type { FlatImportLogEntry } from './db/json-adapters.js';
+} from './db/json-adapters.ts';
+export type { FlatImportLogEntry } from './db/json-adapters.ts';
 
 // Export json-migration for integration testing
-export { migrateMetadataToJson, type MigrationResult } from './db/json-migration.js';
+export { migrateMetadataToJson, type MigrationResult } from './db/json-migration.ts';
 
 // ============================================================================
 // Market Data — store interfaces, registry, datasets
@@ -490,21 +490,21 @@ export {
   ChainStore,
   QuoteStore,
   createMarketStores,
-} from './market/stores/index.js';
+} from './market/stores/index.ts';
 export type {
   StoreContext,
   MarketStores,
   EnrichedReadOpts,
   QuoteRow,
   CoverageReport,
-} from './market/stores/index.js';
-export type { BarRow as MarketStoreBarRow, ContractRow } from './market/stores/index.js';
+} from './market/stores/index.ts';
+export type { BarRow as MarketStoreBarRow, ContractRow } from './market/stores/index.ts';
 
 // Ticker registry + resolver + loader + schemas
-export { extractRoot, rootToUnderlying } from './market/tickers/resolver.js';
-export { TickerRegistry } from './market/tickers/registry.js';
-export type { TickerEntry, EntrySource } from './market/tickers/registry.js';
-export { loadRegistry, saveUserOverride } from './market/tickers/loader.js';
+export { extractRoot, rootToUnderlying } from './market/tickers/resolver.ts';
+export { TickerRegistry } from './market/tickers/registry.ts';
+export type { TickerEntry, EntrySource } from './market/tickers/registry.ts';
+export { loadRegistry, saveUserOverride } from './market/tickers/loader.ts';
 export {
   UnderlyingsFileSchema,
   registerUnderlyingSchema,
@@ -512,13 +512,13 @@ export {
   listUnderlyingsSchema,
   resolveRootSchema,
   TICKER_RE,
-} from './market/tickers/schemas.js';
+} from './market/tickers/schemas.ts';
 
 // Parquet writer multi-level options type
 // Note: the value-level parquet-writer re-exports above already cover the
 // runtime symbols; this line adds the type alias for the multi-level
 // overload so tests can type-check against the V3 shape.
-export type { WriteParquetPartitionOptsV3 } from './db/parquet-writer.js';
+export type { WriteParquetPartitionOptsV3 } from './db/parquet-writer.ts';
 
 // Dataset registry + per-dataset helpers
 export {
@@ -528,8 +528,8 @@ export {
   writeQuoteMinutesPartition,
   writeEnrichedTickerFile,
   writeEnrichedContext,
-} from './db/market-datasets.js';
-export type { DatasetDef } from './db/market-datasets.js';
+} from './db/market-datasets.ts';
+export type { DatasetDef } from './db/market-datasets.ts';
 
 // Ticker MCP tool handlers — schemas re-exported from tickers/schemas.ts above
 export {
@@ -538,7 +538,7 @@ export {
   handleUnregisterUnderlying,
   handleListUnderlyings,
   handleResolveRoot,
-} from './tools/tickers.js';
+} from './tools/tickers.ts';
 
 // ============================================================================
 // Pure helpers + watermark adapter
@@ -552,17 +552,17 @@ export {
   buildReadBarsSQL,
   buildReadDailyBarsSQL,
   buildReadRthOpensSQL,
-} from './market/stores/spot-sql.js';
-export type { BuiltSQL } from './market/stores/spot-sql.js';
-export { buildReadEnrichedSQL } from './market/stores/enriched-sql.js';
-export type { BuildReadEnrichedArgs } from './market/stores/enriched-sql.js';
-export { buildReadChainSQL } from './market/stores/chain-sql.js';
-export { buildReadQuotesSQL } from './market/stores/quote-sql.js';
-export { rthDailyAggregateSubquery } from './market/stores/rth-aggregation.js';
-export type { RthWindowOpts } from './market/stores/rth-aggregation.js';
+} from './market/stores/spot-sql.ts';
+export type { BuiltSQL } from './market/stores/spot-sql.ts';
+export { buildReadEnrichedSQL } from './market/stores/enriched-sql.ts';
+export type { BuildReadEnrichedArgs } from './market/stores/enriched-sql.ts';
+export { buildReadChainSQL } from './market/stores/chain-sql.ts';
+export { buildReadQuotesSQL } from './market/stores/quote-sql.ts';
+export { rthDailyAggregateSubquery } from './market/stores/rth-aggregation.ts';
+export type { RthWindowOpts } from './market/stores/rth-aggregation.ts';
 
 // Shared coverage helper
-export { listPartitionValues } from './market/stores/coverage.js';
+export { listPartitionValues } from './market/stores/coverage.ts';
 
 // Enrichment watermark adapter
 export {
@@ -570,8 +570,8 @@ export {
   loadEnrichmentWatermarks,
   getEnrichedThrough,
   upsertEnrichedThrough,
-} from './db/json-adapters.js';
-export type { EnrichmentWatermarks } from './db/json-adapters.js';
+} from './db/json-adapters.ts';
+export type { EnrichmentWatermarks } from './db/json-adapters.ts';
 
 // Schema ensure functions are re-exported earlier in this file via
 // `ensureMutableMarketTables, ensureMarketDataTables` near the top; do NOT
@@ -585,16 +585,16 @@ export type { EnrichmentWatermarks } from './db/json-adapters.js';
 // ============================================================================
 
 // Concrete Spot store pair
-export { ParquetSpotStore } from './market/stores/parquet-spot-store.js';
-export { DuckdbSpotStore } from './market/stores/duckdb-spot-store.js';
+export { ParquetSpotStore } from './market/stores/parquet-spot-store.ts';
+export { DuckdbSpotStore } from './market/stores/duckdb-spot-store.ts';
 
 // Concrete Chain store pair
-export { ParquetChainStore } from './market/stores/parquet-chain-store.js';
-export { DuckdbChainStore } from './market/stores/duckdb-chain-store.js';
+export { ParquetChainStore } from './market/stores/parquet-chain-store.ts';
+export { DuckdbChainStore } from './market/stores/duckdb-chain-store.ts';
 
 // Concrete Quote store pair
-export { ParquetQuoteStore } from './market/stores/parquet-quote-store.js';
-export { DuckdbQuoteStore } from './market/stores/duckdb-quote-store.js';
+export { ParquetQuoteStore } from './market/stores/parquet-quote-store.ts';
+export { DuckdbQuoteStore } from './market/stores/duckdb-quote-store.ts';
 
 // ============================================================================
 // Concrete Enriched stores
@@ -606,8 +606,8 @@ export { DuckdbQuoteStore } from './market/stores/duckdb-quote-store.js';
 // ============================================================================
 
 // Concrete Enriched store pair
-export { ParquetEnrichedStore } from './market/stores/parquet-enriched-store.js';
-export { DuckdbEnrichedStore } from './market/stores/duckdb-enriched-store.js';
+export { ParquetEnrichedStore } from './market/stores/parquet-enriched-store.ts';
+export { DuckdbEnrichedStore } from './market/stores/duckdb-enriched-store.ts';
 
 // ============================================================================
 // Ingestor exports
@@ -617,8 +617,8 @@ export { DuckdbEnrichedStore } from './market/stores/duckdb-enriched-store.js';
 // ============================================================================
 
 // Market ingestor — exposed for integration tests that import from dist/
-export { MarketIngestor } from "./market/ingestor/index.js";
-export type { MarketIngestorDeps } from "./market/ingestor/index.js";
+export { MarketIngestor } from "./market/ingestor/index.ts";
+export type { MarketIngestorDeps } from "./market/ingestor/index.ts";
 export type {
   IngestStatus,
   IngestResult,
@@ -629,7 +629,7 @@ export type {
   ComputeVixContextOptions,
   RefreshOptions,
   RefreshResult,
-} from "./market/ingestor/index.js";
+} from "./market/ingestor/index.ts";
 
 // ============================================================================
 // Option-data migration helpers
@@ -645,13 +645,13 @@ export {
   buildOptionChainSelectQuery,
   buildOptionQuoteSelectQuery,
   LEVERAGED_ETFS,
-} from './utils/migrate-option-data-helpers.js';
-export type { GroupResult } from './utils/migrate-option-data-helpers.js';
+} from './utils/migrate-option-data-helpers.ts';
+export type { GroupResult } from './utils/migrate-option-data-helpers.ts';
 
 // ============================================================================
 // Tool dependency registry
 // ============================================================================
-export { TOOL_TICKER_DEPS, unionTickerDeps } from './utils/tool-ticker-deps.js';
+export { TOOL_TICKER_DEPS, unionTickerDeps } from './utils/tool-ticker-deps.ts';
 // ============================================================================
 
 // ============================================================================
@@ -664,19 +664,19 @@ export {
   PHASE_5_FIXTURE_SEED,
   PHASE_5_KNOWN_EVENTS,
   PHASE_5_STRUCTURAL_DATES,
-} from './utils/sample-date-selector.js';
-export type { SampleDate } from './utils/sample-date-selector.js';
+} from './utils/sample-date-selector.ts';
+export type { SampleDate } from './utils/sample-date-selector.ts';
 export {
   compareFields,
   compareRow,
   DOUBLE_EPSILON,
   ENRICHED_FIELD_TYPES,
   CONTEXT_FIELD_TYPES,
-} from './utils/enrichment-verification.js';
+} from './utils/enrichment-verification.ts';
 export type {
   FieldType,
   FieldDiff,
   RowDiff,
-} from './utils/enrichment-verification.js';
-export { calibrateProviderFetch } from './utils/calibration-probe.js';
+} from './utils/enrichment-verification.ts';
+export { calibrateProviderFetch } from './utils/calibration-probe.ts';
 // ============================================================================

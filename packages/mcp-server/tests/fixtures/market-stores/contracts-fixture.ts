@@ -4,7 +4,7 @@
  * `ContractRow` field shape from `src/utils/chain-loader.ts:117-126` — all fields
  * required, `contract_type` is `"call" | "put"`.
  */
-import type { ContractRow } from "../../../src/market/stores/types.js";
+import type { ContractRow } from "../../../src/market/stores/types.ts";
 
 /**
  * Build 3 option contracts for the given underlying + date:

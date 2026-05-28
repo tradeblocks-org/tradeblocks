@@ -13,18 +13,18 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection } from "../db/connection.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import { handleReplayTrade } from "./replay.js";
+import { getConnection } from "../db/connection.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import { handleReplayTrade } from "./replay.ts";
 import {
   analyzeBatch,
   type TradeInput,
   type BatchExitConfig,
   type BatchExitResult,
-} from "../utils/batch-exit-analysis.js";
-import { getProfile } from "../db/profile-schemas.js";
-import type { ExitTriggerConfig, LegGroupConfig } from "../utils/exit-triggers.js";
-import type { MarketStores } from "../market/stores/index.js";
+} from "../utils/batch-exit-analysis.ts";
+import { getProfile } from "../db/profile-schemas.ts";
+import type { ExitTriggerConfig, LegGroupConfig } from "../utils/exit-triggers.ts";
+import type { MarketStores } from "../market/stores/index.ts";
 
 // ---------------------------------------------------------------------------
 // Concurrency limiter — hand-rolled semaphore, no external dependency (D-15)

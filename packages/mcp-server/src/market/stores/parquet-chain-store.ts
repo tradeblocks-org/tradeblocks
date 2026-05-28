@@ -14,14 +14,14 @@
  */
 import { existsSync } from "fs";
 import * as path from "path";
-import { ChainStore } from "./chain-store.js";
-import type { ContractRow, CoverageReport } from "./types.js";
-import { buildReadChainSQL } from "./chain-sql.js";
-import { listPartitionValues } from "./coverage.js";
+import { ChainStore } from "./chain-store.ts";
+import type { ContractRow, CoverageReport } from "./types.ts";
+import { buildReadChainSQL } from "./chain-sql.ts";
+import { listPartitionValues } from "./coverage.ts";
 import {
   resolveMarketDir,
   writeChainPartition,
-} from "../../db/market-datasets.js";
+} from "../../db/market-datasets.ts";
 
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");

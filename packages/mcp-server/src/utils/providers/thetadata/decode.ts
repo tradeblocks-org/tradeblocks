@@ -1,5 +1,5 @@
 import { decompress } from "fzstd";
-import { loadMddsProtoRoot } from "./proto.js";
+import { loadMddsProtoRoot } from "./proto.ts";
 
 export type ThetaCellValue = string | number | null;
 

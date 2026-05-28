@@ -2,4 +2,4 @@
  * Type definitions exports
  */
 
-export * from './percentage'
+export * from './percentage.ts'

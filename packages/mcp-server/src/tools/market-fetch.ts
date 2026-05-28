@@ -1,12 +1,12 @@
 // packages/mcp-server/src/tools/market-fetch.ts
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.js";
-import { getDataRoot } from "../db/data-root.js";
-import { MarketIngestor } from "../market/ingestor/index.js";
-import type { MarketStores } from "../market/stores/index.js";
-import type { BulkProgressReporter } from "../market/ingestor/types.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
+import { getDataRoot } from "../db/data-root.ts";
+import { MarketIngestor } from "../market/ingestor/index.ts";
+import type { MarketStores } from "../market/stores/index.ts";
+import type { BulkProgressReporter } from "../market/ingestor/types.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
 
 export function registerMarketFetchTools(
   server: McpServer,

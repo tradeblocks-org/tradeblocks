@@ -10,7 +10,7 @@ import { describe, it, expect } from '@jest/globals';
 import {
   TOOL_TICKER_DEPS,
   unionTickerDeps,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 
 describe('TOOL_TICKER_DEPS registry shape', () => {
   it('declares backtester as [SPX, VIX, VIX9D]', () => {

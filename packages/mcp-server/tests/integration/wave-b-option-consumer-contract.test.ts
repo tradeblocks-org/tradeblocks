@@ -20,14 +20,14 @@ import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.js";
-import { createMarketParquetViews } from "../../src/db/market-views.js";
+} from "../fixtures/market-stores/build-fixture.ts";
+import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import {
   createMarketStores,
   type MarketStores,
   type ContractRow,
   type QuoteRow,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 // ---------------------------------------------------------------------------
 // Fixture seeding helpers — small SPX 5000-strike call chain + 5 minute quotes.

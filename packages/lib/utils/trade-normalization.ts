@@ -1,4 +1,4 @@
-import { Trade } from '../models/trade'
+import type { Trade } from '../models/trade.ts'
 
 function scaleNumeric(value: number, factor: number): number {
   return Number.isFinite(value) ? value * factor : value

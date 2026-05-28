@@ -4,7 +4,7 @@
  * Tests the setDataRoot/getDataRoot/resetDataRoot pattern
  * that allows --data-root CLI flag to override the data root directory.
  */
-import { setDataRoot, getDataRoot, resetDataRoot } from "../../src/db/data-root.js";
+import { setDataRoot, getDataRoot, resetDataRoot } from "../../src/db/data-root.ts";
 
 describe("data-root", () => {
   afterEach(() => {

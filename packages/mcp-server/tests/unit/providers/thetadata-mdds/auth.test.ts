@@ -6,7 +6,7 @@ import {
   authenticateThetaData,
   resolveThetaCredentials,
   thetaConcurrencyForTier,
-} from "../../../../src/utils/providers/thetadata/auth.js";
+} from "../../../../src/utils/providers/thetadata/auth.ts";
 
 describe("ThetaData MDDS auth", () => {
   it("prefers THETADATA_EMAIL and THETADATA_PASSWORD", () => {

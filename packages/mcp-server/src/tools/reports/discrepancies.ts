@@ -6,12 +6,12 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock, loadReportingLog } from "../../utils/block-loader.js";
+import { loadBlock, loadReportingLog } from "../../utils/block-loader.ts";
 import {
   createToolOutput,
   formatPercent,
   formatCurrency,
-} from "../../utils/output-formatter.js";
+} from "../../utils/output-formatter.ts";
 import type { ReportingTrade } from "@tradeblocks/lib";
 import { pearsonCorrelation, kendallTau } from "@tradeblocks/lib";
 import {
@@ -19,8 +19,8 @@ import {
   applyDateRangeFilter,
   matchTrades,
   type MatchedTradeData,
-} from "./slippage-helpers.js";
-import { withSyncedBlock } from "../middleware/sync-middleware.js";
+} from "./slippage-helpers.ts";
+import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 
 /**
  * Register the analyze_discrepancies tool

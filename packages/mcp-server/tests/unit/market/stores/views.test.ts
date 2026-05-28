@@ -18,7 +18,7 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { createMarketParquetViews } from "../../../../src/db/market-views.js";
+import { createMarketParquetViews } from "../../../../src/db/market-views.ts";
 
 let tmpDir: string;
 let db: DuckDBInstance;

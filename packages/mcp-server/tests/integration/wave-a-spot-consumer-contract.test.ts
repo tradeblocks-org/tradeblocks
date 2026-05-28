@@ -11,20 +11,20 @@ import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.js";
-import { makeBars } from "../fixtures/market-stores/bars-fixture.js";
-import { makeQuotes } from "../fixtures/market-stores/quotes-fixture.js";
-import { createMarketParquetViews } from "../../src/db/market-views.js";
+} from "../fixtures/market-stores/build-fixture.ts";
+import { makeBars } from "../fixtures/market-stores/bars-fixture.ts";
+import { makeQuotes } from "../fixtures/market-stores/quotes-fixture.ts";
+import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import {
   ParquetSpotStore,
   ParquetQuoteStore,
   ParquetEnrichedStore,
   createMarketStores,
   type MarketStores,
-} from "../../src/test-exports.js";
-import { writeEnrichedTickerFile } from "../../src/db/market-datasets.js";
-import { checkDataAvailability } from "../../src/utils/data-availability.js";
-import { queryCoverage } from "../../src/utils/data-quality.js";
+} from "../../src/test-exports.ts";
+import { writeEnrichedTickerFile } from "../../src/db/market-datasets.ts";
+import { checkDataAvailability } from "../../src/utils/data-availability.ts";
+import { queryCoverage } from "../../src/utils/data-quality.ts";
 
 // Helper — seed an enriched row for a ticker so checkDataAvailability sees it
 async function seedEnriched(

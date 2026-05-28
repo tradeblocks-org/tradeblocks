@@ -6,7 +6,7 @@
  */
 
 import type { DuckDBConnection } from "@duckdb/node-api";
-import { isParquetMode } from "../db/parquet-writer.js";
+import { isParquetMode } from "../db/parquet-writer.ts";
 import {
   getSyncMetadataJson,
   upsertSyncMetadataJson,
@@ -14,7 +14,7 @@ import {
   getAllSyncedBlockIdsJson,
   getMarketImportMetadataJson,
   upsertMarketImportMetadataJson,
-} from "../db/json-adapters.js";
+} from "../db/json-adapters.ts";
 
 /**
  * Sync metadata for a block (trades._sync_metadata)
