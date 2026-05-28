@@ -7,7 +7,7 @@
  * GC leak rationale.
  */
 import { describe, it, expect } from "@jest/globals";
-import { buildReadEnrichedSQL } from "../../../../src/test-exports.js";
+import { buildReadEnrichedSQL } from "../../../../src/test-exports.ts";
 
 describe("buildReadEnrichedSQL", () => {
   const base = { ticker: "SPX", from: "2025-01-01", to: "2025-01-06" } as const;

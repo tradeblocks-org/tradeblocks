@@ -11,7 +11,7 @@ import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
-import { createMarketParquetViews } from "../../src/test-exports.js";
+import { createMarketParquetViews } from "../../src/test-exports.ts";
 
 describe("createMarketParquetViews", () => {
   let tmpDir: string;

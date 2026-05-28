@@ -5,13 +5,13 @@
  * Similar to the S/L Drift Outcome Table but generalized for any field.
  */
 
-import { EnrichedTrade, getEnrichedTradeValue } from '../models/enriched-trade'
+import { type EnrichedTrade, getEnrichedTradeValue } from '../models/enriched-trade.ts'
 import {
   getFieldInfo,
   parseColumnValue,
-  AggregationType,
+  type AggregationType,
   DEFAULT_TABLE_COLUMNS
-} from '../models/report-config'
+} from '../models/report-config.ts'
 
 /**
  * A single row in the aggregated table with dynamic column values

@@ -5,11 +5,11 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerCoreBlockTools } from "./core.js";
-import { registerComparisonBlockTools } from "./comparison.js";
-import { registerAnalysisBlockTools } from "./analysis.js";
-import { registerSimilarityBlockTools } from "./similarity.js";
-import { registerHealthBlockTools } from "./health.js";
+import { registerCoreBlockTools } from "./core.ts";
+import { registerComparisonBlockTools } from "./comparison.ts";
+import { registerAnalysisBlockTools } from "./analysis.ts";
+import { registerSimilarityBlockTools } from "./similarity.ts";
+import { registerHealthBlockTools } from "./health.ts";
 
 /**
  * Register all block-related MCP tools

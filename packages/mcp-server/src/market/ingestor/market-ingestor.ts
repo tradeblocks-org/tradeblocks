@@ -1,10 +1,10 @@
-import type { MarketStores } from "../stores/index.js";
-import type { MarketDataProvider, BarRow, MinuteQuote } from "../../utils/market-provider.js";
-import { getProvider } from "../../utils/market-provider.js";
-import { MassiveProvider } from "../../utils/providers/massive.js";
-import { ThetaDataProvider } from "../../utils/providers/thetadata.js";
-import { extractRoot } from "../tickers/resolver.js";
-import { validateImportSelect } from "../../tools/sql.js";
+import type { MarketStores } from "../stores/index.ts";
+import type { MarketDataProvider, BarRow, MinuteQuote } from "../../utils/market-provider.ts";
+import { getProvider } from "../../utils/market-provider.ts";
+import { MassiveProvider } from "../../utils/providers/massive.ts";
+import { ThetaDataProvider } from "../../utils/providers/thetadata.ts";
+import { extractRoot } from "../tickers/resolver.ts";
+import { validateImportSelect } from "../../tools/sql.ts";
 import type {
   IngestBarsOptions,
   IngestQuotesOptions,
@@ -17,9 +17,9 @@ import type {
   IngestStatus,
   RefreshResult,
   BulkProgressReporter,
-} from "./types.js";
-import type { QuoteRow } from "../stores/types.js";
-import { applyQuoteGreeks, type QuoteGreeksStats } from "../../utils/option-quote-greeks.js";
+} from "./types.ts";
+import type { QuoteRow } from "../stores/types.ts";
+import { applyQuoteGreeks, type QuoteGreeksStats } from "../../utils/option-quote-greeks.ts";
 
 export interface MarketIngestorDeps {
   stores: MarketStores;
@@ -161,7 +161,10 @@ function unsupportedProviderResult(
 }
 
 export class MarketIngestor {
-  constructor(private readonly deps: MarketIngestorDeps) {}
+  private readonly deps: MarketIngestorDeps;
+  constructor(deps: MarketIngestorDeps) {
+    this.deps = deps;
+  }
 
   async ingestBars(opts: IngestBarsOptions): Promise<IngestResult> {
     const provider = this.resolveProvider(opts.provider);

@@ -1,7 +1,7 @@
 import { getSofrRateByKey } from "@tradeblocks/lib";
-import type { ContractRow } from "./chain-loader.js";
-import { computeLegGreeks } from "./black-scholes.js";
-import { computeFractionalDte } from "./option-time.js";
+import type { ContractRow } from "./chain-loader.ts";
+import { computeLegGreeks } from "./black-scholes.ts";
+import { computeFractionalDte } from "./option-time.ts";
 
 export type QuoteGreeksSource = "massive" | "thetadata" | "computed";
 export type QuoteGreeksMode = "auto" | "provider" | "compute";

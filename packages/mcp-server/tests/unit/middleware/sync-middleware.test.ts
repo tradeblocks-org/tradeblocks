@@ -25,13 +25,13 @@ const syncAllBlocks = jest.fn<(baseDir: string) => Promise<unknown>>();
 // Unused in withFullSync but imported at module top level — mock to avoid resolve failure.
 const syncBlock = jest.fn();
 
-jest.unstable_mockModule("../../../src/db/connection.js", () => ({
+jest.unstable_mockModule("../../../src/db/connection.ts", () => ({
   upgradeToReadWrite,
   downgradeToReadOnly,
   getConnectionMode,
 }));
 
-jest.unstable_mockModule("../../../src/sync/index.js", () => ({
+jest.unstable_mockModule("../../../src/sync/index.ts", () => ({
   syncAllBlocks,
   syncBlock,
 }));
@@ -39,7 +39,7 @@ jest.unstable_mockModule("../../../src/sync/index.js", () => ({
 // Dynamic import AFTER mocks are registered. Use top-level await (Node 18+/ESM) —
 // the Jest runner tolerates this because testMatch files are loaded as ESM.
 const { withFullSync } = await import(
-  "../../../src/tools/middleware/sync-middleware.js"
+  "../../../src/tools/middleware/sync-middleware.ts"
 );
 
 // Shared fixture — a non-empty SyncResult from syncAllBlocks.

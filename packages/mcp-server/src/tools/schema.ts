@@ -8,14 +8,14 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.js";
-import { withFullSync } from "./middleware/sync-middleware.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { getConnection, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.ts";
+import { withFullSync } from "./middleware/sync-middleware.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
 import {
   SCHEMA_DESCRIPTIONS,
   EXAMPLE_QUERIES,
   type ColumnDescription,
-} from "../utils/schema-metadata.js";
+} from "../utils/schema-metadata.ts";
 import {
   OPEN_KNOWN_FIELDS,
   CLOSE_KNOWN_FIELDS,
@@ -23,7 +23,7 @@ import {
   DAILY_OPEN_FIELDS,
   DAILY_STATIC_FIELDS,
   CONTEXT_OPEN_FIELDS,
-} from "../utils/field-timing.js";
+} from "../utils/field-timing.ts";
 
 // ============================================================================
 // Types for output structure

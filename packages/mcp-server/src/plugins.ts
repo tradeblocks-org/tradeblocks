@@ -1,7 +1,7 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { TickerRegistry } from "./market/tickers/registry.js";
-import type { MarketStores } from "./market/stores/index.js";
+import type { TickerRegistry } from "./market/tickers/registry.ts";
+import type { MarketStores } from "./market/stores/index.ts";
 
 export interface TradeBlocksPluginContext {
   baseDir: string;

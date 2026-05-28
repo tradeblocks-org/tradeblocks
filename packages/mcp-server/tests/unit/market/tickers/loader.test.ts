@@ -19,7 +19,7 @@ import { fileURLToPath } from "url";
 import {
   loadRegistry,
   saveUserOverride,
-} from "../../../../src/test-exports.js";
+} from "../../../../src/test-exports.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "../../../fixtures");

@@ -16,12 +16,12 @@
  * default underlyings JSON.
  */
 import type { DuckDBConnection } from "@duckdb/node-api";
-import { TickerRegistry } from "../../../src/market/tickers/registry.js";
+import { TickerRegistry } from "../../../src/market/tickers/registry.ts";
 import {
   createMarketStores,
   type MarketStores,
   type StoreContext,
-} from "../../../src/market/stores/index.js";
+} from "../../../src/market/stores/index.ts";
 
 export interface BuildTestStoresOpts {
   conn: DuckDBConnection;

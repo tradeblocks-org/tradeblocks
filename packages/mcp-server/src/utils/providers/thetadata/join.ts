@@ -1,18 +1,18 @@
 import { getSofrRateByKey } from "@tradeblocks/lib";
-import type { BulkQuoteRow } from "../../market-provider.js";
-import { bsGamma } from "../../black-scholes.js";
-import { computeFractionalDte } from "../../option-time.js";
+import type { BulkQuoteRow } from "../../market-provider.ts";
+import { bsGamma } from "../../black-scholes.ts";
+import { computeFractionalDte } from "../../option-time.ts";
 import {
   OPTION_QUOTE_GREEKS_DIVIDEND_YIELD,
   OPTION_QUOTE_GREEKS_GAMMA_SOURCE,
   OPTION_QUOTE_GREEKS_RATE_TYPE,
   OPTION_QUOTE_GREEKS_REVISION,
-} from "../../option-quote-greeks.js";
+} from "../../option-quote-greeks.ts";
 import type {
   ThetaFirstOrderGreekRow,
   ThetaQuoteRow,
   ThetaRight,
-} from "./types.js";
+} from "./types.ts";
 
 export interface ThetaJoinedQuoteRow extends BulkQuoteRow {
   greeks_revision?: number | null;

@@ -9,9 +9,9 @@
  */
 
 import { mean, std, median } from 'mathjs'
-import { Trade } from '../models/trade'
-import { RegimeSourceField } from '../models/regime'
-import { getTradeFieldValue, computeDerivedFields, DerivedTradeFields } from './regime-filter'
+import type { Trade } from '../models/trade.ts'
+import type { RegimeSourceField } from '../models/regime.ts'
+import { getTradeFieldValue, computeDerivedFields, type DerivedTradeFields } from './regime-filter.ts'
 
 /**
  * Single point in a cumulative distribution

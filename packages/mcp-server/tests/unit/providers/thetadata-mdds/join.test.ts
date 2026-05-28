@@ -1,20 +1,20 @@
 import { getSofrRateByKey } from "@tradeblocks/lib";
-import { bsGamma } from "../../../../src/utils/black-scholes.js";
-import { computeFractionalDte } from "../../../../src/utils/option-time.js";
+import { bsGamma } from "../../../../src/utils/black-scholes.ts";
+import { computeFractionalDte } from "../../../../src/utils/option-time.ts";
 import {
   OPTION_QUOTE_GREEKS_DIVIDEND_YIELD,
   OPTION_QUOTE_GREEKS_GAMMA_SOURCE,
   OPTION_QUOTE_GREEKS_RATE_TYPE,
   OPTION_QUOTE_GREEKS_REVISION,
-} from "../../../../src/utils/option-quote-greeks.js";
+} from "../../../../src/utils/option-quote-greeks.ts";
 import {
   joinThetaQuotesAndFirstOrderGreeks,
   type ThetaJoinedQuoteRow,
-} from "../../../../src/utils/providers/thetadata/join.js";
+} from "../../../../src/utils/providers/thetadata/join.ts";
 import type {
   ThetaFirstOrderGreekRow,
   ThetaQuoteRow,
-} from "../../../../src/utils/providers/thetadata/types.js";
+} from "../../../../src/utils/providers/thetadata/types.ts";
 
 function quote(overrides: Partial<ThetaQuoteRow> = {}): ThetaQuoteRow {
   return {

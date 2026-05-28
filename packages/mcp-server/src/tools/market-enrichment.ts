@@ -26,9 +26,9 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import type { MarketStores } from "../market/stores/index.js";
+import { upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import type { MarketStores } from "../market/stores/index.ts";
 
 const VIX_FAMILY = new Set(["VIX", "VIX9D", "VIX3M"]);
 

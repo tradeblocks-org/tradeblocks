@@ -25,8 +25,8 @@ import { join } from "path";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.js";
-import { createMarketParquetViews } from "../../src/db/market-views.js";
+} from "../fixtures/market-stores/build-fixture.ts";
+import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import {
   createMarketStores,
   writeEnrichedTickerFile,
@@ -36,7 +36,7 @@ import {
   ENRICHED_FIELD_TYPES,
   selectVerificationSampleDates,
   type MarketStores,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 import type {
   MarketDataProvider,
   ProviderCapabilities,
@@ -44,7 +44,7 @@ import type {
   FetchBarsOptions,
   FetchSnapshotOptions,
   FetchSnapshotResult,
-} from "../../src/utils/market-provider.js";
+} from "../../src/utils/market-provider.ts";
 
 // ---------------------------------------------------------------------------
 // MockProvider — deterministic synthetic minute bars for RTH 09:30–16:00 ET.

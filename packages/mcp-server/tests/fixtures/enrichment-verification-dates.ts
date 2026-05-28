@@ -19,7 +19,7 @@
  *
  * and paste the result back here.
  */
-import type { SampleDate } from "../../src/utils/sample-date-selector.js";
+import type { SampleDate } from "../../src/utils/sample-date-selector.ts";
 
 export const PHASE_5_SAMPLE_DATES: SampleDate[] = [
   {

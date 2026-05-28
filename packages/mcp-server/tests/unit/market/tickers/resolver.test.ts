@@ -12,8 +12,8 @@
  */
 import { describe, it, expect } from "@jest/globals";
 // Imported directly from source files rather than via test-exports.
-import { extractRoot, rootToUnderlying } from "../../../../src/market/tickers/resolver.js";
-import { TickerRegistry } from "../../../../src/market/tickers/registry.js";
+import { extractRoot, rootToUnderlying } from "../../../../src/market/tickers/resolver.ts";
+import { TickerRegistry } from "../../../../src/market/tickers/registry.ts";
 
 // A registry seeded with the bundled defaults the production loader builds.
 const defaults = [

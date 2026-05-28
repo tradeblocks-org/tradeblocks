@@ -7,9 +7,9 @@
  *   - JSON loader for {dataRoot}/market/underlyings.json (loader.ts)
  *   - Zod schemas for file + MCP-tool input validation (schemas.ts)
  */
-export { extractRoot, rootToUnderlying } from "./resolver.js";
-export { TickerRegistry } from "./registry.js";
-export type { TickerEntry, EntrySource } from "./registry.js";
+export { extractRoot, rootToUnderlying } from "./resolver.ts";
+export { TickerRegistry } from "./registry.ts";
+export type { TickerEntry, EntrySource } from "./registry.ts";
 export {
   UnderlyingsFileSchema,
   registerUnderlyingSchema,
@@ -17,5 +17,5 @@ export {
   listUnderlyingsSchema,
   resolveRootSchema,
   TICKER_RE,
-} from "./schemas.js";
-export { loadRegistry, saveUserOverride } from "./loader.js";
+} from "./schemas.ts";
+export { loadRegistry, saveUserOverride } from "./loader.ts";

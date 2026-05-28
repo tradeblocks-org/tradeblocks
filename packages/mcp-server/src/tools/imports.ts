@@ -10,8 +10,8 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { importCsv } from "../utils/block-loader.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { importCsv } from "../utils/block-loader.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
 
 /**
  * Common directories where users might have CSV files

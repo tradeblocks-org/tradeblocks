@@ -12,19 +12,19 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import { handleReplayTrade } from "./replay.js";
-import type { MarketStores } from "../market/stores/index.js";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import { handleReplayTrade } from "./replay.ts";
+import type { MarketStores } from "../market/stores/index.ts";
 import {
   analyzeExitTriggers,
   type ExitTriggerConfig,
   type LegGroupConfig,
-} from "../utils/exit-triggers.js";
+} from "../utils/exit-triggers.ts";
 import {
   decomposeGreeks,
   type LegGroupDef,
-} from "../utils/greeks-decomposition.js";
-import { markPrice } from "../utils/trade-replay.js";
+} from "../utils/greeks-decomposition.ts";
+import { markPrice } from "../utils/trade-replay.ts";
 
 // ---------------------------------------------------------------------------
 // Shared trigger type enum
@@ -344,7 +344,7 @@ export async function handleDecomposeGreeks(
   baseDir: string,
   stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
-): Promise<import("../utils/greeks-decomposition.js").GreeksDecompositionResult> {
+): Promise<import("../utils/greeks-decomposition.ts").GreeksDecompositionResult> {
   const {
     legs: inputLegs, block_id, trade_index,
     open_date, close_date, multiplier,

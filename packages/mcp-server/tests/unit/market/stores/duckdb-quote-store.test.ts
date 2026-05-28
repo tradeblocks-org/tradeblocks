@@ -7,15 +7,15 @@
  * `readWindow`.
  */
 import { describe, it, expect } from "@jest/globals";
-import { DuckdbQuoteStore, DuckdbChainStore } from "../../../../src/test-exports.js";
+import { DuckdbQuoteStore, DuckdbChainStore } from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../../../fixtures/market-stores/build-fixture.js";
+} from "../../../fixtures/market-stores/build-fixture.ts";
 import type {
   ContractRow,
   QuoteRow,
-} from "../../../../src/market/stores/types.js";
+} from "../../../../src/market/stores/types.ts";
 
 /**
  * Set up a DuckDB-backed quote store with both chain rows and minute quotes

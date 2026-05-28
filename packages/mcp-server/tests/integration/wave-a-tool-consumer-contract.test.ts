@@ -29,9 +29,9 @@ import {
   getConnection,
   upgradeToReadWrite,
   downgradeToReadOnly,
-} from "../../src/test-exports.js";
-import { buildTestStores } from "../fixtures/market-stores/build-stores.js";
-import type { MarketStores } from "../../src/market/stores/index.js";
+} from "../../src/test-exports.ts";
+import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
+import type { MarketStores } from "../../src/market/stores/index.ts";
 
 // ---------------------------------------------------------------------------
 // Fixture seeding helper (~3 SPX spot bars + 1 VIX enriched-shaped row).

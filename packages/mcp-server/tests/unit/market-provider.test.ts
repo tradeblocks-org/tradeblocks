@@ -2,7 +2,7 @@
  * Unit tests for the MarketDataProvider factory (getProvider / _resetProvider).
  */
 
-import { getProvider, _resetProvider } from "../../src/utils/market-provider.js";
+import { getProvider, _resetProvider } from "../../src/utils/market-provider.ts";
 
 const ORIG_ENV = process.env;
 

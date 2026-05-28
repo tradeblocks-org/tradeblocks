@@ -8,7 +8,7 @@
  * Direction is implicit in the slope sign; significance is conveyed via p-value.
  */
 
-import { normalCDF } from './statistical-utils'
+import { normalCDF } from './statistical-utils.ts'
 
 /**
  * Result of a linear regression on a single metric series.

@@ -27,7 +27,7 @@
  * free-text), and the escape closes the residual injection vector.
  */
 
-import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.js";
+import { escapeSqlLiteral } from "../../utils/quote-parquet-projection.ts";
 
 /**
  * Shape returned by every SQL builder. Just the SQL text — values are inlined

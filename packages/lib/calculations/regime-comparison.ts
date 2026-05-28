@@ -6,9 +6,9 @@
  */
 
 import { mean } from 'mathjs'
-import { Trade } from '../models/trade'
-import { RegimeDefinition } from '../models/regime'
-import { groupTradesByBucket } from './regime-filter'
+import type { Trade } from '../models/trade.ts'
+import type { RegimeDefinition } from '../models/regime.ts'
+import { groupTradesByBucket } from './regime-filter.ts'
 
 /**
  * Statistics for comparing filtered vs full sample

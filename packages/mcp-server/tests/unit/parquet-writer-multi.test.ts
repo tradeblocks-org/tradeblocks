@@ -17,7 +17,7 @@ import { mkdirSync, rmSync, existsSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
-import { writeParquetPartition } from "../../src/test-exports.js";
+import { writeParquetPartition } from "../../src/test-exports.ts";
 
 describe("writeParquetPartition (multi-level)", () => {
   let tmpDir: string;

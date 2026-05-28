@@ -6,11 +6,11 @@
  * Supports optional IndexedDB storage
  */
 
-import { Trade, TRADE_COLUMN_ALIASES, REQUIRED_TRADE_COLUMNS } from '../models/trade'
-import { DailyLogEntry } from '../models/daily-log'
-import { assertRequiredHeaders, normalizeHeaders, parseCsvLine } from '../utils/csv-headers'
+import { type Trade, TRADE_COLUMN_ALIASES, REQUIRED_TRADE_COLUMNS } from '../models/trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import { assertRequiredHeaders, normalizeHeaders, parseCsvLine } from '../utils/csv-headers.ts'
 // Import ProcessingError from models to avoid duplicate definition
-import type { ProcessingError } from '../models'
+import type { ProcessingError } from '../models/index.ts'
 
 /**
  * Data source types
@@ -131,8 +131,9 @@ interface DatabaseModule {
  * IndexedDB storage adapter
  */
 export class IndexedDBAdapter implements StorageAdapter {
-  constructor(private dbModule?: DatabaseModule) {
-    // Allow injection of db module for testing
+  private dbModule?: DatabaseModule;
+  constructor(dbModule?: DatabaseModule) {
+    this.dbModule = dbModule;
   }
 
   async getDB(): Promise<DatabaseModule> {
@@ -140,7 +141,7 @@ export class IndexedDBAdapter implements StorageAdapter {
       return this.dbModule
     }
     // Dynamic import to avoid issues in Node.js
-    const db = await import('../db/trades-store')
+    const db = await import('../db/trades-store.ts')
     return db as DatabaseModule
   }
 
@@ -151,7 +152,7 @@ export class IndexedDBAdapter implements StorageAdapter {
 
   async storeDailyLogs(blockId: string, dailyLogs: DailyLogEntry[]): Promise<void> {
     await this.getDB()
-    const dailyLogsDb = await import('../db/daily-logs-store')
+    const dailyLogsDb = await import('../db/daily-logs-store.ts')
     await dailyLogsDb.addDailyLogEntries(blockId, dailyLogs)
   }
 
@@ -167,7 +168,7 @@ export class IndexedDBAdapter implements StorageAdapter {
   }
 
   async getDailyLogs(blockId: string): Promise<DailyLogEntry[]> {
-    const dailyLogsDb = await import('../db/daily-logs-store')
+    const dailyLogsDb = await import('../db/daily-logs-store.ts')
     const storedLogs = await dailyLogsDb.getDailyLogsByBlock(blockId)
     // Remove blockId and id from stored logs
     return storedLogs.map((storedLog) => {
@@ -179,7 +180,7 @@ export class IndexedDBAdapter implements StorageAdapter {
 
   async clear(blockId: string): Promise<void> {
     const db = await this.getDB()
-    const dailyLogsDb = await import('../db/daily-logs-store')
+    const dailyLogsDb = await import('../db/daily-logs-store.ts')
     await Promise.all([
       db.deleteTradesByBlock(blockId),
       dailyLogsDb.deleteDailyLogsByBlock(blockId),
@@ -288,7 +289,7 @@ export class DataLoader {
       }
 
       // For browser, use the full TradeProcessor
-      const { TradeProcessor } = await import('./trade-processor')
+      const { TradeProcessor } = await import('./trade-processor.ts')
       const processor = new TradeProcessor()
       const result = await processor.processCSVContent(content)
 
@@ -350,7 +351,7 @@ export class DataLoader {
       }
 
       // For browser, use the full DailyLogProcessor
-      const { DailyLogProcessor } = await import('./daily-log-processor')
+      const { DailyLogProcessor } = await import('./daily-log-processor.ts')
       const processor = new DailyLogProcessor()
       const result = await processor.processCSVContent(content)
 

@@ -2,8 +2,8 @@
  * Margin timeline calculations for position sizing analysis
  */
 
-import { Trade } from "../models/trade";
-import { DailyLogEntry } from "../models/daily-log";
+import type { Trade } from "../models/trade.ts";
+import type { DailyLogEntry } from "../models/daily-log.ts";
 
 export interface MarginTimeline {
   dates: string[]; // ISO date strings

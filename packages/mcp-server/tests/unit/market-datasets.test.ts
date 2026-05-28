@@ -28,7 +28,7 @@ import {
   writeQuoteMinutesPartition,
   writeEnrichedTickerFile,
   writeEnrichedContext,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 let tmpDir: string; // serves as dataDir
 let db: DuckDBInstance;

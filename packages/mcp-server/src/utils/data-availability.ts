@@ -15,7 +15,7 @@
  * `stores.spot.getCoverage`. The previous direct raw-SQL paths against the
  * pre-Phase-6 daily / intraday views are gone (D-09 silent-empty contract).
  */
-import type { MarketStores } from "../market/stores/index.js";
+import type { MarketStores } from "../market/stores/index.ts";
 
 export interface DataAvailabilityReport {
   /** Whether enriched data is present for the requested ticker */

@@ -18,22 +18,22 @@ import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.js";
-import { makeBars } from "../fixtures/market-stores/bars-fixture.js";
-import { createMarketParquetViews } from "../../src/db/market-views.js";
+} from "../fixtures/market-stores/build-fixture.ts";
+import { makeBars } from "../fixtures/market-stores/bars-fixture.ts";
+import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import {
   createMarketStores,
   type MarketStores,
-} from "../../src/test-exports.js";
-import { registerMarketEnrichmentTools } from "../../src/tools/market-enrichment.js";
+} from "../../src/test-exports.ts";
+import { registerMarketEnrichmentTools } from "../../src/tools/market-enrichment.ts";
 import {
   getEnrichedThrough,
-} from "../../src/db/json-adapters.js";
+} from "../../src/db/json-adapters.ts";
 
 // Direct module import so the absence-of-symbols assertions can inspect
 // the live module shape.
-import * as marketEnricher from "../../src/utils/market-enricher.js";
-import * as marketEnrichmentTool from "../../src/tools/market-enrichment.js";
+import * as marketEnricher from "../../src/utils/market-enricher.ts";
+import * as marketEnrichmentTool from "../../src/tools/market-enrichment.ts";
 
 // =============================================================================
 // Fixture seeding helpers

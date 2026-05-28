@@ -12,32 +12,32 @@
  * interpretive labels. The LLM consuming the output decides what's notable.
  */
 
-import type { Trade } from '../models/trade'
-import type { ReportingTrade } from '../models/reporting-trade'
+import type { Trade } from '../models/trade.ts'
+import type { ReportingTrade } from '../models/reporting-trade.ts'
 import {
   segmentByPeriod,
   type PeriodSegmentationResult,
   type PeriodMetrics,
-} from './period-segmentation'
+} from './period-segmentation.ts'
 import {
   computeRollingMetrics,
   calculateDefaultRecentWindow,
   type RollingMetricsResult,
   type RecentVsHistoricalComparison,
   type SeasonalAverages,
-} from './rolling-metrics'
+} from './rolling-metrics.ts'
 import {
   runRegimeComparison,
   type MCRegimeComparisonResult,
   type MetricComparison,
-} from './mc-regime-comparison'
+} from './mc-regime-comparison.ts'
 import {
   analyzeWalkForwardDegradation,
   type WFDResult,
   type WFDConfig,
   type WFDMetricSet,
   type WFDPeriodResult,
-} from './walk-forward-degradation'
+} from './walk-forward-degradation.ts'
 import {
   analyzeLiveAlignment,
   type LiveAlignmentOutput,
@@ -46,8 +46,8 @@ import {
   type ExecutionEfficiencyResult,
   type AlignmentTrendResult,
   type AlignmentDataQuality,
-} from './live-alignment'
-import type { TrendAnalysis, TrendResult } from './trend-detection'
+} from './live-alignment.ts'
+import type { TrendAnalysis, TrendResult } from './trend-detection.ts'
 
 // ---------------------------------------------------------------------------
 // Public Types

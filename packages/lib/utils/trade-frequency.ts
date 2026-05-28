@@ -1,4 +1,4 @@
-import { Trade } from "../models/trade";
+import type { Trade } from "../models/trade.ts";
 
 export const MIN_TRADES_PER_YEAR = 10;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;

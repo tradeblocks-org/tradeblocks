@@ -20,7 +20,7 @@ import {
   getEnrichedThrough,
   upsertEnrichedThrough,
   EnrichmentWatermarksSchema,
-} from "../../../../src/test-exports.js";
+} from "../../../../src/test-exports.ts";
 
 let dataDir: string;
 

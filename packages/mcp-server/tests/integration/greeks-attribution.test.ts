@@ -4,10 +4,10 @@ import {
   collapseFactors,
   handleDecomposeGreeks,
   handleGetGreeksAttribution,
-} from "../../src/test-exports.js";
-import type { AttributionSummaryResult } from "../../src/test-exports.js";
-import { buildTestStores } from "../fixtures/market-stores/build-stores.js";
-import type { MarketStores } from "../../src/market/stores/index.js";
+} from "../../src/test-exports.ts";
+import type { AttributionSummaryResult } from "../../src/test-exports.ts";
+import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
+import type { MarketStores } from "../../src/market/stores/index.ts";
 
 const SPY_470C_BARS = [
   { t: 1737124200000, o: 5.0, h: 5.2, l: 4.9, c: 5.1 },

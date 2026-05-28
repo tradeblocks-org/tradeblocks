@@ -14,14 +14,14 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock } from "../utils/block-loader.js";
+import { loadBlock } from "../utils/block-loader.ts";
 import {
   createToolOutput,
   formatPercent,
-} from "../utils/output-formatter.js";
+} from "../utils/output-formatter.ts";
 import type { Trade } from "@tradeblocks/lib";
-import { getConnection } from "../db/connection.js";
-import { withFullSync } from "./middleware/sync-middleware.js";
+import { getConnection } from "../db/connection.ts";
+import { withFullSync } from "./middleware/sync-middleware.ts";
 import {
   buildLookaheadFreeQuery,
   buildOutcomeQuery,
@@ -29,17 +29,17 @@ import {
   OPEN_KNOWN_FIELDS,
   CLOSE_KNOWN_FIELDS,
   STATIC_FIELDS,
-} from "../utils/field-timing.js";
-import { filterByStrategy, filterByDateRange } from "./shared/filters.js";
+} from "../utils/field-timing.ts";
+import { filterByStrategy, filterByDateRange } from "./shared/filters.ts";
 import {
   DEFAULT_MARKET_TICKER,
   marketTickerDateKey,
   normalizeTicker,
   resolveTradeTicker,
-} from "../utils/ticker.js";
-import { checkDataAvailability } from "../utils/data-availability.js";
-import { getProfile } from "../db/profile-schemas.js";
-import type { MarketStores } from "../market/stores/index.js";
+} from "../utils/ticker.ts";
+import { checkDataAvailability } from "../utils/data-availability.ts";
+import { getProfile } from "../db/profile-schemas.ts";
+import type { MarketStores } from "../market/stores/index.ts";
 
 // =============================================================================
 // Types

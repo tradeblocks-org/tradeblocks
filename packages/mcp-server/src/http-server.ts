@@ -16,9 +16,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express, { type Express, type Request, type Response, type RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
-import type { AuthConfig } from "./auth/config.js";
-import { TradeBlocksAuthProvider } from "./auth/provider.js";
-import { renderLoginPage } from "./auth/login-page.js";
+import type { AuthConfig } from "./auth/config.ts";
+import { TradeBlocksAuthProvider } from "./auth/provider.ts";
+import { renderLoginPage } from "./auth/login-page.ts";
 
 export interface HttpServerOptions {
   port: number;

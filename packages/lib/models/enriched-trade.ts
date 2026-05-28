@@ -5,7 +5,7 @@
  * for use in the Report Builder and other analysis components.
  */
 
-import { Trade } from './trade'
+import type { Trade } from './trade.ts'
 
 /**
  * Trade with all derived/calculated fields pre-computed

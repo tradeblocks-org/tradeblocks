@@ -13,15 +13,15 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.js";
+import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
 import {
   upsertProfile,
   getProfile,
   listProfiles,
   deleteProfile,
-} from "../db/profile-schemas.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import { withSyncedBlock } from "./middleware/sync-middleware.js";
+} from "../db/profile-schemas.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import { withSyncedBlock } from "./middleware/sync-middleware.ts";
 
 // ---------------------------------------------------------------------------
 // Zod schemas (exported for testability)

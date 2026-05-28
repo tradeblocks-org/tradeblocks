@@ -22,8 +22,8 @@ import { createReadStream, existsSync, mkdirSync, unlinkSync } from "fs";
 import { createInterface } from "readline";
 import { createGunzip } from "zlib";
 import { resolve } from "path";
-import type { MarketStores, BarRow as MarketStoreBarRow } from "../market/stores/index.js";
-import { getFlatImportLogJson, upsertFlatImportLogJson } from "../db/json-adapters.js";
+import type { MarketStores, BarRow as MarketStoreBarRow } from "../market/stores/index.ts";
+import { getFlatImportLogJson, upsertFlatImportLogJson } from "../db/json-adapters.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -256,7 +256,7 @@ export async function importFlatFileDay(
   // Download via provider (provider-agnostic)
   if (!existsSync(localPath)) {
     mkdirSync(tmpSubdir, { recursive: true });
-    const { getProvider } = await import('./market-provider.js');
+    const { getProvider } = await import('./market-provider.ts');
     const provider = getProvider();
     if (provider.downloadFlatFile) {
       const downloaded = await provider.downloadFlatFile(dateStr, assetClass);
@@ -326,7 +326,7 @@ async function downloadAndParse(
   // Download via provider
   if (!existsSync(localPath)) {
     mkdirSync(tmpSubdir, { recursive: true });
-    const { getProvider } = await import('./market-provider.js');
+    const { getProvider } = await import('./market-provider.ts');
     const provider = getProvider();
     if (provider.downloadFlatFile) {
       const downloaded = await provider.downloadFlatFile(dateStr, assetClass);
@@ -476,7 +476,7 @@ async function downloadAndParseMulti(
 
   if (!existsSync(localPath)) {
     mkdirSync(tmpDir, { recursive: true });
-    const { getProvider } = await import('./market-provider.js');
+    const { getProvider } = await import('./market-provider.ts');
     const provider = getProvider();
     if (provider.downloadFlatFile) {
       const downloaded = await provider.downloadFlatFile(dateStr, 'index');

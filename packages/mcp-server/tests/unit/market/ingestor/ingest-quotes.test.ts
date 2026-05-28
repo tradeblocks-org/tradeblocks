@@ -3,12 +3,12 @@ import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { MarketIngestor } from "../../../../src/market/ingestor/index.js";
-import { createMarketStores } from "../../../../src/market/stores/index.js";
-import { ensureMarketDataTables } from "../../../../src/db/market-schemas.js";
-import { TickerRegistry } from "../../../../src/market/tickers/registry.js";
-import type { MarketDataProvider } from "../../../../src/utils/market-provider.js";
-import { MassiveProvider } from "../../../../src/utils/providers/massive.js";
+import { MarketIngestor } from "../../../../src/market/ingestor/index.ts";
+import { createMarketStores } from "../../../../src/market/stores/index.ts";
+import { ensureMarketDataTables } from "../../../../src/db/market-schemas.ts";
+import { TickerRegistry } from "../../../../src/market/tickers/registry.ts";
+import type { MarketDataProvider } from "../../../../src/utils/market-provider.ts";
+import { MassiveProvider } from "../../../../src/utils/providers/massive.ts";
 
 describe("MarketIngestor.ingestQuotes", () => {
   let dataDir: string;

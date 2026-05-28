@@ -10,15 +10,15 @@
  */
 
 import type { DuckDBConnection } from "@duckdb/node-api";
-import type { StrategyProfile } from "../models/strategy-profile.js";
-import { isParquetMode } from "./parquet-writer.js";
+import type { StrategyProfile } from "../models/strategy-profile.ts";
+import { isParquetMode } from "./parquet-writer.ts";
 import {
   upsertProfileJson,
   getProfileJson,
   listProfilesJson,
   deleteProfileJson,
-} from "./json-adapters.js";
-import { getBlocksDir } from "../sync/index.js";
+} from "./json-adapters.ts";
+import { getBlocksDir } from "../sync/index.ts";
 
 /**
  * Ensure the profiles schema and strategy_profiles table exist.

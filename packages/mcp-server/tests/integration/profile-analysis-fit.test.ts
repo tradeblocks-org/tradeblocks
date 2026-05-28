@@ -21,7 +21,7 @@ import {
   handleValidateEntryFilters,
   upsertProfile,
   ensureProfilesSchema,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 let tempDir: string;
 

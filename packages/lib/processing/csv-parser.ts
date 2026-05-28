@@ -5,8 +5,8 @@
  * and validation for TradeBlocks data.
  */
 
-import { ParsingError } from '../models'
-// import { ProcessingError } from '../models'
+import type { ParsingError } from '../models/index.ts'
+// import { ProcessingError } from '../models/index.ts'
 
 /**
  * CSV parsing configuration

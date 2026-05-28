@@ -20,7 +20,7 @@ import {
   MassiveSnapshotResponseSchema,
   MassiveQuoteSchema,
   MassiveQuotesResponseSchema,
-} from "../../../src/utils/providers/massive.js";
+} from "../../../src/utils/providers/massive.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

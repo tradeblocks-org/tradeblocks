@@ -14,7 +14,7 @@ import {
   buildReadBarsSQL,
   buildReadDailyBarsSQL,
   buildReadRthOpensSQL,
-} from "../../../../src/test-exports.js";
+} from "../../../../src/test-exports.ts";
 
 describe("spot-sql builders", () => {
   describe("buildReadBarsSQL", () => {

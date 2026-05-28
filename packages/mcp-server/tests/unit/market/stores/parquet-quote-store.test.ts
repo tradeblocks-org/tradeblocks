@@ -16,15 +16,15 @@ import {
   ParquetChainStore,
   DuckdbQuoteStore,
   DuckdbChainStore,
-} from "../../../../src/test-exports.js";
+} from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../../../fixtures/market-stores/build-fixture.js";
+} from "../../../fixtures/market-stores/build-fixture.ts";
 import type {
   ContractRow,
   QuoteRow,
-} from "../../../../src/market/stores/types.js";
+} from "../../../../src/market/stores/types.ts";
 
 const DATE = "2024-01-15";
 const EXPIRATION = "2024-01-23";

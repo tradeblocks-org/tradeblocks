@@ -9,7 +9,7 @@
  * cannot import it). If the OCC-ticker regex is ever updated in one place,
  * update the other as well.
  */
-import type { TickerRegistry } from "./registry.js"; // TYPE-ONLY — break runtime cycle with registry.ts
+import type { TickerRegistry } from "./registry.ts"; // TYPE-ONLY — break runtime cycle with registry.ts
 
 // OCC-like option ticker shape: root + YYMMDD + C/P + 6-11 digit strike.
 // Standard OCC encodes strike × 1000 in 8 digits, but ThetaData emits wider

@@ -18,14 +18,14 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import { existsSync, readdirSync } from "fs";
 import * as path from "path";
-import { isParquetMode, writeParquetAtomic } from "../db/parquet-writer.js";
-import { resolveCanonicalMarketFile, resolveMarketDir } from "../db/market-datasets.js";
+import { isParquetMode, writeParquetAtomic } from "../db/parquet-writer.ts";
+import { resolveCanonicalMarketFile, resolveMarketDir } from "../db/market-datasets.ts";
 import {
   getEnrichedThrough,
   upsertEnrichedThrough,
-} from "../db/json-adapters.js";
-import { DEFAULT_MARKET_TICKER } from "./ticker.js";
-import type { SpotStore } from "../market/stores/spot-store.js";
+} from "../db/json-adapters.ts";
+import { DEFAULT_MARKET_TICKER } from "./ticker.ts";
+import type { SpotStore } from "../market/stores/spot-store.ts";
 
 // =============================================================================
 // Interfaces

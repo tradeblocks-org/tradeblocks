@@ -5,8 +5,8 @@ import {
   computeGrossAttributionFlow,
   assessPrecision,
   filterSparseSteps,
-} from "../../src/test-exports.js";
-import type { FactorContribution, AttributionStepEntry } from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
+import type { FactorContribution, AttributionStepEntry } from "../../src/test-exports.ts";
 
 describe("collapseFactors", () => {
   const makeFactors = (entries: Array<[string, number]>): FactorContribution[] =>

@@ -18,7 +18,7 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import {
   ensureMutableMarketTables,
   ensureMarketDataTables,
-} from "../../../../src/db/market-schemas.js";
+} from "../../../../src/db/market-schemas.ts";
 
 let db: DuckDBInstance;
 let conn: DuckDBConnection;

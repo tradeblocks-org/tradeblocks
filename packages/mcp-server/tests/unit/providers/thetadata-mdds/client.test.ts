@@ -4,7 +4,7 @@ import {
   getThetaMddsConfig,
   isRetryableGrpcCode,
   ThetaMddsClient,
-} from "../../../../src/utils/providers/thetadata/client.js";
+} from "../../../../src/utils/providers/thetadata/client.ts";
 
 interface FakeStream<T> {
   on(event: "data", listener: (chunk: T) => void): unknown;

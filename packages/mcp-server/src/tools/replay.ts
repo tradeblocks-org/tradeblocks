@@ -12,11 +12,11 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection } from "../db/connection.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import type { MarketStores } from "../market/stores/index.js";
-import { extractRoot } from "../market/tickers/resolver.js";
-import type { QuoteRow } from "../market/stores/types.js";
+import { getConnection } from "../db/connection.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import type { MarketStores } from "../market/stores/index.ts";
+import { extractRoot } from "../market/tickers/resolver.ts";
+import type { QuoteRow } from "../market/stores/types.ts";
 import {
   parseLegsString,
   buildOccTicker,
@@ -26,8 +26,8 @@ import {
   type ReplayLeg,
   type ReplayResult,
   type GreeksConfig,
-} from "../utils/trade-replay.js";
-import type { BarRow } from "../utils/market-provider.js";
+} from "../utils/trade-replay.ts";
+import type { BarRow } from "../utils/market-provider.ts";
 
 // ---------------------------------------------------------------------------
 // Zod schema
@@ -125,7 +125,7 @@ function resolveOOExpiryHint(hint: string, year: string): string {
  * Returns null if no legs have expiryHint (caller falls back to trade dates).
  */
 export function resolveOODateRange(
-  parsedLegs: import("../utils/trade-replay.js").ParsedLegOO[],
+  parsedLegs: import("../utils/trade-replay.ts").ParsedLegOO[],
   tradeYear: string,
   tradeOpenDate: string,
 ): { from: string; to: string } | null {

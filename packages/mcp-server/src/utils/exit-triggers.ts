@@ -7,7 +7,7 @@
  * Provides the computational heart of the `analyze_exit_triggers` tool.
  */
 
-import type { PnlPoint, ReplayLeg } from './trade-replay.js';
+import type { PnlPoint, ReplayLeg } from './trade-replay.ts';
 
 // ---------------------------------------------------------------------------
 // Types

@@ -10,19 +10,19 @@
  *
  * D-02 reminder: no method body inspects `ctx.parquetMode`.
  */
-import { QuoteStore } from "./quote-store.js";
+import { QuoteStore } from "./quote-store.ts";
 import type {
   QuoteRow,
   CoverageReport,
   ReadWindowParams,
   WindowQuoteRow,
-} from "./types.js";
-import { extractRoot } from "../tickers/resolver.js";
+} from "./types.ts";
+import { extractRoot } from "../tickers/resolver.ts";
 import {
   describeQueryColumns,
   quoteParquetCanonicalProjection,
   type ParquetColumnSet,
-} from "../../utils/quote-parquet-projection.js";
+} from "../../utils/quote-parquet-projection.ts";
 
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");

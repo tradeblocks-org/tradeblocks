@@ -19,7 +19,7 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as fs from "fs/promises";
 import * as path from "path";
-export { resolveMarketDir } from "./market-datasets.js";
+export { resolveMarketDir } from "./market-datasets.ts";
 
 // ---------------------------------------------------------------------------
 // Parquet mode detection

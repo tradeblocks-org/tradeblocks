@@ -6,7 +6,7 @@
  * Until then `npm run build` must succeed and imports must compile cleanly.
  */
 import { describe, it, expect } from "@jest/globals";
-import { TickerRegistry } from "../../../../src/test-exports.js";
+import { TickerRegistry } from "../../../../src/test-exports.ts";
 
 const defaults = [
   { underlying: "SPX", roots: ["SPX", "SPXW", "SPXQ"] },

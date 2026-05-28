@@ -1,7 +1,7 @@
 export {
   MarketIngestor,
   type MarketIngestorDeps,
-} from "./market-ingestor.js";
+} from "./market-ingestor.ts";
 export type {
   IngestStatus,
   IngestResult,
@@ -12,4 +12,4 @@ export type {
   ComputeVixContextOptions,
   RefreshOptions,
   RefreshResult,
-} from "./types.js";
+} from "./types.ts";

@@ -9,8 +9,8 @@
  * MARKET_DATA_PROVIDER environment variable (default: "massive").
  */
 
-import { MassiveProvider } from "./providers/massive.js";
-import { ThetaDataProvider } from "./providers/thetadata.js";
+import { MassiveProvider } from "./providers/massive.ts";
+import { ThetaDataProvider } from "./providers/thetadata.ts";
 
 // ---------------------------------------------------------------------------
 // Shared Types

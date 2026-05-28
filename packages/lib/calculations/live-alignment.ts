@@ -11,15 +11,15 @@
  * Consumed by the MCP tool in Plan 02 and by verdict synthesis in Phase 50.
  */
 
-import type { Trade } from '../models/trade'
-import type { ReportingTrade } from '../models/reporting-trade'
+import type { Trade } from '../models/trade.ts'
+import type { ReportingTrade } from '../models/reporting-trade.ts'
 import {
   formatDateKey,
   truncateTimeToMinute,
   calculateScaledPl,
   getMonthKey,
-} from './trade-matching'
-import { computeTrends, type TrendResult } from './trend-detection'
+} from './trade-matching.ts'
+import { computeTrends, type TrendResult } from './trend-detection.ts'
 
 // ---------------------------------------------------------------------------
 // Types

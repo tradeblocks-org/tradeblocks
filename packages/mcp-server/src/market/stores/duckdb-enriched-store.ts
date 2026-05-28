@@ -10,22 +10,24 @@
  *
  * D-02 reminder: no method body inspects `ctx.parquetMode`.
  */
-import { EnrichedStore, type EnrichedReadOpts } from "./enriched-store.js";
-import { SpotStore } from "./spot-store.js";
-import type { StoreContext, CoverageReport } from "./types.js";
-import { buildReadEnrichedSQL } from "./enriched-sql.js";
-import { runEnrichment } from "../../utils/market-enricher.js";
+import { EnrichedStore, type EnrichedReadOpts } from "./enriched-store.ts";
+import { SpotStore } from "./spot-store.ts";
+import type { StoreContext, CoverageReport } from "./types.ts";
+import { buildReadEnrichedSQL } from "./enriched-sql.ts";
+import { runEnrichment } from "../../utils/market-enricher.ts";
 import {
   getEnrichedThrough,
   upsertEnrichedThrough,
-} from "../../db/json-adapters.js";
+} from "../../db/json-adapters.ts";
 
 export class DuckdbEnrichedStore extends EnrichedStore {
+  private readonly spotStore: SpotStore;
   constructor(
     ctx: StoreContext,
-    private readonly spotStore: SpotStore,
+    spotStore: SpotStore,
   ) {
     super(ctx);
+    this.spotStore = spotStore;
   }
 
   async compute(ticker: string, _from: string, _to: string): Promise<void> {

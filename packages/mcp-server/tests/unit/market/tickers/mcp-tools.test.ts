@@ -24,7 +24,7 @@ import {
   handleResolveRoot,
   registerUnderlyingSchema,
   unregisterUnderlyingSchema,
-} from "../../../../src/test-exports.js";
+} from "../../../../src/test-exports.ts";
 
 interface ResourceContent {
   type: "resource";

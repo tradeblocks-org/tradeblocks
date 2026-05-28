@@ -1,5 +1,5 @@
 import { jest } from "@jest/globals";
-import { ThetaDataProvider } from "../../../src/utils/providers/thetadata.js";
+import { ThetaDataProvider } from "../../../src/utils/providers/thetadata.ts";
 import type {
   optionHistoryGreeksFirstOrder,
   optionHistoryGreeksFirstOrderBand,
@@ -9,7 +9,7 @@ import type {
   ThetaFirstOrderGreekRow,
   ThetaMddsClient,
   ThetaQuoteRow,
-} from "../../../src/utils/providers/thetadata/index.js";
+} from "../../../src/utils/providers/thetadata/index.ts";
 
 type QuoteEndpoint = typeof optionHistoryQuote;
 type FirstOrderEndpoint = typeof optionHistoryGreeksFirstOrder;

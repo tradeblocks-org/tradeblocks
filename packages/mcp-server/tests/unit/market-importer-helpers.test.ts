@@ -18,7 +18,7 @@ import {
   parseCsvToBars,
   parseDatabaseRowsToBars,
   validateColumnMapping,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 // ---------------------------------------------------------------------------
 // validateColumnMapping

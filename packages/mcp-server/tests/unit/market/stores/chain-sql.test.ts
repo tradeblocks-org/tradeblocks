@@ -6,7 +6,7 @@
  * (see `spot-sql.ts` header).
  */
 import { describe, it, expect } from "@jest/globals";
-import { buildReadChainSQL } from "../../../../src/test-exports.js";
+import { buildReadChainSQL } from "../../../../src/test-exports.ts";
 
 describe("buildReadChainSQL", () => {
   it("queries market.option_chain with inlined underlying/date literals", () => {

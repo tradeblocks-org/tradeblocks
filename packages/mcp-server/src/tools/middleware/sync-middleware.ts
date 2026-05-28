@@ -16,8 +16,8 @@ import {
   syncAllBlocks,
   type BlockSyncResult,
   type SyncResult,
-} from "../../sync/index.js";
-import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../../db/connection.js";
+} from "../../sync/index.ts";
+import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../../db/connection.ts";
 
 // MCP tool response types - index signature required for SDK compatibility
 interface ToolError {

@@ -6,8 +6,8 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock, loadReportingLog } from "../../utils/block-loader.js";
-import { createToolOutput, formatCurrency } from "../../utils/output-formatter.js";
+import { loadBlock, loadReportingLog } from "../../utils/block-loader.ts";
+import { createToolOutput, formatCurrency } from "../../utils/output-formatter.ts";
 import type { ReportingTrade } from "@tradeblocks/lib";
 import { pearsonCorrelation, kendallTau, normalCDF } from "@tradeblocks/lib";
 import {
@@ -17,8 +17,8 @@ import {
   getIsoWeekKey,
   getMonthKey,
   type MatchedTradeData,
-} from "./slippage-helpers.js";
-import { withSyncedBlock } from "../middleware/sync-middleware.js";
+} from "./slippage-helpers.ts";
+import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 
 /**
  * Register the analyze_slippage_trends tool

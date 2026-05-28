@@ -3,7 +3,7 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { mkdirSync, rmSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { writeQuoteMinutesPartition } from "../../../src/db/market-datasets.js";
+import { writeQuoteMinutesPartition } from "../../../src/db/market-datasets.ts";
 
 let tmpDir: string;
 let db: DuckDBInstance;

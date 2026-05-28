@@ -25,15 +25,15 @@ import { z } from "zod";
 import * as path from "path";
 import * as os from "os";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
 import {
   parseCsvToBars,
   parseDatabaseRowsToBars,
-} from "../utils/market-importer.js";
-import { normalizeTicker } from "../utils/ticker.js";
-import type { MarketStores } from "../market/stores/index.js";
-import type { BarRow } from "../market/stores/types.js";
+} from "../utils/market-importer.ts";
+import { normalizeTicker } from "../utils/ticker.ts";
+import type { MarketStores } from "../market/stores/index.ts";
+import type { BarRow } from "../market/stores/types.ts";
 
 // ---------------------------------------------------------------------------
 // VIX family — used to gate stores.enriched.computeContext after a write

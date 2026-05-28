@@ -16,22 +16,22 @@
  * import from this barrel so only `./index.js` depends on the concrete file
  * layout.
  */
-import { SpotStore } from "./spot-store.js";
-import { EnrichedStore } from "./enriched-store.js";
-import { ChainStore } from "./chain-store.js";
-import { QuoteStore } from "./quote-store.js";
+import { SpotStore } from "./spot-store.ts";
+import { EnrichedStore } from "./enriched-store.ts";
+import { ChainStore } from "./chain-store.ts";
+import { QuoteStore } from "./quote-store.ts";
 
 // Phase 2 concrete classes (shipped in Plans 02-03 + 02-04).
-import { ParquetSpotStore } from "./parquet-spot-store.js";
-import { DuckdbSpotStore } from "./duckdb-spot-store.js";
-import { ParquetEnrichedStore } from "./parquet-enriched-store.js";
-import { DuckdbEnrichedStore } from "./duckdb-enriched-store.js";
-import { ParquetChainStore } from "./parquet-chain-store.js";
-import { DuckdbChainStore } from "./duckdb-chain-store.js";
-import { ParquetQuoteStore } from "./parquet-quote-store.js";
-import { DuckdbQuoteStore } from "./duckdb-quote-store.js";
+import { ParquetSpotStore } from "./parquet-spot-store.ts";
+import { DuckdbSpotStore } from "./duckdb-spot-store.ts";
+import { ParquetEnrichedStore } from "./parquet-enriched-store.ts";
+import { DuckdbEnrichedStore } from "./duckdb-enriched-store.ts";
+import { ParquetChainStore } from "./parquet-chain-store.ts";
+import { DuckdbChainStore } from "./duckdb-chain-store.ts";
+import { ParquetQuoteStore } from "./parquet-quote-store.ts";
+import { DuckdbQuoteStore } from "./duckdb-quote-store.ts";
 
-import type { StoreContext } from "./types.js";
+import type { StoreContext } from "./types.ts";
 
 export interface MarketStores {
   spot: SpotStore;
@@ -66,5 +66,5 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
 
 export { SpotStore, EnrichedStore, ChainStore, QuoteStore };
 export type { StoreContext };
-export type { EnrichedReadOpts } from "./enriched-store.js";
-export type { BarRow, ContractRow, QuoteRow, CoverageReport } from "./types.js";
+export type { EnrichedReadOpts } from "./enriched-store.ts";
+export type { BarRow, ContractRow, QuoteRow, CoverageReport } from "./types.ts";

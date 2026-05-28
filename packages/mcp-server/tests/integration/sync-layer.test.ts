@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 
 // Import from bundled test exports (test-exports.js has all dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { syncAllBlocks, syncBlock, getConnection, closeConnection, upgradeToReadWrite } from '../../src/test-exports.js';
+import { syncAllBlocks, syncBlock, getConnection, closeConnection, upgradeToReadWrite } from '../../src/test-exports.ts';
 
 // Note: fileURLToPath and path.dirname are available if needed for fixtures
 // Tests use temporary directories for isolation, so these are not currently used

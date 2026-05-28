@@ -17,12 +17,12 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { TickerRegistry } from "../../../src/market/tickers/registry.js";
-import type { StoreContext } from "../../../src/market/stores/types.js";
+import { TickerRegistry } from "../../../src/market/tickers/registry.ts";
+import type { StoreContext } from "../../../src/market/stores/types.ts";
 import {
   ensureMutableMarketTables,
   ensureMarketDataTables,
-} from "../../../src/db/market-schemas.js";
+} from "../../../src/db/market-schemas.ts";
 
 export interface FixtureHandle {
   ctx: StoreContext;

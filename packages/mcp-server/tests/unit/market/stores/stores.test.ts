@@ -29,14 +29,14 @@ import {
   DuckdbChainStore,
   ParquetQuoteStore,
   DuckdbQuoteStore,
-} from "../../../../src/test-exports.js";
+} from "../../../../src/test-exports.ts";
 import type {
   StoreContext,
   MarketStores,
   MarketStoreBarRow,
   CoverageReport,
-} from "../../../../src/test-exports.js";
-import { buildStoreFixture } from "../../../fixtures/market-stores/build-fixture.js";
+} from "../../../../src/test-exports.ts";
+import { buildStoreFixture } from "../../../fixtures/market-stores/build-fixture.ts";
 
 // Helper: a bare-minimum concrete subclass — proves the abstract contract is satisfiable.
 class StubSpotStore extends SpotStore {

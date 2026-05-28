@@ -14,21 +14,21 @@
 
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as path from "path";
-import { isParquetMode } from "./parquet-writer.js";
+import { isParquetMode } from "./parquet-writer.ts";
 import {
   readJsonFile,
   writeJsonFile,
   toFileSlug,
-} from "./json-store.js";
+} from "./json-store.ts";
 import {
   listProfilesJson,
   upsertSyncMetadataJson,
   getAllSyncedBlockIdsJson,
   upsertMarketImportMetadataJson,
   upsertFlatImportLogJson,
-} from "./json-adapters.js";
-import type { BlockSyncMetadata, MarketImportMetadata } from "../sync/metadata.js";
-import type { FlatImportLogEntry } from "./json-adapters.js";
+} from "./json-adapters.ts";
+import type { BlockSyncMetadata, MarketImportMetadata } from "../sync/metadata.ts";
+import type { FlatImportLogEntry } from "./json-adapters.ts";
 
 // ---------------------------------------------------------------------------
 // Types

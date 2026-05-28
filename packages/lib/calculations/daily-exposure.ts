@@ -9,7 +9,7 @@
  * sequentially - 7 sequential trades = 1× margin, not 7×.
  */
 
-import type { Trade } from '../models/trade'
+import type { Trade } from '../models/trade.ts'
 
 /**
  * Daily exposure data point

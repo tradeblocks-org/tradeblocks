@@ -1,4 +1,4 @@
-import { AuthCodeStore } from '../../../src/auth/code-store.js';
+import { AuthCodeStore } from '../../../src/auth/code-store.ts';
 
 describe('AuthCodeStore', () => {
   it('stores and retrieves a code via peek', () => {

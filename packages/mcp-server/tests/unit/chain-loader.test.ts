@@ -14,7 +14,7 @@
  * signal asserted in wave-b-chain-consumer-contract.test.ts.
  */
 
-import { filterChain, type ContractRow } from "../../src/test-exports.js";
+import { filterChain, type ContractRow } from "../../src/test-exports.ts";
 
 // ---------------------------------------------------------------------------
 // ContractRow builder

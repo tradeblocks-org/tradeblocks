@@ -16,34 +16,34 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as fs from "fs/promises";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { registerBlockTools } from "./tools/blocks.js";
-import { registerAnalysisTools } from "./tools/analysis.js";
-import { registerPerformanceTools } from "./tools/performance.js";
-import { registerReportTools } from "./tools/reports.js";
-import { registerImportTools } from "./tools/imports.js";
-import { registerMarketDataTools } from "./tools/market-data.js";
-import { registerMarketImportTools } from "./tools/market-imports.js";
-import { registerMarketEnrichmentTools } from "./tools/market-enrichment.js";
-import { registerSQLTools } from "./tools/sql.js";
-import { registerSchemaTools } from "./tools/schema.js";
-import { registerEdgeDecayTools } from "./tools/edge-decay.js";
-import { registerGuideTools } from "./tools/guides.js";
-import { registerProfileTools } from "./tools/profiles.js";
-import { registerProfileAnalysisTools } from "./tools/profile-analysis.js";
-import { registerRegimeAdvisorTools } from "./tools/regime-advisor.js";
-import { registerReplayTools } from "./tools/replay.js";
-import { registerSnapshotTools } from "./tools/snapshot.js";
-import { registerExitAnalysisTools } from "./tools/exit-analysis.js";
-import { registerBatchExitAnalysisTools } from "./tools/batch-exit-analysis.js";
-import { registerGreeksAttributionTools } from "./tools/greeks-attribution.js";
-import { registerMarketFetchTools } from "./tools/market-fetch.js";
-import { registerTickerTools } from "./tools/tickers.js";
-import { loadRegistry } from "./market/tickers/loader.js";
-import { closeConnection, getConnection, getCurrentConnection } from "./db/index.js";
-import { setDataRoot } from "./db/data-root.js";
-import { createMarketStores } from "./market/stores/index.js";
-import type { StoreContext, MarketStores } from "./market/stores/index.js";
-import type { TradeBlocksPlugin, TradeBlocksPluginContext } from "./plugins.js";
+import { registerBlockTools } from "./tools/blocks.ts";
+import { registerAnalysisTools } from "./tools/analysis.ts";
+import { registerPerformanceTools } from "./tools/performance.ts";
+import { registerReportTools } from "./tools/reports.ts";
+import { registerImportTools } from "./tools/imports.ts";
+import { registerMarketDataTools } from "./tools/market-data.ts";
+import { registerMarketImportTools } from "./tools/market-imports.ts";
+import { registerMarketEnrichmentTools } from "./tools/market-enrichment.ts";
+import { registerSQLTools } from "./tools/sql.ts";
+import { registerSchemaTools } from "./tools/schema.ts";
+import { registerEdgeDecayTools } from "./tools/edge-decay.ts";
+import { registerGuideTools } from "./tools/guides.ts";
+import { registerProfileTools } from "./tools/profiles.ts";
+import { registerProfileAnalysisTools } from "./tools/profile-analysis.ts";
+import { registerRegimeAdvisorTools } from "./tools/regime-advisor.ts";
+import { registerReplayTools } from "./tools/replay.ts";
+import { registerSnapshotTools } from "./tools/snapshot.ts";
+import { registerExitAnalysisTools } from "./tools/exit-analysis.ts";
+import { registerBatchExitAnalysisTools } from "./tools/batch-exit-analysis.ts";
+import { registerGreeksAttributionTools } from "./tools/greeks-attribution.ts";
+import { registerMarketFetchTools } from "./tools/market-fetch.ts";
+import { registerTickerTools } from "./tools/tickers.ts";
+import { loadRegistry } from "./market/tickers/loader.ts";
+import { closeConnection, getConnection, getCurrentConnection } from "./db/index.ts";
+import { setDataRoot } from "./db/data-root.ts";
+import { createMarketStores } from "./market/stores/index.ts";
+import type { StoreContext, MarketStores } from "./market/stores/index.ts";
+import type { TradeBlocksPlugin, TradeBlocksPluginContext } from "./plugins.ts";
 
 export interface StartTradeBlocksMcpOptions {
   plugins?: TradeBlocksPlugin[];
@@ -270,7 +270,7 @@ export async function startTradeBlocksMcp(
       console.error(`Error: Blocks directory does not exist: ${resolvedBlocksDir}`);
       process.exit(1);
     }
-    const { setBlocksDir } = await import("./sync/index.js");
+    const { setBlocksDir } = await import("./sync/index.ts");
     setBlocksDir(resolvedBlocksDir);
   }
 
@@ -344,7 +344,7 @@ export async function startTradeBlocksMcp(
 
   if (http) {
     // Load auth config for HTTP mode
-    const { loadAuthConfig } = await import("./auth/config.js");
+    const { loadAuthConfig } = await import("./auth/config.ts");
     let auth;
     try {
       auth = loadAuthConfig({ noAuth });
@@ -354,7 +354,7 @@ export async function startTradeBlocksMcp(
       process.exit(1);
     }
 
-    const { startHttpServer } = await import("./http-server.js");
+    const { startHttpServer } = await import("./http-server.ts");
     await startHttpServer(createServer, { port, auth });
   } else {
     // Stdio transport for Claude Desktop, Codex CLI, etc.

@@ -11,8 +11,8 @@ import {
   type BatchExitConfig,
   type TradeInput,
   type TradeExitResult,
-} from '../../src/utils/batch-exit-analysis.js';
-import type { PnlPoint, ReplayLeg } from '../../src/utils/trade-replay.js';
+} from '../../src/utils/batch-exit-analysis.ts';
+import type { PnlPoint, ReplayLeg } from '../../src/utils/trade-replay.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers

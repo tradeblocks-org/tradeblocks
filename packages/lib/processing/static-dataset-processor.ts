@@ -5,8 +5,8 @@
  * First column is always the timestamp, remaining columns are data values.
  */
 
-import { CSVParser, type CSVParseResult, type ParseProgress } from './csv-parser'
-import type { StaticDataset, StaticDatasetRow, MatchStrategy } from '../models/static-dataset'
+import { CSVParser, type CSVParseResult, type ParseProgress } from './csv-parser.ts'
+import type { StaticDataset, StaticDatasetRow, MatchStrategy } from '../models/static-dataset.ts'
 
 /**
  * Result of processing a static dataset CSV

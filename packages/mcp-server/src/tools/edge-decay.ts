@@ -8,9 +8,9 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock, loadReportingLog } from "../utils/block-loader.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import { withSyncedBlock } from "./middleware/sync-middleware.js";
+import { loadBlock, loadReportingLog } from "../utils/block-loader.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import { withSyncedBlock } from "./middleware/sync-middleware.ts";
 import {
   segmentByPeriod,
   computeRollingMetrics,

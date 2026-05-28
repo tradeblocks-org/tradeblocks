@@ -12,7 +12,7 @@
  * 4. Average P/L (or ROM) for trades BELOW X threshold
  */
 
-import { EnrichedTrade, getEnrichedTradeValue } from '../models/enriched-trade'
+import { type EnrichedTrade, getEnrichedTradeValue } from '../models/enriched-trade.ts'
 
 /**
  * A single data point in the threshold analysis

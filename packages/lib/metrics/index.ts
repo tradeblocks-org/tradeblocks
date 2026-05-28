@@ -2,4 +2,4 @@
  * Metrics exports
  */
 
-export * from './trade-efficiency'
+export * from './trade-efficiency.ts'

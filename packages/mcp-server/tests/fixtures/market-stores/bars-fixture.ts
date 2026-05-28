@@ -4,7 +4,7 @@
  * Produces a small, well-known set of minute bars that exercise the RTH
  * aggregation window (09:30 - 16:00 ET inclusive) used by readDailyBars.
  */
-import type { BarRow } from "../../../src/market/stores/types.js";
+import type { BarRow } from "../../../src/market/stores/types.ts";
 
 /**
  * Build `rowsPerDay` minute bars (default 3) for the given ticker + date.

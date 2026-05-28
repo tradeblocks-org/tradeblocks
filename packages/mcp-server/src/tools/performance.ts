@@ -6,12 +6,12 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock, loadReportingLog } from "../utils/block-loader.js";
+import { loadBlock, loadReportingLog } from "../utils/block-loader.ts";
 import {
   createToolOutput,
   formatPercent,
   formatCurrency,
-} from "../utils/output-formatter.js";
+} from "../utils/output-formatter.ts";
 import type { Trade, ReportingTrade } from "@tradeblocks/lib";
 import {
   normalizeToOneLot,

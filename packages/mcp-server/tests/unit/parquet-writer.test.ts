@@ -14,7 +14,7 @@ import {
   resolveMarketDir,
   writeParquetAtomic,
   writeParquetPartition,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 describe("parquet-writer", () => {
   describe("isParquetMode()", () => {

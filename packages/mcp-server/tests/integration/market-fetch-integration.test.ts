@@ -3,10 +3,10 @@ import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { MarketIngestor } from "../../src/test-exports.js";
-import { createMarketStores } from "../../src/market/stores/index.js";
-import { ensureMarketDataTables } from "../../src/db/market-schemas.js";
-import type { MarketDataProvider, BarRow } from "../../src/utils/market-provider.js";
+import { MarketIngestor } from "../../src/test-exports.ts";
+import { createMarketStores } from "../../src/market/stores/index.ts";
+import { ensureMarketDataTables } from "../../src/db/market-schemas.ts";
+import type { MarketDataProvider, BarRow } from "../../src/utils/market-provider.ts";
 
 // Integration-level smoke: MarketIngestor wired against real stores on
 // in-memory DuckDB, with a fake provider emitting deterministic bars.

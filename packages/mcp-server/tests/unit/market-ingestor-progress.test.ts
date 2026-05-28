@@ -3,20 +3,20 @@ import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { MarketIngestor } from "../../src/market/ingestor/index.js";
-import { createMarketStores } from "../../src/market/stores/index.js";
-import { ensureMarketDataTables } from "../../src/db/market-schemas.js";
-import { TickerRegistry } from "../../src/market/tickers/registry.js";
+import { MarketIngestor } from "../../src/market/ingestor/index.ts";
+import { createMarketStores } from "../../src/market/stores/index.ts";
+import { ensureMarketDataTables } from "../../src/db/market-schemas.ts";
+import { TickerRegistry } from "../../src/market/tickers/registry.ts";
 import type {
   BulkProgressEvent,
   BulkProgressReporter,
-} from "../../src/market/ingestor/types.js";
+} from "../../src/market/ingestor/types.ts";
 import type {
   BulkQuoteRow,
   BulkQuotesOptions,
   MarketDataProvider,
-} from "../../src/utils/market-provider.js";
-import { countBulkQuoteGroupsPerDate } from "../../src/utils/providers/thetadata.js";
+} from "../../src/utils/market-provider.ts";
+import { countBulkQuoteGroupsPerDate } from "../../src/utils/providers/thetadata.ts";
 
 /**
  * Tests for the bulk-quote progress reporter plumbing. Asserts that an

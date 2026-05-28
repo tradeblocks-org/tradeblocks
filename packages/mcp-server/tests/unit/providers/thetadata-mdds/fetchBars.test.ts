@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import { ThetaDataProvider } from "../../../../src/utils/providers/thetadata.js";
-import type { ThetaMddsClient } from "../../../../src/utils/providers/thetadata/index.js";
+import { ThetaDataProvider } from "../../../../src/utils/providers/thetadata.ts";
+import type { ThetaMddsClient } from "../../../../src/utils/providers/thetadata/index.ts";
 
 interface StockOhlcRow {
   date: string;

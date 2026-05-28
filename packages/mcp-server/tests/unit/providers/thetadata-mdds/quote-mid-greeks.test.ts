@@ -4,8 +4,8 @@ import {
   computeThetaQuoteMidGreekRow,
   OPTION_QUOTE_MID_GREEKS_GAMMA_SOURCE,
   OPTION_QUOTE_MID_GREEKS_REVISION,
-} from "../../../../src/utils/providers/thetadata/quote-mid-greeks.js";
-import type { ThetaQuoteRow } from "../../../../src/utils/providers/thetadata/types.js";
+} from "../../../../src/utils/providers/thetadata/quote-mid-greeks.ts";
+import type { ThetaQuoteRow } from "../../../../src/utils/providers/thetadata/types.ts";
 
 function quote(overrides: Partial<ThetaQuoteRow> = {}): ThetaQuoteRow {
   return {

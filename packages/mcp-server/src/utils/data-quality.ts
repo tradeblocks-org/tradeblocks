@@ -33,7 +33,7 @@
  *   density is no longer exposed by the store layer.
  */
 
-import type { MarketStores } from "../market/stores/index.js";
+import type { MarketStores } from "../market/stores/index.ts";
 
 // ---------------------------------------------------------------------------
 // Interfaces

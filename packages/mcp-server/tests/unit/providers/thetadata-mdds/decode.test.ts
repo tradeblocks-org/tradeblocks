@@ -1,12 +1,12 @@
 import { describe, expect, it } from "@jest/globals";
 import { gzipSync } from "zlib";
-import { loadMddsProtoRoot } from "../../../../src/utils/providers/thetadata/proto.js";
+import { loadMddsProtoRoot } from "../../../../src/utils/providers/thetadata/proto.ts";
 import {
   decodeThetaResponseData,
   decodeThetaDataTablePayload,
   thetaPriceToNumber,
   thetaTimestampToEtMinute,
-} from "../../../../src/utils/providers/thetadata/decode.js";
+} from "../../../../src/utils/providers/thetadata/decode.ts";
 
 function encodeSampleTable(): Buffer {
   const root = loadMddsProtoRoot();

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { PortfolioStatsCalculator } from "../calculations/portfolio-stats";
+import { PortfolioStatsCalculator } from "../calculations/portfolio-stats.ts";
 import {
   deleteBlock as dbDeleteBlock,
   updateBlock as dbUpdateBlock,
@@ -9,10 +9,10 @@ import {
   getReportingTradesByBlock,
   updateBlockStats,
   storePerformanceSnapshotCache,
-} from "../db";
-import { buildPerformanceSnapshot, SnapshotProgress } from "../services/performance-snapshot";
-import { ProcessedBlock } from "../models/block";
-import { StrategyAlignment } from "../models/strategy-alignment";
+} from "../db/index.ts";
+import { buildPerformanceSnapshot, type SnapshotProgress } from "../services/performance-snapshot.ts";
+import type { ProcessedBlock } from "../models/block.ts";
+import type { StrategyAlignment } from "../models/strategy-alignment.ts";
 
 export interface Block {
   id: string;
@@ -177,7 +177,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
       const blocks: Block[] = [];
 
       // Import getTradesByBlockWithOptions
-      const { getTradesByBlockWithOptions } = await import("../db");
+      const { getTradesByBlockWithOptions } = await import("../db/index.ts");
 
       // Convert each ProcessedBlock to Block with trade/daily log counts
       for (const processedBlock of processedBlocks) {
@@ -423,7 +423,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
 
       // Use combineLegGroups setting from block config
       const combineLegGroups = processedBlock.analysisConfig?.combineLegGroups ?? false;
-      const { getTradesByBlockWithOptions } = await import("../db");
+      const { getTradesByBlockWithOptions } = await import("../db/index.ts");
 
       const [trades, dailyLogs, reportingTrades] = await Promise.all([
         getTradesByBlockWithOptions(id, { combineLegGroups }),
@@ -503,7 +503,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
 
       // Use combineLegGroups setting from block config
       const combineLegGroups = processedBlock.analysisConfig?.combineLegGroups ?? false;
-      const { getTradesByBlockWithOptions } = await import("../db");
+      const { getTradesByBlockWithOptions } = await import("../db/index.ts");
 
       const [trades, dailyLogs, reportingTrades] = await Promise.all([
         getTradesByBlockWithOptions(id, { combineLegGroups }),
@@ -625,7 +625,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
       sessionStorage.clear();
 
       // Delete the main TradeBlocksDB
-      const { deleteDatabase } = await import("../db");
+      const { deleteDatabase } = await import("../db/index.ts");
       await deleteDatabase();
 
       // Also delete the cache database if it exists

@@ -1,17 +1,17 @@
-import { enrichTrades, StaticDatasetWithRows } from '../calculations/enrich-trades'
-import { DailyLogEntry } from '../models/daily-log'
-import { EnrichedTrade } from '../models/enriched-trade'
-import { PortfolioStats } from '../models/portfolio-stats'
-import { Trade } from '../models/trade'
+import { enrichTrades, type StaticDatasetWithRows } from '../calculations/enrich-trades.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import type { EnrichedTrade } from '../models/enriched-trade.ts'
+import type { PortfolioStats } from '../models/portfolio-stats.ts'
+import type { Trade } from '../models/trade.ts'
 import {
   buildPerformanceSnapshot,
-  SnapshotChartData,
-  SnapshotFilters
-} from '../services/performance-snapshot'
+  type SnapshotChartData,
+  type SnapshotFilters
+} from '../services/performance-snapshot.ts'
 import {
   deriveGroupedLegOutcomes,
-  GroupedLegOutcomes
-} from '../utils/performance-helpers'
+  type GroupedLegOutcomes
+} from '../utils/performance-helpers.ts'
 import { create } from 'zustand'
 
 // Re-export types from helper if needed or redefine locally if they are store specific.
@@ -31,7 +31,7 @@ export interface ChartSettings {
 }
 
 // Re-export types for consumers
-export type { GroupedLegEntry, GroupedLegOutcomes, GroupedLegSummary, GroupedOutcome } from '../utils/performance-helpers'
+export type { GroupedLegEntry, GroupedLegOutcomes, GroupedLegSummary, GroupedOutcome } from '../utils/performance-helpers.ts'
 
 export interface PerformanceData extends SnapshotChartData {
   trades: Trade[]
@@ -177,7 +177,7 @@ export const usePerformanceStore = create<PerformanceStore>((set, get) => ({
         getEnrichedTradesCache,
         getAllStaticDatasets,
         getStaticDatasetRows
-      } = await import('../db')
+      } = await import('../db/index.ts')
 
       // Fetch block to get analysis config
   const block = await getBlock(blockId)
@@ -310,7 +310,7 @@ export const usePerformanceStore = create<PerformanceStore>((set, get) => ({
     const filteredRawTrades = filterTradesForSnapshot(data.allRawTrades, filters)
 
     // Load static datasets for enrichment
-    const { getAllStaticDatasets, getStaticDatasetRows } = await import('../db')
+    const { getAllStaticDatasets, getStaticDatasetRows } = await import('../db/index.ts')
     const staticDatasets = await getAllStaticDatasets()
     const staticDatasetsWithRows: StaticDatasetWithRows[] = await Promise.all(
       staticDatasets.map(async (dataset) => ({
@@ -353,7 +353,7 @@ export const usePerformanceStore = create<PerformanceStore>((set, get) => ({
 }))
 
 // Re-export for existing unit tests that rely on chart processing helpers
-export { processChartData } from '../services/performance-snapshot'
+export { processChartData } from '../services/performance-snapshot.ts'
 
 function filterTradesForSnapshot(trades: Trade[], filters: SnapshotFilters): Trade[] {
   let filtered = [...trades]

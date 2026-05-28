@@ -25,13 +25,13 @@ import {
 import {
   ParquetSpotStore,
   DuckdbSpotStore,
-} from "../../../../src/test-exports.js";
+} from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
-} from "../../../fixtures/market-stores/build-fixture.js";
-import { makeBars } from "../../../fixtures/market-stores/bars-fixture.js";
-import { createMarketParquetViews } from "../../../../src/db/market-views.js";
+} from "../../../fixtures/market-stores/build-fixture.ts";
+import { makeBars } from "../../../fixtures/market-stores/bars-fixture.ts";
+import { createMarketParquetViews } from "../../../../src/db/market-views.ts";
 
 async function makeParquetSpot(): Promise<{
   store: ParquetSpotStore;

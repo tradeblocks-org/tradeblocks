@@ -6,11 +6,11 @@
  */
 
 import { std, mean } from 'mathjs'
-import { Trade } from '../models/trade'
-import { ReportingTrade } from '../models/reporting-trade'
-import { DailyLogEntry } from '../models/daily-log'
-import { ScalingMode, StrategyMatch, CalendarDayData } from '../stores/trading-calendar-store'
-import { PortfolioStatsCalculator } from '../calculations/portfolio-stats'
+import type { Trade } from '../models/trade.ts'
+import type { ReportingTrade } from '../models/reporting-trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import type { ScalingMode, StrategyMatch, CalendarDayData } from '../stores/trading-calendar-store.ts'
+import { PortfolioStatsCalculator } from '../calculations/portfolio-stats.ts'
 
 /**
  * Configuration for risk metric calculations

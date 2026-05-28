@@ -22,7 +22,7 @@ import {
   getFlatImportLogJson,
   listProfilesJson,
   getAllSyncedBlockIdsJson,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 describe("json-migration", () => {
   let tmpDir: string;

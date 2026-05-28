@@ -3,7 +3,7 @@ import {
   ThetaDataProvider,
   resolveMassiveDataTier,
   resolveProviderCapabilities,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 
 describe('resolveMassiveDataTier', () => {
   test('defaults to ohlc when MASSIVE_DATA_TIER is unset', () => {

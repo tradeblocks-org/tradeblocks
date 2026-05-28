@@ -1,5 +1,5 @@
 import { describe, it, expect } from "@jest/globals";
-import { quoteParquetGreekProjection } from "../../../src/utils/quote-parquet-projection.js";
+import { quoteParquetGreekProjection } from "../../../src/utils/quote-parquet-projection.ts";
 
 describe("quoteParquetGreekProjection", () => {
   const allColumns = new Set([

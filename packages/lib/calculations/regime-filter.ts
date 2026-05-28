@@ -5,8 +5,8 @@
  * Supports numeric thresholds, time of day, and day of week filtering.
  */
 
-import { Trade } from '../models/trade'
-import {
+import type { Trade } from '../models/trade.ts'
+import type {
   RegimeDefinition,
   RegimeBucket,
   NumericThresholdBucket,
@@ -15,7 +15,7 @@ import {
   RegimeFilterConfig,
   RegimeFilterCriterion,
   RegimeSourceField
-} from '../models/regime'
+} from '../models/regime.ts'
 
 /**
  * Derived fields that can be computed from a trade

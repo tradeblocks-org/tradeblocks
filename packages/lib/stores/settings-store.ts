@@ -7,7 +7,7 @@
 
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { ReportConfig } from '../models/report-config'
+import type { ReportConfig } from '../models/report-config.ts'
 
 // ============================================================================
 // Built-in Saved Reports (Flexible Chart Builder)

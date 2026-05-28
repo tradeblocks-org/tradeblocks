@@ -6,11 +6,14 @@
  * Option chains are partitioned by (underlying, date). `readChain(underlying, date)`
  * returns all contracts observed for that underlying on that trading date.
  */
-import type { StoreContext, ContractRow, CoverageReport } from "./types.js";
-import { buildReadChainDatesSQL } from "./chain-sql.js";
+import type { StoreContext, ContractRow, CoverageReport } from "./types.ts";
+import { buildReadChainDatesSQL } from "./chain-sql.ts";
 
 export abstract class ChainStore {
-  constructor(protected readonly ctx: StoreContext) {}
+  protected readonly ctx: StoreContext;
+  constructor(ctx: StoreContext) {
+    this.ctx = ctx;
+  }
 
   abstract writeChain(underlying: string, date: string, rows: ContractRow[]): Promise<void>;
 

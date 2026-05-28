@@ -16,7 +16,7 @@
  * ```
  */
 
-import type { Trade } from '../models/trade'
+import type { Trade } from '../models/trade.ts'
 
 /**
  * Options for rebuilding equity curves.

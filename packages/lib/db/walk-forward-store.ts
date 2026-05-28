@@ -1,5 +1,5 @@
-import { WalkForwardAnalysis } from '../models/walk-forward'
-import { INDEXES, STORES, promisifyRequest, withReadTransaction, withWriteTransaction } from './index'
+import type { WalkForwardAnalysis } from '../models/walk-forward.ts'
+import { INDEXES, STORES, promisifyRequest, withReadTransaction, withWriteTransaction } from './index.ts'
 
 export async function saveWalkForwardAnalysis(analysis: WalkForwardAnalysis): Promise<void> {
   await withWriteTransaction(STORES.WALK_FORWARD, async (transaction) => {

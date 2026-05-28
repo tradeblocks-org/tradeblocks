@@ -4,9 +4,9 @@ import {
   analyzeExitTriggers,
   type ExitTriggerConfig,
   type LegGroupConfig,
-} from '../../src/utils/exit-triggers.js';
-import type { PnlPoint, ReplayLeg } from '../../src/utils/trade-replay.js';
-import type { GreeksResult } from '../../src/utils/black-scholes.js';
+} from '../../src/utils/exit-triggers.ts';
+import type { PnlPoint, ReplayLeg } from '../../src/utils/trade-replay.ts';
+import type { GreeksResult } from '../../src/utils/black-scholes.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers

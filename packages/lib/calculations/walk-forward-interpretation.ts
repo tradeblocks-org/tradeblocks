@@ -1,5 +1,5 @@
-import type { WalkForwardConfig, WalkForwardResults } from '../models/walk-forward'
-import type { Assessment, VerdictAssessment } from './walk-forward-verdict'
+import type { WalkForwardConfig, WalkForwardResults } from '../models/walk-forward.ts'
+import type { Assessment, VerdictAssessment } from './walk-forward-verdict.ts'
 
 /**
  * Explanation for a single metric factor that contributed to the verdict.

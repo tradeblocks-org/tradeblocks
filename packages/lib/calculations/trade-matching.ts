@@ -6,8 +6,8 @@
  * slippage analysis, and discrepancy analysis.
  */
 
-import type { Trade } from '../models/trade'
-import type { ReportingTrade } from '../models/reporting-trade'
+import type { Trade } from '../models/trade.ts'
+import type { ReportingTrade } from '../models/reporting-trade.ts'
 
 /**
  * Helper to format date key for trade matching
