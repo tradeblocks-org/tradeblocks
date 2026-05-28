@@ -714,27 +714,36 @@ export async function openMarketOnlyConnection(
 }
 
 /**
- * Open a market-data connection scoped to READS, backed entirely by the
- * canonical parquet partitions and WITHOUT attaching the shared market
- * database file. No host file is opened against the analytics database
- * either.
+ * Open a parquet-backed market-data connection: an in-memory host with the
+ * `market.*` views registered over the canonical parquet partitions under
+ * `<dataRoot>/market/`, and WITHOUT attaching the shared market database file.
+ * No host file is opened against the analytics database either.
  *
- * Shape: in-memory host instance, a `market` schema created in-memory, and
- * the market parquet views registered on that schema. Reads against the
- * `market.*` views are served directly from the canonical parquet files under
- * `<dataRoot>/market/`. Nothing is attached, so no OS-level file lock is taken
- * on the shared market database — multiple readers (and a concurrent market
- * writer) coexist without contention.
+ * This is the canonical helper for every parquet-mode consumer — read AND
+ * write. Once the shared market database file is out of the picture there is no
+ * read/write distinction for the *connection*: both inputs and outputs are
+ * parquet. Reads resolve against the in-memory `market.*` views (or direct
+ * `read_parquet` on absolute file paths, which store callers prefer). Writes go
+ * through `COPY ... TO '<file>' (FORMAT PARQUET)` staged in a per-connection
+ * `TEMP` table — a filesystem write that needs no attached catalog. The store
+ * write path stages and copies; it never `INSERT`s into the `market.*` views.
  *
- * Why this helper exists: the read path's only inputs are the parquet
- * partitions. The shared market database file is never the source of truth on
- * this path, so attaching it is pure liability — it makes a reader block (or
- * be blocked by) a concurrent market writer that holds the database file lock.
- * Routing reads through a `:memory:` host with parquet views registered leaves
- * the shared market database completely untouched, so a reader can run while a
- * writer ingests. This is the read-side mirror of `openMarketOnlyConnection`;
- * the one structural difference is that this path must CREATE the `market`
- * schema itself (no attach creates it) before registering the views.
+ * Shape: in-memory host instance, a `market` schema created in-memory, and the
+ * market parquet views registered on that schema. Nothing is attached, so no
+ * OS-level file lock is taken on the shared market database — multiple readers,
+ * multiple parquet writers, and a legacy attach-based market writer all coexist
+ * without contention.
+ *
+ * Why this helper exists: the parquet-mode path's only inputs and outputs are
+ * the parquet partitions. The shared market database file is never the source
+ * of truth on this path, so attaching it is pure liability — it makes the
+ * caller block (or be blocked by) any other process holding the database file
+ * lock. Routing through a `:memory:` host with parquet views registered leaves
+ * the shared market database completely untouched. This is the parquet analog
+ * of `openMarketOnlyConnection` (the attach-based RW helper that non-parquet
+ * deployments still require for physical-table `INSERT`s into `market.*`); the
+ * one structural difference is that this path must CREATE the `market` schema
+ * itself (no attach creates it) before registering the views.
  *
  * Important: the returned connection is NOT shared via the module-level
  * singleton. `getCurrentConnection()` is not affected. The caller owns the
@@ -745,7 +754,7 @@ export async function openMarketOnlyConnection(
  *   fallback for `getDataRoot()` when neither `--data-root` nor the data-root
  *   env var is set.
  */
-export interface MarketReadOnlyConnection {
+export interface MarketParquetConnection {
   /** The active DuckDB connection. Backed by a `:memory:` host with `market.*` parquet views. */
   conn: DuckDBConnection;
   /** Resolved data root the parquet views were registered against (for logging/parity). */
@@ -759,15 +768,15 @@ export interface MarketReadOnlyConnection {
   close(): Promise<void>;
 }
 
-export async function openMarketReadOnlyConnection(
+export async function openMarketParquetConnection(
   baseDir: string,
-): Promise<MarketReadOnlyConnection> {
+): Promise<MarketParquetConnection> {
   // `:memory:` host means the connection does not open any on-disk database as
   // the catalog root — neither the analytics database nor the shared market
   // database file is touched by this code path. `enable_external_access:
   // "true"` is required at instance creation to permit reads of local parquet
-  // files (DuckDB 1.4+ otherwise blocks all filesystem operations from within
-  // the connection).
+  // files AND `COPY ... TO '<file>'` writes (DuckDB 1.4+ otherwise blocks all
+  // filesystem operations from within the connection).
   const memoryInstance = await DuckDBInstance.create(":memory:", {
     enable_external_access: "true",
   });
@@ -780,7 +789,10 @@ export async function openMarketReadOnlyConnection(
   await conn.run("CREATE SCHEMA IF NOT EXISTS market");
 
   // Register views over the canonical market parquet partitions. These are the
-  // source of truth for reads; no physical market tables are consulted.
+  // source of truth for reads; no physical market tables are consulted. The
+  // ingest write path uses these views for read-back during enrichment (e.g.
+  // the `market.spot_daily` identity-row backfill) and writes its output via
+  // `COPY ... TO` to parquet files — never an INSERT into a view.
   const dataRoot = getDataRoot(baseDir);
   await createMarketParquetViews(conn, dataRoot);
 
@@ -793,6 +805,20 @@ export async function openMarketReadOnlyConnection(
   };
 
   return { conn, dataRoot, close };
+}
+
+/**
+ * Read-side name for {@link openMarketParquetConnection}. Retained as the
+ * canonical handle for read-only parquet consumers; the underlying connection
+ * is identical (parquet has no read/write distinction once the shared market
+ * database file is out of the picture).
+ */
+export type MarketReadOnlyConnection = MarketParquetConnection;
+
+export function openMarketReadOnlyConnection(
+  baseDir: string,
+): Promise<MarketReadOnlyConnection> {
+  return openMarketParquetConnection(baseDir);
 }
 
 /**
