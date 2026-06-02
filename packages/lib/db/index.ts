@@ -422,6 +422,7 @@ export {
   getDailyLogsByBlock,
   updateDailyLogsForBlock,
 } from "./daily-logs-store.ts";
+export type { StoredDailyLogEntry } from "./daily-logs-store.ts";
 export {
   addReportingTrades,
   deleteReportingTradesByBlock,
@@ -438,6 +439,7 @@ export {
   getTradesByBlockWithOptions,
   updateTradesForBlock,
 } from "./trades-store.ts";
+export type { StoredTrade } from "./trades-store.ts";
 export {
   saveWalkForwardAnalysis,
   getWalkForwardAnalysis,
