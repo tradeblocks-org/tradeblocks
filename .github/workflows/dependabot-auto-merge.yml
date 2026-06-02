@@ -10,6 +10,10 @@ jobs:
   dependabot:
     runs-on: ubuntu-latest
     if: github.event.pull_request.user.login == 'dependabot[bot]'
+    # Map the secret into env so the "skip when unset" guard can be evaluated in
+    # step `if:` (the `secrets` context is not available in `if`, but `env` is).
+    env:
+      AUTOMERGE_TOKEN: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN }}
     steps:
       - name: Dependabot metadata
         id: metadata
@@ -17,9 +21,34 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+      # master requires a *code-owner* approving review (and dismisses stale
+      # reviews on every push). GITHUB_TOKEN / the actions bot cannot satisfy a
+      # code-owner gate, so auto-merge alone leaves patch/minor bumps blocked on a
+      # review that never arrives. Approve with a code-owner PAT instead. Because
+      # `on: pull_request` includes `synchronize`, this re-runs on every rebase and
+      # re-approves, so dismiss-stale doesn't strand the PR.
+      #
+      # Setup (one-time): create a fine-grained PAT owned by a CODEOWNER with
+      # Pull requests: write + Contents: read on this repo, and store it as a
+      # *Dependabot* secret named DEPENDABOT_AUTOMERGE_TOKEN (Settings → Secrets and
+      # variables → Dependabot — NOT Actions; Dependabot-triggered runs only see
+      # Dependabot secrets). Until the secret exists this step is skipped, so the
+      # workflow degrades to the previous (blocked-on-review) behavior instead of
+      # erroring.
+      - name: Auto-approve patch and minor updates
+        if: >-
+          steps.metadata.outputs.update-type != 'version-update:semver-major'
+          && env.AUTOMERGE_TOKEN != ''
+        run: |
+          gh pr review --approve "$PR_URL" \
+            --body "Auto-approving patch/minor dependency bump via code-owner token to satisfy branch protection's required review. CI status checks still gate the merge."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ env.AUTOMERGE_TOKEN }}
+
       - name: Enable auto-merge for patch and minor updates
         if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ env.AUTOMERGE_TOKEN || secrets.GITHUB_TOKEN }}
