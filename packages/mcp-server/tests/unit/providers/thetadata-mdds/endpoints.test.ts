@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import { resolve } from "path";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 import protobuf from "protobufjs";
 import {
   normalizeThetaFirstOrderGreekRow,
@@ -14,8 +15,16 @@ import {
   thetaRequestRight,
 } from "../../../../src/utils/providers/thetadata/endpoints.ts";
 
+// Resolve relative to this test file, not process.cwd(): CI runs jest from the
+// repo root (`--config packages/mcp-server/jest.config.js`), where a cwd-relative
+// `src/...` path does not exist.
+const MDDS_PROTO_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../src/utils/providers/thetadata/mdds.proto",
+);
+
 function encodeRows(headers: string[], dataTable: Array<{ values: unknown[] }>) {
-  const root = protobuf.loadSync(resolve(process.cwd(), "src/utils/providers/thetadata/mdds.proto"));
+  const root = protobuf.loadSync(MDDS_PROTO_PATH);
   const DataTable = root.lookupType("BetaEndpoints.DataTable");
   return {
     compressedData: Buffer.from(DataTable.encode({ headers, dataTable }).finish()),
