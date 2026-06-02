@@ -22,7 +22,7 @@
     "@duckdb/node-api": "^1.4.4-r.3",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.3.1",
+    "express-rate-limit": "^8.5.2",
     "jose": "^6.2.3",
     "zod": "^4.3.6"
   },
