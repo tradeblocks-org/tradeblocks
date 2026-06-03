@@ -26,6 +26,7 @@ import {
   writeSpotPartition,
   writeChainPartition,
   writeQuoteMinutesPartition,
+  writeOiDailyPartition,
   writeEnrichedTickerFile,
   writeEnrichedContext,
 } from "../../src/test-exports.ts";
@@ -54,11 +55,12 @@ afterEach(() => {
 });
 
 describe("DATASETS_V3 — shape matches D-14 spec", () => {
-  it("has exactly 5 entries", () => {
+  it("has exactly 6 entries", () => {
     expect(Object.keys(DATASETS_V3).sort()).toEqual([
       "enriched",
       "enriched_context",
       "option_chain",
+      "option_oi_daily",
       "option_quote_minutes",
       "spot",
     ]);
@@ -99,6 +101,14 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
   it("option_quote_minutes: {underlying,date} partitioning", () => {
     expect(DATASETS_V3.option_quote_minutes).toEqual({
       subdir: "option_quote_minutes",
+      partitionKeys: ["underlying", "date"],
+      filename: "data.parquet",
+    });
+  });
+
+  it("option_oi_daily: {underlying,date} partitioning", () => {
+    expect(DATASETS_V3.option_oi_daily).toEqual({
+      subdir: "option_oi_daily",
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
     });
@@ -179,6 +189,37 @@ describe("writeQuoteMinutesPartition — path resolution", () => {
           tmpDir,
           "market",
           "option_quote_minutes",
+          "underlying=SPX",
+          "date=2025-01-06",
+          "data.parquet",
+        ),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("writeOiDailyPartition — path resolution", () => {
+  it("writes to {dataDir}/market/option_oi_daily/underlying=SPX/date=2025-01-06/data.parquet", async () => {
+    // Inline VALUES with a ticker column so the ORDER BY q.ticker inside
+    // writeOiDailyPartition can resolve.
+    const selectQuery = `SELECT * FROM (VALUES
+      ('A'::VARCHAR, 100::BIGINT),
+      ('B'::VARCHAR, 200::BIGINT),
+      ('C'::VARCHAR, 300::BIGINT)
+    ) t(ticker, open_interest)`;
+    const { rowCount } = await writeOiDailyPartition(conn, {
+      dataDir: tmpDir,
+      underlying: "SPX",
+      date: "2025-01-06",
+      selectQuery,
+    });
+    expect(rowCount).toBe(3);
+    expect(
+      existsSync(
+        join(
+          tmpDir,
+          "market",
+          "option_oi_daily",
           "underlying=SPX",
           "date=2025-01-06",
           "data.parquet",

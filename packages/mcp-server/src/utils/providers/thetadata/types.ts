@@ -56,6 +56,24 @@ export type ThetaIndexOhlcRow = ThetaStockOhlcRow;
 export type ThetaIndexEodRow = ThetaStockEodRow;
 
 /**
+ * Row returned by GetOptionHistoryOpenInterest.
+ *
+ * Open interest is reported at daily granularity — one value per contract per
+ * day. The row carries the OCC ticker (built from the contract identity
+ * fields the same way quote rows are), the report date, and the open-interest
+ * count.
+ */
+export interface ThetaOpenInterestRow {
+  ticker: string;
+  symbol: string;
+  expiration: string;
+  strike: number;
+  right: ThetaRight;
+  date: string;
+  openInterest: number;
+}
+
+/**
  * Row returned by GetOptionHistoryGreeksImpliedVolatility.
  *
  * Includes IV solved against the bid, midpoint, and ask price levels — plus

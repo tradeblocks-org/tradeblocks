@@ -224,6 +224,34 @@ export interface BulkQuoteRow {
   gamma_source?: string | null;
 }
 
+/** Options for fetching daily open interest for every contract under an underlying. */
+export interface BulkOpenInterestOptions {
+  /** Canonical underlying (e.g. "SPX"). Provider expands to its wire-level roots. */
+  underlying: string;
+  /** Start date "YYYY-MM-DD" ET (inclusive). */
+  from: string;
+  /** End date "YYYY-MM-DD" ET (inclusive). */
+  to: string;
+}
+
+/**
+ * One daily open-interest record for a single option contract. Open interest
+ * is reported once per contract per day.
+ */
+export interface OpenInterestRow {
+  /** OCC ticker (e.g. "SPXW260417C04800000"). */
+  ticker: string;
+  /** Canonical underlying the contract resolves to (e.g. "SPX"). */
+  underlying: string;
+  /** Report date "YYYY-MM-DD" ET. */
+  date: string;
+  /** Expiration "YYYY-MM-DD". */
+  expiration: string;
+  strike: number;
+  right: "call" | "put";
+  open_interest: number;
+}
+
 export interface MinuteQuote {
   bid: number;
   ask: number;
@@ -269,6 +297,12 @@ export interface MarketDataProvider {
    * per-ticker-only (Massive, Polygon) do NOT implement this.
    */
   fetchBulkQuotes?(options: BulkQuotesOptions): AsyncIterable<BulkQuoteRow[]>;
+  /**
+   * Fetch daily open interest for every contract under an underlying across a
+   * date range. Optional — providers that lack an open-interest endpoint do
+   * not implement this. Capability-gated behind `capabilities().bulkByRoot`.
+   */
+  fetchOpenInterest?(options: BulkOpenInterestOptions): Promise<OpenInterestRow[]>;
   /** Historical option contract list from reference endpoint. Optional — not all providers support this. */
   fetchContractList?(options: FetchContractListOptions): Promise<FetchContractListResult>;
   /**

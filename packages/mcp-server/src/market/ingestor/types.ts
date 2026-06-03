@@ -158,6 +158,20 @@ export interface IngestChainOptions {
   dryRun?: boolean;
 }
 
+export interface IngestOpenInterestOptions {
+  /**
+   * Underlyings to fetch daily open interest for. Routes through
+   * `provider.fetchOpenInterest`; capability-gated on `bulkByRoot` + presence
+   * of the method. Open interest is daily granularity — one row per contract
+   * per day.
+   */
+  underlyings: string[];
+  from: string;
+  to: string;
+  provider?: "massive" | "thetadata";
+  dryRun?: boolean;
+}
+
 /**
  * Dataset types accepted by import_flat_file. Each maps to a single store:
  *   spot_bars      → stores.spot.writeFromSelect
@@ -201,6 +215,12 @@ export interface RefreshOptions {
   chainUnderlyings?: string[];
   quoteTickers?: string[];
   quoteUnderlyings?: string[];
+  /**
+   * Underlyings to fetch daily open interest for. Opt-in: when omitted or
+   * empty, the open-interest step does NOT run (no silent default). When set,
+   * routes through `ingestOpenInterest`.
+   */
+  openInterestUnderlyings?: string[];
   computeVixContext?: boolean;
   provider?: "massive" | "thetadata";
   /**
@@ -220,6 +240,7 @@ export interface RefreshResult {
     spot: IngestResult[];
     chain: IngestResult[];
     quotes: IngestResult[];
+    openInterest: IngestResult[];
     vixContext: IngestResult | null;
   };
   coverage: Record<string, { totalDates: number; dateRange?: { from: string; to: string } }>;

@@ -6,12 +6,14 @@ import {
   joinThetaQuotesAndFirstOrderGreeks,
   optionHistoryGreeksFirstOrder,
   optionHistoryGreeksFirstOrderBand,
+  optionHistoryOpenInterest,
   optionHistoryQuote,
   optionListContracts,
   stockHistoryEod,
   stockHistoryOhlc,
   type ThetaContractListRow,
   type ThetaFirstOrderGreekRow,
+  type ThetaOpenInterestRow,
   type ThetaQuoteRow,
   type ThetaRight,
   type ThetaStockEodRow,
@@ -19,6 +21,7 @@ import {
 } from "./thetadata/index.ts";
 import type {
   BarRow,
+  BulkOpenInterestOptions,
   BulkQuoteRow,
   BulkQuotesOptions,
   ContractReference,
@@ -29,6 +32,7 @@ import type {
   FetchSnapshotResult,
   MarketDataProvider,
   MinuteQuote,
+  OpenInterestRow,
   ProviderCapabilities,
 } from "../market-provider.ts";
 
@@ -41,6 +45,7 @@ export interface ThetaProviderDeps {
   firstOrderEndpoint?: typeof optionHistoryGreeksFirstOrder;
   firstOrderBandEndpoint?: typeof optionHistoryGreeksFirstOrderBand;
   contractListEndpoint?: typeof optionListContracts;
+  openInterestEndpoint?: typeof optionHistoryOpenInterest;
   stockHistoryOhlc?: typeof stockHistoryOhlc;
   stockHistoryEod?: typeof stockHistoryEod;
   indexHistoryOhlc?: typeof indexHistoryOhlc;
@@ -227,6 +232,7 @@ export class ThetaDataProvider implements MarketDataProvider {
   private readonly firstOrderEndpoint: typeof optionHistoryGreeksFirstOrder;
   private readonly firstOrderBandEndpoint: typeof optionHistoryGreeksFirstOrderBand;
   private readonly contractListEndpoint: typeof optionListContracts;
+  private readonly openInterestEndpoint: typeof optionHistoryOpenInterest;
   private readonly stockHistoryOhlcEndpoint: typeof stockHistoryOhlc;
   private readonly stockHistoryEodEndpoint: typeof stockHistoryEod;
   private readonly indexHistoryOhlcEndpoint: typeof indexHistoryOhlc;
@@ -238,6 +244,7 @@ export class ThetaDataProvider implements MarketDataProvider {
     this.firstOrderEndpoint = deps.firstOrderEndpoint ?? optionHistoryGreeksFirstOrder;
     this.firstOrderBandEndpoint = deps.firstOrderBandEndpoint ?? optionHistoryGreeksFirstOrderBand;
     this.contractListEndpoint = deps.contractListEndpoint ?? optionListContracts;
+    this.openInterestEndpoint = deps.openInterestEndpoint ?? optionHistoryOpenInterest;
     this.stockHistoryOhlcEndpoint = deps.stockHistoryOhlc ?? stockHistoryOhlc;
     this.stockHistoryEodEndpoint = deps.stockHistoryEod ?? stockHistoryEod;
     this.indexHistoryOhlcEndpoint = deps.indexHistoryOhlc ?? indexHistoryOhlc;
@@ -455,6 +462,45 @@ export class ThetaDataProvider implements MarketDataProvider {
 
     contracts.sort((left, right) => left.ticker.localeCompare(right.ticker));
     return { contracts, underlying };
+  }
+
+  async fetchOpenInterest(options: BulkOpenInterestOptions): Promise<OpenInterestRow[]> {
+    await this.client.connect?.();
+    const underlying = options.underlying.toUpperCase();
+    const rows: OpenInterestRow[] = [];
+
+    for (const root of bulkQuoteRootsForUnderlying(underlying)) {
+      // One wildcard-expiration, wildcard-strike, both-rights stream per root
+      // returns every contract's daily open interest across the range.
+      let oiRows: ThetaOpenInterestRow[];
+      try {
+        oiRows = await this.openInterestEndpoint(this.client, {
+          symbol: root,
+          expiration: "*",
+          startDate: options.from,
+          endDate: options.to,
+        });
+      } catch (error) {
+        // NOT_FOUND for a root with no contracts in the range is benign — fall
+        // through to the next root rather than failing the whole fetch.
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!/NOT_FOUND|No data found/i.test(msg)) throw error;
+        oiRows = [];
+      }
+      for (const r of oiRows) {
+        rows.push({
+          ticker: r.ticker,
+          underlying,
+          date: r.date,
+          expiration: r.expiration,
+          strike: r.strike,
+          right: r.right,
+          open_interest: r.openInterest,
+        });
+      }
+    }
+
+    return rows;
   }
 
   async fetchOptionSnapshot(_options: FetchSnapshotOptions): Promise<FetchSnapshotResult> {
