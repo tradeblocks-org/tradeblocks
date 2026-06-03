@@ -158,6 +158,12 @@ async function main() {
   const chunkDays = requirePositiveInt(args["chunk-days"], "chunk-days", 7);
   const storeRoot = args["store-root"];
   if (!storeRoot) die("--store-root is required (e.g. --store-root /home/romeo/tradeblocks-data)");
+  // --no-resume disables the chunk-level skip-if-partition-exists check. Needed when a
+  // second root (SPX) shares an underlying partition with a root already written (SPXW):
+  // the per-date write below merges by occ_ticker, so re-fetching is idempotent and only
+  // ADDS the second root's (distinct) tickers. Without this, SPX skips every chunk SPXW
+  // already created.
+  const noResume = process.argv.includes("--no-resume");
 
   process.env.THETADATA_CREDENTIALS_FILE =
     process.env.THETADATA_CREDENTIALS_FILE || "/home/romeo/thetadata/creds.txt";
@@ -231,7 +237,7 @@ async function main() {
         });
         const allWeekdaysPresent =
           weekdays.length > 0 && weekdays.every((d) => existsSync(partitionFile(underlying, d)));
-        if (allWeekdaysPresent) {
+        if (!noResume && allWeekdaysPresent) {
           rootStats.skippedChunks += 1;
           logger.log(`[${root}] ${chunk.from}..${chunk.to} SKIP (all weekday partitions present)`);
           continue;
