@@ -135,7 +135,11 @@ export function normalizeThetaOpenInterestRow(
   const expiration = requiredText(row.expiration, "open-interest row", "expiration");
   const strike = requiredNumber(row.strike, "open-interest row", "strike");
   const right = normalizeRight(row.right);
-  const date = normalizeThetaDate(row.date, "open-interest row");
+  // The gRPC OI stream names the report-date column `timestamp` (carrying a
+  // "YYYY-MM-DD HH:MM" ET value), matching the REST v3 OI response header.
+  // Accept `date` too for any provider variant; normalizeThetaDate strips the
+  // leading calendar date off either shape.
+  const date = normalizeThetaDate(row.timestamp ?? row.date, "open-interest row");
   const rightChar = right === "call" ? "C" : "P";
   return {
     ticker: buildOccTicker(symbol, expiration, rightChar, strike),

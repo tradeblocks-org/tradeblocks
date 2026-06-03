@@ -32,13 +32,16 @@ function fakeClient(chunks: unknown[]) {
 }
 
 describe("ThetaData MDDS open-interest wrapper", () => {
-  it("normalizes an open-interest tick into a clean daily row", () => {
+  it("normalizes an open-interest tick into a clean daily row (gRPC `timestamp` date column)", () => {
+    // The live gRPC OI stream names the report-date column `timestamp` and
+    // carries a "YYYY-MM-DD HH:MM" ET value (validated against the live
+    // terminal 2026-06-02). normalizeThetaDate strips the leading calendar date.
     expect(normalizeThetaOpenInterestRow({
       symbol: "spxw",
       expiration: "2024-08-05",
       strike: 5725,
       right: "CALL",
-      date: "20240715",
+      timestamp: "2024-07-15 06:30",
       open_interest: 1234,
     })).toEqual({
       ticker: "SPXW240805C05725000",
@@ -49,6 +52,17 @@ describe("ThetaData MDDS open-interest wrapper", () => {
       date: "2024-07-15",
       openInterest: 1234,
     });
+  });
+
+  it("falls back to a `date` column when a provider variant supplies one", () => {
+    expect(normalizeThetaOpenInterestRow({
+      symbol: "SPXW",
+      expiration: "2024-08-05",
+      strike: 5725,
+      right: "CALL",
+      date: "20240715",
+      open_interest: 1234,
+    }).date).toBe("2024-07-15");
   });
 
   it("rejects malformed required open-interest identity fields", () => {
@@ -72,14 +86,14 @@ describe("ThetaData MDDS open-interest wrapper", () => {
 
   it("fetches daily open interest with the date-range request shape and wildcard contract spec", async () => {
     const chunk = encodeRows(
-      ["symbol", "expiration", "strike", "right", "date", "open_interest"],
+      ["symbol", "expiration", "strike", "right", "timestamp", "open_interest"],
       [{
         values: [
           { text: "SPXW" },
           { text: "2024-08-05" },
           { number: 5725 },
           { text: "CALL" },
-          { number: 20240715 },
+          { text: "2024-07-15 06:30" },
           { number: 4096 },
         ],
       }],
