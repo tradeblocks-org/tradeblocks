@@ -28,12 +28,12 @@
  * (default 7) and --logfile (default ./oi-backfill-<ts>.log).
  *
  * Usage:
- *   THETADATA_CREDENTIALS_FILE=/home/romeo/thetadata/creds.txt \
+ *   THETADATA_CREDENTIALS_FILE=/path/to/creds.txt \
  *   node tools/oi-backfill.mjs \
  *     --roots "SPXW SPX" \
  *     --start 2022-01-03 \
  *     --end 2026-03-31 \
- *     --store-root /home/romeo/tradeblocks-data \
+ *     --store-root /path/to/data-root \
  *     [--chunk-days 7] [--logfile /path/to/oi-backfill.log]
  */
 
@@ -157,7 +157,7 @@ async function main() {
   if (start > end) die("--start must be on or before --end");
   const chunkDays = requirePositiveInt(args["chunk-days"], "chunk-days", 7);
   const storeRoot = args["store-root"];
-  if (!storeRoot) die("--store-root is required (e.g. --store-root /home/romeo/tradeblocks-data)");
+  if (!storeRoot) die("--store-root is required (e.g. --store-root /path/to/data-root)");
   // --no-resume disables the chunk-level skip-if-partition-exists check. Needed when a
   // second root (SPX) shares an underlying partition with a root already written (SPXW):
   // the per-date write below merges by occ_ticker, so re-fetching is idempotent and only
@@ -165,8 +165,9 @@ async function main() {
   // already created.
   const noResume = process.argv.includes("--no-resume");
 
-  process.env.THETADATA_CREDENTIALS_FILE =
-    process.env.THETADATA_CREDENTIALS_FILE || "/home/romeo/thetadata/creds.txt";
+  if (!process.env.THETADATA_CREDENTIALS_FILE) {
+    die("THETADATA_CREDENTIALS_FILE env var is required (path to ThetaData creds file)");
+  }
   process.env.THETADATA_MDDS_HOST = process.env.THETADATA_MDDS_HOST || "mdds-01.thetadata.us";
   process.env.THETADATA_MDDS_PORT = process.env.THETADATA_MDDS_PORT || "443";
   process.env.THETADATA_MDDS_CLIENT_TYPE = process.env.THETADATA_MDDS_CLIENT_TYPE || "terminal";

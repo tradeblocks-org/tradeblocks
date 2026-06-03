@@ -20,7 +20,7 @@
  * Writes NOTHING — pure read + print.
  *
  * Usage:
- *   THETADATA_CREDENTIALS_FILE=/home/romeo/thetadata/creds.txt \
+ *   THETADATA_CREDENTIALS_FILE=/path/to/creds.txt \
  *     node tools/oi-validate.mjs
  */
 
@@ -33,8 +33,10 @@ const DIST = resolve(__dirname, "../packages/mcp-server/dist/test-exports.js");
 // Live-session config. The MDDS endpoint is the hosted gRPC service
 // (mdds-01.thetadata.us:443); the "session" is the single authenticated
 // session bound to the account, shared with the running terminal.
-process.env.THETADATA_CREDENTIALS_FILE =
-  process.env.THETADATA_CREDENTIALS_FILE || "/home/romeo/thetadata/creds.txt";
+if (!process.env.THETADATA_CREDENTIALS_FILE) {
+  console.error("ERROR THETADATA_CREDENTIALS_FILE env var is required (path to ThetaData creds file)");
+  process.exit(1);
+}
 process.env.THETADATA_MDDS_HOST = process.env.THETADATA_MDDS_HOST || "mdds-01.thetadata.us";
 process.env.THETADATA_MDDS_PORT = process.env.THETADATA_MDDS_PORT || "443";
 process.env.THETADATA_MDDS_CLIENT_TYPE = process.env.THETADATA_MDDS_CLIENT_TYPE || "terminal";
