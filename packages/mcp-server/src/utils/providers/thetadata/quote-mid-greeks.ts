@@ -9,7 +9,7 @@ import {
 import { buildTicker } from "./join.ts";
 import type { ThetaQuoteRow } from "./types.ts";
 
-export const OPTION_QUOTE_MID_GREEKS_REVISION = 5;
+export const OPTION_QUOTE_MID_GREEKS_REVISION = 6;
 export const OPTION_QUOTE_MID_GREEKS_DIVIDEND_YIELD = OPTION_QUOTE_GREEKS_DIVIDEND_YIELD;
 export const OPTION_QUOTE_MID_GREEKS_GAMMA_SOURCE = "computed_thetadata_quote_mid_sofr_q0";
 
@@ -70,7 +70,10 @@ export function computeThetaQuoteMidGreekRow(params: {
     delta: greeks.delta,
     gamma: greeks.gamma,
     theta: greeks.theta,
-    vega: greeks.vega * 100,
+    // vega is stored per 1% IV move, matching computeLegGreeks' convention and
+    // the rest of the emit path (the per-contract x100 multiplier belongs to the
+    // consumer, not the stored greek).
+    vega: greeks.vega,
     iv: greeks.iv,
     greeks_source: "computed",
     greeks_revision: OPTION_QUOTE_MID_GREEKS_REVISION,
