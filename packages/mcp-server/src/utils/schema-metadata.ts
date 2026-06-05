@@ -599,7 +599,7 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
             hypothesis: false,
           },
           vega: {
-            description: "Option vega for the minute when available from provider data or computed fallback.",
+            description: "Option vega (per 1% IV move) for the minute when available from provider data or computed fallback.",
             hypothesis: false,
           },
           iv: {
