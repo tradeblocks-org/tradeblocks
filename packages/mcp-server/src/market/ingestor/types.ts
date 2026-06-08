@@ -64,8 +64,9 @@ export interface IngestResult {
   error?: string;
   /**
    * Batches that the ingest logged-and-skipped instead of aborting on. Present
-   * only when `status === "partial"`. Empty/undefined for clean runs.
-   * See `IngestSkippedBatch` for the producer surface.
+   * only when `status === "partial"` (i.e. there is at least one skipped
+   * batch); `undefined` when there are no skipped batches. See
+   * `IngestSkippedBatch` for the producer surface.
    */
   skipped?: IngestSkippedBatch[];
   details?: Record<string, unknown>;
@@ -225,10 +226,11 @@ export interface RefreshResult {
   coverage: Record<string, { totalDates: number; dateRange?: { from: string; to: string } }>;
   errors: string[];
   /**
-   * Aggregated `skipped` entries pulled up from every `perOperation.*` IngestResult.
-   * Present (possibly empty) on every non-skipped refresh so orchestrators can
-   * inspect partial-batch failures without traversing `perOperation`. When
-   * `status === "partial"`, this array has at least one entry.
+   * Aggregated `skipped` entries pulled up from every `perOperation.*`
+   * IngestResult so orchestrators can inspect partial-batch failures without
+   * traversing `perOperation`. Present only when there is at least one skipped
+   * batch (i.e. `status === "partial"`); `undefined` for clean runs. Callers
+   * should read `result.skipped?.length ?? 0`.
    */
   skipped?: IngestSkippedBatch[];
 }

@@ -172,17 +172,25 @@ export class DuckdbQuoteStore extends QuoteStore {
     }
     const columns = await this.getQuoteTableColumns();
     const projection = quoteParquetCanonicalProjection(columns, "q");
-    const tickerPlaceholders = occTickers.map((_, i) => `$${i + 4}`).join(", ");
-    const params = [firstUnderlying, from, to, ...occTickers];
+    // Inline every value as a SQL literal and call the unbound
+    // runAndReadAll(sql) form — the bound (sql, values) path routes through
+    // node_bindings.extract_statements, which leaks a non-destroyable handle
+    // per call and eventually throws "Failed to execute prepared statement"
+    // under sustained read load. See spot-sql.ts header for the full writeup.
+    const underlyingLit = `'${escapeSqlLiteral(firstUnderlying)}'`;
+    const fromLit = `'${escapeSqlLiteral(from)}'`;
+    const toLit = `'${escapeSqlLiteral(to)}'`;
+    const tickerList = occTickers
+      .map((t) => `'${escapeSqlLiteral(t)}'`)
+      .join(", ");
     const reader = await this.ctx.conn.runAndReadAll(
       `SELECT ${projection}
          FROM market.option_quote_minutes AS q
-        WHERE q.underlying = $1
-          AND q.date >= $2
-          AND q.date <= $3
-          AND q.ticker IN (${tickerPlaceholders})
+        WHERE q.underlying = ${underlyingLit}
+          AND q.date >= ${fromLit}
+          AND q.date <= ${toLit}
+          AND q.ticker IN (${tickerList})
         ORDER BY q.ticker, q.date, q.time`,
-      params as (string | number | boolean | null | bigint)[],
     );
     const out = new Map<string, QuoteRow[]>();
     for (const row of reader.getRows()) {
@@ -224,6 +232,13 @@ export class DuckdbQuoteStore extends QuoteStore {
 
       const columns = await this.getQuoteTableColumns();
       const projection = quoteParquetCanonicalProjection(columns, "q");
+      // Underlying + time bounds inlined as SQL literals so the call takes the
+      // unbound runAndReadAll(sql) path (the (date, ticker) VALUES are already
+      // inlined above). The bound form leaks an extract_statements handle per
+      // call — see spot-sql.ts header for the full root-cause writeup.
+      const underlyingLit = `'${escapeSqlLiteral(underlying)}'`;
+      const timeStartLit = `'${escapeSqlLiteral(timeStart)}'`;
+      const timeEndLit = `'${escapeSqlLiteral(timeEnd)}'`;
       const sql = `WITH wanted(date, ticker) AS (
                      VALUES ${wantedPairs.join(", ")}
                    )
@@ -231,15 +246,12 @@ export class DuckdbQuoteStore extends QuoteStore {
                    FROM market.option_quote_minutes AS q
                    JOIN wanted AS w
                      ON q.date = w.date AND q.ticker = w.ticker
-                   WHERE q.underlying = $1
-                     AND q.time >= $2 AND q.time <= $3
+                   WHERE q.underlying = ${underlyingLit}
+                     AND q.time >= ${timeStartLit} AND q.time <= ${timeEndLit}
                    ORDER BY q.ticker, q.date, q.time`;
 
       const queryStart = perf ? Date.now() : 0;
-      const reader = await this.ctx.conn.runAndReadAll(
-        sql,
-        [underlying, timeStart, timeEnd] as (string | number | boolean | null | bigint)[],
-      );
+      const reader = await this.ctx.conn.runAndReadAll(sql);
       const rows = reader.getRows();
       if (perf) {
         console.log(
@@ -279,36 +291,28 @@ export class DuckdbQuoteStore extends QuoteStore {
     const { underlying, date, timeStart, timeEnd, legEnvelopes } = params;
     if (legEnvelopes.length === 0) return [];
 
-    // Bind positional `$N` parameters in the same style the rest of this file
-    // uses (readQuotes / getCoverage). Order: underlying, date, timeStart,
-    // timeEnd, then per-envelope (contract_type, dteMin, dteMax, [strikeMin,
-    // strikeMax]).
-    const bound: (string | number)[] = [underlying, date, timeStart, timeEnd];
-    let nextParam = bound.length + 1;
-    const placeholder = (): string => `$${nextParam++}`;
-    const pUnderlying = "$1";
-    const pDate = "$2";
-    const pTimeStart = "$3";
-    const pTimeEnd = "$4";
+    // Inline every value as a SQL literal and call the unbound
+    // runAndReadAll(sql) form — the bound (sql, values) path routes through
+    // node_bindings.extract_statements, which leaks a non-destroyable handle
+    // per call and eventually throws "Failed to execute prepared statement"
+    // under sustained read load. See spot-sql.ts header for the full writeup.
+    // String values (underlying, date, times, contract_type) are
+    // single-quote-escaped; dte/strike bounds are typed numbers from
+    // in-process strategy definitions, inlined directly — no injection vector.
+    const pUnderlying = `'${escapeSqlLiteral(underlying)}'`;
+    const pDate = `'${escapeSqlLiteral(date)}'`;
+    const pTimeStart = `'${escapeSqlLiteral(timeStart)}'`;
+    const pTimeEnd = `'${escapeSqlLiteral(timeEnd)}'`;
 
     const disjuncts: string[] = [];
     for (const env of legEnvelopes) {
-      const pCt = placeholder();
-      bound.push(env.contractType);
-      const pDteMin = placeholder();
-      bound.push(env.dteMin);
-      const pDteMax = placeholder();
-      bound.push(env.dteMax);
-      let clause = `(b.contract_type = ${pCt} AND b.dte BETWEEN ${pDteMin} AND ${pDteMax}`;
+      const ct = `'${escapeSqlLiteral(env.contractType)}'`;
+      let clause = `(b.contract_type = ${ct} AND b.dte BETWEEN ${env.dteMin} AND ${env.dteMax}`;
       if (env.strikeMin != null) {
-        const pStrikeMin = placeholder();
-        bound.push(env.strikeMin);
-        clause += ` AND b.strike >= ${pStrikeMin}`;
+        clause += ` AND b.strike >= ${env.strikeMin}`;
       }
       if (env.strikeMax != null) {
-        const pStrikeMax = placeholder();
-        bound.push(env.strikeMax);
-        clause += ` AND b.strike <= ${pStrikeMax}`;
+        clause += ` AND b.strike <= ${env.strikeMax}`;
       }
       clause += ")";
       disjuncts.push(clause);
@@ -336,10 +340,7 @@ export class DuckdbQuoteStore extends QuoteStore {
          AND q.time BETWEEN ${pTimeStart} AND ${pTimeEnd}
     `;
 
-    const reader = await this.ctx.conn.runAndReadAll(
-      sql,
-      bound as (string | number | boolean | null | bigint)[],
-    );
+    const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       ticker: String(r[0]),
       time: String(r[1]),
