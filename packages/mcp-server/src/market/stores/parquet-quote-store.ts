@@ -201,16 +201,23 @@ export class ParquetQuoteStore extends QuoteStore {
     const source = readParquetFilesSql(files);
     const columns = await describeReadParquetColumns(this.ctx.conn, source);
     const projection = quoteParquetCanonicalProjection(columns, "q");
-    const tickerPlaceholders = occTickers.map((_, i) => `$${i + 3}`).join(", ");
-    const params = [from, to, ...occTickers];
+    // Inline every value as a SQL literal and call the unbound
+    // runAndReadAll(sql) form — the bound (sql, values) path routes through
+    // node_bindings.extract_statements, which leaks a non-destroyable handle
+    // per call and eventually throws "Failed to execute prepared statement"
+    // under sustained read load. See readWindow below for the full writeup.
+    const fromLit = `'${escapeSqlLiteral(from)}'`;
+    const toLit = `'${escapeSqlLiteral(to)}'`;
+    const tickerList = occTickers
+      .map((t) => `'${escapeSqlLiteral(t)}'`)
+      .join(", ");
     const reader = await this.ctx.conn.runAndReadAll(
       `SELECT ${projection}
          FROM ${source} AS q
-        WHERE q.date >= $1
-          AND q.date <= $2
-          AND q.ticker IN (${tickerPlaceholders})
+        WHERE q.date >= ${fromLit}
+          AND q.date <= ${toLit}
+          AND q.ticker IN (${tickerList})
         ORDER BY q.ticker, q.date, q.time`,
-      params as (string | number | boolean | null | bigint)[],
     );
     const out = new Map<string, QuoteRow[]>();
     for (const row of reader.getRows()) {
@@ -264,6 +271,12 @@ export class ParquetQuoteStore extends QuoteStore {
       const source = readParquetFilesSql(filePaths);
       const columns = await describeReadParquetColumns(this.ctx.conn, source);
       const projection = quoteParquetCanonicalProjection(columns, "q");
+      // Time bounds inlined as SQL literals so the call takes the unbound
+      // runAndReadAll(sql) path (the (date, ticker) VALUES are already inlined
+      // above). The bound form leaks an extract_statements handle per call —
+      // see readWindow for the full root-cause writeup.
+      const timeStartLit = `'${escapeSqlLiteral(timeStart)}'`;
+      const timeEndLit = `'${escapeSqlLiteral(timeEnd)}'`;
       const sql = `WITH wanted(date, ticker) AS (
                      VALUES ${wantedPairs.join(", ")}
                    )
@@ -271,14 +284,11 @@ export class ParquetQuoteStore extends QuoteStore {
                    FROM ${source} AS q
                    JOIN wanted AS w
                      ON q.date = w.date AND q.ticker = w.ticker
-                   WHERE q.time >= $1 AND q.time <= $2
+                   WHERE q.time >= ${timeStartLit} AND q.time <= ${timeEndLit}
                    ORDER BY q.ticker, q.date, q.time`;
 
       const queryStart = perf ? Date.now() : 0;
-      const reader = await this.ctx.conn.runAndReadAll(
-        sql,
-        [timeStart, timeEnd] as (string | number | boolean | null | bigint)[],
-      );
+      const reader = await this.ctx.conn.runAndReadAll(sql);
       const rows = reader.getRows();
       if (perf) {
         console.log(
