@@ -6,12 +6,12 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock } from "../../utils/block-loader.js";
+import { loadBlock } from "../../utils/block-loader.ts";
 import {
   createToolOutput,
   formatPercent,
   formatRatio,
-} from "../../utils/output-formatter.js";
+} from "../../utils/output-formatter.ts";
 import {
   PortfolioStatsCalculator,
   calculateCorrelationMatrix,
@@ -21,11 +21,11 @@ import type { Trade } from "@tradeblocks/lib";
 import {
   filterByDateRange,
   filterDailyLogsByDateRange,
-} from "../shared/filters.js";
-import { withSyncedBlock } from "../middleware/sync-middleware.js";
-import { getConnection } from "../../db/connection.js";
-import { getProfile } from "../../db/profile-schemas.js";
-import type { StrategyProfile } from "../../models/strategy-profile.js";
+} from "../shared/filters.ts";
+import { withSyncedBlock } from "../middleware/sync-middleware.ts";
+import { getConnection } from "../../db/connection.ts";
+import { getProfile } from "../../db/profile-schemas.ts";
+import type { StrategyProfile } from "../../models/strategy-profile.ts";
 
 const SIMILARITY_DEFAULTS = {
   correlationThreshold: 0.7,
@@ -383,7 +383,7 @@ export function registerSimilarityBlockTools(
           ): Promise<{ profile: StrategyProfile | null; status: "found" | "not_found" | "error" }> {
             try {
               const conn = await getConnection(baseDir);
-              const profile = await getProfile(conn, strategyBlockId, strategyName);
+              const profile = await getProfile(conn, strategyBlockId, strategyName, baseDir);
               return profile
                 ? { profile, status: "found" }
                 : { profile: null, status: "not_found" };

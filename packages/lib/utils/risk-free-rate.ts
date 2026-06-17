@@ -8,10 +8,12 @@
  * Rates are stored as annual percentages (e.g., 4.32 = 4.32% annual)
  */
 
-import { TREASURY_RATES } from "../data/treasury-rates";
+import { TREASURY_RATES } from "../data/treasury-rates.ts";
+import { SOFR_RATES } from "../data/sofr-rates.ts";
 
 // Cache sorted keys for efficient lookup
 let sortedKeys: string[] | null = null;
+let sortedSofrKeys: string[] | null = null;
 
 /**
  * Get all rate date keys sorted in ascending order
@@ -90,6 +92,55 @@ export function getRiskFreeRate(date: Date): number {
 
   // Return the rate from the most recent prior trading day
   return TREASURY_RATES[keys[left]];
+}
+
+function getSortedSofrKeys(): string[] {
+  if (!sortedSofrKeys) {
+    sortedSofrKeys = Object.keys(SOFR_RATES).sort();
+  }
+  return sortedSofrKeys;
+}
+
+/**
+ * Get the SOFR overnight rate for a date specified as a YYYY-MM-DD string key.
+ *
+ * Behavior mirrors getRiskFreeRateByKey: exact lookup, then nearest prior
+ * trading day via binary search, with edge-clamping to the available range.
+ *
+ * Use this when computing option greeks under the SOFR + q=0 convention.
+ * Use getRiskFreeRateByKey instead for portfolio Sharpe/Sortino calculations.
+ *
+ * @param dateKey - The date as YYYY-MM-DD string
+ * @returns Annual SOFR rate as a percentage (e.g., 3.60 for 3.60%)
+ */
+export function getSofrRateByKey(dateKey: string): number {
+  const keys = getSortedSofrKeys();
+
+  if (SOFR_RATES[dateKey] !== undefined) {
+    return SOFR_RATES[dateKey];
+  }
+
+  if (dateKey < keys[0]) {
+    return SOFR_RATES[keys[0]];
+  }
+
+  if (dateKey > keys[keys.length - 1]) {
+    return SOFR_RATES[keys[keys.length - 1]];
+  }
+
+  let left = 0;
+  let right = keys.length - 1;
+
+  while (left < right) {
+    const mid = Math.floor((left + right + 1) / 2);
+    if (keys[mid] <= dateKey) {
+      left = mid;
+    } else {
+      right = mid - 1;
+    }
+  }
+
+  return SOFR_RATES[keys[left]];
 }
 
 /**

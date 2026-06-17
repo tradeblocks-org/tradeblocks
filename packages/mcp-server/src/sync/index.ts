@@ -5,19 +5,20 @@
  * Exports hashing utilities, metadata operations, and sync functions.
  */
 
+import { existsSync } from "fs";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { getConnection } from "../db/connection.js";
+import { getConnection } from "../db/connection.ts";
 import {
   syncBlockInternal,
   detectBlockChanges,
   cleanupDeletedBlocks,
   type BlockSyncResult,
-} from "./block-sync.js";
-import { getSyncMetadata } from "./metadata.js";
+} from "./block-sync.ts";
+import { getSyncMetadata } from "./metadata.ts";
 
 // Re-export hasher utilities
-export { hashFileContent } from "./hasher.js";
+export { hashFileContent } from "./hasher.ts";
 
 // Re-export metadata operations and types
 export {
@@ -26,10 +27,10 @@ export {
   deleteSyncMetadata,
   getAllSyncedBlockIds,
   type BlockSyncMetadata,
-} from "./metadata.js";
+} from "./metadata.ts";
 
 // Re-export block sync types and internal functions (for testing)
-export { type BlockSyncResult } from "./block-sync.js";
+export { type BlockSyncResult } from "./block-sync.ts";
 
 // --- Result Types ---
 
@@ -43,6 +44,10 @@ export interface SyncResult {
   blocksDeleted: number;
   errors: Array<{ blockId: string; error: string }>;
   results: BlockSyncResult[];
+  /** True when the middleware could not acquire the RW lock and fell back to RO without running sync. */
+  syncSkipped?: boolean;
+  /** Machine-readable reason for skipping sync. Only populated when syncSkipped === true. */
+  skipReason?: "could_not_acquire_write_lock";
 }
 
 // --- Blocks Directory Override ---
@@ -61,7 +66,9 @@ export function setBlocksDir(dir: string): void {
 }
 
 export function getBlocksDir(baseDir: string): string {
-  return _blocksDir ?? baseDir;
+  if (_blocksDir) return _blocksDir;
+  const nestedBlocksDir = path.join(baseDir, "blocks");
+  return existsSync(nestedBlocksDir) ? nestedBlocksDir : baseDir;
 }
 
 // --- Sync Functions ---
@@ -88,7 +95,7 @@ export async function syncAllBlocks(baseDir: string): Promise<SyncResult> {
   // 2. Delete orphaned blocks
   for (const blockId of toDelete) {
     try {
-      await cleanupDeletedBlocks(conn, [blockId]);
+      await cleanupDeletedBlocks(conn, [blockId], blocksDir);
       results.push({ blockId, status: "deleted" });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -139,9 +146,9 @@ export async function syncBlock(
     await fs.access(blockPath);
   } catch {
     // Block folder doesn't exist - if it was synced before, clean it up
-    const existing = await getSyncMetadata(conn, blockId);
+    const existing = await getSyncMetadata(conn, blockId, blocksDir);
     if (existing) {
-      await cleanupDeletedBlocks(conn, [blockId]);
+      await cleanupDeletedBlocks(conn, [blockId], blocksDir);
       return { blockId, status: "deleted" };
     }
     return { blockId, status: "error", error: `Block folder not found: ${blockId}` };
@@ -149,4 +156,3 @@ export async function syncBlock(
 
   return syncBlockInternal(conn, blockId, blockPath);
 }
-

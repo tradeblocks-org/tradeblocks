@@ -9,8 +9,10 @@
  *   2. DROP SCHEMA IF EXISTS market CASCADE (removes legacy inline market tables,
  *      prevents DuckDB #14421 naming conflict with the upcoming ATTACH)
  *   3. ATTACH market.duckdb AS market
- *   4. ensureMarketTables() — creates market.daily/context/intraday/_sync_metadata
- *   5. ensureSyncTables() / ensureTradeDataTable() / ensureReportingDataTable()
+ *   4. ensureMarketDataTables() — physical canonical market tables when Parquet views are absent
+ *   5. ensureMutableMarketTables() — _sync_metadata, data_coverage
+ *   6. createMarketParquetViews() — views over shared Parquet files (opportunistic)
+ *   7. ensureSyncTables() / ensureTradeDataTable() / ensureReportingDataTable()
  *
  * On close: CHECKPOINT → DETACH market → closeSync() to flush WAL reliably.
  * On RO open: ATTACH market.duckdb READ_ONLY (no table creation).
@@ -21,8 +23,8 @@
  * orphaned MCP processes (PPID=1) and terminating them before retrying.
  *
  * Configuration via environment variables:
- *   DUCKDB_MEMORY_LIMIT    - Memory limit (default: 512MB)
- *   DUCKDB_THREADS         - Number of threads (default: 2)
+ *   DUCKDB_MEMORY_LIMIT    - Memory limit (default: 75% of system RAM, floor 1GB)
+ *   DUCKDB_THREADS         - Number of threads (default: 2 — higher counts cause driver flakiness)
  *   DUCKDB_LOCK_RECOVERY   - Force-kill ANY lock-holding tradeblocks-mcp (default: false)
  *   DUCKDB_LOCK_RECOVERY_TIMEOUT_MS - Wait time for SIGTERM (default: 1500)
  *   MARKET_DB_PATH         - Path to market.duckdb (overrides default, overridden by --market-db)
@@ -35,17 +37,21 @@
  *
  * Schemas created on first RW connection:
  *   - trades: For block/trade data (in analytics.duckdb)
- *   - market: ATTACHed from market.duckdb (daily, context, intraday, _sync_metadata)
+ *   - market: ATTACHed from market.duckdb (spot, spot_daily, enriched, enriched_context, option_chain, option_quote_minutes, _sync_metadata)
  */
 
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
 import { execFile } from "child_process";
 import * as fs from "fs/promises";
+import * as os from "os";
 import * as path from "path";
 import { promisify } from "util";
-import { ensureSyncTables, ensureTradeDataTable, ensureReportingDataTable } from "./schemas.js";
-import { ensureMarketTables } from "./market-schemas.js";
-import { ensureProfilesSchema } from "./profile-schemas.js";
+import { ensureSyncTables, ensureTradeDataTable, ensureReportingDataTable } from "./schemas.ts";
+import { ensureMutableMarketTables, ensureMarketDataTables } from "./market-schemas.ts";
+import { ensureProfilesSchema } from "./profile-schemas.ts";
+import { createMarketParquetViews } from "./market-views.ts";
+import { migrateMetadataToJson } from "./json-migration.ts";
+import { getDataRoot } from "./data-root.ts";
 
 // Module-level singleton state
 let instance: DuckDBInstance | null = null;
@@ -57,6 +63,33 @@ let storedMemoryLimit: string | null = null;
 let storedMarketDbPath: string | null = null;
 const execFileAsync = promisify(execFile);
 const isWindows = process.platform === "win32";
+
+/**
+ * Default DuckDB memory limit when `DUCKDB_MEMORY_LIMIT` is unset.
+ *
+ * Scales to 75% of total system RAM — DuckDB's own native default is 80%; we
+ * keep a small headroom for Node's heap, the OS, and other processes. Floored
+ * at 1GB so very small VMs / CI containers still work; no upper cap. Returns
+ * a DuckDB-compatible string like "90GB".
+ */
+function defaultMemoryLimit(): string {
+  const totalGB = os.totalmem() / (1024 ** 3);
+  const targetGB = Math.max(1, Math.floor(totalGB * 0.75));
+  return `${targetGB}GB`;
+}
+
+/**
+ * Default DuckDB thread count when `DUCKDB_THREADS` is unset.
+ *
+ * Stays at 2 — empirically, higher counts trigger intermittent
+ * `Failed to execute prepared statement` errors mid-run on long parquet-mode
+ * read workloads (tested 4, 8, 32 — all flaky). The hot path is per-date
+ * partition reads which are I/O-bound, not CPU-bound. Users with large
+ * parallel-read workloads can override via the env var.
+ */
+function defaultThreads(): string {
+  return "2";
+}
 
 function isLockError(message: string): boolean {
   const lower = message.toLowerCase();
@@ -238,8 +271,9 @@ async function attachMarketDb(
 ): Promise<void> {
   await fs.mkdir(path.dirname(marketDbPath), { recursive: true });
   const readOnlyClause = mode === "read_only" ? " (READ_ONLY)" : "";
+  const escapedPath = marketDbPath.replace(/'/g, "''");
   try {
-    await conn.run(`ATTACH '${marketDbPath}' AS market${readOnlyClause}`);
+    await conn.run(`ATTACH '${escapedPath}' AS market${readOnlyClause}`);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     if (msg.includes("corrupt") || msg.includes("Invalid") || msg.includes("cannot open")) {
@@ -247,7 +281,7 @@ async function attachMarketDb(
       try { await fs.unlink(marketDbPath); } catch { /* file may not exist */ }
       // Also try removing WAL file
       try { await fs.unlink(marketDbPath + ".wal"); } catch { /* ignore */ }
-      await conn.run(`ATTACH '${marketDbPath}' AS market${readOnlyClause}`);
+      await conn.run(`ATTACH '${escapedPath}' AS market${readOnlyClause}`);
     } else {
       throw new Error(`Failed to attach market.duckdb at ${marketDbPath}: ${msg}`);
     }
@@ -306,21 +340,40 @@ async function openReadWriteConnection(
   await ensureSyncTables(connection);
   await ensureTradeDataTable(connection);
   await ensureReportingDataTable(connection);
-  await ensureMarketTables(connection);
+  await ensureMutableMarketTables(connection);
   await ensureProfilesSchema(connection);
 
-  // Optional extensions (e.g., additional DB attachments, write-target overrides)
+  const dataDir = path.dirname(dbPath);
+  const dataRoot = getDataRoot(dataDir);
+
+  // Parquet view overlay: create views over shared Parquet files when present.
+  // The env var controls WRITE path; the read path is always opportunistic —
+  // views are registered whenever the Parquet files exist.
+  // Runs BEFORE ensureMarketDataTables so stale views from a previous data path
+  // are dropped first — otherwise CREATE TABLE IF NOT EXISTS is a no-op against
+  // the existing view name, leaving a broken view referencing a missing file.
+  await createMarketParquetViews(connection, dataRoot);
+
+  // Physical market data tables as fallback for datasets not covered by Parquet views.
+  //
+  // IMPORTANT — lifecycle ordering:
+  // Because createMarketParquetViews (above) runs FIRST, by the time we get here
+  // a VIEW may already occupy any of the canonical names (e.g. market.option_quote_minutes
+  // over legacy-layout Parquet files that lack the new `underlying` column). Any
+  // migration-style logic inside ensureMarketDataTables that wants to DROP+recreate
+  // a physical table MUST filter information_schema.tables by
+  // `table_type = 'BASE TABLE'` so it does not accidentally drop a legitimate VIEW.
+  // VIEWs are owned by the Parquet-view layer, not by this schema layer.
+  await ensureMarketDataTables(connection);
+
+  // One-time metadata migration: DuckDB -> JSON files.
+  // Runs only when TRADEBLOCKS_PARQUET=true and JSON files don't yet exist.
+  // Must run AFTER all DuckDB tables are created (profiles, sync, market schemas).
   try {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore — connection.ext.ts is intentionally absent in this repo; dynamic import fails silently
-    const ext = await import('./connection.ext.js');
-    const ctx = await ext.default(connection, {
-      baseDir: path.dirname(dbPath),
-      marketDbPath: storedMarketDbPath!,
-    });
-    if (ctx?.intradayWriteTable) _intradayWriteTable = ctx.intradayWriteTable;
-  } catch {
-    // No extensions present — defaults apply
+    const blocksDir = (await import("../sync/index.ts")).getBlocksDir(dataRoot);
+    await migrateMetadataToJson(connection, dataRoot, blocksDir);
+  } catch (err) {
+    console.warn("[json-migration] Migration failed (non-fatal):", err instanceof Error ? err.message : err);
   }
 
   connectionMode = "read_write";
@@ -387,9 +440,10 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
 
   const dbPath = path.join(dataDir, "analytics.duckdb");
 
-  // Configuration from environment with sensible defaults
-  const threads = process.env.DUCKDB_THREADS || "2";
-  const memoryLimit = process.env.DUCKDB_MEMORY_LIMIT || "512MB";
+  // Configuration from environment with sensible defaults — thread count and
+  // memory limit auto-scale to host capacity (see helpers above).
+  const threads = process.env.DUCKDB_THREADS || defaultThreads();
+  const memoryLimit = process.env.DUCKDB_MEMORY_LIMIT || defaultMemoryLimit();
 
   // Store config for reuse by upgrade/downgrade
   storedDbPath = dbPath;
@@ -403,7 +457,11 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
   const forceRecovery = (process.env.DUCKDB_LOCK_RECOVERY ?? "true") !== "false";
 
   try {
-    return await openReadWriteConnection(dbPath, threads, memoryLimit);
+    await openReadWriteConnection(dbPath, threads, memoryLimit);
+    // Release write lock after initialization — idle state is read-only.
+    // Write tools call upgradeToReadWrite() when they need writes.
+    await downgradeToReadOnly(dataDir);
+    return connection!; // downgradeToReadOnly reopened as RO
   } catch (error) {
     // Provide clear error message for common issues
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -417,7 +475,10 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
         for (let attempt = 0; attempt < 3; attempt++) {
           await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
           try {
-            return await openReadWriteConnection(dbPath, threads, memoryLimit);
+            await openReadWriteConnection(dbPath, threads, memoryLimit);
+            // Release write lock after initialization
+            await downgradeToReadOnly(dataDir);
+            return connection!;
           } catch (retryError) {
             const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
             if (attempt < 2 && isLockError(retryMsg)) continue;
@@ -498,6 +559,16 @@ export async function upgradeToReadWrite(
   if (connectionMode === "read_write" && connection) return connection;
   await closeConnection();
 
+  // Open directly in RW mode — do NOT go through getConnection() which would
+  // downgrade back to RO immediately after init.
+  // storedDbPath/storedThreads/storedMemoryLimit are set by the initial getConnection() call.
+  const dbPath = storedDbPath || path.join(dataDir, "analytics.duckdb");
+  const threads = storedThreads || process.env.DUCKDB_THREADS || defaultThreads();
+  const memoryLimit = storedMemoryLimit || process.env.DUCKDB_MEMORY_LIMIT || defaultMemoryLimit();
+  if (!storedMarketDbPath) {
+    storedMarketDbPath = resolveMarketDbPath(dataDir);
+  }
+
   // Try RW with retries — another session may briefly hold the lock during its own sync.
   // After /mcp reconnect, the old process may not have released the DuckDB file lock yet,
   // so we retry with increasing delays to allow the lock to fully release.
@@ -507,7 +578,7 @@ export async function upgradeToReadWrite(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await getConnection(dataDir);
+      return await openReadWriteConnection(dbPath, threads, memoryLimit);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (!isLockError(msg)) throw error;
@@ -551,6 +622,241 @@ export async function downgradeToReadOnly(dataDir: string): Promise<void> {
 }
 
 /**
+ * Open a DuckDB connection scoped to writes against market.duckdb only, with
+ * NO host file opened against analytics.duckdb.
+ *
+ * Shape: in-memory host instance, market.duckdb ATTACHed as `market` in
+ * READ_WRITE mode, market parquet views registered on the connection. Writes
+ * resolve to the attached market catalog; reads against the `market.*` views
+ * are served from the canonical parquet files under `<dataRoot>/market/`.
+ *
+ * Why this helper exists: callers whose only job is to write market data
+ * (intraday bar ingest, option-chain refresh, quote backfill) should not
+ * acquire any lock on analytics.duckdb. Holding analytics RW for a
+ * long-running market refresh blocks every parallel reader (other shells,
+ * dashboards, evaluation processes) from even opening analytics READ_ONLY —
+ * DuckDB rejects RO opens against a file that has an active WAL written by
+ * another process. Routing market writes through a `:memory:` host with
+ * market attached RW leaves analytics.duckdb completely untouched for the
+ * duration of the ingest, so concurrent processes keep their normal RO
+ * access. Market writes are still single-writer (the OS-level file lock on
+ * market.duckdb is unchanged) — this helper trades only the analytics lock.
+ *
+ * Important: the returned connection is NOT shared via the module-level
+ * singleton. `getCurrentConnection()` is not affected. The caller owns the
+ * lifecycle and must call `close()` to flush the market WAL and release the
+ * market.duckdb file lock.
+ *
+ * @param baseDir - Directory passed to the rest of the db/ module (the same
+ *   directory that `getConnection(baseDir)` would receive). Used as the
+ *   fallback parent for market.duckdb when neither `--market-db` nor
+ *   `MARKET_DB_PATH` is set, and as the fallback for `getDataRoot()`.
+ */
+export interface MarketOnlyConnection {
+  /** The active DuckDB connection. Backed by a `:memory:` host with `market` attached RW. */
+  conn: DuckDBConnection;
+  /** Resolved path to the market.duckdb file that was attached. */
+  marketDbPath: string;
+  /**
+   * Flush the market WAL, detach the market catalog, and close the connection
+   * + in-memory host instance. Best-effort on each step — surfaces no errors;
+   * the goal is to release the market.duckdb file lock for the next writer.
+   * Safe to call multiple times (subsequent calls are no-ops).
+   */
+  close(): Promise<void>;
+}
+
+export async function openMarketOnlyConnection(
+  baseDir: string,
+): Promise<MarketOnlyConnection> {
+  const marketDbPath = resolveMarketDbPath(baseDir);
+
+  // `:memory:` host means the connection does not open any on-disk database
+  // as the catalog root — analytics.duckdb is never touched by this code
+  // path. `enable_external_access: "true"` is required at instance creation
+  // to permit the ATTACH of a local file (DuckDB 1.4+ otherwise blocks all
+  // filesystem operations from within the connection).
+  const memoryInstance = await DuckDBInstance.create(":memory:", {
+    enable_external_access: "true",
+  });
+  const conn = await memoryInstance.connect();
+
+  // ATTACH market.duckdb as RW. Reuses the same path-resolution +
+  // corruption-recovery logic as the regular RW path so callers see
+  // consistent behavior.
+  await attachMarketDb(conn, marketDbPath, "read_write");
+
+  // Register views over the canonical market parquet partitions on this
+  // fresh connection. Without this, `SELECT ... FROM market.option_chain`
+  // (and friends) resolve only against the physical tables inside the
+  // attached market.duckdb — which is empty in the parquet-mode deployment
+  // where the partition files are the source of truth. createMarketParquetViews
+  // uses CREATE OR REPLACE so this is idempotent against pre-existing views
+  // inside market.duckdb.
+  const dataRoot = getDataRoot(baseDir);
+  await createMarketParquetViews(conn, dataRoot);
+
+  let closed = false;
+  const close = async (): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    // Flush the market WAL before detach so the file on disk is consistent
+    // for the next reader. DETACH is best-effort — if it fails (e.g. an
+    // in-flight statement still references the catalog), we still want to
+    // close the handle so subsequent processes can acquire the RW lock.
+    try { await conn.run("CHECKPOINT market"); } catch { /* non-fatal */ }
+    try { await detachMarketDb(conn); } catch { /* non-fatal */ }
+    try { conn.closeSync(); } catch { /* non-fatal */ }
+    try { memoryInstance.closeSync(); } catch { /* non-fatal */ }
+  };
+
+  return { conn, marketDbPath, close };
+}
+
+/**
+ * Open a parquet-backed market-data connection: an in-memory host with the
+ * `market.*` views registered over the canonical parquet partitions under
+ * `<dataRoot>/market/`, and WITHOUT attaching the shared market database file.
+ * No host file is opened against the analytics database either.
+ *
+ * This is the canonical helper for every parquet-mode consumer — read AND
+ * write. Once the shared market database file is out of the picture there is no
+ * read/write distinction for the *connection*: both inputs and outputs are
+ * parquet. Reads resolve against the in-memory `market.*` views (or direct
+ * `read_parquet` on absolute file paths, which store callers prefer). Writes go
+ * through `COPY ... TO '<file>' (FORMAT PARQUET)` staged in a per-connection
+ * `TEMP` table — a filesystem write that needs no attached catalog. The store
+ * write path stages and copies; it never `INSERT`s into the `market.*` views.
+ *
+ * Shape: in-memory host instance, a `market` schema created in-memory, and the
+ * market parquet views registered on that schema. Nothing is attached, so no
+ * OS-level file lock is taken on the shared market database — multiple readers,
+ * multiple parquet writers, and a legacy attach-based market writer all coexist
+ * without contention.
+ *
+ * Why this helper exists: the parquet-mode path's only inputs and outputs are
+ * the parquet partitions. The shared market database file is never the source
+ * of truth on this path, so attaching it is pure liability — it makes the
+ * caller block (or be blocked by) any other process holding the database file
+ * lock. Routing through a `:memory:` host with parquet views registered leaves
+ * the shared market database completely untouched. This is the parquet analog
+ * of `openMarketOnlyConnection` (the attach-based RW helper that non-parquet
+ * deployments still require for physical-table `INSERT`s into `market.*`); the
+ * one structural difference is that this path must CREATE the `market` schema
+ * itself (no attach creates it) before registering the views.
+ *
+ * Important: the returned connection is NOT shared via the module-level
+ * singleton. `getCurrentConnection()` is not affected. The caller owns the
+ * lifecycle and must call `close()`.
+ *
+ * @param baseDir - Directory passed to the rest of the db/ module (the same
+ *   directory that `getConnection(baseDir)` would receive). Used as the
+ *   fallback for `getDataRoot()` when neither `--data-root` nor the data-root
+ *   env var is set.
+ */
+export interface MarketParquetConnection {
+  /** The active DuckDB connection. Backed by a `:memory:` host with `market.*` parquet views. */
+  conn: DuckDBConnection;
+  /** Resolved data root the parquet views were registered against (for logging/parity). */
+  dataRoot: string;
+  /**
+   * Close the connection + in-memory host instance. Best-effort on each step.
+   * Nothing is attached on this path, so there is no WAL to flush and no
+   * catalog to detach. Safe to call multiple times (subsequent calls are
+   * no-ops).
+   */
+  close(): Promise<void>;
+}
+
+export async function openMarketParquetConnection(
+  baseDir: string,
+): Promise<MarketParquetConnection> {
+  // `:memory:` host means the connection does not open any on-disk database as
+  // the catalog root — neither the analytics database nor the shared market
+  // database file is touched by this code path. `enable_external_access:
+  // "true"` is required at instance creation to permit reads of local parquet
+  // files AND `COPY ... TO '<file>'` writes (DuckDB 1.4+ otherwise blocks all
+  // filesystem operations from within the connection).
+  const memoryInstance = await DuckDBInstance.create(":memory:", {
+    enable_external_access: "true",
+  });
+  const conn = await memoryInstance.connect();
+
+  // The `market.*` views target the `market` schema. On the attach-based
+  // paths the ATTACH creates that schema; here there is no attach, so we must
+  // create it before registering the views or every CREATE VIEW market.* fails
+  // with a catalog error.
+  await conn.run("CREATE SCHEMA IF NOT EXISTS market");
+
+  // Register views over the canonical market parquet partitions. These are the
+  // source of truth for reads; no physical market tables are consulted. The
+  // ingest write path uses these views for read-back during enrichment (e.g.
+  // the `market.spot_daily` identity-row backfill) and writes its output via
+  // `COPY ... TO` to parquet files — never an INSERT into a view.
+  const dataRoot = getDataRoot(baseDir);
+  await createMarketParquetViews(conn, dataRoot);
+
+  let closed = false;
+  const close = async (): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    try { conn.closeSync(); } catch { /* non-fatal */ }
+    try { memoryInstance.closeSync(); } catch { /* non-fatal */ }
+  };
+
+  return { conn, dataRoot, close };
+}
+
+/**
+ * Read-side name for {@link openMarketParquetConnection}. Retained as the
+ * canonical handle for read-only parquet consumers; the underlying connection
+ * is identical (parquet has no read/write distinction once the shared market
+ * database file is out of the picture).
+ */
+export type MarketReadOnlyConnection = MarketParquetConnection;
+
+export function openMarketReadOnlyConnection(
+  baseDir: string,
+): Promise<MarketReadOnlyConnection> {
+  return openMarketParquetConnection(baseDir);
+}
+
+/**
+ * Open a fresh read-only connection without going through `getConnection()`'s
+ * RW-init phase. The standard `getConnection()` flow always opens RW briefly
+ * to create schemas + parquet views before downgrading; that brief RW window
+ * is exclusive across processes (DuckDB is single-process-write) and races
+ * fatally with sibling readers when multiple consumers spin up at once.
+ *
+ * Use this when:
+ *   - Schemas + market views already exist (some prior RW caller initialized them)
+ *   - The caller only needs to *read* — no write tools, no schema setup
+ *   - Multiple processes need concurrent access to the same database
+ *
+ * The fork-pool in `self-improve.mjs --score all` is the canonical caller —
+ * each child worker reads strategy JSON + OO trades + parquet partitions and
+ * writes nothing back. Two RO connections never conflict.
+ *
+ * Returns a connection that's NOT shared via the module-level singleton —
+ * the caller owns it and is responsible for closing. (The internal
+ * `connection`/`instance` module state is still mutated for compatibility
+ * with `getCurrentConnection()` / store contexts that read from it; in a
+ * subprocess that's fine since the module state is per-worker.)
+ */
+export async function getReadOnlyConnection(dataDir: string): Promise<DuckDBConnection> {
+  if (connection) return connection;
+  const dbPath = path.join(dataDir, "analytics.duckdb");
+  const threads = process.env.DUCKDB_THREADS || defaultThreads();
+  const memoryLimit = process.env.DUCKDB_MEMORY_LIMIT || defaultMemoryLimit();
+  storedDbPath = dbPath;
+  storedThreads = threads;
+  storedMemoryLimit = memoryLimit;
+  storedMarketDbPath = resolveMarketDbPath(dataDir);
+  await openReadOnlyConnection(dbPath, threads, memoryLimit);
+  return connection!;
+}
+
+/**
  * Get the current connection mode.
  * Used by middleware to determine if sync should be skipped (RO fallback).
  */
@@ -566,16 +872,29 @@ export function isConnected(): boolean {
   return connection !== null;
 }
 
-// ---------------------------------------------------------------------------
-// Intraday write target
-// ---------------------------------------------------------------------------
-
-let _intradayWriteTable = 'market.intraday';
-
 /**
- * Returns the table name to INSERT intraday bars into.
- * Default: 'market.intraday'. Can be overridden by connection extensions.
+ * Sync accessor for the currently-active module-level connection.
+ *
+ * Resolves the *current* DuckDBConnection at call time. Designed to back a
+ * `get conn()` getter on `StoreContext` so stores that hold the ctx forever
+ * still see the connection that `upgradeToReadWrite` / `downgradeToReadOnly`
+ * swap in after init (the old handle is `closeSync()`-ed and would otherwise
+ * surface as "connection disconnected" on any subsequent read/write).
+ *
+ * Throws if no connection is open — callers should have already awaited
+ * `getConnection(dataDir)` during server init.
  */
-export function getIntradayWriteTable(): string {
-  return _intradayWriteTable;
+export function getCurrentConnection(): DuckDBConnection {
+  if (!connection) {
+    throw new Error(
+      "No active DuckDB connection. Call getConnection(dataDir) during server init before accessing store contexts.",
+    );
+  }
+  return connection;
 }
+
+// Note: the legacy intraday write-target getter / module-state variable and
+// the consumer override hook have been removed. Every spot write now flows
+// through SpotStore.writeBars (the canonical Hive-partitioned
+// `spot/ticker=X/date=Y/` layout); there is no longer a per-process override
+// of the write target.

@@ -6,8 +6,7 @@ on:
       - master
     paths:
       - 'packages/mcp-server/**'
-      - 'packages/agent-skills/**'
-      - 'lib/**'
+      - 'packages/lib/**'
   workflow_dispatch:
 
 permissions:
@@ -202,6 +201,10 @@ jobs:
 
             ### From Source
             ```bash
-            git clone https://github.com/davidromeo/tradeblocks
+            git clone https://github.com/tradeblocks-org/tradeblocks
             cd tradeblocks && npm install && npm run build:mcp
             ```
+
+            ---
+
+            Note: the canonical repo is now `tradeblocks-org/tradeblocks`. GitHub redirects keep old `davidromeo/tradeblocks` URLs working.

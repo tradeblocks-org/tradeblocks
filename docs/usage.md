@@ -115,7 +115,7 @@ Example SQL with normalized VIX JOINs:
 WITH joined AS (
   SELECT d.ticker, d.date, cd.Vol_Regime
   FROM market.daily d
-  LEFT JOIN market._context_derived cd ON cd.date = d.date
+  LEFT JOIN market.date_context cd ON cd.date = d.date
   WHERE d.ticker = 'SPX'
 ),
 lagged AS (

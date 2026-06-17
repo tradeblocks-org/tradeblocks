@@ -6,6 +6,15 @@
  */
 
 import type { DuckDBConnection } from "@duckdb/node-api";
+import { isParquetMode } from "../db/parquet-writer.ts";
+import {
+  getSyncMetadataJson,
+  upsertSyncMetadataJson,
+  deleteSyncMetadataJson,
+  getAllSyncedBlockIdsJson,
+  getMarketImportMetadataJson,
+  upsertMarketImportMetadataJson,
+} from "../db/json-adapters.ts";
 
 /**
  * Sync metadata for a block (trades._sync_metadata)
@@ -29,8 +38,12 @@ export interface BlockSyncMetadata {
  */
 export async function getSyncMetadata(
   conn: DuckDBConnection,
-  blockId: string
+  blockId: string,
+  blocksDir?: string
 ): Promise<BlockSyncMetadata | null> {
+  if (isParquetMode() && blocksDir) {
+    return getSyncMetadataJson(blockId, blocksDir);
+  }
   const reader = await conn.runAndReadAll(
     `SELECT block_id, tradelog_hash, dailylog_hash, reportinglog_hash, synced_at, sync_version
      FROM trades._sync_metadata
@@ -62,8 +75,12 @@ export async function getSyncMetadata(
  */
 export async function upsertSyncMetadata(
   conn: DuckDBConnection,
-  metadata: BlockSyncMetadata
+  metadata: BlockSyncMetadata,
+  blocksDir?: string
 ): Promise<void> {
+  if (isParquetMode() && blocksDir) {
+    return upsertSyncMetadataJson(metadata, blocksDir);
+  }
   await conn.run(
     `INSERT OR REPLACE INTO trades._sync_metadata
      (block_id, tradelog_hash, dailylog_hash, reportinglog_hash, synced_at, sync_version)
@@ -87,8 +104,13 @@ export async function upsertSyncMetadata(
  */
 export async function deleteSyncMetadata(
   conn: DuckDBConnection,
-  blockId: string
+  blockId: string,
+  blocksDir?: string
 ): Promise<void> {
+  if (isParquetMode() && blocksDir) {
+    await deleteSyncMetadataJson(blockId, blocksDir);
+    return;
+  }
   await conn.run(
     `DELETE FROM trades._sync_metadata WHERE block_id = $1`,
     [blockId]
@@ -102,8 +124,12 @@ export async function deleteSyncMetadata(
  * @returns Array of block IDs that have sync metadata
  */
 export async function getAllSyncedBlockIds(
-  conn: DuckDBConnection
+  conn: DuckDBConnection,
+  blocksDir?: string
 ): Promise<string[]> {
+  if (isParquetMode() && blocksDir) {
+    return getAllSyncedBlockIdsJson(blocksDir);
+  }
   const reader = await conn.runAndReadAll(
     `SELECT block_id FROM trades._sync_metadata`
   );
@@ -126,9 +152,8 @@ export async function getAllSyncedBlockIds(
 export interface MarketImportMetadata {
   source: string;       // e.g., "import_market_csv:/abs/path/to/file.csv"
   ticker: string;       // Normalized ticker e.g. "SPX"
-  target_table: string; // "daily" | "context" | "intraday"
+  target_table: string; // "daily" | "date_context" | "intraday" | other canonical datasets
   max_date: string | null;
-  enriched_through: string | null;
   synced_at: Date;
 }
 
@@ -139,10 +164,14 @@ export async function getMarketImportMetadata(
   conn: DuckDBConnection,
   source: string,
   ticker: string,
-  targetTable: string
+  targetTable: string,
+  dataDir?: string
 ): Promise<MarketImportMetadata | null> {
+  if (isParquetMode() && dataDir) {
+    return getMarketImportMetadataJson(source, ticker, targetTable, dataDir);
+  }
   const reader = await conn.runAndReadAll(
-    `SELECT source, ticker, target_table, max_date, enriched_through, synced_at
+    `SELECT source, ticker, target_table, max_date, synced_at
      FROM market._sync_metadata
      WHERE source = $1 AND ticker = $2 AND target_table = $3`,
     [source, ticker, targetTable]
@@ -155,33 +184,34 @@ export async function getMarketImportMetadata(
     ticker: row[1] as string,
     target_table: row[2] as string,
     max_date: row[3] as string | null,
-    enriched_through: row[4] as string | null,
-    synced_at: new Date(row[5] as string),
+    synced_at: new Date(row[4] as string),
   };
 }
 
 /**
  * Upsert market import metadata using the Phase 60 schema PK (source, ticker, target_table).
- * Updates max_date, enriched_through, and synced_at on conflict.
+ * Updates max_date and synced_at on conflict.
  */
 export async function upsertMarketImportMetadata(
   conn: DuckDBConnection,
-  metadata: MarketImportMetadata
+  metadata: MarketImportMetadata,
+  dataDir?: string
 ): Promise<void> {
+  if (isParquetMode() && dataDir) {
+    return upsertMarketImportMetadataJson(metadata, dataDir);
+  }
   await conn.run(
     `INSERT INTO market._sync_metadata
-       (source, ticker, target_table, max_date, enriched_through, synced_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
+       (source, ticker, target_table, max_date, synced_at)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (source, ticker, target_table) DO UPDATE SET
        max_date = EXCLUDED.max_date,
-       enriched_through = EXCLUDED.enriched_through,
        synced_at = EXCLUDED.synced_at`,
     [
       metadata.source,
       metadata.ticker,
       metadata.target_table,
       metadata.max_date,
-      metadata.enriched_through,
       metadata.synced_at.toISOString(),
     ]
   );

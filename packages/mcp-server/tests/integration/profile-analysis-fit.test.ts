@@ -16,11 +16,12 @@ import { tmpdir } from "os";
 import {
   getConnection,
   closeConnection,
+  upgradeToReadWrite,
   handleAnalyzeStructureFit,
   handleValidateEntryFilters,
   upsertProfile,
   ensureProfilesSchema,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 let tempDir: string;
 
@@ -47,8 +48,10 @@ async function createBlockWithTrades(
 }
 
 /**
- * Insert market data rows into DuckDB (market.daily + market._context_derived).
- * Phase 75: VIX fields moved from market.context to market.daily (ticker rows) + market._context_derived.
+ * Insert market data rows into DuckDB. Writes to the v3.0 canonical tables
+ * (market.enriched + market.enriched_context + market.spot) that Phase 6 Wave 1
+ * SQL builders target. The legacy fallback tables (retired in Phase 6 Wave D)
+ * are no longer created or read by buildLookaheadFreeQuery / buildOutcomeQuery.
  * Inserts enough fields for filter testing: Vol_Regime, VIX_Close, RSI_14, Day_of_Week.
  */
 async function insertMarketData(
@@ -66,28 +69,36 @@ async function insertMarketData(
   };
 
   for (const row of rows) {
-    // market.daily with Day_of_Week, RSI_14 for SPX
+    // market.enriched (SPX) — computed indicators + calendar fields (no OHLCV)
     await c.run(
-      `INSERT OR IGNORE INTO market.daily (ticker, date, Open, High, Low, Close, Prior_Close, Gap_Pct, Day_of_Week, RSI_14)
-       VALUES ('SPX', '${row.date}', 4500, 4520, 4480, 4510, 4490, 0.1, ${row.dayOfWeek}, ${row.rsi14})`
+      `INSERT OR IGNORE INTO market.enriched (ticker, date, Prior_Close, Gap_Pct, Day_of_Week, RSI_14)
+       VALUES ('SPX', '${row.date}', 4490, 0.1, ${row.dayOfWeek}, ${row.rsi14})`
     );
 
-    // market.daily VIX ticker row (Phase 75: VIX_Close comes from here)
+    // market.spot (SPX minute bars) — two bars so the spot_daily VIEW aggregates a daily row.
     await c.run(
-      `INSERT OR IGNORE INTO market.daily (ticker, date, Open, High, Low, Close, Prior_Close)
-       VALUES ('VIX', '${row.date}', ${row.vixClose + 0.5}, ${row.vixClose + 1}, ${row.vixClose - 0.5}, ${row.vixClose}, ${row.vixClose - 0.3})`
+      `INSERT OR IGNORE INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+       VALUES ('SPX', '${row.date}', '09:30', 4500, 4520, 4480, 4505, 4499, 4501),
+              ('SPX', '${row.date}', '16:00', 4505, 4520, 4480, 4510, 4509, 4511)`
     );
 
-    // market._context_derived with Vol_Regime (Phase 75: Vol_Regime comes from here)
+    // market.enriched (VIX) — VIX-family IVR/IVP live here post-Phase-6.
     await c.run(
-      `INSERT OR IGNORE INTO market._context_derived (date, Vol_Regime)
+      `INSERT OR IGNORE INTO market.enriched (ticker, date, ivr, ivp)
+       VALUES ('VIX', '${row.date}', 50, 50)`
+    );
+
+    // market.spot (VIX minute bars) — feed the spot_daily view for VIX OHLCV.
+    await c.run(
+      `INSERT OR IGNORE INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+       VALUES ('VIX', '${row.date}', '09:30', ${row.vixClose + 0.5}, ${row.vixClose + 1}, ${row.vixClose - 0.5}, ${row.vixClose + 0.2}, ${row.vixClose + 0.4}, ${row.vixClose + 0.6}),
+              ('VIX', '${row.date}', '16:00', ${row.vixClose + 0.2}, ${row.vixClose + 1}, ${row.vixClose - 0.5}, ${row.vixClose}, ${row.vixClose - 0.1}, ${row.vixClose + 0.1})`
+    );
+
+    // market.enriched_context — cross-ticker Vol_Regime.
+    await c.run(
+      `INSERT OR IGNORE INTO market.enriched_context (date, Vol_Regime)
        VALUES ('${row.date}', ${row.volRegime})`
-    );
-
-    // Also insert into market.context for backward compat queries (legacy)
-    await c.run(
-      `INSERT OR IGNORE INTO market.context (date, Vol_Regime, VIX_Open, VIX_Close)
-       VALUES ('${row.date}', ${row.volRegime}, ${row.vixClose + 0.5}, ${row.vixClose})`
     );
   }
 }
@@ -187,7 +198,8 @@ const TRADES = [
 
 beforeEach(async () => {
   tempDir = await fs.mkdtemp(path.join(tmpdir(), "profile-analysis-fit-"));
-  const conn = await getConnection(tempDir);
+  await getConnection(tempDir);
+  const conn = await upgradeToReadWrite(tempDir);
   await ensureProfilesSchema(conn);
 });
 

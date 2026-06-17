@@ -5,12 +5,22 @@
  * (analytics.duckdb) and the market database (market.duckdb).
  */
 
-export { getConnection, closeConnection, isConnected, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "./connection.js";
+export { getConnection, closeConnection, isConnected, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode, getCurrentConnection, openMarketOnlyConnection, openMarketParquetConnection, openMarketReadOnlyConnection } from "./connection.ts";
+export type { MarketOnlyConnection, MarketParquetConnection, MarketReadOnlyConnection } from "./connection.ts";
 export {
   ensureSyncTables,
   ensureTradeDataTable,
   ensureReportingDataTable,
   tableExists,
-} from "./schemas.js";
-export { ensureMarketTables } from "./market-schemas.js";
-export { ensureProfilesSchema, upsertProfile, getProfile, listProfiles, deleteProfile } from "./profile-schemas.js";
+} from "./schemas.ts";
+export { ensureMutableMarketTables, ensureMarketDataTables } from "./market-schemas.ts";
+export { ensureProfilesSchema, upsertProfile, getProfile, listProfiles, deleteProfile } from "./profile-schemas.ts";
+export { isParquetMode, writeParquetAtomic, writeParquetPartition, resolveMarketDir } from "./parquet-writer.ts";
+export {
+  resolveCanonicalMarketFile,
+  resolveCanonicalMarketPartitionDir,
+  resolveCanonicalMarketPartitionPath,
+  resolveCanonicalMarketPartitionFile,
+  canonicalMarketTableName,
+} from "./market-datasets.ts";
+export { readJsonFile, writeJsonFile, deleteJsonFile, listJsonFiles, toFileSlug } from "./json-store.ts";

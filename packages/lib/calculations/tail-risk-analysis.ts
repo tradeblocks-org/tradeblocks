@@ -9,19 +9,19 @@
  */
 
 import { eigs, matrix } from "mathjs";
-import {
+import type {
   AlignedStrategyReturns,
   MarginalContribution,
   TailRiskAnalysisOptions,
   TailRiskAnalysisResult,
-  TailRiskAnalytics,
-} from "../models/tail-risk";
-import { Trade } from "../models/trade";
+  TailRiskAnalytics
+} from "../models/tail-risk.ts";
+import type { Trade } from "../models/trade.ts";
 import {
   kendallTau,
   kendallTauToPearson,
   probabilityIntegralTransform,
-} from "./statistical-utils";
+} from "./statistical-utils.ts";
 
 // Threshold for classifying a strategy pair as having "high" tail dependence
 // Pairs above this value are flagged in analytics as concerning

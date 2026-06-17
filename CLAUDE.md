@@ -106,10 +106,10 @@ A Next.js 15 application for analyzing options trading performance. Processes CS
 | @duckdb/node-api 1.4.4 | Node.js 22 | Already validated by existing test suite |
 ## Sources
 - Runtime verification: `node --version` → v22.22.0; `node -e "console.log(typeof fetch)"` → `function` (HIGH confidence)
-- `/home/david/code/tradeblocks/packages/mcp-server/package.json` — confirmed installed deps and versions (HIGH confidence)
-- `/home/david/code/tradeblocks/.planning/PROJECT.md` — "No new dependencies for core: Massive API calls use native fetch" constraint (HIGH confidence)
-- `/home/david/code/tradeblocks/packages/mcp-server/src/db/connection.ts` — `process.env.*` pattern (HIGH confidence)
-- `/home/david/code/tradeblocks/packages/mcp-server/jest.config.js` — ESM + ts-jest preset confirmed (HIGH confidence)
+- `packages/mcp-server/package.json` — confirmed installed deps and versions (HIGH confidence)
+- Project dependency constraint — "no new dependencies for core; native fetch for API calls" (HIGH confidence)
+- `packages/mcp-server/src/db/connection.ts` — `process.env.*` pattern (HIGH confidence)
+- `packages/mcp-server/jest.config.js` — ESM + ts-jest preset confirmed (HIGH confidence)
 - Node.js 22 fetch stabilization: https://nodejs.org/en/blog/release/v22.0.0 (HIGH confidence — fetch stable, not experimental, since Node.js 21)
 - Jest 30 global spy pattern: jest.spyOn(globalThis, 'fetch') — standard pattern for mocking native fetch globals in Jest; confirmed consistent with Jest 30 release notes approach to ESM globals (MEDIUM confidence — verified via Jest docs cross-reference, not live Context7 query)
 <!-- GSD:stack-end -->
@@ -117,7 +117,22 @@ A Next.js 15 application for analyzing options trading performance. Processes CS
 <!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during development.
+### Communicating effort
+
+Never estimate effort in time units (hours, days, weeks, sprints). Time estimates are uncalibrated to David's actual workflow and create false precision.
+
+Frame effort as **complexity weighted to value/outcome**:
+- **Scope**: how many files / call sites / systems are affected
+- **Complexity**: mechanical edit vs. design change vs. cross-cutting rewrite
+- **Blast radius**: what breaks if it goes wrong (tests, public repo users, live trading)
+- **Value delivered**: what problem this actually solves and how big that problem is
+
+**Bad:** "multi-day rewrite", "an afternoon's work", "~2 hours"
+**Good:** "large rewrite — every Theta call site remaps + new auth model + native binary in distribution — for marginal value over the 30-line transpose fix already in place"
+**Good:** "small mechanical change in one file, no consumer impact, fixes the immediate breakage Amy reported"
+**Good:** "medium refactor across 3 files, blast radius limited to <feature> scoring path, unblocks the autonomous-iteration agent work"
+
+When recommending between options, lead with the value delta and the blast radius — those are what David is actually weighing.
 <!-- GSD:conventions-end -->
 
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->

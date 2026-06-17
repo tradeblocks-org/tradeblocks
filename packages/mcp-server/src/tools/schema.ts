@@ -8,14 +8,14 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.js";
-import { withFullSync } from "./middleware/sync-middleware.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { getConnection, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.ts";
+import { withFullSync } from "./middleware/sync-middleware.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
 import {
   SCHEMA_DESCRIPTIONS,
   EXAMPLE_QUERIES,
   type ColumnDescription,
-} from "../utils/schema-metadata.js";
+} from "../utils/schema-metadata.ts";
 import {
   OPEN_KNOWN_FIELDS,
   CLOSE_KNOWN_FIELDS,
@@ -23,7 +23,7 @@ import {
   DAILY_OPEN_FIELDS,
   DAILY_STATIC_FIELDS,
   CONTEXT_OPEN_FIELDS,
-} from "../utils/field-timing.js";
+} from "../utils/field-timing.ts";
 
 // ============================================================================
 // Types for output structure
@@ -109,11 +109,12 @@ function generateLagTemplate(): {
   const contextOpenCols = [...CONTEXT_OPEN_FIELDS].map(f => `    c.${f}`).join(',\n');
   const staticCols = [...DAILY_STATIC_FIELDS].map(f => `    d.${f}`).join(',\n');
 
-  const sql = `-- Lookahead-free CTE template for market.daily + VIX tickers + market._context_derived
+  const sql = `-- Lookahead-free CTE template for market.enriched + market.spot_daily + VIX tickers + market.enriched_context
 -- Open-known fields: safe to use same-day (known at/before market open)
 -- Static fields: safe to use same-day (calendar facts)
 -- Close-derived fields: use LAG() for prior trading day values
 --
+-- Indicators come from market.enriched; OHLCV (open/high/low/close) comes from market.spot_daily.
 -- Copy this CTE into your query, then JOIN on (ticker, date)
 WITH requested AS (
   SELECT DISTINCT
@@ -125,27 +126,31 @@ WITH requested AS (
 joined AS (
   -- Scan full ticker history so LAG sees correct prior trading day
   SELECT d.ticker, d.date,
-    -- Open-known fields from daily (safe same-day)
+    -- Open-known fields from enriched indicators (safe same-day)
 ${dailyOpenCols},
     -- Open-known fields from VIX ticker JOIN (safe same-day)
 ${contextOpenCols},
     -- Static fields (safe same-day)
 ${staticCols},
-    -- Close-derived fields from daily + VIX JOINs + _context_derived (will be LAGged below)
-    d.high, d.low, d.close, d.RSI_14, d.ATR_Pct,
+    -- Close-derived fields from enriched + spot_daily OHLCV + VIX JOINs + enriched_context (will be LAGged below)
+    s.high, s.low, s.close, d.RSI_14, d.ATR_Pct,
     d.Realized_Vol_5D, d.Realized_Vol_20D, d.Return_5D, d.Return_20D,
     d.Intraday_Range_Pct, d.Intraday_Return_Pct, d.Close_Position_In_Range,
     d.Gap_Filled, d.Consecutive_Days,
-    vix.close AS VIX_Close, vix.high AS VIX_High, vix.low AS VIX_Low,
+    vix_s.close AS VIX_Close, vix_s.high AS VIX_High, vix_s.low AS VIX_Low,
     vix.ivr AS VIX_IVR, vix.ivp AS VIX_IVP,
-    vix9d.close AS VIX9D_Close, vix9d.ivr AS VIX9D_IVR, vix9d.ivp AS VIX9D_IVP,
-    vix3m.close AS VIX3M_Close, vix3m.ivr AS VIX3M_IVR, vix3m.ivp AS VIX3M_IVP,
+    vix9d_s.close AS VIX9D_Close, vix9d.ivr AS VIX9D_IVR, vix9d.ivp AS VIX9D_IVP,
+    vix3m_s.close AS VIX3M_Close, vix3m.ivr AS VIX3M_IVR, vix3m.ivp AS VIX3M_IVP,
     cd.Vol_Regime, cd.Term_Structure_State, cd.VIX_Spike_Pct
-  FROM market.daily d
-  LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'
-  LEFT JOIN market.daily vix9d ON vix9d.date = d.date AND vix9d.ticker = 'VIX9D'
-  LEFT JOIN market.daily vix3m ON vix3m.date = d.date AND vix3m.ticker = 'VIX3M'
-  LEFT JOIN market._context_derived cd ON cd.date = d.date
+  FROM market.enriched d
+  LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date
+  LEFT JOIN market.spot_daily vix_s ON vix_s.date = d.date AND vix_s.ticker = 'VIX'
+  LEFT JOIN market.enriched vix ON vix.date = d.date AND vix.ticker = 'VIX'
+  LEFT JOIN market.spot_daily vix9d_s ON vix9d_s.date = d.date AND vix9d_s.ticker = 'VIX9D'
+  LEFT JOIN market.enriched vix9d ON vix9d.date = d.date AND vix9d.ticker = 'VIX9D'
+  LEFT JOIN market.spot_daily vix3m_s ON vix3m_s.date = d.date AND vix3m_s.ticker = 'VIX3M'
+  LEFT JOIN market.enriched vix3m ON vix3m.date = d.date AND vix3m.ticker = 'VIX3M'
+  LEFT JOIN market.enriched_context cd ON cd.date = d.date
   WHERE d.ticker IN (SELECT ticker FROM requested)
 ),
 lagged AS (
@@ -169,7 +174,7 @@ WHERE t.block_id = 'my-block'`;
 
   return {
     description:
-      'Reusable LAG() CTE for lookahead-free queries joining trades to market.daily + VIX tickers + market._context_derived. ' +
+      'Reusable LAG() CTE for lookahead-free queries joining trades to market.enriched + market.spot_daily + VIX tickers + market.enriched_context. ' +
       'Close-derived fields (VIX_Close, Vol_Regime, RSI_14, etc.) use LAG() to get the prior trading day value, ' +
       'preventing lookahead bias. Open-known and static fields are safe to use same-day.',
     sql,
@@ -294,15 +299,15 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
         schemas[schemaName].tables[tableName] = tableInfo;
       }
 
-      // Discover available VIX tenors from market.daily
+      // Discover available VIX tenors from market.enriched
       let vixTenors: string[] = [];
       try {
         const tenorResult = await conn.runAndReadAll(
-          `SELECT DISTINCT ticker FROM market.daily WHERE ticker LIKE 'VIX%' ORDER BY ticker`
+          `SELECT DISTINCT ticker FROM market.enriched WHERE ticker LIKE 'VIX%' ORDER BY ticker`
         );
         vixTenors = tenorResult.getRows().map(r => r[0] as string);
       } catch {
-        // No market.daily or no VIX rows — skip
+        // No market.enriched or no VIX rows — skip
       }
 
       // Build output
@@ -313,8 +318,8 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
         importWorkflow: {
           description: "Two-step pipeline to populate market tables from CSV exports.",
           steps: [
-            "1. import_market_csv — ingest raw CSV (daily OHLCV, VIX tenors, or intraday bars) into market.daily / market.intraday",
-            "2. enrich_market_data — compute ~40 derived indicators (RSI, ATR, IVR, IVP, Vol_Regime, etc.) and write back to market.daily and market._context_derived",
+            "1. import_market_csv — ingest raw CSV (daily OHLCV, VIX tenors, or intraday bars) into market.spot (feeds market.spot_daily) or market.enriched",
+            "2. enrich_market_data — compute ~40 derived indicators (RSI, ATR, IVR, IVP, Vol_Regime, etc.) and write back to market.enriched and market.enriched_context",
           ],
         },
         syncInfo: {
@@ -322,8 +327,8 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
         },
         vixTenors: vixTenors.length > 0 ? {
           available: vixTenors,
-          queryPattern: "SELECT date, close, ivr, ivp FROM market.daily WHERE ticker = '{TENOR}'",
-          ratioPattern: "SELECT a.date, a.close / b.close AS ratio FROM market.daily a JOIN market.daily b ON a.date = b.date AND b.ticker = 'VIX' WHERE a.ticker = '{TENOR}'",
+          queryPattern: "SELECT e.date, s.close, e.ivr, e.ivp FROM market.enriched e JOIN market.spot_daily s ON s.date = e.date AND s.ticker = e.ticker WHERE e.ticker = '{TENOR}'",
+          ratioPattern: "SELECT a.date, a.close / b.close AS ratio FROM market.spot_daily a JOIN market.spot_daily b ON a.date = b.date AND b.ticker = 'VIX' WHERE a.ticker = '{TENOR}'",
         } : undefined,
       };
 
@@ -343,12 +348,12 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
     {
       description:
         "Delete all data from a market table and clear its sync metadata. " +
-        "Use when market data is corrupted and needs to be re-imported from CSV. " +
-        "After purging, re-import with import_market_csv and re-run enrich_market_data. " +
-        "Valid tables: daily, context, intraday",
+        "Use when market data is corrupted and needs to be re-imported. " +
+        "After purging, re-import with the market import tools and re-run enrich_market_data as needed. " +
+        "Valid tables: daily, date_context, intraday",
       inputSchema: z.object({
         table: z
-          .enum(["daily", "context", "intraday"])
+          .enum(["daily", "date_context", "intraday"])
           .describe("Market table to purge (without 'market.' prefix)"),
       }),
     },

@@ -91,7 +91,7 @@ export function SidebarFooterLegal() {
             </a>
             <span className="text-muted-foreground/50">•</span>
             <Link
-              href="https://github.com/davidromeo/tradeblocks"
+              href="https://github.com/tradeblocks-org/tradeblocks"
               target="_blank"
               className="inline-flex items-center gap-1 transition hover:text-foreground"
             >
@@ -166,7 +166,7 @@ export function SidebarFooterLegal() {
         </a>
         <span className="text-muted-foreground/50">•</span>
         <Link
-          href="https://github.com/davidromeo/tradeblocks"
+          href="https://github.com/tradeblocks-org/tradeblocks"
           target="_blank"
           className="inline-flex items-center gap-1.5 transition hover:text-foreground"
         >

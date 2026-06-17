@@ -9,11 +9,12 @@
  */
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { fileURLToPath } from 'url';
 
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { loadBlock, listBlocks, closeConnection } from '../src/test-exports.js';
+import { loadBlock, listBlocks, importCsv, closeConnection } from '../src/test-exports.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +29,22 @@ afterAll(async () => {
   try { await fs.unlink(path.join(FIXTURES_DIR, 'market.duckdb')); } catch { /* ignore */ }
   try { await fs.unlink(path.join(FIXTURES_DIR, 'market.duckdb.wal')); } catch { /* ignore */ }
 });
+
+async function withNestedBlocksFixture<T>(fn: (dataRoot: string) => Promise<T>): Promise<T> {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tb-block-root-'));
+  const blocksDir = path.join(tmpRoot, 'blocks');
+  await fs.mkdir(blocksDir, { recursive: true });
+  await fs.cp(path.join(FIXTURES_DIR, 'mock-block'), path.join(blocksDir, 'mock-block'), { recursive: true });
+  await fs.cp(path.join(FIXTURES_DIR, 'nonstandard-name'), path.join(blocksDir, 'nonstandard-name'), { recursive: true });
+
+  try {
+    await closeConnection();
+    return await fn(tmpRoot);
+  } finally {
+    await closeConnection();
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  }
+}
 
 describe('block-loader', () => {
   describe('listBlocks', () => {
@@ -60,6 +77,14 @@ describe('block-loader', () => {
       // nonstandard-name folder has my-custom-trades.csv
       const nonstandardBlock = blocks.find((b: { blockId: string }) => b.blockId === 'nonstandard-name');
       expect(nonstandardBlock).toBeDefined();
+    });
+
+    it('should scan nested blocks directory when data root contains blocks/', async () => {
+      await withNestedBlocksFixture(async (dataRoot) => {
+        const blocks = await listBlocks(dataRoot);
+        expect(blocks.find((b: { blockId: string }) => b.blockId === 'mock-block')).toBeDefined();
+        expect(blocks.find((b: { blockId: string }) => b.blockId === 'nonstandard-name')).toBeDefined();
+      });
     });
   });
 
@@ -100,6 +125,30 @@ describe('block-loader', () => {
 
       expect(block.trades.length).toBe(2);
       expect(block.trades[0].strategy).toBe('Custom Strategy');
+    });
+
+    it('should load blocks from nested blocks directory when given data root', async () => {
+      await withNestedBlocksFixture(async (dataRoot) => {
+        const block = await loadBlock(dataRoot, 'mock-block');
+        expect(block.trades.length).toBe(5);
+      });
+    });
+  });
+
+  describe('importCsv', () => {
+    it('should import into nested blocks directory when data root contains blocks/', async () => {
+      await withNestedBlocksFixture(async (dataRoot) => {
+        const sourceCsv = path.join(FIXTURES_DIR, 'nonstandard-name', 'my-custom-trades.csv');
+        const result = await importCsv(dataRoot, {
+          csvPath: sourceCsv,
+          blockName: 'Imported Block',
+          csvType: 'tradelog',
+        });
+
+        expect(result.blockId).toBe('imported-block');
+        await expect(fs.access(path.join(dataRoot, 'blocks', 'imported-block', 'tradelog.csv'))).resolves.toBeUndefined();
+        await expect(fs.access(path.join(dataRoot, 'imported-block'))).rejects.toThrow();
+      });
     });
   });
 

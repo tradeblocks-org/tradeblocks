@@ -26,7 +26,7 @@ try {
     memory_limit: "64MB",
     enable_external_access: "false",
   });
-  await instance.connect(); // eslint-disable-line @typescript-eslint/no-unused-vars
+  await instance.connect();
 
   // Signal that we're alive and holding the lock
   process.stderr.write(`Lock holder ready: PID=${process.pid} DB=${dbPath}\n`);

@@ -8,13 +8,13 @@
  * derived fields that are expensive to compute for large portfolios.
  */
 
-import { EnrichedTrade } from "../models/enriched-trade";
+import type { EnrichedTrade } from "../models/enriched-trade.ts";
 import {
   promisifyRequest,
   STORES,
   withReadTransaction,
   withWriteTransaction,
-} from "./index";
+} from "./index.ts";
 
 /**
  * Cache entry for enriched trades

@@ -9,11 +9,11 @@ import { fileURLToPath } from 'url';
 
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { loadBlock } from '../../src/test-exports.js';
+import { loadBlock } from '../../src/test-exports.ts';
 
 // Import PortfolioStatsCalculator for expected value verification
 // @ts-expect-error - importing from bundled output
-import { PortfolioStatsCalculator } from '../../src/test-exports.js';
+import { PortfolioStatsCalculator } from '../../src/test-exports.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

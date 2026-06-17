@@ -13,15 +13,15 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.js";
+import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
 import {
   upsertProfile,
   getProfile,
   listProfiles,
   deleteProfile,
-} from "../db/profile-schemas.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import { withSyncedBlock } from "./middleware/sync-middleware.js";
+} from "../db/profile-schemas.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import { withSyncedBlock } from "./middleware/sync-middleware.ts";
 
 // ---------------------------------------------------------------------------
 // Zod schemas (exported for testability)
@@ -171,7 +171,7 @@ export async function handleProfileStrategy(
       requireTwoPricesPT: input.requireTwoPricesPT,
       closeOnCompletion: input.closeOnCompletion,
       ignoreMarginReq: input.ignoreMarginReq,
-    });
+    }, baseDir);
     return createToolOutput(
       `Profile saved: ${input.strategyName} for block ${input.blockId}`,
       { profile: stored }
@@ -189,7 +189,7 @@ export async function handleGetStrategyProfile(
   baseDir: string
 ): Promise<ReturnType<typeof createToolOutput>> {
   const conn = await getConnection(baseDir);
-  const profile = await getProfile(conn, input.blockId, input.strategyName);
+  const profile = await getProfile(conn, input.blockId, input.strategyName, baseDir);
   if (!profile) {
     return createToolOutput(
       `No profile found for strategy '${input.strategyName}' in block '${input.blockId}'`,
@@ -210,7 +210,7 @@ export async function handleListProfiles(
   baseDir: string
 ): Promise<ReturnType<typeof createToolOutput>> {
   const conn = await getConnection(baseDir);
-  const profiles = await listProfiles(conn, input.blockId);
+  const profiles = await listProfiles(conn, input.blockId, baseDir);
   const summaryRows = profiles.map((p) => ({
     blockId: p.blockId,
     strategyName: p.strategyName,
@@ -236,7 +236,7 @@ export async function handleDeleteProfile(
   await upgradeToReadWrite(baseDir);
   try {
     const conn = await getConnection(baseDir);
-    const deleted = await deleteProfile(conn, input.blockId, input.strategyName);
+    const deleted = await deleteProfile(conn, input.blockId, input.strategyName, baseDir);
     if (deleted) {
       return createToolOutput(
         `Deleted profile: ${input.strategyName} from block ${input.blockId}`,

@@ -23,7 +23,7 @@ import {
   handleListProfiles,
   handleDeleteProfile,
   profileStrategySchema,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 
 /**
  * Create a minimal valid profile input for testing.

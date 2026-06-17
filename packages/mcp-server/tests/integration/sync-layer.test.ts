@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 
 // Import from bundled test exports (test-exports.js has all dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { syncAllBlocks, syncBlock, getConnection, closeConnection } from '../../src/test-exports.js';
+import { syncAllBlocks, syncBlock, getConnection, closeConnection, upgradeToReadWrite } from '../../src/test-exports.ts';
 
 // Note: fileURLToPath and path.dirname are available if needed for fixtures
 // Tests use temporary directories for isolation, so these are not currently used
@@ -112,6 +112,10 @@ describe('Sync Layer Integration', () => {
   beforeEach(async () => {
     // Create isolated temp directory for each test
     testDir = await fs.mkdtemp(path.join(tmpdir(), 'sync-test-'));
+    // Pre-open connection in RW mode — getConnection() downgrades to RO after init,
+    // but sync operations need write access for INSERT/DELETE
+    await getConnection(testDir);
+    await upgradeToReadWrite(testDir);
   });
 
   afterEach(async () => {
@@ -525,8 +529,9 @@ describe('Sync Layer Integration', () => {
       await fs.rm(path.join(testDir, 'analytics.duckdb'), { force: true });
       await fs.rm(path.join(testDir, 'analytics.duckdb.wal'), { force: true });
 
-      // Reopen and verify required tables exist on the fresh DB file.
-      const conn = await getConnection(testDir);
+      // Reopen in RW mode and verify required tables exist on the fresh DB file.
+      await getConnection(testDir);
+      const conn = await upgradeToReadWrite(testDir);
       const syncMetaCheck = await conn.runAndReadAll(`
         SELECT COUNT(*)
         FROM duckdb_tables()

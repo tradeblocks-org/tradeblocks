@@ -6,21 +6,22 @@
  * filter suggestions, and Opening Range Breakout calculations.
  *
  * Data source: DuckDB normalized schema
- * - market.daily: Per-ticker OHLCV + enrichment indicators (including VIX tickers)
- * - market._context_derived: Global cross-ticker derived fields (Vol_Regime, Term_Structure_State, etc.)
- * - market.intraday: Raw bar data for ORB and intraday analysis
+ * - market.enriched: Per-ticker technical indicators (including VIX tickers: RSI, ATR, IVR/IVP, etc.)
+ * - market.spot_daily: RTH-aggregated daily OHLCV view over market.spot (per ticker, per date)
+ * - market.enriched_context: Global cross-ticker derived fields (Vol_Regime, Term_Structure_State, etc.)
+ * - market.spot: Minute bars (ticker-first layout) for ORB and intraday analysis
  */
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock } from "../utils/block-loader.js";
+import { loadBlock } from "../utils/block-loader.ts";
 import {
   createToolOutput,
   formatPercent,
-} from "../utils/output-formatter.js";
+} from "../utils/output-formatter.ts";
 import type { Trade } from "@tradeblocks/lib";
-import { getConnection } from "../db/connection.js";
-import { withFullSync } from "./middleware/sync-middleware.js";
+import { getConnection } from "../db/connection.ts";
+import { withFullSync } from "./middleware/sync-middleware.ts";
 import {
   buildLookaheadFreeQuery,
   buildOutcomeQuery,
@@ -28,28 +29,31 @@ import {
   OPEN_KNOWN_FIELDS,
   CLOSE_KNOWN_FIELDS,
   STATIC_FIELDS,
-} from "../utils/field-timing.js";
-import { filterByStrategy, filterByDateRange } from "./shared/filters.js";
+} from "../utils/field-timing.ts";
+import { filterByStrategy, filterByDateRange } from "./shared/filters.ts";
 import {
   DEFAULT_MARKET_TICKER,
   marketTickerDateKey,
   normalizeTicker,
   resolveTradeTicker,
-} from "../utils/ticker.js";
-import { checkDataAvailability } from "../utils/data-availability.js";
-import { getProfile } from "../db/profile-schemas.js";
+} from "../utils/ticker.ts";
+import { checkDataAvailability } from "../utils/data-availability.ts";
+import { getProfile } from "../db/profile-schemas.ts";
+import type { MarketStores } from "../market/stores/index.ts";
 
 // =============================================================================
 // Types
 // =============================================================================
 
 /**
- * Daily market data columns sourced from market.daily + market._context_derived (normalized schema).
- * Kept as documentation reference for the multi-table JOIN pattern.
+ * Daily market data columns sourced from market.enriched + market.spot_daily + market.enriched_context
+ * (normalized schema). Kept as documentation reference for the multi-table JOIN pattern.
  *
- * market.daily: Per-ticker OHLCV + technical indicators (Gap_Pct, ATR_Pct, RSI_14, Realized_Vol_5D/20D, etc.)
- * market.daily (VIX tickers): VIX_Open, VIX_Close, VIX9D_Close, VIX3M_Close, ivr/ivp per tenor via ticker JOINs
- * market._context_derived: Cross-ticker derived fields (Vol_Regime, Term_Structure_State, VIX_Spike_Pct, etc.)
+ * market.enriched: Per-ticker technical indicators (Gap_Pct, ATR_Pct, RSI_14, Realized_Vol_5D/20D, etc.)
+ * market.spot_daily: Per-ticker daily OHLCV (open/high/low/close) aggregated from market.spot minute bars
+ * market.enriched (VIX tickers): ivr/ivp per tenor via ticker JOINs
+ * market.spot_daily (VIX tickers): VIX_Open, VIX_Close, VIX9D_Close, VIX3M_Close via ticker JOINs
+ * market.enriched_context: Cross-ticker derived fields (Vol_Regime, Term_Structure_State, VIX_Spike_Pct, etc.)
  *
  * Field timing:
  * - Open-known (safe for trade-entry analysis): Prior_Close, Gap_Pct, VIX_Open, VIX_Gap_Pct, Prior_Range_vs_ATR
@@ -60,37 +64,37 @@ import { getProfile } from "../db/profile-schemas.js";
 export interface DailyMarketData {
   date: string; // YYYY-MM-DD
   ticker: string;
-  // Core price (market.daily)
+  // Core price (market.spot_daily)
   Prior_Close: number; // open-known
   Open: number;
   High: number;
   Low: number;
   Close: number;
-  // Gap & movement (market.daily)
+  // Gap & movement (market.enriched)
   Gap_Pct: number; // open-known
   Prior_Range_vs_ATR: number; // open-known: prior day's (high-low)/ATR
   Intraday_Range_Pct: number;
   Intraday_Return_Pct: number;
   Close_Position_In_Range: number;
   Gap_Filled: number; // 0 or 1
-  // Realized volatility (market.daily)
+  // Realized volatility (market.enriched)
   Realized_Vol_5D: number;
   Realized_Vol_20D: number;
-  // Technical (market.daily)
+  // Technical (market.enriched)
   ATR_Pct: number;
   RSI_14: number;
   Price_vs_EMA21_Pct: number;
   Price_vs_SMA50_Pct: number;
-  // Momentum (market.daily)
+  // Momentum (market.enriched)
   Return_5D: number;
   Return_20D: number;
   Consecutive_Days: number;
   Prev_Return_Pct: number;
-  // Calendar (market.daily, static)
+  // Calendar (market.enriched, static)
   Day_of_Week: number; // 2=Mon...6=Fri
   Month: number;
   Is_Opex: number; // 0 or 1
-  // VIX (market.daily ticker='VIX' via JOIN)
+  // VIX (market.spot_daily ticker='VIX' via JOIN for OHLCV; market.enriched ticker='VIX' for ivr/ivp)
   VIX_Open: number; // open-known
   VIX_Gap_Pct: number; // open-known
   VIX_Close: number;
@@ -98,8 +102,8 @@ export interface DailyMarketData {
   VIX_Spike_Pct: number;
   VIX_IVR: number;
   VIX_IVP: number;
-  Vol_Regime: number; // 1-6 (market._context_derived)
-  // VIX term structure (market.daily ticker='VIX9D'/'VIX3M' via JOIN)
+  Vol_Regime: number; // 1-6 (market.enriched_context)
+  // VIX term structure (market.spot_daily ticker='VIX9D'/'VIX3M' via JOIN)
   VIX9D_Close: number;
   VIX3M_Close: number;
   VIX9D_VIX_Ratio: number;
@@ -108,7 +112,7 @@ export interface DailyMarketData {
 }
 
 /**
- * Intraday data is stored in market.intraday (normalized: one row per bar).
+ * Intraday data is stored in market.spot (ticker-first layout: one row per bar).
  * Schema: (ticker VARCHAR, date DATE, time VARCHAR -- HH:MM format, open, high, low, close, volume)
  * Primary key: (ticker, date, time)
  *
@@ -200,17 +204,6 @@ function recordsByTickerDate(
   return mapped;
 }
 
-function buildRequestedPairsClause(
-  keys: MarketLookupKey[]
-): { valuesClause: string; params: string[] } {
-  const params: string[] = [];
-  const rows = keys.map((key) => {
-    params.push(key.ticker, key.date);
-    return `($${params.length - 1}, $${params.length})`;
-  });
-  return { valuesClause: rows.join(", "), params };
-}
-
 /**
  * Get volatility regime label
  */
@@ -261,9 +254,13 @@ function getDayLabel(dow: number): string {
  * - analyze_regime_performance: Statistical breakdown by market regime
  * - suggest_filters: Market-based filter testing with projected impact
  * - enrich_trades: Returns trades enriched with lag-aware market context
- * - calculate_orb: Opening Range Breakout from market.intraday bar aggregation
+ * - calculate_orb: Opening Range Breakout from market.spot bar aggregation
  */
-export function registerMarketDataTools(server: McpServer, baseDir: string): void {
+export function registerMarketDataTools(
+  server: McpServer,
+  baseDir: string,
+  stores: MarketStores,
+): void {
   // ---------------------------------------------------------------------------
   // analyze_regime_performance - Break down performance by market regime
   // ---------------------------------------------------------------------------
@@ -271,10 +268,10 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
     "analyze_regime_performance",
     {
       description:
-        "Break down a block's trade performance by market regime using market.daily (including VIX tickers) and market._context_derived. " +
+        "Break down a block's trade performance by market regime using market.enriched + market.spot_daily (including VIX tickers) and market.enriched_context. " +
         "Identifies which market conditions favor or hurt the strategy. " +
         "Close-derived fields (volRegime, termStructure) use prior trading day values to prevent lookahead bias. " +
-        "Vol_Regime and Term_Structure_State come from market._context_derived via JOIN. " +
+        "Vol_Regime and Term_Structure_State come from market.enriched_context via JOIN. " +
         "Returns warnings when market data is partially missing.",
       inputSchema: z.object({
         blockId: z.string().describe("Block ID to analyze"),
@@ -313,7 +310,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
 
         // Check data availability and collect warnings
         const resolvedTicker = normalizeTicker(ticker || '') || DEFAULT_MARKET_TICKER;
-        const availability = await checkDataAvailability(conn, resolvedTicker);
+        const availability = await checkDataAvailability(stores, resolvedTicker);
 
         const { sql: lagSql, params: lagParams } = buildLookaheadFreeQuery(tradeKeys);
         const dailyResult = await conn.runAndReadAll(lagSql, lagParams);
@@ -463,7 +460,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
 
         const laggedSegments = ["volRegime", "termStructure"];
         const lagNote = laggedSegments.includes(segmentBy)
-          ? `Segmentation by ${segmentBy} uses prior trading day values (close-derived field from market._context_derived) to prevent lookahead bias.`
+          ? `Segmentation by ${segmentBy} uses prior trading day values (close-derived field from market.enriched_context) to prevent lookahead bias.`
           : `Segmentation by ${segmentBy} uses same-day values (${segmentBy === "dayOfWeek" ? "static" : "open-known"} field).`;
 
         // Future: Realized_Vol quartile and IVR/IVP regime segmentation dimensions can be added here
@@ -511,7 +508,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
         "Returns actionable standalone filter suggestions plus composite filters where cross-field correlations are strong. " +
         "Close-derived fields (VIX_Close, Vol_Regime, RSI_14, Realized_Vol_5D/20D, VIX_IVR, VIX_IVP) use prior trading day values. " +
         "Open-known fields (Gap_Pct, VIX_Open, VIX_Gap_Pct, Prior_Range_vs_ATR, Day_of_Week, Is_Opex) use same-day values. " +
-        "Uses market.daily LEFT JOIN VIX tickers + market._context_derived. Returns warnings when market data is partially missing.",
+        "Uses market.enriched + market.spot_daily LEFT JOIN VIX tickers + market.enriched_context. Returns warnings when market data is partially missing.",
       inputSchema: z.object({
         blockId: z.string().describe("Block ID to analyze"),
         strategy: z.string().optional().describe("Filter to specific strategy"),
@@ -542,7 +539,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
         let profileEntryFilters: Array<{ field: string; operator: string; value: unknown; description?: string }> | null = null;
         if (strategyName) {
           const conn = await getConnection(baseDir);
-          const profile = await getProfile(conn, blockId, strategyName);
+          const profile = await getProfile(conn, blockId, strategyName, baseDir);
           if (profile) {
             profileEntryFilters = profile.entryFilters;
           }
@@ -564,7 +561,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
 
         // Check data availability and collect warnings
         const resolvedTickerSF = normalizeTicker(ticker || '') || DEFAULT_MARKET_TICKER;
-        const availabilitySF = await checkDataAvailability(conn, resolvedTickerSF);
+        const availabilitySF = await checkDataAvailability(stores, resolvedTickerSF);
 
         const { sql, params } = buildLookaheadFreeQuery(tradeKeys);
         const dailyResult = await conn.runAndReadAll(sql, params);
@@ -640,10 +637,10 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
           { name: "Skip Mondays", field: "Day_of_Week", operator: "==", value: 2, test: (m) => getNum(m, "Day_of_Week") === 2, lagged: false },
           // OPEX
           { name: "Skip OPEX days", field: "Is_Opex", operator: "==", value: 1, test: (m) => getNum(m, "Is_Opex") === 1, lagged: false },
-          // VIX_Open filters (new, BIAS-05)
+          // VIX_Open filters (open-known)
           { name: "Skip when VIX_Open > 25", field: "VIX_Open", operator: ">", value: 25, test: (m) => getNum(m, "VIX_Open") > 25, lagged: false },
           { name: "Skip when VIX_Open > 30", field: "VIX_Open", operator: ">", value: 30, test: (m) => getNum(m, "VIX_Open") > 30, lagged: false },
-          // VIX_Gap_Pct filters (new, BIAS-05)
+          // VIX_Gap_Pct filters (open-known)
           { name: "Skip when |VIX_Gap_Pct| > 10%", field: "VIX_Gap_Pct", operator: ">", value: 10, test: (m) => Math.abs(getNum(m, "VIX_Gap_Pct")) > 10, lagged: false },
           { name: "Skip when |VIX_Gap_Pct| > 15%", field: "VIX_Gap_Pct", operator: ">", value: 15, test: (m) => Math.abs(getNum(m, "VIX_Gap_Pct")) > 15, lagged: false },
 
@@ -667,15 +664,15 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
           { name: "Skip when prior-day RSI > 70", field: "RSI_14", operator: ">", value: 70, test: (m) => getNum(m, "prev_RSI_14") > 70, lagged: true },
           { name: "Skip when prior-day RSI < 30", field: "RSI_14", operator: "<", value: 30, test: (m) => getNum(m, "prev_RSI_14") < 30, lagged: true },
 
-          // Realized Vol filters (close-derived, from market.daily)
+          // Realized Vol filters (close-derived, from market.enriched)
           { name: "Skip when prior-day 5D realized vol > 1.5%", field: "Realized_Vol_5D", operator: ">", value: 1.5, test: (m) => getNum(m, "prev_Realized_Vol_5D") > 1.5, lagged: true },
           { name: "Skip when prior-day 20D realized vol > 1.2%", field: "Realized_Vol_20D", operator: ">", value: 1.2, test: (m) => getNum(m, "prev_Realized_Vol_20D") > 1.2, lagged: true },
 
-          // IVP filters (close-derived, from market.daily ivr/ivp columns)
+          // IVP filters (close-derived, from market.enriched ivr/ivp columns)
           { name: "Skip when prior-day VIX_IVP > 80 (top 20% historically elevated vol)", field: "VIX_IVP", operator: ">", value: 80, test: (m) => getNum(m, "prev_VIX_IVP") > 80, lagged: true },
           { name: "Skip when prior-day VIX_IVP < 20 (bottom 20% historically suppressed vol)", field: "VIX_IVP", operator: "<", value: 20, test: (m) => getNum(m, "prev_VIX_IVP") < 20, lagged: true },
 
-          // Prior_Range_vs_ATR filter (open-known, from market.daily — same-day value)
+          // Prior_Range_vs_ATR filter (open-known, from market.enriched — same-day value)
           { name: "Skip when Prior_Range_vs_ATR > 1.5 (prior day had outsized range)", field: "Prior_Range_vs_ATR", operator: ">", value: 1.5, test: (m) => getNum(m, "Prior_Range_vs_ATR") > 1.5, lagged: false },
           { name: "Skip when Prior_Range_vs_ATR < 0.5 (prior day had compressed range)", field: "Prior_Range_vs_ATR", operator: "<", value: 0.5, test: (m) => getNum(m, "Prior_Range_vs_ATR") < 0.5, lagged: false },
         ];
@@ -889,12 +886,12 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
     "enrich_trades",
     {
       description:
-        "Enrich trades with market context from market.daily (ticker-specific + VIX tickers) and market._context_derived using correct temporal joins. " +
+        "Enrich trades with market context from market.enriched + market.spot_daily (ticker-specific + VIX tickers) and market.enriched_context using correct temporal joins. " +
         "Open-known fields (Gap_Pct, VIX_Open, Prior_Range_vs_ATR) use same-day values. " +
         "Close-derived fields (VIX_Close, RSI_14, Vol_Regime, Realized_Vol_5D/20D, VIX_IVR, VIX_IVP) use prior trading day values to prevent lookahead bias. " +
         "Enrichment fields: Realized_Vol_5D, Realized_Vol_20D, VIX_IVR, VIX_IVP, Prior_Range_vs_ATR. " +
         "Use includeOutcomeFields=true for post-hoc analysis (with clear warning). " +
-        "Use includeIntradayContext=true to get raw intraday bars (intradayBars: [{time, open, high, low, close}]) from market.intraday. " +
+        "Use includeIntradayContext=true to get raw intraday bars (intradayBars: [{time, open, high, low, close}]) from market.spot. " +
         "Returns warnings when market data is partially missing.",
       inputSchema: z.object({
         blockId: z.string().describe("Block ID to enrich"),
@@ -904,7 +901,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
         ticker: z.string().optional().describe("Underlying ticker symbol (default: SPX)"),
         includeOutcomeFields: z.boolean().default(false).describe("Include same-day close values (lookahead). Defaults to false for safety."),
         includeIntradayContext: z.boolean().default(false).describe(
-          "Include raw intraday bars from market.intraday (intradayBars array with time/open/high/low/close per bar). Requires 1 additional DuckDB query."
+          "Include raw intraday bars from market.spot (intradayBars array with time/open/high/low/close per bar). Requires 1 additional DuckDB query."
         ),
         limit: z.number().min(1).max(500).default(50).describe("Max trades to return (default: 50, max: 500)"),
         offset: z.number().min(0).default(0).describe("Pagination offset (default: 0)"),
@@ -956,7 +953,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
 
         // Check data availability and collect warnings
         const resolvedTickerET = normalizeTicker(ticker || '') || DEFAULT_MARKET_TICKER;
-        const availabilityET = await checkDataAvailability(conn, resolvedTickerET, { checkIntraday: includeIntradayContext });
+        const availabilityET = await checkDataAvailability(stores, resolvedTickerET, { checkIntraday: includeIntradayContext });
 
         const { sql: lagSql, params: lagParams } = buildLookaheadFreeQuery(tradeKeys);
         const dailyResult = await conn.runAndReadAll(lagSql, lagParams);
@@ -976,28 +973,37 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
         let intradayBarsByKey: Map<string, Array<{time: string, open: number, high: number, low: number, close: number}>> | null = null;
 
         if (includeIntradayContext) {
-          const { valuesClause: pairsClause, params: pairParams } = buildRequestedPairsClause(tradeKeys);
-          const intradayResult = await conn.runAndReadAll(
-            `WITH requested(ticker, date) AS (VALUES ${pairsClause})
-             SELECT i.ticker, i.date, i.time, i.open, i.high, i.low, i.close
-             FROM market.intraday i
-             JOIN requested r ON i.ticker = r.ticker AND i.date = r.date
-             ORDER BY i.ticker, i.date, i.time`,
-            pairParams
-          );
-          const intradayRecords = resultToRecords(intradayResult);
-          // Group by ticker+date into arrays of bars
+          // Read intraday bars per (ticker, date) via SpotStore. The store
+          // returns BarRow[] in (date, time) order; we group by ticker+date
+          // so the downstream consumer can index by trade key.
           intradayBarsByKey = new Map<string, Array<{time: string, open: number, high: number, low: number, close: number}>>();
-          for (const rec of intradayRecords) {
-            const key = marketTickerDateKey(String(rec.ticker), String(rec.date));
-            if (!intradayBarsByKey.has(key)) intradayBarsByKey.set(key, []);
-            intradayBarsByKey.get(key)!.push({
-              time: String(rec.time),
-              open: Number(rec.open),
-              high: Number(rec.high),
-              low: Number(rec.low),
-              close: Number(rec.close),
-            });
+          for (const key of tradeKeys) {
+            const bars = await stores.spot.readBars(key.ticker, key.date, key.date);
+            if (bars.length === 0) continue;
+            const mapKey = marketTickerDateKey(key.ticker, key.date);
+            const list = intradayBarsByKey.get(mapKey) ?? [];
+            for (const bar of bars) {
+              // Defense-in-depth: skip underlying bars with zero/null OHLC
+              // (provider gaps from the spot ingest). Raw bars are left
+              // unfiltered upstream so option tickers can keep legitimate
+              // "no trade" zeros; underlyings always have a real price, so
+              // a zero is a bug that would corrupt downstream high/low/range
+              // computations.
+              if (
+                !Number.isFinite(bar.open)  || bar.open  <= 0 ||
+                !Number.isFinite(bar.high)  || bar.high  <= 0 ||
+                !Number.isFinite(bar.low)   || bar.low   <= 0 ||
+                !Number.isFinite(bar.close) || bar.close <= 0
+              ) continue;
+              list.push({
+                time: String(bar.time),
+                open: Number(bar.open),
+                high: Number(bar.high),
+                low: Number(bar.low),
+                close: Number(bar.close),
+              });
+            }
+            intradayBarsByKey.set(mapKey, list);
           }
         }
 
@@ -1082,7 +1088,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
 
         // Build lagNote
         let lagNote =
-          "Entry context uses lookahead-free temporal joins on ticker+date via market.daily LEFT JOIN VIX tickers + market._context_derived. " +
+          "Entry context uses lookahead-free temporal joins on ticker+date via market.enriched + market.spot_daily LEFT JOIN VIX tickers + market.enriched_context. " +
           "Same-day (open-known) fields: Gap_Pct, VIX_Open, VIX_Gap_Pct, Prior_Range_vs_ATR, Day_of_Week, Month, Is_Opex. " +
           "Prior-day (close-derived) fields: VIX_Close, RSI_14, Vol_Regime, Realized_Vol_5D, Realized_Vol_20D, VIX_IVR, VIX_IVP, Term_Structure_State, etc. — " +
           "use the previous trading day's close-derived values to prevent lookahead bias.";
@@ -1090,7 +1096,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
           lagNote += " Outcome fields contain same-day close-derived values and represent information NOT available at trade entry time.";
         }
         if (includeIntradayContext) {
-          lagNote += " intradayBars contains raw OHLC bar arrays from market.intraday keyed by ticker+date.";
+          lagNote += " intradayBars contains raw OHLC bar arrays from market.spot keyed by ticker+date.";
         }
 
         // Build response data
@@ -1129,7 +1135,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
   );
 
   // ---------------------------------------------------------------------------
-  // calculate_orb - Calculate Opening Range Breakout levels from market.intraday
+  // calculate_orb - Calculate Opening Range Breakout levels from market.spot
   // ---------------------------------------------------------------------------
 
   /**
@@ -1147,7 +1153,7 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
     "calculate_orb",
     {
       description:
-        "Calculate Opening Range Breakout (ORB) levels from market.intraday bar data. " +
+        "Calculate Opening Range Breakout (ORB) levels from market.spot bar data. " +
         "ORB range defined by high/low (or close) within the specified time window. " +
         "Returns per-day ORB levels plus breakout events (direction, time, condition). " +
         "Supports any bar resolution and any ticker with intraday data.",
@@ -1171,20 +1177,23 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
         const sqlStartTime = hhmmToSqlTime(startTime);
         const sqlEndTime = hhmmToSqlTime(endTime);
 
-        const conn = await getConnection(baseDir);
-
         // Check data availability
-        const availability = await checkDataAvailability(conn, normalizedTicker, { checkIntraday: true });
+        const availability = await checkDataAvailability(stores, normalizedTicker, { checkIntraday: true });
 
-        // Quick check: is there any intraday data for this ticker?
-        const hasDataResult = await conn.runAndReadAll(
-          `SELECT COUNT(*) FROM market.intraday WHERE ticker = $1`,
-          [normalizedTicker]
+        // Data availability + bar reads flow through SpotStore; the window
+        // aggregation and breakout-detection logic runs in TypeScript over
+        // the BarRow[] returned by readBars.
+
+        // Quick check: is there any spot data for this ticker over the requested range?
+        // Use a wide bracket so the "no data at all" case is distinguishable from
+        // "no data in the requested range" (the latter is handled below by an empty
+        // `byDate` map).
+        const wideCoverage = await stores.spot.getCoverage(
+          normalizedTicker,
+          "2000-01-01",
+          new Date().toISOString().split("T")[0],
         );
-        const hasDataRows = hasDataResult.getRows();
-        const hasDataCount = hasDataRows.length > 0 ? Number(hasDataRows[0][0]) : 0;
-
-        if (hasDataCount === 0) {
+        if (wideCoverage.totalDates === 0) {
           return createToolOutput(
             `ORB (${normalizedTicker}): No intraday data available`,
             {
@@ -1203,21 +1212,27 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
           if (!isNaN(parsed) && parsed > 0) {
             resolvedBarResolution = parsed;
           }
-        } else {
-          // Auto-detect: find the first date with data and compute time gap between consecutive bars
+        } else if (wideCoverage.earliest) {
+          // Auto-detect: read the first available date's bars, compute the gap
+          // between the first two distinct times. SpotStore returns rows ordered
+          // by (date, time) so we can scan in order.
           try {
-            const sampleResult = await conn.runAndReadAll(
-              `SELECT DISTINCT time FROM market.intraday
-               WHERE ticker = $1 AND date = (SELECT MIN(date) FROM market.intraday WHERE ticker = $1)
-               ORDER BY time
-               LIMIT 10`,
-              [normalizedTicker]
+            const sampleBars = await stores.spot.readBars(
+              normalizedTicker,
+              wideCoverage.earliest,
+              wideCoverage.earliest,
             );
-            const sampleRows = resultToRecords(sampleResult);
-            if (sampleRows.length >= 2) {
-              // Parse HH:MM times and compute minute gap between first two bars
-              const t1 = String(sampleRows[0]["time"]);
-              const t2 = String(sampleRows[1]["time"]);
+            const distinctTimes: string[] = [];
+            for (const bar of sampleBars) {
+              const t = String(bar.time);
+              if (distinctTimes.length === 0 || distinctTimes[distinctTimes.length - 1] !== t) {
+                distinctTimes.push(t);
+                if (distinctTimes.length === 10) break;
+              }
+            }
+            if (distinctTimes.length >= 2) {
+              const t1 = distinctTimes[0];
+              const t2 = distinctTimes[1];
               const [h1, m1] = t1.split(":").map(Number);
               const [h2, m2] = t2.split(":").map(Number);
               const gap = (h2 * 60 + m2) - (h1 * 60 + m1);
@@ -1230,63 +1245,27 @@ export function registerMarketDataTools(server: McpServer, baseDir: string): voi
           }
         }
 
-        // Build the ORB SQL query using DuckDB CTEs with parameterized ticker, dates, times.
-        // useHighLow is a template-time toggle (not a SQL parameter) controlling which expressions are used.
-        const highExpr = useHighLow ? "MAX(high)" : "MAX(close)";
-        const lowExpr = useHighLow ? "MIN(low)" : "MIN(close)";
-        const rangeExpr = useHighLow ? "MAX(high) - MIN(low)" : "MAX(close) - MIN(close)";
-        const breakupExpr = useHighLow ? "i.high > r.ORB_High" : "i.close > r.ORB_High";
-        const breakdownExpr = useHighLow ? "i.low < r.ORB_Low" : "i.close < r.ORB_Low";
+        // Read all in-range bars and group by date for ORB computation. The
+        // `useHighLow` toggle picks raw high/low vs close-of-bar high/low.
+        const allBars = await stores.spot.readBars(normalizedTicker, startDate, end);
 
-        const orbSql = `
-WITH orb_range AS (
-  SELECT
-    ticker, date,
-    ${highExpr} AS ORB_High,
-    ${lowExpr} AS ORB_Low,
-    ${rangeExpr} AS ORB_Range,
-    MIN(open) FILTER (WHERE time = $4) AS ORB_Open
-  FROM market.intraday
-  WHERE ticker = $1
-    AND date BETWEEN $2 AND $3
-    AND time >= $4
-    AND time <= $5
-  GROUP BY ticker, date
-),
-breakout_events AS (
-  SELECT
-    i.ticker, i.date,
-    MIN(i.time) FILTER (WHERE ${breakupExpr}) AS breakout_up_time,
-    MIN(i.time) FILTER (WHERE ${breakdownExpr}) AS breakout_down_time
-  FROM market.intraday i
-  JOIN orb_range r ON i.ticker = r.ticker AND i.date = r.date
-  WHERE i.time > $5
-  GROUP BY i.ticker, i.date
-)
-SELECT
-  r.date,
-  r.ORB_High,
-  r.ORB_Low,
-  r.ORB_Range,
-  CASE WHEN r.ORB_Low > 0 THEN r.ORB_Range / r.ORB_Low * 100 ELSE 0 END AS ORB_Range_Pct,
-  r.ORB_Open,
-  b.breakout_up_time,
-  b.breakout_down_time,
-  CASE
-    WHEN b.breakout_up_time IS NOT NULL AND b.breakout_down_time IS NOT NULL THEN
-      CASE WHEN b.breakout_up_time < b.breakout_down_time THEN 'HighFirst' ELSE 'LowFirst' END
-    WHEN b.breakout_up_time IS NOT NULL THEN 'HighOnly'
-    WHEN b.breakout_down_time IS NOT NULL THEN 'LowOnly'
-    ELSE 'NoBreakout'
-  END AS breakout_condition
-FROM orb_range r
-LEFT JOIN breakout_events b ON r.ticker = b.ticker AND r.date = b.date
-ORDER BY r.date`;
+        // Group by date, preserving (time)-ascending order from readBars.
+        // Defense-in-depth: skip underlying bars with zero/null OHLC (provider
+        // gaps from the spot ingest). Without this, a zero-low minute in the
+        // opening window would corrupt ORB_Low and the breakout/range output.
+        const barsByDate = new Map<string, typeof allBars>();
+        for (const bar of allBars) {
+          if (
+            !Number.isFinite(bar.open)  || bar.open  <= 0 ||
+            !Number.isFinite(bar.high)  || bar.high  <= 0 ||
+            !Number.isFinite(bar.low)   || bar.low   <= 0 ||
+            !Number.isFinite(bar.close) || bar.close <= 0
+          ) continue;
+          const arr = barsByDate.get(bar.date);
+          if (arr) arr.push(bar);
+          else barsByDate.set(bar.date, [bar]);
+        }
 
-        const orbResult = await conn.runAndReadAll(orbSql, [normalizedTicker, startDate, end, sqlStartTime, sqlEndTime]);
-        const orbRows = resultToRecords(orbResult);
-
-        // Process results into typed day records
         type BreakoutCondition = "HighFirst" | "LowFirst" | "HighOnly" | "LowOnly" | "NoBreakout";
 
         interface OrbDayResult {
@@ -1302,28 +1281,70 @@ ORDER BY r.date`;
           entry_triggered: boolean;
         }
 
-        const days: OrbDayResult[] = orbRows.map((row) => {
-          const breakoutCondition = (row["breakout_condition"] ?? "NoBreakout") as BreakoutCondition;
-          const entry_triggered = breakoutCondition !== "NoBreakout";
+        // Compute ORB window + breakouts per date in TypeScript over the
+        // grouped bars.
+        const days: OrbDayResult[] = [];
+        const sortedDates = [...barsByDate.keys()].sort();
+        for (const date of sortedDates) {
+          const dayBars = barsByDate.get(date)!;
+          // ORB window: time in [sqlStartTime, sqlEndTime]
+          const windowBars = dayBars.filter(
+            (b) => String(b.time) >= sqlStartTime && String(b.time) <= sqlEndTime,
+          );
+          if (windowBars.length === 0) continue;
 
-          const orbOpen = row["ORB_Open"];
-          const orbOpenVal = (orbOpen === null || orbOpen === undefined)
-            ? null
-            : typeof orbOpen === "bigint" ? Number(orbOpen) : (orbOpen as number);
+          let orbHigh = -Infinity;
+          let orbLow = Infinity;
+          let orbOpen: number | null = null;
+          for (const b of windowBars) {
+            const hi = useHighLow ? Number(b.high) : Number(b.close);
+            const lo = useHighLow ? Number(b.low) : Number(b.close);
+            if (hi > orbHigh) orbHigh = hi;
+            if (lo < orbLow) orbLow = lo;
+            if (String(b.time) === sqlStartTime && orbOpen === null) {
+              orbOpen = Number(b.open);
+            }
+          }
+          const orbRange = orbHigh - orbLow;
+          const orbRangePct = orbLow > 0 ? (orbRange / orbLow) * 100 : 0;
 
-          return {
-            date: String(row["date"]),
-            ORB_High: Math.round(getNum(row, "ORB_High") * 100) / 100,
-            ORB_Low: Math.round(getNum(row, "ORB_Low") * 100) / 100,
-            ORB_Range: Math.round(getNum(row, "ORB_Range") * 100) / 100,
-            ORB_Range_Pct: Math.round(getNum(row, "ORB_Range_Pct") * 10000) / 10000,
-            ORB_Open: orbOpenVal !== null ? Math.round(orbOpenVal * 100) / 100 : null,
+          // Breakout window: time strictly > sqlEndTime
+          let breakoutUpTime: string | null = null;
+          let breakoutDownTime: string | null = null;
+          for (const b of dayBars) {
+            const t = String(b.time);
+            if (t <= sqlEndTime) continue;
+            const upHit = useHighLow ? Number(b.high) > orbHigh : Number(b.close) > orbHigh;
+            const downHit = useHighLow ? Number(b.low) < orbLow : Number(b.close) < orbLow;
+            if (upHit && breakoutUpTime === null) breakoutUpTime = t;
+            if (downHit && breakoutDownTime === null) breakoutDownTime = t;
+            if (breakoutUpTime !== null && breakoutDownTime !== null) break;
+          }
+
+          let breakoutCondition: BreakoutCondition;
+          if (breakoutUpTime !== null && breakoutDownTime !== null) {
+            breakoutCondition = breakoutUpTime < breakoutDownTime ? "HighFirst" : "LowFirst";
+          } else if (breakoutUpTime !== null) {
+            breakoutCondition = "HighOnly";
+          } else if (breakoutDownTime !== null) {
+            breakoutCondition = "LowOnly";
+          } else {
+            breakoutCondition = "NoBreakout";
+          }
+
+          days.push({
+            date,
+            ORB_High: Math.round(orbHigh * 100) / 100,
+            ORB_Low: Math.round(orbLow * 100) / 100,
+            ORB_Range: Math.round(orbRange * 100) / 100,
+            ORB_Range_Pct: Math.round(orbRangePct * 10000) / 10000,
+            ORB_Open: orbOpen !== null ? Math.round(orbOpen * 100) / 100 : null,
             breakout_condition: breakoutCondition,
-            breakout_up_time: row["breakout_up_time"] ? String(row["breakout_up_time"]) : null,
-            breakout_down_time: row["breakout_down_time"] ? String(row["breakout_down_time"]) : null,
-            entry_triggered,
-          };
-        });
+            breakout_up_time: breakoutUpTime,
+            breakout_down_time: breakoutDownTime,
+            entry_triggered: breakoutCondition !== "NoBreakout",
+          });
+        }
 
         const totalDays = days.length;
 

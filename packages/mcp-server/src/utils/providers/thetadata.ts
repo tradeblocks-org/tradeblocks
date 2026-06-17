@@ -1,163 +1,64 @@
-import { buildOccTicker } from "./thetadata.ext.js";
+import { buildOccTicker } from "../trade-replay.ts";
+import {
+  ThetaMddsClient,
+  indexHistoryEod,
+  indexHistoryOhlc,
+  joinThetaQuotesAndFirstOrderGreeks,
+  optionHistoryGreeksFirstOrder,
+  optionHistoryGreeksFirstOrderBand,
+  optionHistoryOpenInterest,
+  optionHistoryQuote,
+  optionListContracts,
+  stockHistoryEod,
+  stockHistoryOhlc,
+  type ThetaContractListRow,
+  type ThetaFirstOrderGreekRow,
+  type ThetaOpenInterestRow,
+  type ThetaQuoteRow,
+  type ThetaRight,
+  type ThetaStockEodRow,
+  type ThetaStockOhlcRow,
+} from "./thetadata/index.ts";
 import type {
-  MarketDataProvider,
-  ProviderCapabilities,
   BarRow,
+  BulkOpenInterestOptions,
+  BulkQuoteRow,
+  BulkQuotesOptions,
+  ContractReference,
   FetchBarsOptions,
-  FetchSnapshotOptions,
-  FetchSnapshotResult,
   FetchContractListOptions,
   FetchContractListResult,
-  ContractReference,
-  OptionContract,
-  AssetClass,
-} from "../market-provider.js";
-import { ensureThetaTerminalRunning } from "./thetadata-terminal.js";
+  FetchSnapshotOptions,
+  FetchSnapshotResult,
+  MarketDataProvider,
+  MinuteQuote,
+  OpenInterestRow,
+  ProviderCapabilities,
+} from "../market-provider.ts";
 
-const THETADATA_BASE_URL = "http://127.0.0.1:25503";
-const THETADATA_TIMEOUT_MS = 30_000;
-const THETADATA_RETRY_BASE_MS = 250;
-const THETADATA_MAX_ATTEMPTS = 4;
-const RETRYABLE_THETA_STATUS_CODES = new Set([429, 474, 571]);
+const BULK_YIELD_CHUNK = 50_000;
+const BULK_GREEKS_STRIKE_RANGE = 20;
 
-const THETA_ERROR_NAMES: Record<number, string> = {
-  404: "NO_IMPL",
-  429: "OS_LIMIT",
-  470: "GENERAL",
-  471: "PERMISSION",
-  472: "NO_DATA",
-  473: "INVALID_PARAMS",
-  474: "DISCONNECTED",
-  475: "TERMINAL_PARSE",
-  476: "WRONG_IP",
-  477: "NO_PAGE_FOUND",
-  478: "INVALID_SESSION_ID",
-  571: "SERVER_STARTING",
-  572: "UNCAUGHT_ERROR",
-};
+export interface ThetaProviderDeps {
+  client?: ThetaMddsClient;
+  quoteEndpoint?: typeof optionHistoryQuote;
+  firstOrderEndpoint?: typeof optionHistoryGreeksFirstOrder;
+  firstOrderBandEndpoint?: typeof optionHistoryGreeksFirstOrderBand;
+  contractListEndpoint?: typeof optionListContracts;
+  openInterestEndpoint?: typeof optionHistoryOpenInterest;
+  stockHistoryOhlc?: typeof stockHistoryOhlc;
+  stockHistoryEod?: typeof stockHistoryEod;
+  indexHistoryOhlc?: typeof indexHistoryOhlc;
+  indexHistoryEod?: typeof indexHistoryEod;
+}
 
-type ThetaJsonObject = Record<string, unknown>;
-type ThetaJsonArray = ThetaJsonObject[];
+type GreekBandCache = Map<string, Promise<ThetaFirstOrderGreekRow[]>>;
 
 interface ParsedOccTicker {
   root: string;
   expiration: string;
-  right: "call" | "put";
+  right: ThetaRight;
   strike: number;
-}
-
-interface ThetaContractKeyParts {
-  symbol: string;
-  expiration: string;
-  strike: number;
-  right: "call" | "put";
-}
-
-function getBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  return env.THETADATA_BASE_URL || THETADATA_BASE_URL;
-}
-
-function getTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
-  return Number.parseInt(
-    env.THETADATA_REQUEST_TIMEOUT_MS || String(THETADATA_TIMEOUT_MS),
-    10,
-  ) || THETADATA_TIMEOUT_MS;
-}
-
-function getRetryBaseMs(env: NodeJS.ProcessEnv = process.env): number {
-  return Number.parseInt(
-    env.THETADATA_RETRY_BASE_MS || String(THETADATA_RETRY_BASE_MS),
-    10,
-  ) || THETADATA_RETRY_BASE_MS;
-}
-
-function getMaxAttempts(env: NodeJS.ProcessEnv = process.env): number {
-  return Number.parseInt(
-    env.THETADATA_MAX_ATTEMPTS || String(THETADATA_MAX_ATTEMPTS),
-    10,
-  ) || THETADATA_MAX_ATTEMPTS;
-}
-
-async function maybeEnsureThetaRunning(env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  if (env.THETADATA_SKIP_AUTO_START === "1") return;
-  await ensureThetaTerminalRunning(env);
-}
-
-function compactDate(date: string): string {
-  return date.replaceAll("-", "");
-}
-
-function formatDate(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function parseIsoDate(date: string): Date {
-  return new Date(`${date}T12:00:00Z`);
-}
-
-function splitDateRangeByMonth(from: string, to: string): Array<{ from: string; to: string }> {
-  const start = parseIsoDate(from);
-  const end = parseIsoDate(to);
-  const chunks: Array<{ from: string; to: string }> = [];
-
-  let cursor = new Date(start);
-  while (cursor <= end) {
-    const chunkStart = new Date(cursor);
-    const chunkEnd = new Date(Date.UTC(
-      cursor.getUTCFullYear(),
-      cursor.getUTCMonth() + 1,
-      0,
-      12,
-      0,
-      0,
-    ));
-    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
-    chunks.push({ from: formatDate(chunkStart), to: formatDate(chunkEnd) });
-    cursor = new Date(Date.UTC(
-      chunkEnd.getUTCFullYear(),
-      chunkEnd.getUTCMonth(),
-      chunkEnd.getUTCDate() + 1,
-      12,
-      0,
-      0,
-    ));
-  }
-
-  return chunks;
-}
-
-function toThetaInterval(timespan: "day" | "minute" | "hour", multiplier = 1): string | null {
-  if (timespan === "day") return null;
-  if (timespan === "hour") {
-    if (multiplier !== 1) {
-      throw new Error(`ThetaData does not support ${multiplier}h bars`);
-    }
-    return "1h";
-  }
-
-  const minuteIntervals = new Set([1, 5, 10, 15, 30]);
-  if (!minuteIntervals.has(multiplier)) {
-    throw new Error(`ThetaData does not support ${multiplier}m bars`);
-  }
-  return `${multiplier}m`;
-}
-
-function formatStrike(strike: number): string {
-  return strike.toFixed(3);
-}
-
-function toThetaRight(right: "call" | "put"): string {
-  return right;
-}
-
-function normalizeThetaRight(value: unknown): "call" | "put" {
-  const raw = String(value ?? "").trim().toLowerCase();
-  if (raw === "c" || raw === "call") return "call";
-  if (raw === "p" || raw === "put") return "put";
-  throw new Error(`Unsupported ThetaData option right: ${String(value)}`);
 }
 
 function parseOccTicker(ticker: string): ParsedOccTicker {
@@ -166,48 +67,103 @@ function parseOccTicker(ticker: string): ParsedOccTicker {
     throw new Error(`Invalid OCC option ticker: ${ticker}`);
   }
 
-  const root = match[1];
-  const expiration = `20${match[2]}-${match[3]}-${match[4]}`;
-  const right = match[5] === "C" ? "call" : "put";
-  const strike = Number.parseInt(match[6], 10) / 1000;
-  return { root, expiration, right, strike };
+  return {
+    root: match[1],
+    expiration: `20${match[2]}-${match[3]}-${match[4]}`,
+    right: match[5] === "C" ? "call" : "put",
+    strike: Number.parseInt(match[6], 10) / 1000,
+  };
 }
 
-function thetaTimestampToEtDate(timestamp: string): string {
-  return timestamp.slice(0, 10);
+function formatStrike(strike: number): string {
+  return strike.toFixed(3);
 }
 
-function thetaTimestampToEtTime(timestamp: string): string {
-  return timestamp.slice(11, 16);
+function parseIsoDate(date: string): Date {
+  return new Date(`${date}T12:00:00.000Z`);
 }
 
-function toNumber(value: unknown): number | null {
-  if (value == null) return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : null;
+function formatIsoDate(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function enumerateDates(from: string, to: string): string[] {
+  const dates: string[] = [];
+  const cursor = parseIsoDate(from);
+  const end = parseIsoDate(to);
+  while (cursor <= end) {
+    dates.push(formatIsoDate(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
-  return null;
+  return dates;
 }
 
-function toInteger(value: unknown): number | null {
-  const num = toNumber(value);
-  return num == null ? null : Math.trunc(num);
+function timespanToThetaInterval(
+  timespan: FetchBarsOptions["timespan"],
+  multiplier: number | undefined,
+): string | null {
+  if (timespan === "day") return null;
+  const resolvedMultiplier = multiplier ?? 1;
+  if (!Number.isInteger(resolvedMultiplier) || resolvedMultiplier <= 0) {
+    throw new Error("ThetaData fetchBars multiplier must be a positive integer");
+  }
+  if (timespan === "hour") return `${resolvedMultiplier * 60}m`;
+  return `${resolvedMultiplier}m`;
 }
 
-function thetaKey(parts: ThetaContractKeyParts): string {
-  return [
-    parts.symbol,
-    parts.expiration,
-    parts.strike.toFixed(3),
-    parts.right,
-  ].join("|");
+function msOfDayToEtMinute(msOfDay: number): string {
+  if (!Number.isFinite(msOfDay) || msOfDay < 0) {
+    throw new Error(`ThetaData stock OHLC row invalid ms_of_day: ${String(msOfDay)}`);
+  }
+  const totalMinutes = Math.floor(msOfDay / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 23 || (hours === 23 && minutes > 59)) {
+    throw new Error(`ThetaData stock OHLC row invalid ms_of_day: ${String(msOfDay)}`);
+  }
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function inferExerciseStyle(symbol: string): string {
+function stockEodRowToBar(ticker: string, row: ThetaStockEodRow): BarRow {
+  return {
+    ticker,
+    date: row.date,
+    open: row.open,
+    high: row.high,
+    low: row.low,
+    close: row.close,
+    volume: row.volume ?? 0,
+  };
+}
+
+function stockOhlcRowToBar(ticker: string, row: ThetaStockOhlcRow): BarRow {
+  return {
+    ...stockEodRowToBar(ticker, row),
+    time: msOfDayToEtMinute(row.msOfDay),
+  };
+}
+
+/**
+ * Wire-level roots that bulk quote ingestion expands an underlying into. SPX has
+ * monthly (`SPX`) and weekly/daily (`SPXW`) option roots in ThetaData.
+ */
+export function bulkQuoteRootsForUnderlying(underlying: string): string[] {
+  const upper = underlying.toUpperCase();
+  return upper === "SPX" ? ["SPX", "SPXW"] : [upper];
+}
+
+/**
+ * Number of final root/right groups per date. Providers may emit additional
+ * checkpoint events while processing those groups.
+ */
+export function countBulkQuoteGroupsPerDate(underlying: string): number {
+  return bulkQuoteRootsForUnderlying(underlying).length * 2;
+}
+
+function inferExerciseStyle(symbol: string): "american" | "european" {
   const europeanRoots = new Set([
     "SPX",
     "SPXW",
@@ -223,233 +179,77 @@ function inferExerciseStyle(symbol: string): string {
   return europeanRoots.has(symbol.toUpperCase()) ? "european" : "american";
 }
 
-function breakEvenFor(contractType: "call" | "put", strike: number, midpoint: number): number {
-  const value = contractType === "call" ? strike + midpoint : strike - midpoint;
-  return Number(value.toFixed(6));
-}
-
-function filterSnapshotContract(
-  contract: ThetaContractKeyParts,
-  options: FetchSnapshotOptions,
+function isGreekForBulkContract(
+  row: ThetaFirstOrderGreekRow,
+  root: string,
+  right: ThetaRight,
+  contract: ThetaContractListRow,
 ): boolean {
-  if (options.contract_type && contract.right !== options.contract_type) return false;
-  if (options.expiration_date_gte && contract.expiration < options.expiration_date_gte) return false;
-  if (options.expiration_date_lte && contract.expiration > options.expiration_date_lte) return false;
-  if (options.strike_price_gte != null && contract.strike < options.strike_price_gte) return false;
-  if (options.strike_price_lte != null && contract.strike > options.strike_price_lte) return false;
-  return true;
+  return row.symbol.toUpperCase() === root.toUpperCase()
+    && row.expiration === contract.expiration
+    && formatStrike(row.strike) === formatStrike(contract.strike)
+    && row.right === right;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function thetaErrorLabel(status: number): string {
-  return THETA_ERROR_NAMES[status] ?? `HTTP_${status}`;
-}
-
-function thetaErrorMessage(status: number, body: string): string {
-  const prefix = `ThetaData ${status} ${thetaErrorLabel(status)}`;
-  const trimmed = body.trim();
-  if (!trimmed) return prefix;
-  return `${prefix}: ${trimmed}`;
-}
-
-async function requestThetaArray(
-  endpointPath: string,
-  params: Record<string, string | number | boolean | undefined>,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<ThetaJsonArray> {
-  await maybeEnsureThetaRunning(env);
-
-  const url = new URL(endpointPath, getBaseUrl(env));
-  for (const [key, value] of Object.entries(params)) {
-    if (value == null) continue;
-    url.searchParams.set(key, String(value));
-  }
-  if (!url.searchParams.has("format")) {
-    url.searchParams.set("format", "json");
-  }
-
-  const maxAttempts = getMaxAttempts(env);
-  const retryBaseMs = getRetryBaseMs(env);
-  let lastError: Error | null = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const response = await fetch(url, {
-        signal: AbortSignal.timeout(getTimeoutMs(env)),
-      });
-      const text = await response.text();
-
-      if (response.status === 472 && text.trim().startsWith("No data found for your request")) {
-        return [];
-      }
-
-      if (!response.ok) {
-        if (RETRYABLE_THETA_STATUS_CODES.has(response.status) && attempt < maxAttempts) {
-          await sleep(retryBaseMs * attempt);
-          continue;
-        }
-        throw new Error(thetaErrorMessage(response.status, text));
-      }
-
-      const trimmed = text.trim();
-      if (!trimmed) return [];
-      if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) {
-        throw new Error(trimmed);
-      }
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(trimmed);
-      } catch (error) {
-        throw new Error(
-          `ThetaData returned invalid JSON from ${endpointPath}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-
-      if (Array.isArray(parsed)) return parsed as ThetaJsonArray;
-      if (parsed && typeof parsed === "object") {
-        const object = parsed as {
-          data?: unknown[];
-          response?: unknown[];
-        };
-        if (Array.isArray(object.data)) return object.data as ThetaJsonArray;
-        if (Array.isArray(object.response)) return object.response as ThetaJsonArray;
-      }
-
-      throw new Error(`ThetaData ${endpointPath} returned unexpected JSON shape`);
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      lastError = err;
-      const isTransportError = err.message === "fetch failed";
-      if ((isTransportError || err.name === "AbortError") && attempt < maxAttempts) {
-        await sleep(retryBaseMs * attempt);
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  throw lastError ?? new Error(`ThetaData request failed for ${endpointPath}`);
-}
-
-function flattenThetaRows(rows: ThetaJsonArray): ThetaJsonArray {
-  const flat: ThetaJsonArray = [];
-  for (const row of rows) {
-    if (Array.isArray(row.data) && row.contract && typeof row.contract === "object") {
-      for (const datum of row.data as unknown[]) {
-        if (!datum || typeof datum !== "object") continue;
-        flat.push({
-          ...(row.contract as ThetaJsonObject),
-          ...(datum as ThetaJsonObject),
-        });
-      }
-      continue;
-    }
-    flat.push(row);
-  }
-  return flat;
-}
-
-function mapIntradayRow(row: ThetaJsonObject, ticker: string): BarRow {
-  const timestamp = String(row.timestamp ?? "");
+function toMinuteQuote(row: BulkQuoteRow & { greeks_revision?: number | null }): MinuteQuote {
   return {
-    date: thetaTimestampToEtDate(timestamp),
-    time: thetaTimestampToEtTime(timestamp),
-    open: toNumber(row.open) ?? 0,
-    high: toNumber(row.high) ?? 0,
-    low: toNumber(row.low) ?? 0,
-    close: toNumber(row.close) ?? 0,
-    volume: toInteger(row.volume) ?? 0,
-    ticker,
+    bid: row.bid,
+    ask: row.ask,
+    source: "nbbo",
+    delta: row.delta ?? null,
+    gamma: row.gamma ?? null,
+    theta: row.theta ?? null,
+    vega: row.vega ?? null,
+    iv: row.iv ?? null,
+    greeks_source: row.greeks_source ?? null,
+    greeks_revision: row.greeks_revision ?? null,
+    rate_type: row.rate_type ?? null,
+    rate_value: row.rate_value ?? null,
+    gamma_source: row.gamma_source ?? null,
   };
 }
 
-function mapEodRow(row: ThetaJsonObject, ticker: string): BarRow {
-  const dateToken = String(row.date ?? row.timestamp ?? row.created ?? row.last_trade ?? "");
+function occTickerFromQuote(row: ThetaQuoteRow): string {
+  const rightChar = row.right === "call" ? "C" : "P";
+  return buildOccTicker(row.symbol, row.expiration, rightChar, row.strike);
+}
+
+function contractReference(row: ThetaContractListRow): ContractReference {
+  const rightChar = row.right === "call" ? "C" : "P";
   return {
-    date: dateToken.slice(0, 10),
-    open: toNumber(row.open) ?? 0,
-    high: toNumber(row.high) ?? 0,
-    low: toNumber(row.low) ?? 0,
-    close: toNumber(row.close) ?? 0,
-    volume: toInteger(row.volume) ?? 0,
-    ticker,
-    bid: toNumber(row.bid) ?? undefined,
-    ask: toNumber(row.ask) ?? undefined,
+    ticker: buildOccTicker(row.symbol, row.expiration, rightChar, row.strike),
+    contract_type: row.right,
+    strike: row.strike,
+    expiration: row.expiration,
+    exercise_style: inferExerciseStyle(row.symbol),
   };
-}
-
-function normalizedMidpoint(bid: number, ask: number): number {
-  if (bid > 0 && ask > 0) return Number(((bid + ask) / 2).toFixed(6));
-  return Math.max(bid, ask, 0);
-}
-
-async function fetchOptionHistoryRows(
-  ticker: string,
-  from: string,
-  to: string,
-  endpoint: "ohlc" | "quote" | "eod",
-  interval: string | null,
-): Promise<ThetaJsonArray> {
-  const occ = parseOccTicker(ticker);
-  const chunks = splitDateRangeByMonth(from, to);
-  const rows: ThetaJsonArray = [];
-
-  for (const chunk of chunks) {
-    const params: Record<string, string | number | boolean | undefined> = {
-      symbol: occ.root,
-      expiration: compactDate(occ.expiration),
-      strike: formatStrike(occ.strike),
-      right: toThetaRight(occ.right),
-      format: "json",
-      ...(interval ? { interval } : {}),
-      ...(chunk.from === chunk.to
-        ? { date: compactDate(chunk.from) }
-        : { start_date: compactDate(chunk.from), end_date: compactDate(chunk.to) }),
-    };
-    rows.push(...flattenThetaRows(
-      await requestThetaArray(`/v3/option/history/${endpoint}`, params),
-    ));
-  }
-
-  return rows;
-}
-
-async function fetchSymbolHistoryRows(
-  ticker: string,
-  from: string,
-  to: string,
-  assetClass: Exclude<AssetClass, "option">,
-  endpoint: "ohlc" | "eod",
-  interval: string | null,
-): Promise<ThetaJsonArray> {
-  const chunks = splitDateRangeByMonth(from, to);
-  const rows: ThetaJsonArray = [];
-
-  for (const chunk of chunks) {
-    const params: Record<string, string | number | boolean | undefined> = {
-      symbol: ticker,
-      format: "json",
-      ...(interval ? { interval } : {}),
-      ...(chunk.from === chunk.to
-        ? { date: compactDate(chunk.from) }
-        : { start_date: compactDate(chunk.from), end_date: compactDate(chunk.to) }),
-    };
-    rows.push(...flattenThetaRows(
-      await requestThetaArray(`/v3/${assetClass}/history/${endpoint}`, params),
-    ));
-  }
-
-  return rows;
 }
 
 export class ThetaDataProvider implements MarketDataProvider {
   readonly name = "thetadata";
+  private readonly client: ThetaMddsClient;
+  private readonly quoteEndpoint: typeof optionHistoryQuote;
+  private readonly firstOrderEndpoint: typeof optionHistoryGreeksFirstOrder;
+  private readonly firstOrderBandEndpoint: typeof optionHistoryGreeksFirstOrderBand;
+  private readonly contractListEndpoint: typeof optionListContracts;
+  private readonly openInterestEndpoint: typeof optionHistoryOpenInterest;
+  private readonly stockHistoryOhlcEndpoint: typeof stockHistoryOhlc;
+  private readonly stockHistoryEodEndpoint: typeof stockHistoryEod;
+  private readonly indexHistoryOhlcEndpoint: typeof indexHistoryOhlc;
+  private readonly indexHistoryEodEndpoint: typeof indexHistoryEod;
+
+  constructor(deps: ThetaProviderDeps = {}) {
+    this.client = deps.client ?? new ThetaMddsClient();
+    this.quoteEndpoint = deps.quoteEndpoint ?? optionHistoryQuote;
+    this.firstOrderEndpoint = deps.firstOrderEndpoint ?? optionHistoryGreeksFirstOrder;
+    this.firstOrderBandEndpoint = deps.firstOrderBandEndpoint ?? optionHistoryGreeksFirstOrderBand;
+    this.contractListEndpoint = deps.contractListEndpoint ?? optionListContracts;
+    this.openInterestEndpoint = deps.openInterestEndpoint ?? optionHistoryOpenInterest;
+    this.stockHistoryOhlcEndpoint = deps.stockHistoryOhlc ?? stockHistoryOhlc;
+    this.stockHistoryEodEndpoint = deps.stockHistoryEod ?? stockHistoryEod;
+    this.indexHistoryOhlcEndpoint = deps.indexHistoryOhlc ?? indexHistoryOhlc;
+    this.indexHistoryEodEndpoint = deps.indexHistoryEod ?? indexHistoryEod;
+  }
 
   capabilities(): ProviderCapabilities {
     return {
@@ -465,242 +265,329 @@ export class ThetaDataProvider implements MarketDataProvider {
   }
 
   async fetchBars(options: FetchBarsOptions): Promise<BarRow[]> {
-    const {
-      ticker,
-      from,
-      to,
-      timespan = "day",
-      multiplier = 1,
-      assetClass = "stock",
-    } = options;
+    await this.client.connect?.();
 
-    if (timespan === "day") {
-      const rows = assetClass === "option"
-        ? await fetchOptionHistoryRows(ticker, from, to, "eod", null)
-        : await fetchSymbolHistoryRows(ticker, from, to, assetClass, "eod", null);
+    const ticker = options.ticker;
+    const symbol = ticker.trim().toUpperCase();
+    const timespan = options.timespan;
+    const interval = timespanToThetaInterval(timespan, options.multiplier);
+    const isIndex = options.assetClass === "index";
+    const eodEndpoint = isIndex ? this.indexHistoryEodEndpoint : this.stockHistoryEodEndpoint;
+    const ohlcEndpoint = isIndex ? this.indexHistoryOhlcEndpoint : this.stockHistoryOhlcEndpoint;
 
-      return rows
-        .map((row) => mapEodRow(row, ticker))
-        .sort((a, b) => a.date.localeCompare(b.date));
+    if (interval == null) {
+      const rows = await eodEndpoint(this.client, {
+        symbol,
+        startDate: options.from,
+        endDate: options.to,
+      });
+      return rows.map((row) => stockEodRowToBar(ticker, row));
     }
 
-    const interval = toThetaInterval(timespan, multiplier);
-    const rows = assetClass === "option"
-      ? await fetchOptionHistoryRows(ticker, from, to, "ohlc", interval)
-      : await fetchSymbolHistoryRows(ticker, from, to, assetClass, "ohlc", interval);
-
-    return rows
-      .map((row) => mapIntradayRow(row, ticker))
-      .sort((a, b) => {
-        const left = `${a.date} ${a.time ?? ""}`;
-        const right = `${b.date} ${b.time ?? ""}`;
-        return left.localeCompare(right);
+    const bars: BarRow[] = [];
+    for (const date of enumerateDates(options.from, options.to)) {
+      const rows = await ohlcEndpoint(this.client, {
+        symbol,
+        startDate: date,
+        endDate: date,
+        interval,
       });
+      bars.push(...rows.map((row) => stockOhlcRowToBar(ticker, row)));
+    }
+    return bars;
   }
 
-  async fetchQuotes(ticker: string, from: string, to: string): Promise<Map<string, { bid: number; ask: number }>> {
-    const rows = await fetchOptionHistoryRows(ticker, from, to, "quote", "1m");
-    const quotes = new Map<string, { bid: number; ask: number }>();
+  async fetchQuotes(ticker: string, from: string, to: string): Promise<Map<string, MinuteQuote>> {
+    await this.client.connect?.();
+    const occ = parseOccTicker(ticker);
+    const result = new Map<string, MinuteQuote>();
 
-    for (const row of rows) {
-      const timestamp = String(row.timestamp ?? "");
-      if (!timestamp) continue;
-      const bid = toNumber(row.bid);
-      const ask = toNumber(row.ask);
-      if (bid == null || ask == null) continue;
-      quotes.set(`${thetaTimestampToEtDate(timestamp)} ${thetaTimestampToEtTime(timestamp)}`, {
-        bid,
-        ask,
-      });
+    for (const date of enumerateDates(from, to)) {
+      const request = {
+        symbol: occ.root,
+        expiration: occ.expiration,
+        strike: formatStrike(occ.strike),
+        right: occ.right,
+        date,
+        interval: "1m",
+      } as const;
+      const [quotes, providerGreeks] = await Promise.all([
+        this.quoteEndpoint(this.client, request),
+        this.firstOrderEndpoint(this.client, { ...request, rateType: "sofr" }),
+      ]);
+      const joined = joinThetaQuotesAndFirstOrderGreeks({ quotes, providerGreeks });
+      for (const row of joined.rows) {
+        result.set(row.timestamp, toMinuteQuote(row));
+      }
     }
 
-    return quotes;
+    return result;
+  }
+
+  async *fetchBulkQuotes(options: BulkQuotesOptions): AsyncGenerator<BulkQuoteRow[], void, void> {
+    // Wildcard fetch path: instead of one quote request per contract (which on
+    // a dense post-2024 SPX chain is 5000+ sequential gRPC calls), issue one
+    // `strike="*"` request per (root, expiration, right). That collapses the
+    // wall time from ~hours to ~minutes per date. Greeks are not fetched from
+    // ThetaData here — downstream applyQuoteGreeks computes them inline under
+    // the SOFR+q=0 convention (see option-quote-greeks.ts).
+    await this.client.connect?.();
+    const roots = bulkQuoteRootsForUnderlying(options.underlying);
+    const rights: ThetaRight[] = ["call", "put"];
+    let chunk: BulkQuoteRow[] = [];
+
+    const flush = function* (): Generator<BulkQuoteRow[], void, void> {
+      if (chunk.length === 0) return;
+      const ready = chunk;
+      chunk = [];
+      yield ready;
+    };
+
+    for (const root of roots) {
+      const contracts = await this.contractListEndpoint(this.client, {
+        symbol: root,
+        date: options.date,
+        requestType: "quote",
+      });
+      // Expirations present in the chain for this root, sorted for determinism.
+      const expirationsByRight = new Map<ThetaRight, string[]>();
+      for (const right of rights) {
+        const expirations = new Set<string>();
+        for (const c of contracts) {
+          if (c.right === right) expirations.add(c.expiration);
+        }
+        expirationsByRight.set(right, [...expirations].sort());
+      }
+
+      for (const right of rights) {
+        const expirations = expirationsByRight.get(right) ?? [];
+        let completedExpirations = 0;
+
+        try {
+          for (const expiration of expirations) {
+            let quotes: ThetaQuoteRow[];
+            try {
+              quotes = await this.quoteEndpoint(this.client, {
+                symbol: root,
+                expiration,
+                strike: "*",
+                right,
+                date: options.date,
+                interval: "1m",
+              });
+            } catch (error) {
+              // ThetaData returns NOT_FOUND for (root, expiration, right)
+              // combos that have no quotes on this date (e.g., zero-volume
+              // expirations near the current month boundary). Treat as an
+              // empty result and fall through to the per-iteration notify
+              // so the final expiration in a group still emits a
+              // phase="complete" event when it NOT_FOUNDs.
+              const msg = error instanceof Error ? error.message : String(error);
+              if (!/NOT_FOUND|No data found/i.test(msg)) {
+                throw error;
+              }
+              quotes = [];
+            }
+            for (const q of quotes) {
+              // Drop rows missing bid or ask; the parquet schema is DOUBLE
+              // NOT NULL on the price columns, and downstream applyQuoteGreeks
+              // skips them anyway. Some (root, expiration, right) tuples
+              // include zero-volume strikes that come back null/NaN.
+              if (!Number.isFinite(q.bid as number) || !Number.isFinite(q.ask as number)) {
+                continue;
+              }
+              chunk.push({
+                ticker: occTickerFromQuote(q),
+                timestamp: q.timestamp,
+                bid: q.bid,
+                ask: q.ask,
+                delta: null,
+                gamma: null,
+                theta: null,
+                vega: null,
+                iv: null,
+                greeks_source: null,
+                rate_type: null,
+                rate_value: null,
+                gamma_source: null,
+                source: "nbbo",
+              } as BulkQuoteRow);
+              if (chunk.length >= BULK_YIELD_CHUNK) {
+                yield* flush();
+              }
+            }
+            completedExpirations += 1;
+            this.notifyGroupComplete(options, root, right, "ok", {
+              phase: completedExpirations >= expirations.length ? "complete" : "checkpoint",
+              completedContracts: completedExpirations,
+              totalContracts: expirations.length,
+            });
+          }
+
+          if (expirations.length === 0) {
+            this.notifyGroupComplete(options, root, right, "ok", {
+              phase: "complete",
+              completedContracts: 0,
+              totalContracts: 0,
+            });
+          }
+          yield* flush();
+        } catch (error) {
+          this.notifyGroupComplete(options, root, right, "error", { phase: "complete" });
+          throw error;
+        }
+      }
+    }
+
+    yield* flush();
   }
 
   async fetchContractList(options: FetchContractListOptions): Promise<FetchContractListResult> {
-    const { underlying, as_of, expiration_date_gte, expiration_date_lte } = options;
-    const maxDte = expiration_date_lte
-      ? Math.max(
-          0,
-          Math.round(
-            (parseIsoDate(expiration_date_lte).getTime() - parseIsoDate(as_of).getTime()) /
-            86_400_000,
-          ),
-        )
-      : undefined;
-
-    const rows = await requestThetaArray("/v3/option/list/contracts/quote", {
-      symbol: underlying,
-      date: compactDate(as_of),
-      format: "json",
-      ...(maxDte != null ? { max_dte: maxDte } : {}),
-    });
-
+    await this.client.connect?.();
+    const underlying = options.underlying.toUpperCase();
     const contracts: ContractReference[] = [];
-    for (const row of rows) {
-      const symbol = String(row.symbol ?? underlying).toUpperCase();
-      const expiration = String(row.expiration ?? "");
-      const strike = toNumber(row.strike);
-      if (!expiration || strike == null) continue;
-      const contractType = normalizeThetaRight(row.right);
-      if (expiration_date_gte && expiration < expiration_date_gte) continue;
-      if (expiration_date_lte && expiration > expiration_date_lte) continue;
 
-      contracts.push({
-        ticker: buildOccTicker(
-          symbol,
-          expiration,
-          contractType === "call" ? "C" : "P",
-          strike,
-        ),
-        contract_type: contractType,
-        strike,
-        expiration,
-        exercise_style: inferExerciseStyle(symbol),
+    for (const root of bulkQuoteRootsForUnderlying(underlying)) {
+      const rows = await this.contractListEndpoint(this.client, {
+        symbol: root,
+        date: options.as_of,
+        requestType: "quote",
       });
+      for (const row of rows) {
+        if (options.expiration_date_gte && row.expiration < options.expiration_date_gte) continue;
+        if (options.expiration_date_lte && row.expiration > options.expiration_date_lte) continue;
+        contracts.push(contractReference(row));
+      }
     }
 
+    contracts.sort((left, right) => left.ticker.localeCompare(right.ticker));
     return { contracts, underlying };
   }
 
-  async fetchOptionSnapshot(options: FetchSnapshotOptions): Promise<FetchSnapshotResult> {
-    const firstOrderRows = flattenThetaRows(await requestThetaArray("/v3/option/snapshot/greeks/first_order", {
-      symbol: options.underlying,
-      expiration: "*",
-      format: "json",
-    }));
+  async fetchOpenInterest(options: BulkOpenInterestOptions): Promise<OpenInterestRow[]> {
+    await this.client.connect?.();
+    const underlying = options.underlying.toUpperCase();
+    const rows: OpenInterestRow[] = [];
 
-    if (firstOrderRows.length === 0) {
-      return {
-        contracts: [],
-        underlying_price: 0,
-        underlying_ticker: options.underlying,
-      };
-    }
-
-    let underlyingPrice = toNumber(firstOrderRows[0].underlying_price) ?? 0;
-
-    const filtered = firstOrderRows.filter((row) => {
-      const strike = toNumber(row.strike);
-      const expiration = String(row.expiration ?? "");
-      if (strike == null || !expiration) return false;
-      return filterSnapshotContract({
-        symbol: String(row.symbol ?? options.underlying).toUpperCase(),
-        expiration,
-        strike,
-        right: normalizeThetaRight(row.right),
-      }, options);
-    });
-
-    const oiPromise = requestThetaArray("/v3/option/snapshot/open_interest", {
-      symbol: options.underlying,
-      expiration: "*",
-      format: "json",
-    }).then(flattenThetaRows).catch(() => []);
-
-    const expirations = [...new Set(filtered.map((row) => String(row.expiration)))];
-    const tradePromises = expirations.map(async (expiration) => {
+    for (const root of bulkQuoteRootsForUnderlying(underlying)) {
+      // One wildcard-expiration, wildcard-strike, both-rights stream per root
+      // returns every contract's daily open interest across the range.
+      let oiRows: ThetaOpenInterestRow[];
       try {
-        const rows = flattenThetaRows(await requestThetaArray("/v3/option/snapshot/trade", {
-          symbol: options.underlying,
-          expiration,
-          format: "json",
-        }));
-        return { expiration, rows };
-      } catch {
-        return { expiration, rows: [] as ThetaJsonArray };
+        oiRows = await this.openInterestEndpoint(this.client, {
+          symbol: root,
+          expiration: "*",
+          startDate: options.from,
+          endDate: options.to,
+        });
+      } catch (error) {
+        // NOT_FOUND for a root with no contracts in the range is benign — fall
+        // through to the next root rather than failing the whole fetch.
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!/NOT_FOUND|No data found/i.test(msg)) throw error;
+        oiRows = [];
       }
-    });
-
-    const [oiRows, tradeGroups] = await Promise.all([
-      oiPromise,
-      Promise.all(tradePromises),
-    ]);
-
-    const openInterestByKey = new Map<string, number>();
-    for (const row of oiRows) {
-      const symbol = String(row.symbol ?? options.underlying).toUpperCase();
-      const expiration = String(row.expiration ?? "");
-      const strike = toNumber(row.strike);
-      if (!expiration || strike == null) continue;
-      openInterestByKey.set(thetaKey({
-        symbol,
-        expiration,
-        strike,
-        right: normalizeThetaRight(row.right),
-      }), toInteger(row.open_interest) ?? 0);
-    }
-
-    const tradePriceByKey = new Map<string, number>();
-    for (const group of tradeGroups) {
-      for (const row of group.rows) {
-        const symbol = String(row.symbol ?? options.underlying).toUpperCase();
-        const expiration = String(row.expiration ?? "");
-        const strike = toNumber(row.strike);
-        const price = toNumber(row.price);
-        if (!expiration || strike == null || price == null) continue;
-        tradePriceByKey.set(thetaKey({
-          symbol,
-          expiration,
-          strike,
-          right: normalizeThetaRight(row.right),
-        }), price);
+      for (const r of oiRows) {
+        rows.push({
+          ticker: r.ticker,
+          underlying,
+          date: r.date,
+          expiration: r.expiration,
+          strike: r.strike,
+          right: r.right,
+          open_interest: r.openInterest,
+        });
       }
     }
 
-    const contracts: OptionContract[] = filtered.map((row) => {
-      const symbol = String(row.symbol ?? options.underlying).toUpperCase();
-      const expiration = String(row.expiration);
-      const strike = toNumber(row.strike) ?? 0;
-      const contractType = normalizeThetaRight(row.right);
-      const bid = toNumber(row.bid) ?? 0;
-      const ask = toNumber(row.ask) ?? 0;
-      const midpoint = normalizedMidpoint(bid, ask);
-      const rowUnderlying = toNumber(row.underlying_price) ?? 0;
-      if (underlyingPrice === 0 && rowUnderlying > 0) {
-        underlyingPrice = rowUnderlying;
-      }
+    return rows;
+  }
 
-      const key = thetaKey({ symbol, expiration, strike, right: contractType });
-      return {
-        ticker: buildOccTicker(
-          symbol,
-          expiration,
-          contractType === "call" ? "C" : "P",
-          strike,
-        ),
-        underlying_ticker: options.underlying,
-        underlying_price: rowUnderlying || underlyingPrice,
-        contract_type: contractType,
-        strike,
+  async fetchOptionSnapshot(_options: FetchSnapshotOptions): Promise<FetchSnapshotResult> {
+    throw new Error("ThetaData MDDS provider does not implement fetchOptionSnapshot yet");
+  }
+
+  private async fetchBulkContractRows(
+    root: string,
+    right: ThetaRight,
+    date: string,
+    contract: ThetaContractListRow,
+    greekBandCache: GreekBandCache,
+  ): Promise<BulkQuoteRow[]> {
+    // Quote history remains concrete per contract. First-order greeks are
+    // fetched as one strike band per expiration/day and reused across rights.
+    const request = {
+      symbol: root,
+      expiration: contract.expiration,
+      strike: formatStrike(contract.strike),
+      right,
+      date,
+      interval: "1m",
+    } as const;
+    const [quotes, bandGreeks]: [ThetaQuoteRow[], ThetaFirstOrderGreekRow[]] =
+      await Promise.all([
+        this.quoteEndpoint(this.client, request),
+        this.fetchBulkGreekBand(root, contract.expiration, date, greekBandCache),
+      ]);
+    const contractBandGreeks = bandGreeks.filter((row) =>
+      isGreekForBulkContract(row, root, right, contract)
+    );
+    const bandJoined = joinThetaQuotesAndFirstOrderGreeks({
+      quotes,
+      providerGreeks: contractBandGreeks,
+    });
+    if (quotes.length === 0 || bandJoined.stats.missingGreekRows === 0) {
+      return bandJoined.rows;
+    }
+
+    const contractGreeks = await this.firstOrderEndpoint(this.client, {
+      ...request,
+      rateType: "sofr",
+    });
+    return joinThetaQuotesAndFirstOrderGreeks({
+      quotes,
+      providerGreeks: [...contractBandGreeks, ...contractGreeks],
+    }).rows;
+  }
+
+  private fetchBulkGreekBand(
+    root: string,
+    expiration: string,
+    date: string,
+    greekBandCache: GreekBandCache,
+  ): Promise<ThetaFirstOrderGreekRow[]> {
+    const key = `${root}|${expiration}|${date}`;
+    let promise = greekBandCache.get(key);
+    if (!promise) {
+      promise = this.firstOrderBandEndpoint(this.client, {
+        symbol: root,
         expiration,
-        exercise_style: inferExerciseStyle(symbol),
-        delta: toNumber(row.delta),
-        gamma: null,
-        theta: toNumber(row.theta),
-        vega: toNumber(row.vega),
-        iv: toNumber(row.implied_vol),
-        greeks_source: "thetadata",
-        bid,
-        ask,
-        midpoint,
-        last_price: tradePriceByKey.get(key) ?? null,
-        open_interest: openInterestByKey.get(key) ?? 0,
-        volume: 0,
-        break_even: breakEvenFor(contractType, strike, midpoint),
-      };
-    });
+        date,
+        interval: "1m",
+        rateType: "sofr",
+        strikeRange: BULK_GREEKS_STRIKE_RANGE,
+      });
+      greekBandCache.set(key, promise);
+    }
+    return promise;
+  }
 
-    contracts.sort((a, b) => {
-      const left = `${a.expiration}|${a.strike.toFixed(3)}|${a.contract_type}`;
-      const right = `${b.expiration}|${b.strike.toFixed(3)}|${b.contract_type}`;
-      return left.localeCompare(right);
-    });
-
-    return {
-      contracts,
-      underlying_price: underlyingPrice,
-      underlying_ticker: options.underlying,
-    };
+  private notifyGroupComplete(
+    options: BulkQuotesOptions,
+    root: string,
+    right: ThetaRight,
+    status: "ok" | "error",
+    progress: {
+      phase?: "checkpoint" | "complete";
+      completedContracts?: number;
+      totalContracts?: number;
+    } = {},
+  ): void {
+    if (!options.onGroupComplete) return;
+    try {
+      options.onGroupComplete({ root, right, date: options.date, status, ...progress });
+    } catch {
+      // Progress hooks are best-effort; provider data flow owns the error path.
+    }
   }
 }

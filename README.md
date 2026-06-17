@@ -24,7 +24,7 @@ tradeblocks/
 ### Development Setup
 
 ```bash
-git clone https://github.com/davidromeo/tradeblocks.git
+git clone https://github.com/tradeblocks-org/tradeblocks.git
 cd tradeblocks
 npm install
 npm run dev              # Web dashboard at http://localhost:3000

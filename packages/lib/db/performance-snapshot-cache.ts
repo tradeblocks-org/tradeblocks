@@ -5,16 +5,16 @@
  * to avoid expensive recalculation on every page load.
  */
 
-import { PortfolioStats } from "../models/portfolio-stats";
-import { Trade } from "../models/trade";
-import { DailyLogEntry } from "../models/daily-log";
-import { SnapshotChartData } from "../services/performance-snapshot";
+import type { PortfolioStats } from "../models/portfolio-stats.ts";
+import type { Trade } from "../models/trade.ts";
+import type { DailyLogEntry } from "../models/daily-log.ts";
+import type { SnapshotChartData } from "../services/performance-snapshot.ts";
 import {
   promisifyRequest,
   STORES,
   withReadTransaction,
   withWriteTransaction,
-} from "./index";
+} from "./index.ts";
 
 /**
  * Cache entry for performance snapshot

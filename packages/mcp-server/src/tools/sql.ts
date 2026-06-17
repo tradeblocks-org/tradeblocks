@@ -14,19 +14,23 @@
  * Available tables:
  *   - trades.trade_data: Trade records from all blocks (includes inferred ticker)
  *   - trades.reporting_data: Reporting/actual trade records from strategy logs
- *   - market.daily: Daily OHLCV + enriched indicators keyed by (ticker, date); VIX tickers stored here too
- *   - market.context: Global market conditions (VIX, regime) keyed by (date) — LEGACY, prefer market._context_derived
- *   - market._context_derived: Cross-ticker derived fields (Vol_Regime, Term_Structure_State, etc.) keyed by (date)
- *   - market.intraday: Intraday bars at any resolution keyed by (ticker, date, time)
+ *   - market.spot: Minute bars, ticker-first layout (indicators source)
+ *   - market.spot_daily: RTH-aggregated daily OHLCV view over market.spot (ticker, date)
+ *   - market.enriched: Daily technical indicators (RSI, ATR, IVR/IVP, etc.), ticker-first
+ *   - market.enriched_context: Cross-ticker derived fields (Vol_Regime, Term_Structure_State, etc.)
+ *   - market.option_chain: Option contract metadata keyed by (underlying, date)
+ *   - market.option_quote_minutes: Option NBBO minute bars keyed by (underlying, date)
  *   - market._sync_metadata: Import/enrichment tracking metadata
  */
 
+import * as path from "path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DuckDBConnection } from "@duckdb/node-api";
-import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.js";
-import { withFullSync } from "./middleware/sync-middleware.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
+import { getDataRoot } from "../db/data-root.ts";
+import { withFullSync } from "./middleware/sync-middleware.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
 
 /**
  * Available tables for reference in error messages
@@ -34,15 +38,17 @@ import { createToolOutput } from "../utils/output-formatter.js";
 const AVAILABLE_TABLES = [
   "trades.trade_data",
   "trades.reporting_data",
-  "market.daily",
-  "market.context",         // Legacy — kept for backward compat
-  "market._context_derived", // Phase 75: cross-ticker derived fields (Vol_Regime, Term_Structure_State, etc.)
-  "market.intraday",
+  "market.spot",
+  "market.spot_daily",
+  "market.enriched",
+  "market.enriched_context",
+  "market.option_chain",
+  "market.option_quote_minutes",
   "market._sync_metadata",
 ];
 
 /**
- * Always-blocked SQL patterns — external access and config changes.
+ * Always-blocked SQL patterns — external access, writes, and config changes.
  */
 const BLOCKED_PATTERNS: Array<{ pattern: RegExp; operation: string }> = [
   // External access
@@ -51,16 +57,79 @@ const BLOCKED_PATTERNS: Array<{ pattern: RegExp; operation: string }> = [
   { pattern: /\bATTACH\b/i, operation: "ATTACH" },
   { pattern: /\bDETACH\b/i, operation: "DETACH" },
 
-  // File functions
-  { pattern: /\bread_csv\s*\(/i, operation: "read_csv()" },
-  { pattern: /\bread_parquet\s*\(/i, operation: "read_parquet()" },
-  { pattern: /\bread_json\s*\(/i, operation: "read_json()" },
+  // File functions that write or read arbitrary text
   { pattern: /\bread_text\s*\(/i, operation: "read_text()" },
   { pattern: /\bwrite_csv\s*\(/i, operation: "write_csv()" },
 
   // Configuration changes (standalone SET, not UPDATE ... SET)
   { pattern: /^\s*SET\b/i, operation: "SET" },
 ];
+
+/**
+ * File-read functions allowed only when every path argument resolves under
+ * --data-root. Lets debug queries inspect managed Parquet/CSV/JSON while
+ * preventing filesystem traversal via SQL.
+ */
+const PATH_GATED_READ_FUNCTIONS = ["read_parquet", "read_csv", "read_json"] as const;
+
+interface FileReadCall {
+  fn: string;
+  paths: string[];
+}
+
+function findMatchingParen(s: string, openIdx: number): number {
+  let depth = 0;
+  for (let i = openIdx; i < s.length; i++) {
+    if (s[i] === "(") depth++;
+    else if (s[i] === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Scan SQL for path-gated file-read calls. Returns null if any call can't
+ * be parsed safely — the caller should treat null as a block verdict.
+ */
+function extractFileReadCalls(sql: string): FileReadCall[] | null {
+  const calls: FileReadCall[] = [];
+  for (const fn of PATH_GATED_READ_FUNCTIONS) {
+    const nameRegex = new RegExp(`\\b${fn}\\s*\\(`, "gi");
+    let m: RegExpExecArray | null;
+    while ((m = nameRegex.exec(sql)) !== null) {
+      const openIdx = m.index + m[0].length - 1;
+      const closeIdx = findMatchingParen(sql, openIdx);
+      if (closeIdx === -1) return null;
+      const args = sql.slice(openIdx + 1, closeIdx);
+      const paths: string[] = [];
+      const strRegex = /(['"])((?:\\.|(?!\1).)*)\1/g;
+      let s: RegExpExecArray | null;
+      while ((s = strRegex.exec(args)) !== null) {
+        paths.push(s[2]);
+      }
+      if (paths.length === 0) return null;
+      calls.push({ fn, paths });
+    }
+  }
+  return calls;
+}
+
+/**
+ * Is the given path under dataRoot? Strips glob characters from the end so
+ * patterns like `<root>/market/spot/ ** /*.parquet` validate against their
+ * literal prefix. Resolves both paths absolutely and compares with a
+ * separator guard to prevent `<root>-evil` from matching `<root>`.
+ */
+export function isUnderDataRoot(filePath: string, dataRoot: string): boolean {
+  const globMatch = filePath.match(/[*?[]/);
+  const prefix = globMatch?.index !== undefined ? filePath.slice(0, globMatch.index) : filePath;
+  const resolved = path.resolve(prefix);
+  const resolvedRoot = path.resolve(dataRoot);
+  const rootWithSep = resolvedRoot.endsWith(path.sep) ? resolvedRoot : resolvedRoot + path.sep;
+  return resolved === resolvedRoot || resolved.startsWith(rootWithSep);
+}
 
 /**
  * Default and maximum query timeout in milliseconds
@@ -90,11 +159,47 @@ const CONFIRM_REQUIRED_PATTERNS: Array<{ pattern: RegExp; operation: string }> =
  * Validate SQL query for dangerous patterns.
  * Returns null if valid, or an error message if invalid.
  */
-function validateQuery(sql: string): string | null {
+export function validateQuery(sql: string, dataRoot: string): string | null {
   for (const { pattern, operation } of BLOCKED_PATTERNS) {
     if (pattern.test(sql)) {
       return `${operation} operations are not allowed.`;
     }
+  }
+
+  const calls = extractFileReadCalls(sql);
+  if (calls === null) {
+    return "File-read function calls could not be parsed safely. Use the market.* views instead.";
+  }
+  for (const call of calls) {
+    for (const p of call.paths) {
+      if (!isUnderDataRoot(p, dataRoot)) {
+        return `${call.fn}() path must be under --data-root: ${p}`;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Validate a user-supplied SELECT passed into import_flat_file.
+ *
+ * Keeps the hard blocks on external access, writes, and config changes —
+ * but relaxes the read_parquet/read_csv/read_json path gate because the
+ * purpose of the import tool is to pull data from arbitrary source files
+ * the LLM has been pointed at. The output location is sandboxed by the
+ * store's partition-path composer (data-root-relative, whitelisted
+ * partition values), so a malicious SELECT can only pollute the store
+ * it's writing to — it cannot exfiltrate or write outside the data root.
+ */
+export function validateImportSelect(sql: string): string | null {
+  for (const { pattern, operation } of BLOCKED_PATTERNS) {
+    if (pattern.test(sql)) {
+      return `${operation} operations are not allowed in select_sql.`;
+    }
+  }
+  if (/^\s*SELECT\b/i.test(sql) === false && /^\s*WITH\b/i.test(sql) === false) {
+    return "select_sql must be a SELECT or WITH statement.";
   }
   return null;
 }
@@ -283,7 +388,8 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
         "SELECT runs freely. All mutating operations (DELETE, UPDATE, INSERT, CREATE, ALTER, DROP, TRUNCATE) " +
         "require confirm=true — without it, returns a preview or confirmation prompt. " +
         "Query trades (trades.trade_data, trades.reporting_data) and market data " +
-        "(market.daily, market.context, market._context_derived, market.intraday, market._sync_metadata). " +
+        "(market.spot, market.enriched, market.enriched_context, market.spot_daily, " +
+        "market.option_chain, market.option_quote_minutes, market._sync_metadata). " +
         "Trade queries should filter by block_id (e.g. WHERE block_id = 'my-strategy'). " +
         "Call describe_database first to discover available block_ids and column names. " +
         "Returns up to 1000 rows for SELECT queries.",
@@ -303,7 +409,7 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
     },
     withFullSync(baseDir, async ({ query, limit, confirm }) => {
       // Validate query for dangerous patterns
-      const validationError = validateQuery(query);
+      const validationError = validateQuery(query, getDataRoot(baseDir));
       if (validationError) {
         return {
           content: [{ type: "text" as const, text: validationError }],

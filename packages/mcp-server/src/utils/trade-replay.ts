@@ -7,8 +7,8 @@
  * All functions are pure — no fetch, no DuckDB.
  */
 
-import type { BarRow } from './market-provider.js';
-import { computeLegGreeks, type GreeksResult } from './black-scholes.js';
+import type { BarRow } from './market-provider.ts';
+import { computeLegGreeks, type GreeksResult } from './black-scholes.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,8 +43,14 @@ export interface PnlPoint {
   netGamma?: number | null;
   netTheta?: number | null;
   netVega?: number | null;
-  // IVP from market.context
+  // IVP from canonical market datasets (typically VIX ticker rows in market.enriched)
   ivp?: number | null;
+  // True when all legs have synchronized quotes at this minute; false when one or more
+  // legs lack a fresh quote. Triggers like profitTarget gate hit-counting on this so
+  // unsynchronized bars don't count toward confirmation and don't reset the counter.
+  // When undefined (no producer populates the field) consumers treat the bar as synchronized.
+  // TODO: populated by a future quote-sync detector — currently forward-compat only.
+  allLegsSync?: boolean;
 }
 
 /** Configuration for greeks computation in P&L path. */
@@ -81,12 +87,21 @@ export interface ReplayResult {
  * When providers supply bid/ask data (e.g., option chains), the midpoint is a
  * more accurate mark price than HL2. This is opt-in — existing data without
  * bid/ask continues to use HL2 identically.
+ *
+ * Guards against broken exchange quotes (crossed bid>ask; blown ask>10×bid
+ * with mid>$1) by falling back to HL2.
  */
 export function markPrice(bar: Pick<BarRow, 'high' | 'low' | 'bid' | 'ask'>): number {
-  if (bar.bid != null && bar.ask != null && (bar.bid > 0 || bar.ask > 0)) {
-    return (bar.bid + bar.ask) / 2;
+  const { bid, ask } = bar;
+  const hl2 = (bar.high + bar.low) / 2;
+  if (bid != null && ask != null && (bid > 0 || ask > 0)) {
+    if (bid > 0 && ask > 0) {
+      if (bid > ask) return hl2;
+      if (ask > 10 * bid && (bid + ask) / 2 > 1) return hl2;
+    }
+    return (bid + ask) / 2;
   }
-  return (bar.high + bar.low) / 2;
+  return hl2;
 }
 
 // ---------------------------------------------------------------------------

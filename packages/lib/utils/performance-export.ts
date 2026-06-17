@@ -3,8 +3,8 @@
  * Each export function generates CSV content for a specific chart's raw data
  */
 
-import { SnapshotChartData } from "../services/performance-snapshot";
-import { toCsvRow } from "./export-helpers";
+import type { SnapshotChartData } from "../services/performance-snapshot.ts";
+import { toCsvRow } from "./export-helpers.ts";
 
 export const TAB_ORDER = [
   "Overview",

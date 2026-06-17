@@ -9,8 +9,8 @@
 import {
   shouldSkipEnrichment,
   buildEnrichmentPlan,
-} from "../../src/test-exports.js";
-import type { EnrichmentPlanInput } from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
+import type { EnrichmentPlanInput } from "../../src/test-exports.ts";
 
 // ---------------------------------------------------------------------------
 // shouldSkipEnrichment

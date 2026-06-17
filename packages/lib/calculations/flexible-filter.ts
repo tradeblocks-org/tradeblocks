@@ -5,8 +5,8 @@
  * Works with EnrichedTrade objects which include derived fields.
  */
 
-import { EnrichedTrade } from '../models/enriched-trade'
-import { FilterConfig, FilterCondition, FilterOperator } from '../models/report-config'
+import type { EnrichedTrade } from '../models/enriched-trade.ts'
+import type { FilterConfig, FilterCondition, FilterOperator } from '../models/report-config.ts'
 
 /**
  * Result of applying filters to trades

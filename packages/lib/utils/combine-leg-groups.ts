@@ -8,9 +8,9 @@
  * This utility groups trades by entry timestamp and combines them into single trade records.
  */
 
-import { Trade } from '../models/trade'
-import { ReportingTrade } from '../models/reporting-trade'
-import { yieldToMain, checkCancelled } from './async-helpers'
+import type { Trade } from '../models/trade.ts'
+import type { ReportingTrade } from '../models/reporting-trade.ts'
+import { yieldToMain, checkCancelled } from './async-helpers.ts'
 
 /**
  * Key used to group trades that were opened at the same time
@@ -281,8 +281,7 @@ export function combineAllLegGroups(trades: Trade[]): CombinedTrade[] {
   const groups = groupTradesByEntry(trades)
   const combinedTrades: CombinedTrade[] = []
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const [_, groupTrades] of groups) {
+  for (const [, groupTrades] of groups) {
     combinedTrades.push(combineLegGroup(groupTrades))
   }
 
@@ -322,8 +321,7 @@ export async function combineAllLegGroupsAsync(
   checkCancelled(signal)
   onProgress?.({ step: 'Combining leg groups', percent: 10 })
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const [_, groupTrades] of groups) {
+  for (const [, groupTrades] of groups) {
     combinedTrades.push(combineLegGroup(groupTrades))
     processedGroups++
 
@@ -506,8 +504,7 @@ export function combineAllReportingLegGroups(trades: ReportingTrade[]): Combined
   const groups = groupReportingTradesByEntry(trades)
   const combinedTrades: CombinedReportingTrade[] = []
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const [_, groupTrades] of groups) {
+  for (const [, groupTrades] of groups) {
     combinedTrades.push(combineReportingLegGroup(groupTrades))
   }
 

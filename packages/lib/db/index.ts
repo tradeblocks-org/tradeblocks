@@ -6,10 +6,10 @@
  */
 
 // Types imported for reference (commented out to avoid unused warnings)
-// import { ProcessedBlock } from '../models/block'
-// import { Trade } from '../models/trade'
-// import { DailyLogEntry } from '../models/daily-log'
-// import { PortfolioStats, StrategyStats, PerformanceMetrics } from '../models/portfolio-stats'
+// import { ProcessedBlock } from '../models/block.ts'
+// import { Trade } from '../models/trade.ts'
+// import { DailyLogEntry } from '../models/daily-log.ts'
+// import { PortfolioStats, StrategyStats, PerformanceMetrics } from '../models/portfolio-stats.ts'
 
 // Database configuration
 export const DB_NAME = "TradeBlocksDB";
@@ -369,14 +369,20 @@ export async function requestPersistentStorage(): Promise<boolean> {
  * Database error types
  */
 export class DatabaseError extends Error {
+  readonly operation: string;
+  readonly store?: string;
+  override readonly cause?: Error;
   constructor(
     message: string,
-    public readonly operation: string,
-    public readonly store?: string,
-    public readonly cause?: Error
+    operation: string,
+    store?: string,
+    cause?: Error
   ) {
     super(message);
     this.name = "DatabaseError";
+    this.operation = operation;
+    this.store = store;
+    this.cause = cause;
   }
 }
 
@@ -408,15 +414,15 @@ export {
   getBlock,
   updateBlock,
   updateBlockStats,
-} from "./blocks-store";
+} from "./blocks-store.ts";
 export {
   addDailyLogEntries,
   deleteDailyLogsByBlock,
   getDailyLogCountByBlock,
   getDailyLogsByBlock,
   updateDailyLogsForBlock,
-} from "./daily-logs-store";
-export type { StoredDailyLogEntry } from "./daily-logs-store";
+} from "./daily-logs-store.ts";
+export type { StoredDailyLogEntry } from "./daily-logs-store.ts";
 export {
   addReportingTrades,
   deleteReportingTradesByBlock,
@@ -424,7 +430,7 @@ export {
   getReportingTradeCountByBlock,
   getReportingTradesByBlock,
   updateReportingTradesForBlock,
-} from "./reporting-logs-store";
+} from "./reporting-logs-store.ts";
 export {
   addTrades,
   deleteTradesByBlock,
@@ -432,35 +438,35 @@ export {
   getTradesByBlock,
   getTradesByBlockWithOptions,
   updateTradesForBlock,
-} from "./trades-store";
-export type { StoredTrade } from "./trades-store";
+} from "./trades-store.ts";
+export type { StoredTrade } from "./trades-store.ts";
 export {
   saveWalkForwardAnalysis,
   getWalkForwardAnalysis,
   getWalkForwardAnalysesByBlock,
   deleteWalkForwardAnalysis,
   deleteWalkForwardAnalysesByBlock,
-} from "./walk-forward-store";
+} from "./walk-forward-store.ts";
 export {
   storeCombinedTradesCache,
   getCombinedTradesCache,
   deleteCombinedTradesCache,
   hasCombinedTradesCache,
   invalidateBlockCaches,
-} from "./combined-trades-cache";
+} from "./combined-trades-cache.ts";
 export {
   storePerformanceSnapshotCache,
   getPerformanceSnapshotCache,
   deletePerformanceSnapshotCache,
   hasPerformanceSnapshotCache,
-} from "./performance-snapshot-cache";
-export type { CachedPerformanceSnapshot } from "./performance-snapshot-cache";
+} from "./performance-snapshot-cache.ts";
+export type { CachedPerformanceSnapshot } from "./performance-snapshot-cache.ts";
 export {
   storeEnrichedTradesCache,
   getEnrichedTradesCache,
   deleteEnrichedTradesCache,
   hasEnrichedTradesCache,
-} from "./enriched-trades-cache";
+} from "./enriched-trades-cache.ts";
 export {
   createStaticDataset,
   getStaticDataset,
@@ -471,7 +477,7 @@ export {
   deleteStaticDataset,
   isDatasetNameTaken,
   getStaticDatasetCount,
-} from "./static-datasets-store";
+} from "./static-datasets-store.ts";
 export {
   addStaticDatasetRows,
   getStaticDatasetRows,
@@ -480,4 +486,4 @@ export {
   deleteStaticDatasetRows,
   deleteStaticDatasetWithRows,
   getStaticDatasetDateRange,
-} from "./static-dataset-rows-store";
+} from "./static-dataset-rows-store.ts";

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import { Trade } from '../models/trade'
-import { ReportingTrade } from '../models/reporting-trade'
-import { DailyLogEntry } from '../models/daily-log'
+import type { Trade } from '../models/trade.ts'
+import type { ReportingTrade } from '../models/reporting-trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
 import {
   calculateAdvancedMetrics,
   calculateTradeMetrics,
@@ -9,9 +9,9 @@ import {
   getFilteredScaledDayActualPl,
   getScaledDayBacktestPl,
   getScaledDayActualPl
-} from '../services/calendar-data'
-import { PortfolioStatsCalculator } from '../calculations/portfolio-stats'
-import { normalizeTradesToOneLot } from '../utils/trade-normalization'
+} from '../services/calendar-data.ts'
+import { PortfolioStatsCalculator } from '../calculations/portfolio-stats.ts'
+import { normalizeTradesToOneLot } from '../utils/trade-normalization.ts'
 
 /**
  * Scaling modes for P&L display
@@ -749,7 +749,7 @@ export const useTradingCalendarStore = create<TradingCalendarState>((set, get) =
         getReportingTradesByBlock,
         getDailyLogsByBlock,
         getBlock
-      } = await import('../db')
+      } = await import('../db/index.ts')
 
       // Load all data for the block
       // Note: tradeLog (Trade) = backtest data, reportingLog (ReportingTrade) = actual live trading
@@ -1162,7 +1162,7 @@ export const useTradingCalendarStore = create<TradingCalendarState>((set, get) =
     // Persist to block
     if (state.blockId) {
       try {
-        const { getBlock, updateBlock } = await import('../db')
+        const { getBlock, updateBlock } = await import('../db/index.ts')
         const block = await getBlock(state.blockId)
         if (block) {
           const existingMappings = block.strategyAlignment?.mappings ?? []
@@ -1249,7 +1249,7 @@ export const useTradingCalendarStore = create<TradingCalendarState>((set, get) =
     // Remove from persisted block
     if (state.blockId) {
       try {
-        const { getBlock, updateBlock } = await import('../db')
+        const { getBlock, updateBlock } = await import('../db/index.ts')
         const block = await getBlock(state.blockId)
         if (block) {
           const existingMappings = block.strategyAlignment?.mappings ?? []

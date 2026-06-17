@@ -4,10 +4,41 @@ import {
   computeStrategyPnlPath,
   computeReplayMfeMae,
   resolveOODateRange,
+  markPrice,
   type ReplayLeg,
   type PnlPoint,
   type BarRow,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
+
+describe('markPrice', () => {
+  it('returns bid/ask midpoint when both are positive and well-formed', () => {
+    expect(markPrice({ high: 5, low: 4, bid: 2, ask: 3 })).toBe(2.5);
+  });
+
+  it('falls back to HL2 when bid/ask are missing', () => {
+    expect(markPrice({ high: 6, low: 4, bid: null as unknown as number, ask: null as unknown as number })).toBe(5);
+  });
+
+  it('falls back to HL2 on crossed quotes (bid > ask)', () => {
+    expect(markPrice({ high: 10, low: 8, bid: 5, ask: 3 })).toBe(9);
+  });
+
+  it('falls back to HL2 on blown spreads (ask > 10×bid with mid > $1)', () => {
+    // Noise-day quote: bid=0.05, ask=10.00 ⇒ raw mid = 5.025 (phantom).
+    // Guard triggers because ask > 10*bid AND mid > 1.
+    expect(markPrice({ high: 0.2, low: 0.1, bid: 0.05, ask: 10.0 })).toBeCloseTo(0.15, 6);
+  });
+
+  it('does not apply blown-spread guard when mid is at/below $1', () => {
+    // Penny-wide cheap option: ask/bid ratio >10 but mid is sub-dollar; keep mid.
+    expect(markPrice({ high: 0.5, low: 0.3, bid: 0.05, ask: 0.6 })).toBeCloseTo(0.325, 6);
+  });
+
+  it('keeps midpoint for normal wide-but-not-blown spreads', () => {
+    // ask/bid = 5x; guard does not fire (needs > 10x).
+    expect(markPrice({ high: 3, low: 1, bid: 1, ask: 5 })).toBe(3);
+  });
+});
 
 describe('parseLegsString', () => {
   it('parses single call leg', () => {

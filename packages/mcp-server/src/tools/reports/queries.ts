@@ -22,7 +22,8 @@
  *     COUNT(*) as trades,
  *     SUM(pl) as total_pl
  *   FROM trades.trade_data t
- *   JOIN market.daily m ON t.date_opened = m.date
+ *   JOIN market.enriched m ON t.date_opened = m.date
+ *   LEFT JOIN market.spot_daily vix_s ON vix_s.date = m.date AND vix_s.ticker = 'VIX'
  *   WHERE t.block_id = 'my-block'
  *   GROUP BY bucket
  */

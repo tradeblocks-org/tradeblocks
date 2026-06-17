@@ -2,8 +2,8 @@
  * Static Datasets Store - CRUD operations for static dataset metadata
  */
 
-import type { StaticDataset, MatchStrategy } from '../models/static-dataset'
-import { STORES, withReadTransaction, withWriteTransaction, promisifyRequest } from './index'
+import type { StaticDataset, MatchStrategy } from '../models/static-dataset.ts'
+import { STORES, withReadTransaction, withWriteTransaction, promisifyRequest } from './index.ts'
 
 /**
  * Create a new static dataset

@@ -35,7 +35,7 @@ Don't dump walls of information. Give focused answers.
 
 ## What is TradeBlocks?
 
-Browser-based options trading analyzer. Upload CSVs → get statistics, charts, Monte Carlo, walk-forward analysis, Kelly sizing. All data stays local (IndexedDB). Open source: github.com/davidromeo/tradeblocks
+Browser-based options trading analyzer. Upload CSVs → get statistics, charts, Monte Carlo, walk-forward analysis, Kelly sizing. All data stays local (IndexedDB). Open source: github.com/tradeblocks-org/tradeblocks
 
 **Built for Option Omega** backtests and portfolios.
 

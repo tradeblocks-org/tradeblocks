@@ -20,7 +20,7 @@ import {
   MassiveSnapshotResponseSchema,
   MassiveQuoteSchema,
   MassiveQuotesResponseSchema,
-} from "../../../src/utils/providers/massive.js";
+} from "../../../src/utils/providers/massive.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -561,7 +561,6 @@ describe("MassiveQuoteSchema", () => {
   });
 
   it("rejects a quote missing bid_price", () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { bid_price: _bid, ...rest } = VALID_QUOTE;
     expect(MassiveQuoteSchema.safeParse(rest).success).toBe(false);
   });
@@ -571,7 +570,6 @@ describe("MassiveQuoteSchema", () => {
   });
 
   it("rejects a quote missing sequence_number", () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { sequence_number: _seq, ...rest } = VALID_QUOTE;
     expect(MassiveQuoteSchema.safeParse(rest).success).toBe(false);
   });
@@ -607,6 +605,36 @@ describe("MassiveQuotesResponseSchema", () => {
   it("rejects response missing required status field", () => {
     const resp = { request_id: "req-quotes-004", results: [] };
     expect(MassiveQuotesResponseSchema.safeParse(resp).success).toBe(false);
+  });
+});
+
+// ===========================================================================
+// MassiveProvider.capabilities — strictly NBBO availability
+// ===========================================================================
+
+describe("MassiveProvider.capabilities.quotes — strictly NBBO availability", () => {
+  afterEach(() => {
+    delete process.env.MASSIVE_DATA_TIER;
+  });
+
+  it("reports quotes=false when MASSIVE_DATA_TIER is unset (Developer/Starter plan, no /v3/quotes access)", () => {
+    delete process.env.MASSIVE_DATA_TIER;
+    expect(new MassiveProvider().capabilities().quotes).toBe(false);
+  });
+
+  it("reports quotes=false when MASSIVE_DATA_TIER=ohlc", () => {
+    process.env.MASSIVE_DATA_TIER = "ohlc";
+    expect(new MassiveProvider().capabilities().quotes).toBe(false);
+  });
+
+  it("reports quotes=false when MASSIVE_DATA_TIER=trades", () => {
+    process.env.MASSIVE_DATA_TIER = "trades";
+    expect(new MassiveProvider().capabilities().quotes).toBe(false);
+  });
+
+  it("reports quotes=true ONLY when MASSIVE_DATA_TIER=quotes (true NBBO via /v3/quotes)", () => {
+    process.env.MASSIVE_DATA_TIER = "quotes";
+    expect(new MassiveProvider().capabilities().quotes).toBe(true);
   });
 });
 
@@ -667,12 +695,12 @@ function makeQuotesResponse(quotes: Array<{ bid: number; ask: number; nanos: num
 }
 
 describe("Quotes enrichment", () => {
-  beforeEach(() => { process.env.MASSIVE_QUOTES_ENABLED = "true"; });
-  afterEach(() => { delete process.env.MASSIVE_QUOTES_ENABLED; });
+  beforeEach(() => { process.env.MASSIVE_DATA_TIER = "quotes"; });
+  afterEach(() => { delete process.env.MASSIVE_DATA_TIER; });
 
-  it("fetchBars returns bars without bid/ask — enrichment handled by bar-cache", async () => {
-    // Quote enrichment moved from fetchBars() to fetchBarsWithCache() in bar-cache.ts.
-    // fetchBars() now returns raw OHLCV bars; bid/ask are added by the cache layer.
+  it("fetchBars returns raw OHLCV bars without bid/ask enrichment", async () => {
+    // fetchBars() returns raw OHLCV bars; bid/ask enrichment is handled
+    // out-of-band by the pipeline-side enrich_quotes tool.
     fetchSpy
       .mockResolvedValueOnce(mockResponse(makeOptionBarsResponse()));
 
@@ -799,5 +827,156 @@ describe("Quotes enrichment", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].bid).toBeUndefined();
     expect(rows[0].ask).toBeUndefined();
+  });
+});
+
+// ===========================================================================
+// MassiveProvider.fetchQuotes — tier-aware endpoint selection
+// ===========================================================================
+
+describe("MassiveProvider.fetchQuotes — tier-aware endpoint selection", () => {
+  let fetchSpy: jest.SpiedFunction<typeof globalThis.fetch>;
+
+  beforeEach(() => {
+    process.env.MASSIVE_API_KEY = "test-key";
+    fetchSpy = jest.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    delete process.env.MASSIVE_API_KEY;
+    delete process.env.MASSIVE_DATA_TIER;
+    jest.restoreAllMocks();
+  });
+
+  it("uses /v3/quotes endpoint when MASSIVE_DATA_TIER=quotes and tags rows as nbbo", async () => {
+    process.env.MASSIVE_DATA_TIER = "quotes";
+    // 09:30 ET = 14:30 UTC = 1736260200000 ms; nanos = ms * 1_000_000
+    const nanos = 1736260200000 * 1_000_000;
+    fetchSpy.mockResolvedValue(mockResponse({
+      status: "OK",
+      request_id: "r1",
+      results: [{ bid_price: 12.5, ask_price: 13.5, sip_timestamp: nanos, bid_size: 10, ask_size: 15, sequence_number: 1 }],
+    }));
+
+    const provider = new MassiveProvider();
+    const quotes = await provider.fetchQuotes("SPX250107C05000000", "2025-01-07", "2025-01-07");
+
+    const url = fetchSpy.mock.calls[0][0] as string;
+    expect(url).toContain("/v3/quotes/");
+    expect(url).toContain("O%3ASPX250107C05000000");
+
+    const entry = quotes.get("2025-01-07 09:30");
+    expect(entry).toBeDefined();
+    expect(entry!.bid).toBe(12.5);
+    expect(entry!.ask).toBe(13.5);
+    expect(entry!.source).toBe("nbbo");
+  });
+
+  it("uses /v2/aggs minute-bars endpoint when MASSIVE_DATA_TIER is unset (Developer plan fallback)", async () => {
+    delete process.env.MASSIVE_DATA_TIER;
+    // 2025-01-07 09:30 ET = UTC 14:30 = 1736260200000 ms (EST/UTC-5).
+    // See massive.test.ts:618 for the canonical timestamp reference.
+    const barResponse = {
+      ticker: "O:SPX250107C05000000",
+      queryCount: 1,
+      resultsCount: 1,
+      adjusted: false,
+      results: [{ v: 50, vw: 13.0, o: 12.8, c: 13.2, h: 13.5, l: 12.5, t: 1736260200000, n: 10 }],
+      status: "OK",
+      request_id: "req-aggs-001",
+    };
+    fetchSpy.mockResolvedValueOnce(mockResponse(barResponse));
+
+    const provider = new MassiveProvider();
+    const quotes = await provider.fetchQuotes("SPX250107C05000000", "2025-01-07", "2025-01-07");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const url = fetchSpy.mock.calls[0][0] as string;
+    expect(url).toContain("/v2/aggs/ticker/");
+    expect(url).toContain("O%3ASPX250107C05000000");
+    expect(url).toContain("/range/1/minute/2025-01-07/2025-01-07");
+
+    // bid === ask === close, keyed by ET minute
+    expect(quotes.size).toBe(1);
+    const entry = quotes.get("2025-01-07 09:30");
+    expect(entry).toBeDefined();
+    expect(entry!.bid).toBe(13.2);
+    expect(entry!.ask).toBe(13.2);
+    expect(entry!.source).toBe("synth_close");
+  });
+
+  it("uses /v2/aggs minute-bars endpoint when MASSIVE_DATA_TIER=ohlc", async () => {
+    process.env.MASSIVE_DATA_TIER = "ohlc";
+    fetchSpy.mockResolvedValueOnce(mockResponse({
+      ticker: "O:SPX250107C05000000",
+      queryCount: 0,
+      resultsCount: 0,
+      adjusted: false,
+      results: [],
+      status: "OK",
+      request_id: "req-aggs-002",
+    }));
+
+    const provider = new MassiveProvider();
+    await provider.fetchQuotes("SPX250107C05000000", "2025-01-07", "2025-01-07");
+
+    const url = fetchSpy.mock.calls[0][0] as string;
+    expect(url).toContain("/v2/aggs/ticker/");
+    expect(url).not.toContain("/v3/quotes/");
+  });
+
+  it("synthesizes bid=ask=close for every minute returned by /v2/aggs", async () => {
+    delete process.env.MASSIVE_DATA_TIER;
+    // 09:30 ET = 1736260200000, 09:31 ET = +60_000 ms.
+    fetchSpy.mockResolvedValueOnce(mockResponse({
+      ticker: "O:SPX250107C05000000",
+      queryCount: 1,
+      resultsCount: 2,
+      adjusted: false,
+      results: [
+        { v: 50, vw: 13.0, o: 12.8, c: 13.20, h: 13.5, l: 12.5, t: 1736260200000, n: 10 },
+        { v: 60, vw: 13.4, o: 13.20, c: 13.50, h: 13.6, l: 13.1, t: 1736260260000, n: 12 },
+      ],
+      status: "OK",
+      request_id: "req-aggs-003",
+    }));
+
+    const provider = new MassiveProvider();
+    const quotes = await provider.fetchQuotes("SPX250107C05000000", "2025-01-07", "2025-01-07");
+
+    expect(quotes.size).toBe(2);
+    for (const [, q] of quotes) {
+      expect(q.bid).toBe(q.ask);
+      expect(q.source).toBe("synth_close");
+    }
+    expect(quotes.get("2025-01-07 09:30")!.bid).toBe(13.20);
+    expect(quotes.get("2025-01-07 09:31")!.bid).toBe(13.50);
+  });
+
+  it("filters out bars outside RTH (09:30–16:00 ET)", async () => {
+    delete process.env.MASSIVE_DATA_TIER;
+    // 09:29 ET = 1736260140000 (in pre-market), 09:30 ET = 1736260200000 (in RTH),
+    // 16:01 ET = 1736283660000 (after close).
+    fetchSpy.mockResolvedValueOnce(mockResponse({
+      ticker: "O:SPX250107C05000000",
+      queryCount: 1,
+      resultsCount: 3,
+      adjusted: false,
+      results: [
+        { v: 10, vw: 13.0, o: 12.8, c: 13.10, h: 13.2, l: 12.7, t: 1736260140000, n: 5 },
+        { v: 50, vw: 13.0, o: 12.8, c: 13.20, h: 13.5, l: 12.5, t: 1736260200000, n: 10 },
+        { v: 5,  vw: 13.0, o: 12.8, c: 13.30, h: 13.4, l: 12.9, t: 1736283660000, n: 3 },
+      ],
+      status: "OK",
+      request_id: "req-aggs-004",
+    }));
+
+    const provider = new MassiveProvider();
+    const quotes = await provider.fetchQuotes("SPX250107C05000000", "2025-01-07", "2025-01-07");
+
+    expect(quotes.size).toBe(1);
+    expect(quotes.has("2025-01-07 09:30")).toBe(true);
+    expect(quotes.has("2025-01-07 09:29")).toBe(false);
+    expect(quotes.has("2025-01-07 16:01")).toBe(false);
   });
 });

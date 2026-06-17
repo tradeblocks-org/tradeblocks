@@ -32,7 +32,23 @@ import {
   classifyTermStructure,
   computeIVR,
   computeIVP,
-} from '../../src/test-exports.js';
+  runEnrichment,
+  ensureMutableMarketTables,
+  ensureMarketDataTables,
+} from '../../src/test-exports.ts';
+import type { DuckDBConnection, DuckDBInstance as DuckDBInstanceType } from '@duckdb/node-api';
+import { DuckDBInstance } from '@duckdb/node-api';
+import { existsSync, mkdirSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+/** Minimal shape for SpotStore fakes in IO-routing tests. */
+type FakeSpotStore = {
+  readBars: (...args: unknown[]) => Promise<unknown[]>;
+  readDailyBars: (...args: unknown[]) => Promise<unknown[]>;
+  getCoverage: (...args: unknown[]) => Promise<{ earliest: string | null; latest: string | null; missingDates: string[]; totalDates: number }>;
+  writeBars: (...args: unknown[]) => Promise<void>;
+};
 
 // =============================================================================
 // computeRSI
@@ -790,5 +806,538 @@ describe('computeIVP', () => {
     const values = [1, 2, 3, 4, 5];
     const ivp = computeIVP(values, 5);
     expect(ivp[4]).toBeCloseTo(100, 5);
+  });
+});
+
+// =============================================================================
+// runEnrichment injected IO path
+//
+// Tests that runEnrichment accepts an optional `io` parameter and routes the
+// 5 IO call sites (watermark get/upsert, Tier 2 VIX RTH open, Tier 3 hasData
+// check, Tier 3 minute bars) through injected stores when provided. Math and
+// legacy behaviour (undefined io) must remain bit-exact equivalent.
+// =============================================================================
+
+/**
+ * Seed the minimal fixture required to drive runEnrichment. Writes daily
+ * OHLCV rows into market.spot (one synthetic 09:30 bar per date); the
+ * fallback path in runEnrichment reads from market.spot_daily which
+ * aggregates market.spot. For IO-routing tests we seed a short window and
+ * assert on routing, not math correctness — the pure-function tests above
+ * already cover the math.
+ *
+ * The enrichment write-target table (dailyTarget) defaults to
+ * market.enriched, so ensureMarketDataTables provides the write surface.
+ * No watermark row — runEnrichment treats this as a fresh ticker.
+ */
+async function seedDailyFixture(conn: DuckDBConnection, ticker: string, dates: string[]): Promise<void> {
+  for (const date of dates) {
+    // Seed market.spot with a single 09:30 bar per date — market.spot_daily
+    // aggregates this into the daily OHLCV row the enricher reads.
+    await conn.run(
+      `INSERT OR REPLACE INTO market.spot
+         (ticker, date, time, open, high, low, close)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [ticker, date, '09:30', 100, 101, 99, 100.5],
+    );
+    // Seed an empty market.enriched row so UPDATE targets have somewhere to write.
+    await conn.run(
+      `INSERT OR REPLACE INTO market.enriched (ticker, date) VALUES ($1, $2)`,
+      [ticker, date],
+    );
+  }
+}
+
+describe('runEnrichment injected IO path', () => {
+  let tmpDir: string;
+  let db: DuckDBInstanceType;
+  let conn: DuckDBConnection;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `enricher-io-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(join(tmpDir, 'market'), { recursive: true });
+    db = await DuckDBInstance.create(':memory:');
+    conn = await db.connect();
+    await conn.run(`ATTACH ':memory:' AS market`);
+    await ensureMutableMarketTables(conn);
+    await ensureMarketDataTables(conn);
+    // The no-spotStore fallback path in runEnrichment reads from
+    // market.spot_daily (the RTH-aggregated view). Register the view
+    // locally over the fixture's market.spot table so tests that do not
+    // inject io.spotStore still have a readable daily OHLCV source.
+    await conn.run(`
+      CREATE OR REPLACE VIEW market.spot_daily AS
+        SELECT ticker, date,
+               first(open  ORDER BY time) AS open,
+               max(high)                  AS high,
+               min(low)                   AS low,
+               last(close  ORDER BY time) AS close,
+               first(bid   ORDER BY time) AS bid,
+               last(ask    ORDER BY time) AS ask
+        FROM market.spot
+        WHERE time >= '09:30' AND time <= '16:00'
+        GROUP BY ticker, date
+    `);
+  });
+
+  afterEach(() => {
+    try { conn.closeSync(); } catch { /* */ }
+    try { db.closeSync(); } catch { /* */ }
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('with io.watermarkStore provided, reads watermark from injected store (not _sync_metadata)', async () => {
+    const getCalls: string[] = [];
+    const upsertCalls: Array<[string, string]> = [];
+    const io = {
+      watermarkStore: {
+        get: async (t: string) => { getCalls.push(t); return null; },
+        upsert: async (t: string, v: string) => { upsertCalls.push([t, v]); },
+      },
+    };
+    await seedDailyFixture(conn, 'SPX', ['2025-01-06', '2025-01-07', '2025-01-08']);
+    await runEnrichment(conn, 'SPX', { dataDir: tmpDir }, io);
+    expect(getCalls).toContain('SPX');
+    // If rows were produced, upsert must have been called with the final date.
+    if (upsertCalls.length > 0) {
+      expect(upsertCalls[upsertCalls.length - 1][0]).toBe('SPX');
+      expect(upsertCalls[upsertCalls.length - 1][1]).toBe('2025-01-08');
+    }
+  });
+
+  test('with io.watermarkStore, _sync_metadata is NOT touched for enrichment', async () => {
+    const io = {
+      watermarkStore: {
+        get: async () => null,
+        upsert: async () => { /* no-op — stays in-memory */ },
+      },
+    };
+    await seedDailyFixture(conn, 'SPX', ['2025-01-06', '2025-01-07', '2025-01-08']);
+    await runEnrichment(conn, 'SPX', { dataDir: tmpDir }, io);
+    const metaRows = await conn.runAndReadAll(
+      `SELECT COUNT(*) FROM market._sync_metadata
+       WHERE source = 'enrichment' AND ticker = 'SPX'`,
+    );
+    expect(Number(metaRows.getRows()[0]?.[0] ?? 0)).toBe(0);
+  });
+
+  test('with io.spotStore provided, Tier 3 hasData check routes through spotStore.getCoverage', async () => {
+    const coverageCalls: string[] = [];
+    const readBarsCalls: string[] = [];
+    // Tier 1 reads via spotStore.readDailyBars when io.spotStore is
+    // provided. To drive Tier 1 to completion (so Tier 3 gets dates and
+    // the hasData/getCoverage check runs), the fake spotStore must return
+    // non-empty daily bars — matching that read path.
+    const fakeSpot: FakeSpotStore = {
+      readBars: async (t: string) => { readBarsCalls.push(t); return []; },
+      readDailyBars: async (t: string) => {
+        if (t !== 'SPX') return [];
+        return [
+          { ticker: 'SPX', date: '2025-01-06', time: '09:30', open: 100, high: 101, low: 99, close: 100.5, volume: 0 },
+          { ticker: 'SPX', date: '2025-01-07', time: '09:30', open: 100, high: 101, low: 99, close: 100.5, volume: 0 },
+          { ticker: 'SPX', date: '2025-01-08', time: '09:30', open: 100, high: 101, low: 99, close: 100.5, volume: 0 },
+        ];
+      },
+      getCoverage: async (t: string) => { coverageCalls.push(t); return { earliest: null, latest: null, missingDates: [], totalDates: 0 }; },
+      writeBars: async () => { /* */ },
+    };
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: {
+        get: async () => null,
+        upsert: async () => { /* */ },
+      },
+    };
+    await seedDailyFixture(conn, 'SPX', ['2025-01-06', '2025-01-07', '2025-01-08']);
+    await runEnrichment(conn, 'SPX', { dataDir: tmpDir }, io);
+    // hasTier3Data should route through getCoverage for SPX
+    expect(coverageCalls).toContain('SPX');
+  });
+
+  test('with io.spotStore, the legacy minute-bar SQL path is NOT queried for Tier 3', async () => {
+    // Seed market.spot with data — proves the io.spotStore is preferred over the
+    // direct SQL path (if direct SQL were used, Tier 3 would find rows via the
+    // SpotStore wrapper but NOT via the injected fake store readBars).
+    await conn.run(
+      `INSERT INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+       VALUES ('SPX', '2025-01-06', '09:30', 100, 101, 99, 100, NULL, NULL)`,
+    );
+    let receivedReadBarsTicker: string | null = null;
+    // Tier 1 reads via spotStore.readDailyBars when io.spotStore is
+    // provided. Provide non-empty daily bars so Tier 1 completes and Tier 3
+    // gets driven to call readBars.
+    const fakeSpot: FakeSpotStore = {
+      readBars: async (t: string) => { receivedReadBarsTicker = t; return []; },
+      readDailyBars: async (t: string) => {
+        if (t !== 'SPX') return [];
+        return [
+          { ticker: 'SPX', date: '2025-01-06', time: '09:30', open: 100, high: 101, low: 99, close: 100.5, volume: 0 },
+          { ticker: 'SPX', date: '2025-01-07', time: '09:30', open: 100, high: 101, low: 99, close: 100.5, volume: 0 },
+        ];
+      },
+      getCoverage: async () => ({ earliest: '2025-01-06', latest: '2025-01-06', missingDates: [], totalDates: 1 }),
+      writeBars: async () => { /* */ },
+    };
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: { get: async () => null, upsert: async () => { /* */ } },
+    };
+    await seedDailyFixture(conn, 'SPX', ['2025-01-06', '2025-01-07']);
+    await runEnrichment(conn, 'SPX', { dataDir: tmpDir }, io);
+    // With io present, Tier 3 should have asked the injected store for bars
+    expect(receivedReadBarsTicker).toBe('SPX');
+  });
+
+  test('without io but with dataDir, runEnrichment completes and writes watermark via JSON adapter', async () => {
+    // When `io` is not supplied, runEnrichment falls back to the JSON
+    // adapter (`getEnrichedThrough` / `upsertEnrichedThrough`) directly,
+    // keyed off `opts.dataDir`. Verify the fallback writes the watermark
+    // there and does NOT touch market._sync_metadata for enrichment.
+    const { getEnrichedThrough } = await import('../../src/db/json-adapters.ts');
+    await seedDailyFixture(conn, 'SPX', ['2025-01-06', '2025-01-07', '2025-01-08']);
+    // Insert a VIX ticker so Tier 2 doesn't bail with "no VIX data"
+    await seedDailyFixture(conn, 'VIX', ['2025-01-06', '2025-01-07', '2025-01-08']);
+    const result = await runEnrichment(conn, 'SPX', { dataDir: tmpDir });
+    // Result should be defined (not error) and reference the seeded ticker.
+    expect(result.ticker).toBe('SPX');
+    expect(result.tier1.status).toBe('complete');
+    // JSON-adapter watermark was written
+    const watermark = await getEnrichedThrough('SPX', tmpDir);
+    expect(watermark).toBe('2025-01-08');
+    // No market._sync_metadata enrichment row should have been written by
+    // the runner — the legacy SQL watermark path is retired.
+    const metaRows = await conn.runAndReadAll(
+      `SELECT source FROM market._sync_metadata
+       WHERE source = 'enrichment' AND ticker = 'SPX' AND target_table = 'daily'`,
+    );
+    expect(metaRows.getRows().length).toBe(0);
+  });
+
+  test('explicit parquetMode uses working tables even when market.enriched is a view', async () => {
+    delete process.env.TRADEBLOCKS_PARQUET;
+    await seedDailyFixture(conn, 'SPX', ['2025-01-06', '2025-01-07', '2025-01-08']);
+    await seedDailyFixture(conn, 'VIX', ['2025-01-06', '2025-01-07', '2025-01-08']);
+    await conn.run(`ALTER TABLE market.enriched RENAME TO enriched_backing`);
+    await conn.run(`CREATE VIEW market.enriched AS SELECT * FROM enriched_backing`);
+
+    const result = await runEnrichment(conn, 'SPX', { dataDir: tmpDir, parquetMode: true });
+    expect(result.tier1.status).toBe('complete');
+
+    const enrichedPath = join(tmpDir, 'market', 'enriched', 'ticker=SPX', 'data.parquet');
+    expect(existsSync(enrichedPath)).toBe(true);
+  });
+});
+
+// =============================================================================
+// io.spotStore as the canonical OHLCV read path
+//
+// runEnrichment reads OHLCV from spot/ via io.spotStore.readDailyBars (Tier
+// 1) and via a TEMP table seeded from spotStore (Tier 2 VIX-family joins).
+// Callers MUST pass io.spotStore (or rely on the spot_daily Parquet view
+// resolved via createMarketParquetViews); the legacy daily-view SQL
+// fallback is retired.
+//
+// These tests prove the io.spotStore path works:
+//   - io.spotStore present → Tier 1 reads via readDailyBars, Tier 2
+//     VIX-family reads via the TEMP seeded from spotStore
+// =============================================================================
+
+/** Build a fake SpotStore that returns the given daily-bar map (ticker → BarRow[]). */
+function buildFakeSpotStoreWithDailyBars(
+  perTicker: Record<string, Array<{ date: string; open: number; high: number; low: number; close: number }>>,
+): FakeSpotStore & { readDailyBarsCalls: string[]; readBarsCalls: string[] } {
+  const readDailyBarsCalls: string[] = [];
+  const readBarsCalls: string[] = [];
+  return {
+    readBars: async (t: string) => { readBarsCalls.push(t); return []; },
+    readDailyBars: async (t: string) => {
+      readDailyBarsCalls.push(t);
+      const bars = perTicker[t] ?? [];
+      return bars.map((b) => ({
+        ticker: t,
+        date: b.date,
+        time: '09:30',
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+        volume: 0,
+      }));
+    },
+    getCoverage: async (t: string) => {
+      const bars = perTicker[t] ?? [];
+      if (bars.length === 0) return { earliest: null, latest: null, missingDates: [], totalDates: 0 };
+      return {
+        earliest: bars[0].date,
+        latest: bars[bars.length - 1].date,
+        missingDates: [],
+        totalDates: bars.length,
+      };
+    },
+    writeBars: async () => { /* */ },
+    readDailyBarsCalls,
+    readBarsCalls,
+  };
+}
+
+/**
+ * Synthesize 60 weekday OHLCV rows for a ticker at a base price.
+ * 60 days is enough for Tier 1 (SMA50 needs ≥50 closes) without 252-day IVR/IVP being meaningful.
+ */
+function syntheticDailyBars(
+  basePrice: number,
+  startDate: string,
+  count: number,
+): Array<{ date: string; open: number; high: number; low: number; close: number }> {
+  const bars: Array<{ date: string; open: number; high: number; low: number; close: number }> = [];
+  const start = new Date(startDate + 'T00:00:00Z');
+  let added = 0;
+  let dayOffset = 0;
+  while (added < count) {
+    const d = new Date(start);
+    d.setUTCDate(start.getUTCDate() + dayOffset);
+    dayOffset++;
+    const dow = d.getUTCDay();
+    if (dow === 0 || dow === 6) continue; // skip weekends
+    const dateStr = d.toISOString().split('T')[0];
+    const drift = added * 0.1;
+    bars.push({
+      date: dateStr,
+      open: basePrice + drift,
+      high: basePrice + drift + 1,
+      low: basePrice + drift - 1,
+      close: basePrice + drift + 0.5,
+    });
+    added++;
+  }
+  return bars;
+}
+
+describe('io.spotStore is the canonical OHLCV read path', () => {
+  let tmpDir: string;
+  let db: DuckDBInstanceType;
+  let conn: DuckDBConnection;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `enricher-a8-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(join(tmpDir, 'market'), { recursive: true });
+    db = await DuckDBInstance.create(':memory:');
+    conn = await db.connect();
+    await conn.run(`ATTACH ':memory:' AS market`);
+    await ensureMutableMarketTables(conn);
+    await ensureMarketDataTables(conn);
+    // The no-spotStore fallback path in runEnrichment reads from
+    // market.spot_daily (the RTH-aggregated view). Register the view
+    // locally over the fixture's market.spot table so tests that do not
+    // inject io.spotStore still have a readable daily OHLCV source.
+    await conn.run(`
+      CREATE OR REPLACE VIEW market.spot_daily AS
+        SELECT ticker, date,
+               first(open  ORDER BY time) AS open,
+               max(high)                  AS high,
+               min(low)                   AS low,
+               last(close  ORDER BY time) AS close,
+               first(bid   ORDER BY time) AS bid,
+               last(ask    ORDER BY time) AS ask
+        FROM market.spot
+        WHERE time >= '09:30' AND time <= '16:00'
+        GROUP BY ticker, date
+    `);
+  });
+
+  afterEach(() => {
+    try { conn.closeSync(); } catch { /* */ }
+    try { db.closeSync(); } catch { /* */ }
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('Tier 1: uses spotStore.readDailyBars when io.spotStore is provided (no daily.parquet, empty spot fallback)', async () => {
+    // Synthesize 60 SPX daily bars in the fake spotStore. market.spot is empty.
+    // Without the rewire, runEnrichment would skip Tier 1 with "no data".
+    // With the rewire, it should read from spotStore.readDailyBars and complete Tier 1.
+    const spxBars = syntheticDailyBars(4500, '2025-01-02', 60);
+    const fakeSpot = buildFakeSpotStoreWithDailyBars({ SPX: spxBars });
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: { get: async () => null, upsert: async () => { /* */ } },
+    };
+    const result = await runEnrichment(conn, 'SPX', { dataDir: tmpDir }, io);
+    // Tier 1 must have read via spotStore.readDailyBars
+    expect(fakeSpot.readDailyBarsCalls).toContain('SPX');
+    // Tier 1 must complete (NOT skipped)
+    expect(result.tier1.status).toBe('complete');
+    expect(result.rowsEnriched).toBe(60);
+    expect(result.enrichedThrough).toBe(spxBars[spxBars.length - 1].date);
+  });
+
+  // The "Tier 1 falls back to legacy daily-view SQL when io is undefined"
+  // case is intentionally absent — that fallback no longer exists in the
+  // catalog; io.spotStore is the canonical read path.
+
+  test('Tier 2: uses spotStore for VIX-family daily when io.spotStore is provided (no daily.parquet)', async () => {
+    // Synthesize VIX/VIX9D/VIX3M daily bars in the fake spotStore. market.spot has no VIX data.
+    // Without the Tier 2 rewire, Tier 2 would skip with "no VIX data — import VIX ticker first".
+    // With the rewire, Tier 2 reads VIX-family OHLCV from spotStore via the TEMP seed.
+    const vixBars = syntheticDailyBars(15, '2025-01-02', 60);
+    const vix9dBars = syntheticDailyBars(14, '2025-01-02', 60);
+    const vix3mBars = syntheticDailyBars(16, '2025-01-02', 60);
+    const fakeSpot = buildFakeSpotStoreWithDailyBars({
+      VIX: vixBars,
+      VIX9D: vix9dBars,
+      VIX3M: vix3mBars,
+    });
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: { get: async () => null, upsert: async () => { /* */ } },
+    };
+    // Drive runEnrichment for VIX — its Tier 1 reads VIX from spotStore, then
+    // Tier 2 needs VIX/VIX9D/VIX3M daily data for the IVR/IVP + context query.
+    const result = await runEnrichment(conn, 'VIX', { dataDir: tmpDir }, io);
+    // Tier 1 should have read via spotStore.readDailyBars for VIX
+    expect(fakeSpot.readDailyBarsCalls).toContain('VIX');
+    expect(result.tier1.status).toBe('complete');
+    // Tier 2 must NOT skip with "no VIX data" — it should now find VIX via spotStore
+    expect(result.tier2.status).not.toBe('skipped');
+    expect(result.tier2.status).toBe('complete');
+    // Tier 2 should have asked spotStore for VIX9D and VIX3M too (TEMP seed pass)
+    expect(fakeSpot.readDailyBarsCalls).toContain('VIX9D');
+    expect(fakeSpot.readDailyBarsCalls).toContain('VIX3M');
+  });
+
+  test('Tier 1: returns "no data from spotStore" skip reason when spotStore has no data for ticker', async () => {
+    // Empty spotStore for SPX — runEnrichment should skip with the new reason
+    // mentioning spotStore (not a legacy catalog name).
+    const fakeSpot = buildFakeSpotStoreWithDailyBars({}); // no entries
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: { get: async () => null, upsert: async () => { /* */ } },
+    };
+    const result = await runEnrichment(conn, 'SPX', { dataDir: tmpDir }, io);
+    expect(result.tier1.status).toBe('skipped');
+    // The skip reason should mention spotStore so operators know which read
+    // path failed when io.spotStore is the active source.
+    expect(result.tier1.reason).toMatch(/spotStore/i);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Indicator unit/scale regression tests
+// ───────────────────────────────────────────────────────────────────────────
+//
+// These tests pin the percent-vs-points contract on three columns whose
+// units silently regressed in earlier versions, producing nonsense values
+// in market.enriched:
+//
+//   • ATR_Pct          — must be percent-of-close (ratio × 100), NOT raw points
+//   • Intraday_Range_Pct — must use close as denominator (consistency with
+//     every other "_Pct" column) AND must return null if low = 0 (catches
+//     zero-bar contamination from the spot ingester)
+//   • Prior_Range_vs_ATR — must equal (prior_range_pct / prior_atr_pct);
+//     algebraically (range/atr) since closes cancel, but spelled out for
+//     intent. Must return null when any prior-day component is zero/non-finite.
+//
+// Inputs are synthetic SPX-shaped daily bars: basePrice 5000, fixed
+// daily range of 2 points (high = base+1, low = base−1). With these
+// inputs the math is hand-verifiable:
+//   ATR after 14 bars converges to 2 (raw points)
+//   ATR_Pct ≈ 2 / 5000 × 100 = 0.04
+//   Intraday_Range_Pct ≈ 2 / 5000.5 × 100 ≈ 0.04
+//   Prior_Range_vs_ATR ≈ 2 / 2 = 1.00
+describe('Enricher indicator units regression', () => {
+  let tmpDir: string;
+  let db: DuckDBInstanceType;
+  let conn: DuckDBConnection;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `enricher-units-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(join(tmpDir, 'market'), { recursive: true });
+    db = await DuckDBInstance.create(':memory:');
+    conn = await db.connect();
+    await conn.run(`ATTACH ':memory:' AS market`);
+    await ensureMutableMarketTables(conn);
+    await ensureMarketDataTables(conn);
+  });
+
+  afterEach(() => {
+    try { conn.closeSync(); } catch { /* */ }
+    try { db.closeSync(); } catch { /* */ }
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('ATR_Pct is percent-of-close (not raw price points)', async () => {
+    const spxBars = syntheticDailyBars(5000, '2025-01-02', 60);
+    const fakeSpot = buildFakeSpotStoreWithDailyBars({ SPX: spxBars });
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: { get: async () => null, upsert: async () => { /* */ } },
+    };
+    await runEnrichment(conn, 'SPX', { dataDir: tmpDir }, io);
+
+    // Read a row from past the 14-bar warmup so ATR has converged.
+    const reader = await conn.runAndReadAll(
+      `SELECT ATR_Pct FROM market.enriched
+       WHERE ticker='SPX' AND date='2025-02-25' LIMIT 1`,
+    );
+    const rows = reader.getRows();
+    expect(rows.length).toBe(1);
+    const atrPct = Number(rows[0][0]);
+
+    // For close ≈ 5000 and synthetic range = 2, ATR converges to 2 raw points
+    // → ATR_Pct = 2/5000*100 = 0.04. Demand the value sit in the percent
+    // band [0.001, 5.0] — anything ≥ 5 means the formula regressed back
+    // to raw points (would be 2.x for this fixture).
+    expect(atrPct).toBeGreaterThan(0);
+    expect(atrPct).toBeLessThan(5);
+    expect(atrPct).toBeCloseTo(0.04, 2);
+  });
+
+  test('Intraday_Range_Pct uses close as denominator and is in the percent band', async () => {
+    const spxBars = syntheticDailyBars(5000, '2025-01-02', 60);
+    const fakeSpot = buildFakeSpotStoreWithDailyBars({ SPX: spxBars });
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: { get: async () => null, upsert: async () => { /* */ } },
+    };
+    await runEnrichment(conn, 'SPX', { dataDir: tmpDir }, io);
+
+    const reader = await conn.runAndReadAll(
+      `SELECT Intraday_Range_Pct FROM market.enriched
+       WHERE ticker='SPX' AND date='2025-02-25' LIMIT 1`,
+    );
+    const rows = reader.getRows();
+    expect(rows.length).toBe(1);
+    const rangePct = Number(rows[0][0]);
+
+    // For range = 2 and close ≈ 5000.5: 2 / 5000.5 * 100 ≈ 0.04.
+    // Open-based formula would yield 2 / 5000 * 100 = 0.04 — same to 2 dp on
+    // this fixture, but the assertion below confirms the value lives in
+    // the percent band (regression would put it in the points band > 100).
+    expect(rangePct).toBeGreaterThan(0);
+    expect(rangePct).toBeLessThan(5);
+    expect(rangePct).toBeCloseTo(0.04, 2);
+  });
+
+  test('Prior_Range_vs_ATR is a ratio of percents in the expected ~1.0 band', async () => {
+    const spxBars = syntheticDailyBars(5000, '2025-01-02', 60);
+    const fakeSpot = buildFakeSpotStoreWithDailyBars({ SPX: spxBars });
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: { get: async () => null, upsert: async () => { /* */ } },
+    };
+    await runEnrichment(conn, 'SPX', { dataDir: tmpDir }, io);
+
+    const reader = await conn.runAndReadAll(
+      `SELECT Prior_Range_vs_ATR FROM market.enriched
+       WHERE ticker='SPX' AND date='2025-02-25' LIMIT 1`,
+    );
+    const rows = reader.getRows();
+    expect(rows.length).toBe(1);
+    const ratio = Number(rows[0][0]);
+
+    // With range = 2 and ATR converged to ~2, the ratio should be ~1.0.
+    // Earlier broken stored values clustered at 0.02-0.08 (~50× too small
+    // due to the upstream zero-bar cascade). Demand it sit in [0.5, 2.0].
+    expect(ratio).toBeGreaterThan(0.5);
+    expect(ratio).toBeLessThan(2.0);
   });
 });

@@ -1,4 +1,4 @@
-import { issueAccessToken, verifyAccessToken } from '../../../src/auth/token.js';
+import { issueAccessToken, verifyAccessToken } from '../../../src/auth/token.ts';
 
 const TEST_SECRET = 'test-secret-key-at-least-32-chars-long';
 

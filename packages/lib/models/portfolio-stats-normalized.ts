@@ -22,7 +22,7 @@
  * @see {@link @/lib/types/percentage} for type-safe unit utilities
  */
 
-import type { Decimal01 } from '../types/percentage'
+import type { Decimal01 } from '../types/percentage.ts'
 
 /**
  * Normalized portfolio statistics with all percentages as decimals (0-1).

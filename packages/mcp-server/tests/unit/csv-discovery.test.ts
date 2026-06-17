@@ -7,7 +7,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
-import { detectCsvType, discoverCsvFiles } from "../../src/test-exports.js";
+import { detectCsvType, discoverCsvFiles } from "../../src/test-exports.ts";
 
 let tmpDir: string;
 

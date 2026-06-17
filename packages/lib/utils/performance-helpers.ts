@@ -1,5 +1,5 @@
-import { Trade } from '../models/trade'
-import { groupTradesByEntry } from './combine-leg-groups'
+import type { Trade } from '../models/trade.ts'
+import { groupTradesByEntry } from './combine-leg-groups.ts'
 
 export type GroupedOutcome =
   | 'all_losses'

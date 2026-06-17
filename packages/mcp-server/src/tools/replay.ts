@@ -2,7 +2,7 @@
  * Trade Replay Tools
  *
  * MCP tool for replaying trades using historical minute-level option bars
- * from Massive.com. Supports two modes:
+ * read from the local market-data cache. Supports two modes:
  *   A) Hypothetical replay — explicit legs with strikes/expiry/dates
  *   B) Tradelog replay — block_id + trade_index to replay from existing trade data
  *
@@ -12,9 +12,11 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection } from "../db/connection.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import { fetchBarsWithCache } from "../utils/bar-cache.js";
+import { getConnection } from "../db/connection.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import type { MarketStores } from "../market/stores/index.ts";
+import { extractRoot } from "../market/tickers/resolver.ts";
+import type { QuoteRow } from "../market/stores/types.ts";
 import {
   parseLegsString,
   buildOccTicker,
@@ -24,8 +26,8 @@ import {
   type ReplayLeg,
   type ReplayResult,
   type GreeksConfig,
-} from "../utils/trade-replay.js";
-import type { BarRow } from "../utils/market-provider.js";
+} from "../utils/trade-replay.ts";
+import type { BarRow } from "../utils/market-provider.ts";
 
 // ---------------------------------------------------------------------------
 // Zod schema
@@ -123,7 +125,7 @@ function resolveOOExpiryHint(hint: string, year: string): string {
  * Returns null if no legs have expiryHint (caller falls back to trade dates).
  */
 export function resolveOODateRange(
-  parsedLegs: import("../utils/trade-replay.js").ParsedLegOO[],
+  parsedLegs: import("../utils/trade-replay.ts").ParsedLegOO[],
   tradeYear: string,
   tradeOpenDate: string,
 ): { from: string; to: string } | null {
@@ -148,6 +150,7 @@ export function resolveOODateRange(
 export async function handleReplayTrade(
   params: z.infer<typeof replayTradeSchema>,
   baseDir: string,
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection
 ): Promise<ReplayResult> {
   const {
@@ -268,56 +271,64 @@ export async function handleReplayTrade(
     );
   }
 
-  // ----- Fetch minute bars for each leg -----
-  // Index options often trade under a weekly root on Massive (e.g., SPX→SPXW).
-  // If the primary root fetch returns empty, retry with the mapped fallback root.
-  const ROOT_FALLBACK_MAP: Record<string, string> = {
-    SPX: 'SPXW',
-    NDX: 'NDXP',
-    RUT: 'RUTW',
-  };
+  // ----- Fetch minute quotes for each option leg via QuoteStore -----
+  // Adapt QuoteRow → BarRow with mid = (bid+ask)/2 as open/high/low/close
+  // (mid-price is the canonical mark for option-leg pricing).
+  //
+  // Group OCC tickers by underlying before each readQuotes call: the store
+  // enforces a single-underlying invariant per call so partitioned reads
+  // can be served from one parquet partition root. Typical replays have
+  // all legs under one underlying (single SPX trade); multi-underlying
+  // replays issue one readQuotes per underlying.
+  //
+  // Fallback root logic (SPX→SPXW etc.) is implicit: the QuoteStore's
+  // tickers.resolve(extractRoot(...)) maps both SPX and SPXW to underlying
+  // 'SPX'. The OCC ticker prefix in the chain is whatever the data layer
+  // ingested (typically SPXW); keying on underlying makes the same data
+  // reachable via either root.
+  //
+  // skip_quotes is a no-op for option-leg reads — quotes ARE the source of
+  // truth here. Parameter remains in the schema for backward compat with
+  // callers.
+  void skip_quotes;
 
-  const fetchLegBars = async (occTicker: string): Promise<BarRow[]> => {
-    const bars = await fetchBarsWithCache({
-      ticker: occTicker,
-      from: open_date!,
-      to: close_date!,
-      timespan: 'minute',
-      assetClass: 'option',
-      conn: injectedConn,
-      baseDir,
-      skipQuotes: skip_quotes,
-    });
-    if (bars.length > 0) return bars;
+  const byUnderlying = new Map<string, string[]>();
+  for (const leg of replayLegs) {
+    const underlying = stores.quote.tickers.resolve(extractRoot(leg.occTicker));
+    const arr = byUnderlying.get(underlying) ?? [];
+    arr.push(leg.occTicker);
+    byUnderlying.set(underlying, arr);
+  }
 
-    // Fallback root retry (SPX→SPXW, NDX→NDXP, RUT→RUTW)
-    const rootMatch = occTicker.match(/^([A-Z]+)/);
-    const root = rootMatch ? rootMatch[1] : '';
-    const fallbackRoot = ROOT_FALLBACK_MAP[root];
-    if (fallbackRoot && !occTicker.startsWith(fallbackRoot)) {
-      const fallbackTicker = fallbackRoot + occTicker.slice(root.length);
-      const fallbackBars = await fetchBarsWithCache({
-        ticker: fallbackTicker,
-        from: open_date!,
-        to: close_date!,
-        timespan: 'minute',
-        assetClass: 'option',
-        conn: injectedConn,
-        baseDir,
-        skipQuotes: skip_quotes,
-      });
-      if (fallbackBars.length > 0) {
-        const leg = replayLegs.find(l => l.occTicker === occTicker);
-        if (leg) leg.occTicker = fallbackTicker;
-        return fallbackBars;
-      }
+  const quotesByOcc = new Map<string, QuoteRow[]>();
+  for (const [, occs] of byUnderlying) {
+    try {
+      const result = await stores.quote.readQuotes(occs, open_date!, close_date!);
+      for (const [occ, rows] of result) quotesByOcc.set(occ, rows);
+    } catch {
+      // Best-effort: a missing partition / read error returns empty for these legs.
     }
-    return [];
-  };
+  }
 
-  const barsByLeg = await Promise.all(
-    replayLegs.map((leg) => fetchLegBars(leg.occTicker))
-  );
+  const barsByLeg: BarRow[][] = replayLegs.map((leg) => {
+    const quotes = quotesByOcc.get(leg.occTicker) ?? [];
+    return quotes.map((q) => {
+      const [date, time] = q.timestamp.split(' ');
+      const mid = (q.bid + q.ask) / 2;
+      return {
+        ticker: q.occ_ticker,
+        date,
+        time,
+        open: mid,
+        high: mid,
+        low: mid,
+        close: mid,
+        bid: q.bid,
+        ask: q.ask,
+        volume: 0,
+      };
+    });
+  });
 
   // ----- Fetch underlying bars + build greeks config -----
   // Reverse-map weekly roots back to standard root for underlying fetch
@@ -334,40 +345,41 @@ export async function handleReplayTrade(
   const underlyingTicker = REVERSE_ROOT_MAP[rawRoot] ?? rawRoot;
   const dividendYield = DIVIDEND_YIELDS[rawRoot] ?? 0;
 
-  // Fetch underlying minute bars via shared cache utility (cache-read → API → cache-write)
-  let underlyingBars: BarRow[] = await fetchBarsWithCache({
-    ticker: underlyingTicker,
-    from: open_date!,
-    to: close_date!,
-    timespan: 'minute',
-    assetClass: underlyingTicker === 'SPX' || underlyingTicker === 'NDX' || underlyingTicker === 'RUT' ? 'index' : 'stock',
-    conn: injectedConn,
-    baseDir,
-  });
-
-  // Daily fallback when minute bars unavailable
+  // Read underlying minute bars via SpotStore, falling back to the daily
+  // aggregate (readDailyBars) when minute bars are absent. The daily
+  // fallback keeps greeks computable on dates with sparse intraday
+  // coverage.
+  let underlyingBars: BarRow[] = await stores.spot.readBars(
+    underlyingTicker,
+    open_date!,
+    close_date!,
+  );
   if (underlyingBars.length === 0) {
     try {
-      const conn = injectedConn ?? await getConnection(baseDir);
-      const result = await conn.runAndReadAll(
-        `SELECT date, close FROM market.daily
-         WHERE ticker = '${underlyingTicker}'
-         AND date >= '${open_date}' AND date <= '${close_date}'
-         ORDER BY date`
+      underlyingBars = await stores.spot.readDailyBars(
+        underlyingTicker,
+        open_date!,
+        close_date!,
       );
-      const dailyRows = result.getRows();
-      underlyingBars = dailyRows.map(r => ({
-        date: String(r[0]),
-        open: Number(r[1]),
-        high: Number(r[1]),
-        low: Number(r[1]),
-        close: Number(r[1]),
-        volume: 0,
-        ticker: underlyingTicker,
-      }));
     } catch {
       // No fallback available — greeks will be omitted
     }
+  }
+  // Defense-in-depth: drop any underlying bar with a zero/null OHLC value.
+  // SPX/QQQ/etc. always have a real price — a zero in spot is a provider
+  // gap (see ParquetSpotStore writer guard), and feeding it into Black-
+  // Scholes greeks computation produces nonsense (S=0 → infinite delta etc.).
+  // Raw bars are left unfiltered upstream so option tickers can keep
+  // legitimate "no trade" zero rows; the filtering responsibility lives
+  // here at the underlying-consumer site.
+  if (underlyingBars.length > 0) {
+    underlyingBars = underlyingBars.filter(
+      (b) =>
+        Number.isFinite(b.open) && b.open > 0 &&
+        Number.isFinite(b.high) && b.high > 0 &&
+        Number.isFinite(b.low)  && b.low  > 0 &&
+        Number.isFinite(b.close)&& b.close> 0,
+    );
   }
 
   // Build underlying price map for greeks config
@@ -377,28 +389,33 @@ export async function handleReplayTrade(
     underlyingPrices.set(ts, markPrice(b));
   }
 
-  // Build sorted timestamps array for tolerant nearest-timestamp lookup (D-07/D-08)
+  // Build sorted timestamps for tolerant nearest-timestamp lookup: when a
+  // leg's quote timestamp doesn't have an exact underlying-price match
+  // (e.g. one source skipped a minute), greeks computation falls back to
+  // the nearest underlying timestamp within tolerance.
   const sortedTimestamps = Array.from(underlyingPrices.keys())
     .filter(k => k.includes(' '))  // Only intraday timestamps, not date-only keys
     .sort();
 
-  // IVP lookup from market.daily VIX ticker (normalized schema)
+  // VIX IVP lookup via EnrichedStore.read — used as an optional input to
+  // the greeks model when implied-vol percentile context is available.
   let ivpByDate: Map<string, number> | undefined;
   try {
-    const conn = injectedConn ?? await getConnection(baseDir);
-    const ivpResult = await conn.runAndReadAll(
-      `SELECT date, ivp FROM market.daily
-       WHERE ticker = 'VIX'
-       AND date >= '${open_date}' AND date <= '${close_date}'
-       AND ivp IS NOT NULL
-       ORDER BY date`
-    );
-    const ivpRows = ivpResult.getRows();
-    if (ivpRows.length > 0) {
-      ivpByDate = new Map();
-      for (const r of ivpRows) {
-        ivpByDate.set(String(r[0]), Number(r[1]));
+    const vixEnriched = await stores.enriched.read({
+      ticker: "VIX",
+      from: open_date!,
+      to: close_date!,
+      includeContext: false,
+    });
+    const map = new Map<string, number>();
+    for (const row of vixEnriched) {
+      const ivp = row.ivp;
+      if (ivp != null) {
+        map.set(String(row.date), Number(ivp));
       }
+    }
+    if (map.size > 0) {
+      ivpByDate = map;
     }
   } catch {
     // IVP is optional enrichment — don't fail
@@ -432,7 +449,9 @@ export async function handleReplayTrade(
     computeReplayMfeMae(fullPath);
   let totalPnl = fullPath.length > 0 ? fullPath[fullPath.length - 1].strategyPnl : 0;
 
-  // Compute greeks warning (D-12): warn when >50% of leg-timestamps have null greeks
+  // Surface a warning when >50% of leg-timestamps have null greeks — the
+  // most common cause is sparse IV data or 0DTE legs falling outside the
+  // pricing model's valid range.
   let greeksNullCount = 0;
   let greeksTotalCount = 0;
   for (const point of fullPath) {
@@ -505,14 +524,16 @@ export async function handleReplayTrade(
 
 export function registerReplayTools(
   server: McpServer,
-  baseDir: string
+  baseDir: string,
+  stores: MarketStores,
 ): void {
   server.registerTool(
     "replay_trade",
     {
       description:
         "Replay a trade using historical minute-level option bars. " +
-        "Uses cached bars from market.intraday if available; fetches from Massive.com API on cache miss (requires MASSIVE_API_KEY). " +
+        "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
+        "missing data yields a degenerate replay. Use the data-pipeline tools to backfill cache. " +
         "Returns minute-by-minute P&L path with MFE (Maximum Favorable Excursion) and MAE (Maximum Adverse Excursion). " +
         "Two modes: (A) Hypothetical — provide explicit legs with strikes, expiry, entry prices. " +
         "(B) Tradelog — provide block_id + trade_index to replay an existing trade from your data.",
@@ -520,7 +541,7 @@ export function registerReplayTools(
     },
     async (params) => {
       try {
-        const result = await handleReplayTrade(params, baseDir);
+        const result = await handleReplayTrade(params, baseDir, stores);
 
         const summary =
           `Replayed ${result.legs.length}-leg strategy from ${params.open_date ?? "trade dates"} to ${params.close_date ?? "trade dates"}: ` +

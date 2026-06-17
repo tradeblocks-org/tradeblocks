@@ -4,9 +4,9 @@ import {
   analyzeExitTriggers,
   type ExitTriggerConfig,
   type LegGroupConfig,
-} from '../../src/utils/exit-triggers.js';
-import type { PnlPoint, ReplayLeg } from '../../src/utils/trade-replay.js';
-import type { GreeksResult } from '../../src/utils/black-scholes.js';
+} from '../../src/utils/exit-triggers.ts';
+import type { PnlPoint, ReplayLeg } from '../../src/utils/trade-replay.ts';
+import type { GreeksResult } from '../../src/utils/black-scholes.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -58,13 +58,22 @@ describe('evaluateTrigger', () => {
   const path = buildTestPath(STANDARD_PNLS, { deltas: STANDARD_DELTAS });
 
   describe('profitTarget', () => {
-    it('fires when P&L >= threshold', () => {
+    it('fires on the first bar at or above the threshold by default', () => {
       const trigger: ExitTriggerConfig = { type: 'profitTarget', threshold: 200 };
       const result = evaluateTrigger(trigger, path, DEFAULT_LEGS);
       expect(result).not.toBeNull();
       expect(result!.type).toBe('profitTarget');
-      expect(result!.index).toBe(3); // pnl=200
+      expect(result!.index).toBe(3); // first bar where pnl reaches 200
       expect(result!.pnlAtFire).toBe(200);
+    });
+
+    it('fires after two synchronized bars when requiredHits is 2', () => {
+      const trigger: ExitTriggerConfig = { type: 'profitTarget', threshold: 200, requiredHits: 2 };
+      const result = evaluateTrigger(trigger, path, DEFAULT_LEGS);
+      expect(result).not.toBeNull();
+      expect(result!.type).toBe('profitTarget');
+      expect(result!.index).toBe(4); // second qualifying bar after pnl first reaches 200
+      expect(result!.pnlAtFire).toBe(300);
     });
 
     it('returns null when threshold never reached', () => {
@@ -373,21 +382,25 @@ describe('evaluateTrigger', () => {
   });
 
   describe('perLegDelta', () => {
-    // Shared legGreeks for directional tests:
-    // Leg 0 delta ramps: 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75
-    // Leg 1 delta ramps: -0.20, -0.25, -0.30, -0.35, -0.40, -0.45, -0.50, -0.55, -0.60, -0.65
+    const directionalLegs: ReplayLeg[] = [
+      { occTicker: 'SPY260105P00470000', quantity: -1, entryPrice: 5.0, multiplier: 100 },
+      { occTicker: 'SPY260105C00465000', quantity: -1, entryPrice: 3.0, multiplier: 100 },
+    ];
+    // Raw option deltas:
+    // Leg 0 (put) ramps: -0.30..-0.75 -> short position delta ramps +0.30..+0.75
+    // Leg 1 (call) ramps: +0.20..+0.65 -> short position delta ramps -0.20..-0.65
     const directionalLegGreeks: GreeksResult[][] = STANDARD_PNLS.map((_, i) => [
-      { delta: 0.3 + i * 0.05, gamma: 0.01, theta: -0.5, vega: 0.1, iv: 0.2 },
-      { delta: -(0.2 + i * 0.05), gamma: 0.01, theta: -0.5, vega: 0.1, iv: 0.2 },
+      { delta: -(0.3 + i * 0.05), gamma: 0.01, theta: -0.5, vega: 0.1, iv: 0.2 },
+      { delta: 0.2 + i * 0.05, gamma: 0.01, theta: -0.5, vega: 0.1, iv: 0.2 },
     ]);
     const pathWithGreeks = buildTestPath(STANDARD_PNLS, { deltas: STANDARD_DELTAS, legGreeks: directionalLegGreeks });
 
     it('fires when any single leg delta exceeds threshold (backward compat)', () => {
       const trigger: ExitTriggerConfig = { type: 'perLegDelta', threshold: 0.6 };
-      const result = evaluateTrigger(trigger, pathWithGreeks, DEFAULT_LEGS);
+      const result = evaluateTrigger(trigger, pathWithGreeks, directionalLegs);
       expect(result).not.toBeNull();
       expect(result!.type).toBe('perLegDelta');
-      // Leg 0 delta: 0.3, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60 -> fires at i=6
+      // Position-adjusted leg 0 delta: 0.3, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60 -> fires at i=6
       expect(result!.index).toBe(6);
     });
 
@@ -397,46 +410,45 @@ describe('evaluateTrigger', () => {
       expect(result).toBeNull();
     });
 
-    it('legIndex=0 + exitAbove=0.64 fires when leg 0 delta exceeds bound', () => {
-      // Leg 0 delta at i=7 is 0.65 > 0.64
+    it('legIndex=0 + exitAbove=0.64 fires when short put position delta exceeds bound', () => {
+      // Position-adjusted leg 0 delta at i=7 is 0.65 > 0.64
       const trigger: ExitTriggerConfig = { type: 'perLegDelta', threshold: 0, legIndex: 0, exitAbove: 0.64 };
-      const result = evaluateTrigger(trigger, pathWithGreeks, DEFAULT_LEGS);
+      const result = evaluateTrigger(trigger, pathWithGreeks, directionalLegs);
       expect(result).not.toBeNull();
-      expect(result!.index).toBe(7); // leg 0 delta=0.65 > 0.64
+      expect(result!.index).toBe(7);
       expect(result!.detail).toContain('Leg 0');
       expect(result!.detail).toContain('exitAbove');
     });
 
-    it('legIndex=1 + exitBelow=-0.47 fires when leg 1 delta drops below', () => {
-      // Leg 1 deltas: -0.20, -0.25, -0.30, -0.35, -0.40, -0.45, -0.50
+    it('legIndex=1 + exitBelow=-0.47 fires when short call position delta drops below', () => {
+      // Position-adjusted leg 1 deltas: -0.20, -0.25, -0.30, -0.35, -0.40, -0.45, -0.50
       // At i=6: leg 1 delta = -0.50 < -0.47
       const trigger: ExitTriggerConfig = { type: 'perLegDelta', threshold: 0, legIndex: 1, exitBelow: -0.47 };
-      const result = evaluateTrigger(trigger, pathWithGreeks, DEFAULT_LEGS);
+      const result = evaluateTrigger(trigger, pathWithGreeks, directionalLegs);
       expect(result).not.toBeNull();
-      expect(result!.index).toBe(6); // leg 1 delta=-0.50 < -0.47
+      expect(result!.index).toBe(6);
       expect(result!.detail).toContain('Leg 1');
       expect(result!.detail).toContain('exitBelow');
     });
 
-    it('legIndex=1 + exitAbove=0.6 does NOT fire (leg 1 is negative)', () => {
-      // Leg 1 delta is always negative, never > 0.6
+    it('legIndex=1 + exitAbove=0.6 does NOT fire when the short call position stays negative', () => {
       const trigger: ExitTriggerConfig = { type: 'perLegDelta', threshold: 0, legIndex: 1, exitAbove: 0.6 };
-      const result = evaluateTrigger(trigger, pathWithGreeks, DEFAULT_LEGS);
+      const result = evaluateTrigger(trigger, pathWithGreeks, directionalLegs);
       expect(result).toBeNull();
     });
 
     it('legIndex + no exitAbove/exitBelow uses abs() on that single leg', () => {
-      // legIndex=0, threshold=0.6: abs(leg 0 delta) >= 0.6 fires at i=6 (delta=0.60)
+      // legIndex=0, threshold=0.6: abs(position-adjusted delta) >= 0.6 fires at i=6
       const trigger: ExitTriggerConfig = { type: 'perLegDelta', threshold: 0.6, legIndex: 0 };
-      const result = evaluateTrigger(trigger, pathWithGreeks, DEFAULT_LEGS);
+      const result = evaluateTrigger(trigger, pathWithGreeks, directionalLegs);
       expect(result).not.toBeNull();
-      expect(result!.index).toBe(6); // abs(0.60) >= 0.6
+      expect(result!.index).toBe(6);
     });
 
     it('no legIndex iterates all legs with abs() (full backward compat)', () => {
       // Without legIndex, fires on whichever leg first hits abs >= threshold
       const trigger: ExitTriggerConfig = { type: 'perLegDelta', threshold: 0.6 };
-      const result = evaluateTrigger(trigger, pathWithGreeks, DEFAULT_LEGS);
+      const result = evaluateTrigger(trigger, pathWithGreeks, directionalLegs);
       expect(result).not.toBeNull();
       // Leg 0 at i=6: abs(0.60) >= 0.6, Leg 1 at i=8: abs(-0.60) >= 0.6
       // Leg 0 fires first at i=6
@@ -547,9 +559,10 @@ describe('evaluateTrigger', () => {
   });
 
   describe('slRatioMove', () => {
-    it('fires when S/L ratio changes by threshold from initial', () => {
-      // Build a path where short leg price changes significantly
-      const legPrices = STANDARD_PNLS.map((_, i) => [5.0 + i * 0.5, 3.0]); // short leg price rises
+    it('fires when S/L ratio rises by the configured percent from initial', () => {
+      // Legacy evaluator uses spreadValue/maxLoss. With spreadWidth=5, ratio starts at 1.0
+      // and rises as the short leg price rises. A +30% threshold should fire at index 3.
+      const legPrices = STANDARD_PNLS.map((_, i) => [5.0 + i * 0.5, 3.0]);
       const pathWithPrices = buildTestPath(STANDARD_PNLS, { legPrices });
       const trigger: ExitTriggerConfig = {
         type: 'slRatioMove',
@@ -558,13 +571,52 @@ describe('evaluateTrigger', () => {
         contracts: 1,
         multiplier: 100,
       };
-      // Initial S/L: (5.0 * 1 * 100) / 500 = 1.0
-      // At index 4: (7.0 * 1 * 100) / 500 = 1.4, change = 0.4 >= 0.3
+      // Initial ratio = 1.0. Index 3 ratio = 1.3, which is a +30% move.
       const result = evaluateTrigger(trigger, pathWithPrices, DEFAULT_LEGS);
       expect(result).not.toBeNull();
       expect(result!.type).toBe('slRatioMove');
-      // Index 0 sets initial. Index 1: 5.5->1.1, change=0.1. Index 2: 6.0->1.2, change=0.2. Index 3: 6.5->1.3, change=0.3
       expect(result!.index).toBe(3);
+    });
+
+    it('fires when S/L ratio falls by the configured percent from initial', () => {
+      const legPrices = STANDARD_PNLS.map((_, i) => [5.0 - i * 0.75, 3.0]);
+      const pathWithPrices = buildTestPath(STANDARD_PNLS, { legPrices });
+      const trigger: ExitTriggerConfig = {
+        type: 'slRatioMove',
+        threshold: -0.3,
+        spreadWidth: 5,
+        contracts: 1,
+        multiplier: 100,
+      };
+
+      const result = evaluateTrigger(trigger, pathWithPrices, DEFAULT_LEGS);
+      expect(result).not.toBeNull();
+      expect(result!.type).toBe('slRatioMove');
+      expect(result!.index).toBe(2);
+    });
+
+    it('uses entrySLRatio as the baseline when provided', () => {
+      const pathWithPrices = buildTestPath(STANDARD_PNLS, {
+        legPrices: [
+          [2.0, 10.0],
+          [1.3, 10.0],
+          [1.2, 10.0],
+        ],
+      });
+      const trigger: ExitTriggerConfig = {
+        type: 'slRatioMove',
+        threshold: -0.7,
+        spreadWidth: 5,
+        contracts: 1,
+        multiplier: 100,
+        entrySLRatio: 1.0,
+      };
+
+      const result = evaluateTrigger(trigger, pathWithPrices, DEFAULT_LEGS);
+      expect(result).not.toBeNull();
+      expect(result!.type).toBe('slRatioMove');
+      expect(result!.index).toBe(1);
+      expect(result!.detail).toContain('initial 1.0000');
     });
   });
 
@@ -580,9 +632,9 @@ describe('evaluateTrigger', () => {
 
   describe('profitTarget with unit:percent', () => {
     it('fires when P&L >= threshold * abs(entryCost) for credit spread (entryCost negative)', () => {
-      // entryCost=-350 (received $350 credit), threshold=0.7 -> dollarThreshold=0.7*350=245
-      // pnlPath ramps: [0, 100, 200, 244, 246]
-      const pnlPath = buildTestPath([0, 100, 200, 244, 246]);
+      // entryCost=-350 (received $350 credit), threshold=0.7 -> dollarThreshold=245
+      // Fires on the first bar at or above threshold by default.
+      const pnlPath = buildTestPath([0, 100, 200, 246, 250]);
       const trigger: ExitTriggerConfig = {
         type: 'profitTarget',
         threshold: 0.7,
@@ -592,7 +644,7 @@ describe('evaluateTrigger', () => {
       const result = evaluateTrigger(trigger, pnlPath, DEFAULT_LEGS);
       expect(result).not.toBeNull();
       expect(result!.type).toBe('profitTarget');
-      expect(result!.index).toBe(4); // pnl=246 >= 245
+      expect(result!.index).toBe(3);
       expect(result!.pnlAtFire).toBe(246);
       // Detail string should mention percentage context
       expect(result!.detail).toContain('70%');
@@ -609,7 +661,7 @@ describe('evaluateTrigger', () => {
       };
       const result = evaluateTrigger(trigger, pnlPath, DEFAULT_LEGS);
       expect(result).not.toBeNull();
-      expect(result!.index).toBe(3); // pnl=250 >= 250
+      expect(result!.index).toBe(3);
       expect(result!.pnlAtFire).toBe(250);
     });
 
@@ -647,7 +699,7 @@ describe('evaluateTrigger', () => {
       };
       const result = evaluateTrigger(trigger, path, DEFAULT_LEGS);
       expect(result).not.toBeNull();
-      expect(result!.index).toBe(3); // pnl=200
+      expect(result!.index).toBe(3);
       expect(result!.pnlAtFire).toBe(200);
     });
 
@@ -766,7 +818,7 @@ describe('analyzeExitTriggers', () => {
 
   it('identifies first-to-fire when multiple triggers fire', () => {
     const triggers: ExitTriggerConfig[] = [
-      { type: 'profitTarget', threshold: 200 }, // fires at index 3
+      { type: 'profitTarget', threshold: 200 }, // fires at index 3 on first cross
       { type: 'stopLoss', threshold: 100 },     // fires at index 8
     ];
     const result = analyzeExitTriggers({ pnlPath: path, legs: DEFAULT_LEGS, triggers });
@@ -805,7 +857,7 @@ describe('analyzeExitTriggers', () => {
 
   it('handles actual exit after all path points', () => {
     const triggers: ExitTriggerConfig[] = [
-      { type: 'profitTarget', threshold: 100 }, // fires at index 2 (pnl=100)
+      { type: 'profitTarget', threshold: 100 }, // fires at index 2 on first cross
     ];
     const result = analyzeExitTriggers({
       pnlPath: path,
@@ -832,29 +884,33 @@ describe('analyzeExitTriggers', () => {
   it('percentage-based profitTarget fires correctly via analyzeExitTriggers', () => {
     // entryCost on the config object is passed through to evaluateTrigger
     // entryCost=-350, threshold=0.7 -> dollarThreshold=245
-    const pnlPath = buildTestPath([0, 100, 200, 244, 246]);
+    const pnlPath = buildTestPath([0, 100, 200, 246, 250]);
     const triggers: ExitTriggerConfig[] = [
       { type: 'profitTarget', threshold: 0.7, unit: 'percent', entryCost: -350 },
     ];
     const result = analyzeExitTriggers({ pnlPath, legs: DEFAULT_LEGS, triggers });
     expect(result.overall.firstToFire).not.toBeNull();
     expect(result.overall.firstToFire!.type).toBe('profitTarget');
-    expect(result.overall.firstToFire!.index).toBe(4); // pnl=246 >= 245
+    expect(result.overall.firstToFire!.index).toBe(3);
   });
 
   it('two directional perLegDelta triggers targeting different legs fire independently', () => {
-    // Leg 0 delta ramps: 0.30..0.75, Leg 1 delta ramps: -0.20..-0.65
+    const directionalLegs: ReplayLeg[] = [
+      { occTicker: 'SPY260105P00470000', quantity: -1, entryPrice: 5.0, multiplier: 100 },
+      { occTicker: 'SPY260105C00465000', quantity: -1, entryPrice: 3.0, multiplier: 100 },
+    ];
+    // Position-adjusted deltas become +0.30..+0.75 for leg 0 and -0.20..-0.65 for leg 1
     const legGreeks: GreeksResult[][] = STANDARD_PNLS.map((_, i) => [
-      { delta: 0.3 + i * 0.05, gamma: 0.01, theta: -0.5, vega: 0.1, iv: 0.2 },
-      { delta: -(0.2 + i * 0.05), gamma: 0.01, theta: -0.5, vega: 0.1, iv: 0.2 },
+      { delta: -(0.3 + i * 0.05), gamma: 0.01, theta: -0.5, vega: 0.1, iv: 0.2 },
+      { delta: 0.2 + i * 0.05, gamma: 0.01, theta: -0.5, vega: 0.1, iv: 0.2 },
     ]);
     const pathWithGreeks = buildTestPath(STANDARD_PNLS, { deltas: STANDARD_DELTAS, legGreeks });
 
     const triggers: ExitTriggerConfig[] = [
-      { type: 'perLegDelta', threshold: 0, legIndex: 0, exitAbove: 0.64 },  // fires at i=7 (delta=0.65)
-      { type: 'perLegDelta', threshold: 0, legIndex: 1, exitBelow: -0.47 }, // fires at i=6 (delta=-0.50)
+      { type: 'perLegDelta', threshold: 0, legIndex: 0, exitAbove: 0.64 },
+      { type: 'perLegDelta', threshold: 0, legIndex: 1, exitBelow: -0.47 },
     ];
-    const result = analyzeExitTriggers({ pnlPath: pathWithGreeks, legs: DEFAULT_LEGS, triggers });
+    const result = analyzeExitTriggers({ pnlPath: pathWithGreeks, legs: directionalLegs, triggers });
     expect(result.overall.triggers).toHaveLength(2);
     // Both fired — leg 1 exitBelow fires first (i=6), leg 0 exitAbove fires second (i=7)
     expect(result.overall.firstToFire).not.toBeNull();
@@ -875,20 +931,21 @@ describe('leg groups', () => {
       [5.0, 3.0],  // index 0: both at entry
       [4.5, 3.5],  // index 1: leg0 dropped, leg1 rose
       [4.0, 4.0],  // index 2
+      [3.5, 4.5],  // index 3
     ];
-    const pnls = [0, 100, 200]; // overall P&L
+    const pnls = [0, 100, 200, 300]; // overall P&L
     const path = buildTestPath(pnls, { legPrices });
 
     const legGroups: LegGroupConfig[] = [
       {
         label: 'short_call',
         legIndices: [0],
-        triggers: [{ type: 'profitTarget', threshold: 40 }],
+        triggers: [{ type: 'profitTarget', threshold: 40, requiredHits: 2 }],
       },
       {
         label: 'long_call',
         legIndices: [1],
-        triggers: [{ type: 'profitTarget', threshold: 80 }],
+        triggers: [{ type: 'profitTarget', threshold: 80, requiredHits: 2 }],
       },
     ];
 
@@ -912,10 +969,10 @@ describe('leg groups', () => {
     expect(shortCallGroup.groupPnl[1]).toBe(50);
     expect(shortCallGroup.groupPnl[2]).toBe(100);
 
-    // short_call profitTarget at 40 fires at index 1 (groupPnl=50)
+    // short_call profitTarget at 40 fires on the second qualifying bar.
     expect(shortCallGroup.result.firstToFire).not.toBeNull();
-    expect(shortCallGroup.result.firstToFire!.index).toBe(1);
-    expect(shortCallGroup.result.firstToFire!.pnlAtFire).toBe(50);
+    expect(shortCallGroup.result.firstToFire!.index).toBe(2);
+    expect(shortCallGroup.result.firstToFire!.pnlAtFire).toBe(100);
 
     // long_call group: pnl = (markPrice - 3.0) * 1 * 100
     // index 0: 0, index 1: 50, index 2: 100
@@ -925,9 +982,9 @@ describe('leg groups', () => {
     expect(longCallGroup.groupPnl[1]).toBe(50);
     expect(longCallGroup.groupPnl[2]).toBe(100);
 
-    // long_call profitTarget at 80 fires at index 2 (groupPnl=100)
+    // long_call profitTarget at 80 also requires a second confirmation bar.
     expect(longCallGroup.result.firstToFire).not.toBeNull();
-    expect(longCallGroup.result.firstToFire!.index).toBe(2);
+    expect(longCallGroup.result.firstToFire!.index).toBe(3);
   });
 
   it('evaluates per-group triggers independently of other groups', () => {

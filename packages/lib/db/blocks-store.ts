@@ -2,8 +2,8 @@
  * Blocks Store - CRUD operations for trading blocks
  */
 
-import { ProcessedBlock, Block } from '../models/block'
-import { STORES, withReadTransaction, withWriteTransaction, promisifyRequest, DatabaseError } from './index'
+import type { ProcessedBlock, Block } from '../models/block.ts'
+import { STORES, withReadTransaction, withWriteTransaction, promisifyRequest, DatabaseError } from './index.ts'
 
 /**
  * Create a new block

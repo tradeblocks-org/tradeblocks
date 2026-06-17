@@ -1,12 +1,22 @@
-# TradeBlocks Code Owners
-# Global owners for all files
-* @davidromeo
+# CODEOWNERS — tradeblocks-org/tradeblocks
+#
+# Path-based review routing. Both maintainers review every path by design.
 
-# Critical configuration files
-vercel.json @davidromeo
-requirements.txt @davidromeo
-.github/ @davidromeo
+# Public-facing application and library code
+/packages/                              @davidromeo @longpshorn
+/app/                                   @davidromeo @longpshorn
+/components/                            @davidromeo @longpshorn
+/hooks/                                 @davidromeo @longpshorn
+/docs/                                  @davidromeo @longpshorn
+/public/                                @davidromeo @longpshorn
+/tests/                                 @davidromeo @longpshorn
+/tools/                                 @davidromeo @longpshorn
+/gpt/                                   @davidromeo @longpshorn
 
-# Core application
-app/main.py @davidromeo
-app/api/ @davidromeo
+# Build / CI / publish config
+/package.json                           @davidromeo @longpshorn
+/.github/workflows/                     @davidromeo @longpshorn
+/.github/CODEOWNERS                     @davidromeo @longpshorn
+
+# Default
+*                                       @davidromeo @longpshorn

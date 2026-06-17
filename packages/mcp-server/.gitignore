@@ -8,3 +8,11 @@ agent-skills/
 # Test-generated cache files
 tests/fixtures/**/block.json
 tests/fixtures/**/.block.json
+tests/fixtures/*.duckdb
+
+# Self-improve scoring run history (ephemeral, machine-specific)
+scripts/reports/history/
+scripts/reports/latest.json
+
+# Local DuckDB files (data lives in ~/tradeblocks-data/)
+data/*.duckdb

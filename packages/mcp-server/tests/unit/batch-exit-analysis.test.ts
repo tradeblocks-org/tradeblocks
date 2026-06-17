@@ -11,8 +11,8 @@ import {
   type BatchExitConfig,
   type TradeInput,
   type TradeExitResult,
-} from '../../src/utils/batch-exit-analysis.js';
-import type { PnlPoint, ReplayLeg } from '../../src/utils/trade-replay.js';
+} from '../../src/utils/batch-exit-analysis.ts';
+import type { PnlPoint, ReplayLeg } from '../../src/utils/trade-replay.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -31,6 +31,10 @@ function buildPath(start: number, end: number, steps: number): PnlPoint[] {
     };
   });
 }
+
+// profitTarget fires on the first bar at or above the threshold by default.
+// On buildPath(0, 300, 10) the path hits exactly 200 at i=6.
+const PROFIT_TARGET_PNL = 200;
 
 const DEFAULT_LEGS: ReplayLeg[] = [
   { occTicker: 'SPY260105C00470000', quantity: -1, entryPrice: 5.0, multiplier: 100 },
@@ -83,7 +87,8 @@ describe('analyzeBatch', () => {
   // ---------------------------------------------------------------------------
 
   test('3 winning trades with profitTarget returns correct win rate and total P&L', () => {
-    // Each trade goes to $300 (exceeds $200 profit target at some point)
+    // profitTarget fires on the first cross by default.
+    // On a 0 -> 300 path with 10 samples, the path touches 200 at i=6 and fires there.
     const trades = [0, 1, 2].map(i =>
       buildTradeInput(i, 200, buildPath(0, 300, 10))
     );
@@ -94,9 +99,8 @@ describe('analyzeBatch', () => {
     expect(result.aggregate.winningTrades).toBe(3);
     expect(result.aggregate.losingTrades).toBe(0);
     expect(result.aggregate.winRate).toBe(1.0);
-    // candidatePnl = $200 (trigger fires at threshold) * 3 trades
-    expect(result.aggregate.totalPnl).toBeCloseTo(600, 0);
-    expect(result.aggregate.avgPnl).toBeCloseTo(200, 0);
+    expect(result.aggregate.totalPnl).toBeCloseTo(PROFIT_TARGET_PNL * 3, 5);
+    expect(result.aggregate.avgPnl).toBeCloseTo(PROFIT_TARGET_PNL, 5);
   });
 
   // ---------------------------------------------------------------------------
@@ -104,8 +108,8 @@ describe('analyzeBatch', () => {
   // ---------------------------------------------------------------------------
 
   test('mixed wins/losses returns correct profit factor', () => {
-    // 2 winning trades at $200, 1 losing trade at -$150
-    const winPath = buildPath(0, 300, 10);  // hits $200 profit target
+    // 2 winning trades at 200 (first cross), 1 losing trade at -$150
+    const winPath = buildPath(0, 300, 10);
     const lossPath = buildPath(0, -150, 10); // no trigger fires
 
     const trades = [
@@ -121,9 +125,8 @@ describe('analyzeBatch', () => {
     expect(result.aggregate.losingTrades).toBe(1);
 
     // profitFactor = sum(wins) / abs(sum(losses))
-    // wins = 200 + 200 = 400, losses = |-150| = 150
-    // profitFactor = 400/150 ≈ 2.667
-    expect(result.aggregate.profitFactor).toBeCloseTo(400 / 150, 2);
+    // wins = 200 + 200, losses = |-150| = 150
+    expect(result.aggregate.profitFactor).toBeCloseTo((PROFIT_TARGET_PNL * 2) / 150, 5);
   });
 
   // ---------------------------------------------------------------------------
@@ -131,9 +134,9 @@ describe('analyzeBatch', () => {
   // ---------------------------------------------------------------------------
 
   test('baseline=actual computes candidate P&L delta correctly', () => {
-    // Trade: path goes to $300 (profit target $200 fires)
+    // Trade: path goes to $300. The trigger fires on the first cross at 200.
     // actual P&L = $180
-    // candidatePnl = $200 (trigger fires at threshold)
+    // candidatePnl = $200
     // delta = $200 - $180 = $20
     const path = buildPath(0, 300, 10);
     const trade = buildTradeInput(0, 180, path);
@@ -143,9 +146,9 @@ describe('analyzeBatch', () => {
       baselineMode: 'actual',
     });
 
-    expect(result.perTrade[0].candidatePnl).toBeCloseTo(200, 1);
+    expect(result.perTrade[0].candidatePnl).toBeCloseTo(PROFIT_TARGET_PNL, 5);
     expect(result.perTrade[0].baselinePnl).toBe(180);
-    expect(result.perTrade[0].pnlDelta).toBeCloseTo(20, 1);
+    expect(result.perTrade[0].pnlDelta).toBeCloseTo(PROFIT_TARGET_PNL - 180, 5);
   });
 
   // ---------------------------------------------------------------------------
@@ -154,7 +157,7 @@ describe('analyzeBatch', () => {
 
   test('baseline=holdToEnd uses last P&L path point as baseline', () => {
     // path goes from 0 to 300, last point = 300
-    // profit target $200 fires → candidatePnl = $200
+    // profit target fires on first cross → candidatePnl = $200
     // baselinePnl = $300 (last path point)
     // delta = $200 - $300 = -$100
     const path = buildPath(0, 300, 10);
@@ -165,9 +168,9 @@ describe('analyzeBatch', () => {
       baselineMode: 'holdToEnd',
     });
 
-    expect(result.perTrade[0].candidatePnl).toBeCloseTo(200, 1);
+    expect(result.perTrade[0].candidatePnl).toBeCloseTo(PROFIT_TARGET_PNL, 5);
     expect(result.perTrade[0].baselinePnl).toBeCloseTo(300, 0);
-    expect(result.perTrade[0].pnlDelta).toBeCloseTo(-100, 0);
+    expect(result.perTrade[0].pnlDelta).toBeCloseTo(PROFIT_TARGET_PNL - 300, 5);
   });
 
   // ---------------------------------------------------------------------------

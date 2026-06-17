@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "underlyings": [
+    { "underlying": "XSP", "roots": ["XSP", "XSPW"] },
+    { "underlying": "SPX", "roots": ["SPX", "SPXW", "SPXQ", "SPXCUSTOM"] }
+  ]
+}

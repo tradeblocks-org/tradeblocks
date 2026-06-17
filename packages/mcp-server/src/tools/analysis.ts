@@ -7,13 +7,13 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock } from "../utils/block-loader.js";
+import { loadBlock } from "../utils/block-loader.ts";
 import {
   createToolOutput,
   formatPercent,
   formatRatio,
   formatCurrency,
-} from "../utils/output-formatter.js";
+} from "../utils/output-formatter.ts";
 import {
   WalkForwardAnalyzer,
   assessResults,
@@ -26,8 +26,8 @@ import {
   calculateStrategyKellyMetrics,
 } from "@tradeblocks/lib";
 import type { Trade, MonteCarloParams } from "@tradeblocks/lib";
-import { filterByDateRange } from "./shared/filters.js";
-import { resolveTradeTicker } from "../utils/ticker.js";
+import { filterByDateRange } from "./shared/filters.ts";
+import { resolveTradeTicker } from "../utils/ticker.ts";
 
 /**
  * Filter trades by strategy

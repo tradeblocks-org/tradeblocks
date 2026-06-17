@@ -11,9 +11,9 @@
  * Consumed by the MCP tool in Plan 03 and by downstream phases (47-50).
  */
 
-import { Trade } from '../models/trade'
-import { PortfolioStatsCalculator } from './portfolio-stats'
-import { calculateKellyMetrics } from './kelly'
+import type { Trade } from '../models/trade.ts'
+import { PortfolioStatsCalculator } from './portfolio-stats.ts'
+import { calculateKellyMetrics } from './kelly.ts'
 
 // ---------------------------------------------------------------------------
 // Types

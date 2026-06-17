@@ -1,136 +1,114 @@
 /**
  * Data Availability Helper
  *
- * Checks whether market data (daily, context, intraday) is available for a
- * given ticker and returns actionable warnings when data is missing.
+ * Checks whether canonical market data (enriched daily, VIX context, intraday
+ * spot bars) is available for a given ticker and returns actionable warnings
+ * when data is missing.
  *
  * Used at the start of every market tool call to surface missing data with
- * clear import instructions rather than returning silent NULLs or cryptic errors.
+ * clear import instructions rather than returning silent NULLs or cryptic
+ * errors.
+ *
+ * Phase 4 / CONSUMER-02: rewritten to consume `MarketStores` so reads NEVER
+ * trigger provider fetches. Daily/context coverage flows through
+ * `stores.enriched.getCoverage`; intraday coverage flows through
+ * `stores.spot.getCoverage`. The previous direct raw-SQL paths against the
+ * pre-Phase-6 daily / intraday views are gone (D-09 silent-empty contract).
  */
-
-import type { DuckDBConnection } from "@duckdb/node-api";
+import type { MarketStores } from "../market/stores/index.ts";
 
 export interface DataAvailabilityReport {
-  /** Whether market.daily has rows for the requested ticker */
+  /** Whether enriched data is present for the requested ticker */
   hasDailyData: boolean;
-  /** Whether market.daily has VIX ticker data (normalized schema — replaces market.context check) */
+  /** Whether enriched data is present for the canonical VIX context ticker */
   hasContextData: boolean;
-  /** Whether market.intraday has rows for the requested ticker */
+  /** Whether spot intraday data is present for the requested ticker */
   hasIntradayData: boolean;
-  /** Date range available in market.daily for the ticker, or null if no data */
+  /** Date range available in enriched for the ticker, or null if no data */
   dailyDateRange: { min: string; max: string } | null;
-  /** Date range of VIX data in market.daily, or null if no data */
+  /** Date range of VIX enriched coverage, or null if no data */
   contextDateRange: { min: string; max: string } | null;
-  /** Date range available in market.intraday for the ticker, or null if no data */
+  /** Date range available in spot intraday for the ticker, or null if no data */
   intradayDateRange: { min: string; max: string } | null;
   /** Actionable warning messages for any missing data sources */
   warnings: string[];
 }
 
 /**
- * Checks data availability in market tables for the specified ticker.
+ * Sentinel "wide" date range used when callers want an "any data?" check.
+ * Matches the D-09 contract — store returns empty coverage when the range has
+ * no partitions; caller interprets `totalDates > 0` as "data exists somewhere
+ * in history" without paying for an extra `MIN/MAX` query.
+ */
+const WIDE_FROM = "2000-01-01";
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Checks data availability via the typed Phase 2 store layer.
  *
- * Queries COUNT, MIN(date), and MAX(date) from each relevant table.
- * Returns a report with boolean flags, date ranges, and actionable warning messages.
+ * Calls `stores.enriched.getCoverage(...)` for the daily + VIX context probes
+ * and `stores.spot.getCoverage(...)` for the optional intraday probe. Returns
+ * a report with boolean flags, date ranges, and actionable warning messages.
  *
- * @param conn - Active DuckDB connection with market catalog attached
- * @param ticker - Ticker symbol to check (e.g., 'SPX')
- * @param options.checkIntraday - Whether to also check market.intraday (default: false)
+ * @param stores  - MarketStores bundle (constructed once at process startup)
+ * @param ticker  - Ticker symbol to check (e.g., 'SPX')
+ * @param options.checkIntraday - Whether to also check spot intraday (default: false)
  */
 export async function checkDataAvailability(
-  conn: DuckDBConnection,
+  stores: MarketStores,
   ticker: string,
-  options?: { checkIntraday?: boolean }
+  options?: { checkIntraday?: boolean },
 ): Promise<DataAvailabilityReport> {
   const warnings: string[] = [];
 
-  // Check market.daily for ticker
-  let hasDailyData = false;
-  let dailyDateRange: { min: string; max: string } | null = null;
-  try {
-    const dailyResult = await conn.runAndReadAll(
-      `SELECT COUNT(*) as cnt, MIN(date) as min_date, MAX(date) as max_date
-       FROM market.daily WHERE ticker = $1`,
-      [ticker]
-    );
-    const rows = dailyResult.getRowObjectsJson();
-    if (rows.length > 0) {
-      const row = rows[0] as { cnt: number | string; min_date: string | null; max_date: string | null };
-      const cnt = typeof row.cnt === 'string' ? parseInt(row.cnt, 10) : Number(row.cnt);
-      hasDailyData = cnt > 0;
-      if (hasDailyData && row.min_date && row.max_date) {
-        dailyDateRange = { min: row.min_date, max: row.max_date };
-      }
-    }
-  } catch {
-    // market.daily table doesn't exist yet — treat as no data
-  }
+  // --- Daily (enriched) — ticker-only signature per EnrichedStore.getCoverage ---
+  const dailyCov = await stores.enriched.getCoverage(ticker);
+  const hasDailyData = dailyCov.totalDates > 0;
+  const dailyDateRange =
+    hasDailyData && dailyCov.earliest && dailyCov.latest
+      ? { min: dailyCov.earliest, max: dailyCov.latest }
+      : null;
 
   if (!hasDailyData) {
     warnings.push(
-      `No market.daily data for ticker ${ticker}. ` +
-      `Import daily OHLCV with import_market_csv (target_table: "daily", ticker: "${ticker}") ` +
-      `then run enrich_market_data.`
+      `No enriched daily data for ticker ${ticker}. ` +
+        `Import daily OHLCV with import_market_csv (target_table: "daily", ticker: "${ticker}") ` +
+        `then run enrich_market_data.`,
     );
   }
 
-  // Check for VIX data in market.daily (normalized schema)
-  let hasContextData = false;
-  let contextDateRange: { min: string; max: string } | null = null;
-  try {
-    const contextResult = await conn.runAndReadAll(
-      `SELECT COUNT(*) as cnt, MIN(date) as min_date, MAX(date) as max_date
-       FROM market.daily WHERE ticker = 'VIX'`
-    );
-    const rows = contextResult.getRowObjectsJson();
-    if (rows.length > 0) {
-      const row = rows[0] as { cnt: number | string; min_date: string | null; max_date: string | null };
-      const cnt = typeof row.cnt === 'string' ? parseInt(row.cnt, 10) : Number(row.cnt);
-      hasContextData = cnt > 0;
-      if (hasContextData && row.min_date && row.max_date) {
-        contextDateRange = { min: row.min_date, max: row.max_date };
-      }
-    }
-  } catch {
-    // market.daily may not exist yet
-  }
+  // --- Context (VIX enriched) — same store, fixed ticker ---
+  const vixCov = await stores.enriched.getCoverage("VIX");
+  const hasContextData = vixCov.totalDates > 0;
+  const contextDateRange =
+    hasContextData && vixCov.earliest && vixCov.latest
+      ? { min: vixCov.earliest, max: vixCov.latest }
+      : null;
 
   if (!hasContextData) {
     warnings.push(
-      `No VIX data in market.daily. ` +
-      `Import VIX data with import_from_api (ticker: "VIX", target_table: "daily") ` +
-      `or import_market_csv (target_table: "context") ` +
-      `then run enrich_market_data for IVR/IVP enrichment.`
+      `No VIX enriched data found. ` +
+        `Import VIX-family data with import_from_api (target_table: "date_context") ` +
+        `or import_market_csv for VIX/VIX9D/VIX3M daily rows, ` +
+        `then run enrich_market_data for IVR/IVP and date_context enrichment.`,
     );
   }
 
-  // Optionally check market.intraday for ticker
+  // --- Intraday (spot) — only when caller explicitly opts in ---
   let hasIntradayData = false;
   let intradayDateRange: { min: string; max: string } | null = null;
   if (options?.checkIntraday) {
-    try {
-      const intradayResult = await conn.runAndReadAll(
-        `SELECT COUNT(*) as cnt, MIN(date) as min_date, MAX(date) as max_date
-         FROM market.intraday WHERE ticker = $1`,
-        [ticker]
-      );
-      const rows = intradayResult.getRowObjectsJson();
-      if (rows.length > 0) {
-        const row = rows[0] as { cnt: number | string; min_date: string | null; max_date: string | null };
-        const cnt = typeof row.cnt === 'string' ? parseInt(row.cnt, 10) : Number(row.cnt);
-        hasIntradayData = cnt > 0;
-        if (hasIntradayData && row.min_date && row.max_date) {
-          intradayDateRange = { min: row.min_date, max: row.max_date };
-        }
-      }
-    } catch {
-      // market.intraday table doesn't exist yet — treat as no data
+    const spotCov = await stores.spot.getCoverage(ticker, WIDE_FROM, todayIso());
+    hasIntradayData = spotCov.totalDates > 0;
+    if (hasIntradayData && spotCov.earliest && spotCov.latest) {
+      intradayDateRange = { min: spotCov.earliest, max: spotCov.latest };
     }
-
     if (!hasIntradayData) {
       warnings.push(
-        `No market.intraday data for ticker ${ticker}. ` +
-        `Import intraday bars with import_market_csv (target_table: "intraday", ticker: "${ticker}").`
+        `No spot intraday data for ticker ${ticker}. ` +
+          `Import intraday bars with import_market_csv (target_table: "intraday", ticker: "${ticker}").`,
       );
     }
   }

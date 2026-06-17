@@ -9,30 +9,30 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock } from "../utils/block-loader.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { loadBlock } from "../utils/block-loader.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
 import type { Trade } from "@tradeblocks/lib";
-import { getConnection } from "../db/connection.js";
-import { getProfile, listProfiles } from "../db/profile-schemas.js";
-import { filterByStrategy } from "./shared/filters.js";
+import { getConnection } from "../db/connection.ts";
+import { getProfile, listProfiles } from "../db/profile-schemas.ts";
+import { filterByStrategy } from "./shared/filters.ts";
 import {
   buildLookaheadFreeQuery,
   type MarketLookupKey,
-} from "../utils/field-timing.js";
+} from "../utils/field-timing.ts";
 import {
   DEFAULT_MARKET_TICKER,
   marketTickerDateKey,
   resolveTradeTicker,
-} from "../utils/ticker.js";
-import { computeSliceStats, type SliceStats } from "../utils/analysis-stats.js";
-import { buildFilterPredicate, type FilterPredicate } from "../utils/filter-predicates.js";
-import { withSyncedBlock } from "./middleware/sync-middleware.js";
+} from "../utils/ticker.ts";
+import { computeSliceStats, type SliceStats } from "../utils/analysis-stats.ts";
+import { buildFilterPredicate, type FilterPredicate } from "../utils/filter-predicates.ts";
+import { withSyncedBlock } from "./middleware/sync-middleware.ts";
 import {
   upgradeToReadWrite,
   downgradeToReadOnly,
   getConnectionMode,
-} from "../db/connection.js";
-import { syncAllBlocks } from "../sync/index.js";
+} from "../db/connection.ts";
+import { syncAllBlocks } from "../sync/index.ts";
 
 // =============================================================================
 // Utility Functions (local to this module)
@@ -298,7 +298,7 @@ export async function handleAnalyzeStructureFit(
 
   // Load profile
   const conn = await getConnection(baseDir);
-  const profile = await getProfile(conn, blockId, strategyName);
+  const profile = await getProfile(conn, blockId, strategyName, baseDir);
   if (!profile) {
     return createToolOutput(
       `No profile found for strategy '${strategyName}' in block '${blockId}'. Create one with profile_strategy first.`,
@@ -533,7 +533,7 @@ export async function handleValidateEntryFilters(
 
   // Load profile
   const conn = await getConnection(baseDir);
-  const profile = await getProfile(conn, blockId, strategyName);
+  const profile = await getProfile(conn, blockId, strategyName, baseDir);
   if (!profile) {
     return createToolOutput(
       `No profile found for strategy '${strategyName}' in block '${blockId}'. Create one with profile_strategy first.`,
@@ -829,7 +829,7 @@ export async function handlePortfolioStructureMap(
     const conn = await getConnection(baseDir);
 
     // Load profiles
-    const profiles = await listProfiles(conn, blockId);
+    const profiles = await listProfiles(conn, blockId, baseDir);
     if (profiles.length === 0) {
       return {
         content: [
@@ -1108,7 +1108,7 @@ export function registerProfileAnalysisTools(
       if (getConnectionMode() === "read_write") {
         try {
           if (input.blockId) {
-            const { syncBlock } = await import("../sync/index.js");
+            const { syncBlock } = await import("../sync/index.ts");
             await syncBlock(input.blockId, baseDir);
           } else {
             await syncAllBlocks(baseDir);

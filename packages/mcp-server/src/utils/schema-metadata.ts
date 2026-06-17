@@ -6,8 +6,13 @@
  *
  * Tables are organized by schema:
  *   - trades: Trade data from CSV files
- *   - market: Market context data — daily (per-ticker OHLCV + indicators),
- *             context (global VIX/regime), intraday (raw bar data)
+ *   - market: Canonical market datasets post-v3.0 —
+ *       * spot (raw minute bars, ticker-first)
+ *       * spot_daily (view-backed RTH-aggregated daily OHLCV)
+ *       * enriched (per-ticker computed indicators + ivr/ivp — NO OHLCV)
+ *       * enriched_context (cross-ticker derived fields: Vol_Regime, Term_Structure_State)
+ *       * option_chain / option_quote_minutes (option contract universe + quote cache)
+ *     OHLCV callers must LEFT JOIN market.spot_daily on ticker+date; enriched alone does not carry open/high/low/close.
  */
 
 // ============================================================================
@@ -23,7 +28,7 @@ export interface ColumnDescription {
    *  - 'open': Known at/before market open (Prior_Close, Gap_Pct, VIX_Open, etc.)
    *  - 'close': Only known after market close (RSI_14, Vol_Regime, Close, etc.)
    *  - 'static': Calendar/metadata facts known before the day (Day_of_Week, Month, Is_Opex)
-   *  Only applicable to market.daily and market.context columns. Omit for non-market tables.
+   *  Only applicable to market.enriched and market.enriched_context columns. Omit for non-market tables.
    */
   timing?: 'open' | 'close' | 'static';
 }
@@ -204,11 +209,11 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
   },
   market: {
     description:
-      "Market context data for hypothesis testing. Normalized into four tables: daily (per-ticker OHLCV + technical indicators + ivr/ivp for VIX-family tickers), _context_derived (cross-ticker derived fields like Vol_Regime), context (LEGACY — preserved for backward compat), and intraday (raw bar data). Source: CSV files in market/ folder.",
+      "Canonical market data for hypothesis testing (v3.0 layout). Normalized into six datasets: spot (raw minute bars, ticker-first), spot_daily (view-backed RTH-aggregated daily OHLCV derived from market.spot), enriched (per-ticker computed Tier 1 indicators + ivr/ivp for VIX-family tickers; NO OHLCV), enriched_context (cross-ticker derived fields like Vol_Regime), option_chain (contract universe by date), and option_quote_minutes (dense option quote cache by minute, including persisted minute greeks when provider or computed fallback data is available). OHLCV-using queries must LEFT JOIN market.spot_daily on ticker+date because market.enriched does not carry open/high/low/close. Source: market/ Parquet files and provider imports.",
     tables: {
-      daily: {
+      enriched: {
         description:
-          "Per-ticker daily OHLCV with Tier 1 enrichment indicators and calendar fields. One row per ticker per trading day. JOIN with trades on ticker+date (e.g., d.ticker = 'SPX' AND t.date_opened = d.date). VIX-family tickers (VIX, VIX9D, VIX3M, etc.) also have ivr/ivp columns populated. For trade-entry queries, use LAG() on close-derived fields. Join market._context_derived (LEFT JOIN on date) for Vol_Regime, Term_Structure_State, etc.",
+          "Per-ticker computed enrichment indicators and calendar fields. One row per ticker per trading day. OHLCV is NOT stored here — LEFT JOIN market.spot_daily on ticker+date for open/high/low/close/bid/ask. JOIN with trades on ticker+date (e.g., d.ticker = 'SPX' AND t.date_opened = d.date). VIX-family tickers (VIX, VIX9D, VIX3M, etc.) also have ivr/ivp columns populated. For trade-entry queries, use LAG() on close-derived fields. Join market.enriched_context (LEFT JOIN on date) for Vol_Regime, Term_Structure_State, etc.",
         keyColumns: ["ticker", "date", "RSI_14", "ATR_Pct", "Realized_Vol_20D"],
         columns: {
           ticker: {
@@ -387,9 +392,9 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
           },
         },
       },
-      _context_derived: {
+      enriched_context: {
         description:
-          "Cross-ticker derived market context fields per trading day. Contains Vol_Regime, Term_Structure_State, and other fields derived from multiple VIX tickers. JOIN with market.daily on date. VIX OHLCV and IVR/IVP are now in market.daily (ticker='VIX', 'VIX9D', etc.).",
+          "Cross-ticker derived market context fields per trading day. Contains Vol_Regime, Term_Structure_State, and other fields derived from multiple VIX tickers. JOIN with market.enriched on date. VIX IVR/IVP live in market.enriched (ticker='VIX', 'VIX9D', etc.); VIX OHLCV lives in market.spot_daily.",
         keyColumns: ["date", "Vol_Regime", "Term_Structure_State"],
         columns: {
           date: {
@@ -423,20 +428,9 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
           },
         },
       },
-      context: {
+      spot: {
         description:
-          "LEGACY: Global VIX and volatility term structure data. VIX ticker data has moved to market.daily (ticker='VIX', 'VIX9D', etc.) with ivr/ivp columns. Derived fields moved to market._context_derived. This table is maintained for backward compatibility but is no longer the primary data source.",
-        keyColumns: ["date"],
-        columns: {
-          date: {
-            description: "Trading date (VARCHAR, format YYYY-MM-DD). Primary key.",
-            hypothesis: false,
-          },
-        },
-      },
-      intraday: {
-        description:
-          "Raw intraday bars per ticker. One row per bar (any resolution). Use for ORB calculations and intraday context enrichment. Time column is Eastern Time HH:MM format (e.g., '09:30'). Filter by ticker='VIX' to get VIX intraday data.",
+          "Raw minute bars per ticker (ticker-first Hive partitioned Parquet). One row per bar. Use for ORB calculations and intraday context enrichment. Time column is Eastern Time HH:MM format (e.g., '09:30'). Filter by ticker='VIX' to get VIX intraday data.",
         keyColumns: ["ticker", "date", "time"],
         columns: {
           ticker: {
@@ -465,6 +459,171 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
           },
           close: {
             description: "Bar close price",
+            hypothesis: false,
+          },
+          bid: {
+            description: "Bar best bid",
+            hypothesis: false,
+          },
+          ask: {
+            description: "Bar best ask",
+            hypothesis: false,
+          },
+        },
+      },
+      spot_daily: {
+        description:
+          "View-backed RTH-aggregated daily OHLCV derived from market.spot (first-open, max-high, min-low, last-close, first-bid, last-ask over 09:30–16:00 bars). One row per ticker per trading day. LEFT JOIN on ticker+date to retrieve OHLCV alongside market.enriched indicators (e.g., market.enriched d LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date).",
+        keyColumns: ["ticker", "date", "open", "high", "low", "close"],
+        columns: {
+          ticker: {
+            description: "Underlying ticker symbol (composite key with date).",
+            hypothesis: true,
+          },
+          date: {
+            description: "Trading date (VARCHAR YYYY-MM-DD). Composite key with ticker.",
+            hypothesis: true,
+          },
+          open: {
+            description: "RTH open (first bar at/after 09:30 ET).",
+            hypothesis: false,
+          },
+          high: {
+            description: "RTH high (max across 09:30–16:00 ET bars).",
+            hypothesis: false,
+          },
+          low: {
+            description: "RTH low (min across 09:30–16:00 ET bars).",
+            hypothesis: false,
+          },
+          close: {
+            description: "RTH close (last bar at/before 16:00 ET).",
+            hypothesis: false,
+          },
+          bid: {
+            description: "RTH first bid (first bar's bid at/after 09:30 ET).",
+            hypothesis: false,
+          },
+          ask: {
+            description: "RTH last ask (last bar's ask at/before 16:00 ET).",
+            hypothesis: false,
+          },
+        },
+      },
+      option_chain: {
+        description:
+          "Option contract universe by underlying and trading date. One row per listed option contract, used for strike resolution and candidate selection in backtests.",
+        keyColumns: ["underlying", "date", "ticker"],
+        columns: {
+          underlying: {
+            description: "Underlying root symbol for the option chain snapshot.",
+            hypothesis: true,
+          },
+          date: {
+            description: "Trading date for the chain snapshot (VARCHAR YYYY-MM-DD).",
+            hypothesis: true,
+          },
+          ticker: {
+            description: "Canonical OCC option ticker for the contract.",
+            hypothesis: true,
+          },
+          contract_type: {
+            description: "Option side: call or put.",
+            hypothesis: true,
+          },
+          strike: {
+            description: "Option strike price.",
+            hypothesis: true,
+          },
+          expiration: {
+            description: "Expiration date for the contract (VARCHAR YYYY-MM-DD).",
+            hypothesis: true,
+          },
+          dte: {
+            description: "Days to expiration as of the chain snapshot date.",
+            hypothesis: true,
+          },
+          exercise_style: {
+            description: "Exercise style reported by the provider when available.",
+            hypothesis: false,
+          },
+        },
+      },
+      option_quote_minutes: {
+        description:
+          "Dense minute-level option quote cache keyed by ticker/date/time. Used to fill sparse option trade bars with bid/ask-derived marks during replay and backtests.",
+        keyColumns: ["ticker", "date", "time"],
+        columns: {
+          ticker: {
+            description: "Canonical OCC option ticker.",
+            hypothesis: true,
+          },
+          date: {
+            description: "Trading date (VARCHAR YYYY-MM-DD).",
+            hypothesis: true,
+          },
+          time: {
+            description: "Quote minute in HH:MM Eastern Time format.",
+            hypothesis: false,
+          },
+          bid: {
+            description: "Best bid at or carried into that minute.",
+            hypothesis: false,
+          },
+          ask: {
+            description: "Best ask at or carried into that minute.",
+            hypothesis: false,
+          },
+          mid: {
+            description: "Bid/ask midpoint for the minute.",
+            hypothesis: false,
+          },
+          last_updated_ns: {
+            description: "Monotonic write-order field used for quote upsert precedence.",
+            hypothesis: false,
+          },
+          source: {
+            description: "Quote source label used for debugging and provenance.",
+            hypothesis: false,
+          },
+          delta: {
+            description: "Option delta for the minute when available from provider data or computed fallback.",
+            hypothesis: true,
+          },
+          gamma: {
+            description: "Option gamma for the minute when available from provider data or computed fallback.",
+            hypothesis: false,
+          },
+          theta: {
+            description: "Option theta for the minute when available from provider data or computed fallback.",
+            hypothesis: false,
+          },
+          vega: {
+            description: "Option vega (per 1% IV move) for the minute when available from provider data or computed fallback.",
+            hypothesis: false,
+          },
+          iv: {
+            description: "Implied volatility used for the stored minute greeks when available.",
+            hypothesis: true,
+          },
+          greeks_source: {
+            description: "Origin of the stored minute greeks: provider-native or computed fallback.",
+            hypothesis: false,
+          },
+          greeks_revision: {
+            description: "Computation revision for stored computed greeks; null for provider-native values.",
+            hypothesis: false,
+          },
+          rate_type: {
+            description: "Interest-rate curve or rate label used by the provider or computed-greeks path.",
+            hypothesis: false,
+          },
+          rate_value: {
+            description: "Interest-rate value used by the provider or computed-greeks path.",
+            hypothesis: false,
+          },
+          gamma_source: {
+            description: "Provenance label for the stored gamma value when it differs from the broader greeks source.",
             hypothesis: false,
           },
         },
@@ -496,11 +655,13 @@ ORDER BY date_opened`,
     },
     {
       description: "Recent market conditions (last 20 days)",
-      sql: `SELECT d.date, d.close, d.RSI_14, d.ATR_Pct,
-  vix.close AS VIX_Close, cd.Vol_Regime, cd.Term_Structure_State, vix.ivr AS VIX_IVR, vix.ivp AS VIX_IVP
-FROM market.daily d
-LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'
-LEFT JOIN market._context_derived cd ON cd.date = d.date
+      sql: `SELECT d.date, s.close, d.RSI_14, d.ATR_Pct,
+  vix_s.close AS VIX_Close, cd.Vol_Regime, cd.Term_Structure_State, evix.ivr AS VIX_IVR, evix.ivp AS VIX_IVP
+FROM market.enriched d
+LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date
+LEFT JOIN market.spot_daily vix_s ON vix_s.date = d.date AND vix_s.ticker = 'VIX'
+LEFT JOIN market.enriched evix ON evix.date = d.date AND evix.ticker = 'VIX'
+LEFT JOIN market.enriched_context cd ON cd.date = d.date
 WHERE d.ticker = 'SPX'
 ORDER BY d.date DESC
 LIMIT 20`,
@@ -529,13 +690,14 @@ LIMIT 50 OFFSET 0`,
     },
     {
       description: "Market data query with VIX context",
-      sql: `SELECT d.date, d.close, d.Gap_Pct, vix.close AS VIX_Close, cd.Vol_Regime, cd.Term_Structure_State
-FROM market.daily d
-LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'
-LEFT JOIN market._context_derived cd ON cd.date = d.date
+      sql: `SELECT d.date, s.close, d.Gap_Pct, vix_s.close AS VIX_Close, cd.Vol_Regime, cd.Term_Structure_State
+FROM market.enriched d
+LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date
+LEFT JOIN market.spot_daily vix_s ON vix_s.date = d.date AND vix_s.ticker = 'VIX'
+LEFT JOIN market.enriched_context cd ON cd.date = d.date
 WHERE d.ticker = 'SPX'
   AND d.date BETWEEN '2024-01-01' AND '2024-06-30'
-  AND vix.close > 20
+  AND vix_s.close > 20
 ORDER BY d.date`,
     },
     {
@@ -558,12 +720,14 @@ ORDER BY t.date_opened`,
       sql: `WITH joined AS (
   SELECT d.ticker, d.date,
     d.Gap_Pct, d.Prior_Close, d.Prev_Return_Pct,
-    vix.open AS VIX_Open,
+    vix_s.open AS VIX_Open,
     d.RSI_14, d.Realized_Vol_20D,
-    vix.close AS VIX_Close, vix.ivp AS VIX_IVP, cd.Vol_Regime, cd.Term_Structure_State
-  FROM market.daily d
-  LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'
-  LEFT JOIN market._context_derived cd ON cd.date = d.date
+    vix_s.close AS VIX_Close, evix.ivp AS VIX_IVP, cd.Vol_Regime, cd.Term_Structure_State
+  FROM market.enriched d
+  LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date
+  LEFT JOIN market.spot_daily vix_s ON vix_s.date = d.date AND vix_s.ticker = 'VIX'
+  LEFT JOIN market.enriched evix ON evix.date = d.date AND evix.ticker = 'VIX'
+  LEFT JOIN market.enriched_context cd ON cd.date = d.date
   WHERE d.ticker = 'SPX'
 ),
 lagged AS (
@@ -584,15 +748,22 @@ WHERE t.block_id = 'my-block'
 ORDER BY t.date_opened DESC`,
     },
     {
-      description: "Trades with ORB context (opening range breakout from intraday bars)",
+      description: "Trades with ORB context (opening range breakout from minute bars in market.spot)",
       sql: `WITH orb_range AS (
   SELECT ticker, date,
     MAX(high) AS ORB_High,
     MIN(low)  AS ORB_Low,
     MAX(high) - MIN(low) AS ORB_Range
-  FROM market.intraday
+  FROM market.spot
   WHERE ticker = 'SPX'
     AND time >= '09:30' AND time <= '09:45'
+    -- Drop minute bars with zero/null OHLC (occasional provider gaps).
+    -- Without this, MIN(low) collapses to 0 on contaminated minutes
+    -- and ORB_Range balloons to ~100% of price.
+    AND open IS NOT NULL AND open > 0
+    AND high IS NOT NULL AND high > 0
+    AND low  IS NOT NULL AND low  > 0
+    AND close IS NOT NULL AND close > 0
   GROUP BY ticker, date
 )
 SELECT
@@ -604,9 +775,9 @@ WHERE t.block_id = 'my-block'
 ORDER BY t.date_opened`,
     },
     {
-      description: "VIX intraday data for a specific date (VIX bars are in market.intraday with ticker='VIX')",
+      description: "VIX intraday data for a specific date (VIX bars are in market.spot with ticker='VIX')",
       sql: `SELECT time, open, high, low, close
-FROM market.intraday
+FROM market.spot
 WHERE ticker = 'VIX'
   AND date = '2024-03-15'
 ORDER BY time`,
@@ -616,7 +787,7 @@ ORDER BY time`,
       sql: `WITH joined AS (
   SELECT d.ticker, d.date,
     d.High_Before_Low, d.Reversal_Type
-  FROM market.daily d
+  FROM market.enriched d
   WHERE d.ticker = 'SPX'
 ),
 lagged AS (
@@ -638,12 +809,13 @@ WHERE m.prev_Reversal_Type != 0
       sql: `WITH joined AS (
   SELECT d.ticker, d.date,
     d.Gap_Pct, d.Prior_Close,
-    vix.open AS VIX_Open,
+    vix_s.open AS VIX_Open,
     d.RSI_14, d.ATR_Pct,
-    vix.close AS VIX_Close, cd.Vol_Regime
-  FROM market.daily d
-  LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'
-  LEFT JOIN market._context_derived cd ON cd.date = d.date
+    vix_s.close AS VIX_Close, cd.Vol_Regime
+  FROM market.enriched d
+  LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date
+  LEFT JOIN market.spot_daily vix_s ON vix_s.date = d.date AND vix_s.ticker = 'VIX'
+  LEFT JOIN market.enriched_context cd ON cd.date = d.date
   WHERE d.ticker = 'SPX'
 ),
 lagged AS (
@@ -661,11 +833,11 @@ WHERE t.block_id = 'my-block'`,
   ],
   hypothesis: [
     {
-      description: "Win rate by VIX regime (lag-aware: uses prior day's Vol_Regime from market._context_derived)",
+      description: "Win rate by VIX regime (lag-aware: uses prior day's Vol_Regime from market.enriched_context)",
       sql: `WITH joined AS (
   SELECT d.ticker, d.date, cd.Vol_Regime
-  FROM market.daily d
-  LEFT JOIN market._context_derived cd ON cd.date = d.date
+  FROM market.enriched d
+  LEFT JOIN market.enriched_context cd ON cd.date = d.date
   WHERE d.ticker = 'SPX'
 ),
 lagged AS (
@@ -694,17 +866,17 @@ ORDER BY m.prev_Vol_Regime`,
   SUM(t.pl) as total_pl,
   ROUND(AVG(t.pl), 2) as avg_pl
 FROM trades.trade_data t
-JOIN market.daily d ON t.date_opened = d.date AND d.ticker = 'SPX'
+JOIN market.enriched d ON t.date_opened = d.date AND d.ticker = 'SPX'
 WHERE t.block_id = 'my-block'
 GROUP BY d.Day_of_Week
 ORDER BY d.Day_of_Week`,
     },
     {
-      description: "Performance by VIX term structure (lag-aware: uses prior day's Term_Structure_State from market._context_derived)",
+      description: "Performance by VIX term structure (lag-aware: uses prior day's Term_Structure_State from market.enriched_context)",
       sql: `WITH joined AS (
   SELECT d.ticker, d.date, cd.Term_Structure_State
-  FROM market.daily d
-  LEFT JOIN market._context_derived cd ON cd.date = d.date
+  FROM market.enriched d
+  LEFT JOIN market.enriched_context cd ON cd.date = d.date
   WHERE d.ticker = 'SPX'
 ),
 lagged AS (
@@ -727,11 +899,11 @@ WHERE t.block_id = 'my-block'
 GROUP BY term_structure`,
     },
     {
-      description: "Aggregate by VIX buckets (lag-aware: uses prior day's VIX close from market.daily ticker='VIX')",
+      description: "Aggregate by VIX buckets (lag-aware: uses prior day's VIX close from market.spot_daily ticker='VIX')",
       sql: `WITH joined AS (
-  SELECT d.ticker, d.date, vix.close AS VIX_Close
-  FROM market.daily d
-  LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'
+  SELECT d.ticker, d.date, vix_s.close AS VIX_Close
+  FROM market.enriched d
+  LEFT JOIN market.spot_daily vix_s ON vix_s.date = d.date AND vix_s.ticker = 'VIX'
   WHERE d.ticker = 'SPX'
 ),
 lagged AS (
@@ -759,21 +931,23 @@ ORDER BY vix_bucket`,
     {
       description: "Find similar days by conditions",
       sql: `WITH ref AS (
-  SELECT d.close, vix.close AS VIX_Close, cd.Vol_Regime, cd.Term_Structure_State
-  FROM market.daily d
-  LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'
-  LEFT JOIN market._context_derived cd ON cd.date = d.date
+  SELECT s.close, vix_s.close AS VIX_Close, cd.Vol_Regime, cd.Term_Structure_State
+  FROM market.enriched d
+  LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date
+  LEFT JOIN market.spot_daily vix_s ON vix_s.date = d.date AND vix_s.ticker = 'VIX'
+  LEFT JOIN market.enriched_context cd ON cd.date = d.date
   WHERE d.ticker = 'SPX' AND d.date = '2024-01-15'
 )
-SELECT d.date, d.close, vix.close AS VIX_Close, cd.Vol_Regime, cd.Term_Structure_State
-FROM market.daily d
-LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'
-LEFT JOIN market._context_derived cd ON cd.date = d.date, ref
+SELECT d.date, s.close, vix_s.close AS VIX_Close, cd.Vol_Regime, cd.Term_Structure_State
+FROM market.enriched d
+LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date
+LEFT JOIN market.spot_daily vix_s ON vix_s.date = d.date AND vix_s.ticker = 'VIX'
+LEFT JOIN market.enriched_context cd ON cd.date = d.date, ref
 WHERE d.ticker = 'SPX'
   AND d.date != '2024-01-15'
   AND cd.Vol_Regime = ref.Vol_Regime
-  AND ABS(vix.close - ref.VIX_Close) < 3
-ORDER BY ABS(vix.close - ref.VIX_Close)
+  AND ABS(vix_s.close - ref.VIX_Close) < 3
+ORDER BY ABS(vix_s.close - ref.VIX_Close)
 LIMIT 20`,
     },
   ],

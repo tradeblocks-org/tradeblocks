@@ -6,21 +6,21 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock } from "../../utils/block-loader.js";
+import { loadBlock } from "../../utils/block-loader.ts";
 import {
   createToolOutput,
   formatCurrency,
-} from "../../utils/output-formatter.js";
+} from "../../utils/output-formatter.ts";
 import { PortfolioStatsCalculator } from "@tradeblocks/lib";
-import { resolveTradeTicker } from "../../utils/ticker.js";
+import { resolveTradeTicker } from "../../utils/ticker.ts";
 import {
   filterByDateRange,
   filterDailyLogsByDateRange,
-} from "../shared/filters.js";
+} from "../shared/filters.ts";
 import {
   withSyncedBlock,
   withSyncedBlocks,
-} from "../middleware/sync-middleware.js";
+} from "../middleware/sync-middleware.ts";
 
 /**
  * Register comparison block tools

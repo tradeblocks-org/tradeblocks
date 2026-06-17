@@ -2,7 +2,7 @@
  * Unit tests for field classification and LAG CTE builder.
  *
  * Validates:
- * - Every market.daily and market._context_derived column (except key columns) has a timing annotation
+ * - Every market.enriched and market.enriched_context column (except key columns) has a timing annotation
  * - Derived sets cover all classified columns with correct counts
  * - Sets are mutually exclusive
  * - Known pitfall classifications are correct (Return_5D, Prev_Return_Pct, etc.)
@@ -22,14 +22,15 @@ import {
   CONTEXT_CLOSE_FIELDS,
   buildLookaheadFreeQuery,
   buildOutcomeQuery,
+  buildVixJoinClause,
   SCHEMA_DESCRIPTIONS,
-} from '../../src/test-exports.js';
+} from '../../src/test-exports.ts';
 
-const dailyColumns = SCHEMA_DESCRIPTIONS.market.tables.daily.columns;
-const contextColumns = SCHEMA_DESCRIPTIONS.market.tables.context.columns;
+const dailyColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched.columns;
+const dateContextColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched_context.columns;
 
 describe('Field Classification', () => {
-  test('every classified market.daily column has a timing annotation', () => {
+  test('every classified market.enriched column has a timing annotation', () => {
     for (const [name, desc] of Object.entries(dailyColumns) as [string, { timing?: string }][]) {
       if (name === 'date' || name === 'ticker') {
         expect(desc.timing).toBeUndefined();
@@ -40,8 +41,8 @@ describe('Field Classification', () => {
     }
   });
 
-  test('every classified market.context column has a timing annotation', () => {
-    for (const [name, desc] of Object.entries(contextColumns) as [string, { timing?: string }][]) {
+  test('every classified market.enriched_context column has a timing annotation', () => {
+    for (const [name, desc] of Object.entries(dateContextColumns) as [string, { timing?: string }][]) {
       if (name === 'date') {
         expect(desc.timing).toBeUndefined();
         continue;
@@ -51,12 +52,12 @@ describe('Field Classification', () => {
     }
   });
 
-  test('date column has no timing annotation (daily)', () => {
+  test('date column has no timing annotation (enriched)', () => {
     expect(dailyColumns.date.timing).toBeUndefined();
   });
 
-  test('date column has no timing annotation (context)', () => {
-    expect(contextColumns.date.timing).toBeUndefined();
+  test('date column has no timing annotation (enriched_context)', () => {
+    expect(dateContextColumns.date.timing).toBeUndefined();
   });
 });
 
@@ -72,19 +73,19 @@ describe('Derived Sets', () => {
     const dailyClassified = Object.keys(dailyColumns).filter(
       name => name !== 'date' && name !== 'ticker'
     );
-    // context is now a LEGACY stub with only a date key column — no classified columns
-    const contextClassified = Object.keys(contextColumns).filter(
+    const contextClassified = Object.keys(dateContextColumns).filter(
       name => name !== 'date'
     );
 
-    // Phase 75: VIX fields moved from market.context to market.daily (ticker rows) + market._context_derived.
-    // allClassified = 51 total (9 open + 39 close + 3 static).
-    // dailyClassified = 27 (only schema-named daily columns).
+    // Phase 75: VIX fields moved from the old context table to per-ticker enriched rows + cross-ticker
+    // enriched_context. allClassified = 51 total (9 open + 39 close + 3 static).
+    // dailyClassified = 27 (only schema-named enriched columns).
     // The additional 24 fields in allClassified are VIX ticker aliases (VIX_Open, VIX_Close, etc.)
-    // and _context_derived columns (Vol_Regime, Term_Structure_State, etc.) — virtual/cross-table fields
-    // not listed as named columns in the daily or context schema.
+    // and enriched_context columns (Vol_Regime, Term_Structure_State, etc.).
     expect(allClassified.size).toBe(51);
-    expect(contextClassified.length).toBe(0); // context is LEGACY stub
+    for (const col of contextClassified) {
+      expect(allClassified.has(col)).toBe(true);
+    }
 
     // Every schema-described daily column should be in exactly one set
     for (const col of dailyClassified) {
@@ -109,24 +110,24 @@ describe('Derived Sets', () => {
   });
 
   test('OPEN_KNOWN_FIELDS has exactly 9 fields (5 daily + 4 VIX/derived)', () => {
-    // Phase 75: VIX_RTH_Open removed (not in VIX_FIELD_MAPPINGS). VIX_Gap_Pct moved to _context_derived (open-known).
+    // Phase 75: VIX_RTH_Open removed (not in VIX_FIELD_MAPPINGS). VIX_Gap_Pct moved to date_context (open-known).
     expect(OPEN_KNOWN_FIELDS.size).toBe(9);
     // Daily open-known: open, Prior_Close, Gap_Pct, Prev_Return_Pct, Prior_Range_vs_ATR
     expect(DAILY_OPEN_FIELDS.size).toBe(5);
-    // Context open-known: VIX_Open, VIX9D_Open, VIX3M_Open (3 VIX tickers) + VIX_Gap_Pct (from _context_derived) = 4
+    // Context open-known: VIX_Open, VIX9D_Open, VIX3M_Open (3 VIX tickers) + VIX_Gap_Pct (from date_context) = 4
     expect(CONTEXT_OPEN_FIELDS.size).toBe(4);
   });
 
-  test('CLOSE_KNOWN_FIELDS has exactly 39 fields (24 daily + 15 VIX/derived)', () => {
-    // Phase 75: VIX fields moved to market.daily ticker rows + market._context_derived.
-    // Daily close-derived: 16 Tier1 + 6 Tier3 + ivr/ivp on daily = 24
-    // VIX/derived close-derived: 11 VIX_FIELD_MAPPINGS close + 4 _context_derived close = 15
+  test('CLOSE_KNOWN_FIELDS has exactly 39 fields (24 enriched + 15 VIX/derived)', () => {
+    // Phase 75: VIX fields moved to per-ticker enriched rows + cross-ticker enriched_context.
+    // Enriched close-derived: 16 Tier1 + 6 Tier3 + ivr/ivp on enriched = 24
+    // VIX/derived close-derived: 11 VIX mapping close + 4 enriched_context close = 15
     expect(CLOSE_KNOWN_FIELDS.size).toBe(39);
     expect(DAILY_CLOSE_FIELDS.size).toBe(24);
     expect(CONTEXT_CLOSE_FIELDS.size).toBe(15);
   });
 
-  test('STATIC_FIELDS has exactly 3 fields (all from daily)', () => {
+  test('STATIC_FIELDS has exactly 3 fields (all from enriched)', () => {
     expect(STATIC_FIELDS.size).toBe(3);
     expect(DAILY_STATIC_FIELDS.size).toBe(3);
   });
@@ -161,19 +162,19 @@ describe('Derived Sets', () => {
     expect(OPEN_KNOWN_FIELDS.has('Realized_Vol_5D')).toBe(false);
   });
 
-  test('Vol_Regime is close-derived (from market.context)', () => {
+  test('Vol_Regime is close-derived (from market.enriched_context)', () => {
     expect(CLOSE_KNOWN_FIELDS.has('Vol_Regime')).toBe(true);
     expect(OPEN_KNOWN_FIELDS.has('Vol_Regime')).toBe(false);
     expect(CONTEXT_CLOSE_FIELDS.has('Vol_Regime')).toBe(true);
   });
 
-  test('VIX_Open is open-known (from market.context)', () => {
+  test('VIX_Open is open-known (from market.spot_daily VIX ticker rows)', () => {
     expect(OPEN_KNOWN_FIELDS.has('VIX_Open')).toBe(true);
     expect(CLOSE_KNOWN_FIELDS.has('VIX_Open')).toBe(false);
     expect(CONTEXT_OPEN_FIELDS.has('VIX_Open')).toBe(true);
   });
 
-  test('VIX_Gap_Pct is open-known (from market.context)', () => {
+  test('VIX_Gap_Pct is open-known (from market.enriched_context)', () => {
     expect(OPEN_KNOWN_FIELDS.has('VIX_Gap_Pct')).toBe(true);
     expect(CLOSE_KNOWN_FIELDS.has('VIX_Gap_Pct')).toBe(false);
     expect(CONTEXT_OPEN_FIELDS.has('VIX_Gap_Pct')).toBe(true);
@@ -196,11 +197,15 @@ describe('buildLookaheadFreeQuery', () => {
     expect(sql).toContain('lagged AS');
   });
 
-  test('JOINs market.daily with VIX tickers and market._context_derived', () => {
+  test('JOINs market.enriched with market.spot_daily target-ticker, buildVixJoinClause VIX, and market.enriched_context', () => {
     const { sql } = buildLookaheadFreeQuery(['2025-01-06']);
-    expect(sql).toContain('FROM market.daily d');
-    expect(sql).toContain("LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'");
-    expect(sql).toContain('LEFT JOIN market._context_derived cd ON cd.date = d.date');
+    expect(sql).toContain('FROM market.enriched d');
+    expect(sql).toContain('LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date');
+    expect(sql).toContain("LEFT JOIN market.spot_daily vix ON vix.date = d.date AND vix.ticker = 'VIX'");
+    expect(sql).toContain("LEFT JOIN market.enriched evix ON evix.date = d.date AND evix.ticker = 'VIX'");
+    expect(sql).toContain('LEFT JOIN market.enriched_context cd ON cd.date = d.date');
+    expect(sql).not.toMatch(/market\.daily\b/);
+    expect(sql).not.toMatch(/market\.date_context\b/);
   });
 
   test('passes open-known fields through without LAG', () => {
@@ -273,13 +278,15 @@ describe('buildLookaheadFreeQuery', () => {
     expect(params).toEqual(['SPX', '2025-01-06', 'MSFT', '2025-01-06']);
   });
 
-  test('ticker overload also JOINs market.daily with VIX tickers and market._context_derived', () => {
+  test('ticker overload also JOINs market.enriched with market.spot_daily target, VIX double-JOIN, and market.enriched_context', () => {
     const { sql } = buildLookaheadFreeQuery([
       { ticker: 'SPX', date: '2025-01-06' },
     ]);
-    expect(sql).toContain('FROM market.daily d');
-    expect(sql).toContain("LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'");
-    expect(sql).toContain('LEFT JOIN market._context_derived cd ON cd.date = d.date');
+    expect(sql).toContain('FROM market.enriched d');
+    expect(sql).toContain('LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date');
+    expect(sql).toContain("LEFT JOIN market.spot_daily vix ON vix.date = d.date AND vix.ticker = 'VIX'");
+    expect(sql).toContain("LEFT JOIN market.enriched evix ON evix.date = d.date AND evix.ticker = 'VIX'");
+    expect(sql).toContain('LEFT JOIN market.enriched_context cd ON cd.date = d.date');
   });
 });
 
@@ -294,11 +301,15 @@ describe('buildOutcomeQuery', () => {
     expect(sql).toContain('"VIX_Close"');
   });
 
-  test('queries from market.daily with VIX ticker JOINs and market._context_derived', () => {
+  test('queries from market.enriched with market.spot_daily target + VIX double-JOIN and market.enriched_context', () => {
     const { sql } = buildOutcomeQuery(['2025-01-06']);
-    expect(sql).toContain('FROM market.daily');
-    expect(sql).toContain("LEFT JOIN market.daily vix ON vix.date = d.date AND vix.ticker = 'VIX'");
-    expect(sql).toContain('LEFT JOIN market._context_derived cd ON cd.date = d.date');
+    expect(sql).toContain('FROM market.enriched d');
+    expect(sql).toContain('LEFT JOIN market.spot_daily s ON s.ticker = d.ticker AND s.date = d.date');
+    expect(sql).toContain("LEFT JOIN market.spot_daily vix ON vix.date = d.date AND vix.ticker = 'VIX'");
+    expect(sql).toContain("LEFT JOIN market.enriched evix ON evix.date = d.date AND evix.ticker = 'VIX'");
+    expect(sql).toContain('LEFT JOIN market.enriched_context cd ON cd.date = d.date');
+    expect(sql).not.toMatch(/market\.daily\b/);
+    expect(sql).not.toMatch(/market\.date_context\b/);
   });
 
   test('uses parameterized placeholders', () => {
@@ -345,7 +356,7 @@ describe('buildOutcomeQuery', () => {
     expect(params).toEqual(['SPX', '2025-01-06', 'MSFT', '2025-01-07']);
   });
 
-  test('ticker+date path uses m alias consistently (no d. references)', () => {
+  test('ticker+date path uses m/ms aliases consistently (no d. or s. references)', () => {
     const { sql } = buildOutcomeQuery([
       { ticker: 'SPX', date: '2025-01-06' },
     ]);
@@ -355,8 +366,42 @@ describe('buildOutcomeQuery', () => {
     expect(sql).toContain('vix3m.date = m.date');
     // Must NOT contain corrupted alias "vix9m" (regression: regex replace turned vix9d.date into vix9m.date)
     expect(sql).not.toContain('vix9m');
-    // Daily close columns must use m. prefix, not d. (base table is aliased as m)
-    expect(sql).not.toMatch(/\bd\."(high|low|close|RSI_14|ATR_Pct)"/);
-    expect(sql).toContain('m."high"');
+    // Enrichment close columns must use m. prefix, OHLCV must use ms. prefix. No d. or s. at base.
+    expect(sql).not.toMatch(/\bd\."(RSI_14|ATR_Pct)"/);
+    expect(sql).not.toMatch(/\bs\."(high|low|close)"/);
+    expect(sql).toContain('ms."high"');
+    expect(sql).toContain('m."RSI_14"');
+  });
+});
+
+// =============================================================================
+// Phase 6 Plan 06-00 Task 2 — buildVixJoinClause pure helper
+//
+// Wave 1 (Plan 06-01) swapped buildLookaheadFreeQuery + buildOutcomeQuery over
+// to this named export. The helper emits the post-Phase-6 double-JOIN shape:
+// one market.spot_daily JOIN (for OHLCV columns) + one market.enriched JOIN
+// (for ivr/ivp) per ticker alias.
+// =============================================================================
+
+describe('buildVixJoinClause', () => {
+  test('emits spot_daily + enriched JOINs for each ticker alias', () => {
+    const sql = buildVixJoinClause(['vix', 'vix9d'], 'd');
+    expect(sql).toContain("LEFT JOIN market.spot_daily vix ON vix.date = d.date AND vix.ticker = 'VIX'");
+    expect(sql).toContain("LEFT JOIN market.enriched evix ON evix.date = d.date AND evix.ticker = 'VIX'");
+    expect(sql).toContain("LEFT JOIN market.spot_daily vix9d ON vix9d.date = d.date AND vix9d.ticker = 'VIX9D'");
+    expect(sql).toContain("LEFT JOIN market.enriched evix9d ON evix9d.date = d.date AND evix9d.ticker = 'VIX9D'");
+    expect(sql).not.toMatch(/market\.daily/);
+    expect(sql).not.toMatch(/market\.date_context/);
+  });
+
+  test('uses custom baseAlias when provided', () => {
+    const sql = buildVixJoinClause(['vix'], 'm');
+    expect(sql).toContain('vix.date = m.date');
+    expect(sql).toContain('evix.date = m.date');
+  });
+
+  test('emits correct UPPER-cased ticker literal', () => {
+    const sql = buildVixJoinClause(['vix3m'], 'd');
+    expect(sql).toContain("vix3m.ticker = 'VIX3M'");
   });
 });

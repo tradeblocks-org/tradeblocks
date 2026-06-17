@@ -16,8 +16,8 @@ import {
   syncAllBlocks,
   type BlockSyncResult,
   type SyncResult,
-} from "../../sync/index.js";
-import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../../db/connection.js";
+} from "../../sync/index.ts";
+import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../../db/connection.ts";
 
 // MCP tool response types - index signature required for SDK compatibility
 interface ToolError {
@@ -51,6 +51,9 @@ export function withSyncedBlock<TInput extends { blockId: string }, TOutput>(
   handler: (input: TInput, ctx: SingleBlockContext) => Promise<TOutput>
 ): (input: TInput) => Promise<TOutput | ToolError> {
   return async (input: TInput) => {
+    // NOTE: single-shot RW upgrade + silent RO fallback. withFullSync uses a bounded
+    // retry + loud warn (see 260421-j1b plan). Apply here if/when lock contention
+    // becomes a visible problem for single-block tools.
     await upgradeToReadWrite(baseDir, { fallbackToReadOnly: true });
     let syncResult: BlockSyncResult;
 
@@ -113,6 +116,9 @@ export function withSyncedBlocks<
 
     const syncResults = new Map<string, BlockSyncResult>();
 
+    // NOTE: single-shot RW upgrade + silent RO fallback. withFullSync uses a bounded
+    // retry + loud warn (see 260421-j1b plan). Apply here if/when lock contention
+    // becomes a visible problem for multi-block tools.
     await upgradeToReadWrite(baseDir, { fallbackToReadOnly: true });
 
     if (getConnectionMode() === "read_write") {
@@ -168,17 +174,43 @@ export function withFullSync<TInput, TOutput>(
   handler: (input: TInput, ctx: FullSyncContext) => Promise<TOutput>
 ): (input: TInput) => Promise<TOutput> {
   return async (input: TInput) => {
-    await upgradeToReadWrite(baseDir, { fallbackToReadOnly: true });
-    let blockSyncResult: SyncResult;
+    // Outer retry loop: papers over short RW-lock races where another session is
+    // mid-sync. upgradeToReadWrite itself already retries internally (4× 1000ms
+    // with RO fallback), so each iteration is really "give the other session
+    // another window to release." 3 attempts × [100, 250, 500]ms backoff =
+    // ~850ms outer budget before we give up and warn loudly.
+    // See quick task 260421-j1b for rationale.
+    const backoffsMs = [100, 250, 500]; // 3 attempts, ~850ms worst case
+    let attempts = 0;
+    let mode: "read_write" | "read_only" | null = null;
+    for (let i = 0; i < backoffsMs.length; i++) {
+      attempts = i + 1;
+      await upgradeToReadWrite(baseDir, { fallbackToReadOnly: true });
+      mode = getConnectionMode();
+      if (mode === "read_write") break;
+      // Last attempt: don't sleep — we're about to fall through to the skip path.
+      if (i < backoffsMs.length - 1) {
+        await new Promise((r) => setTimeout(r, backoffsMs[i]));
+      }
+    }
 
-    if (getConnectionMode() === "read_write") {
+    let blockSyncResult: SyncResult;
+    if (mode === "read_write") {
       try {
         blockSyncResult = await syncAllBlocks(baseDir);
+        // Explicitly mark as not-skipped so callers checking the flag get a stable answer.
+        blockSyncResult.syncSkipped = false;
       } finally {
         await downgradeToReadOnly(baseDir);
       }
     } else {
-      // RO fallback — another session holds the write lock, skip sync
+      // All retries exhausted — another session still holds the write lock.
+      // Surface this LOUDLY (warn + flag) so downstream callers and humans can
+      // tell that sync was skipped and data may be stale.
+      console.warn(
+        `[sync-middleware] sync skipped: could not acquire write lock after ${attempts} retries; ` +
+          `downstream data may be stale until next call succeeds.`
+      );
       blockSyncResult = {
         blocksProcessed: 0,
         blocksSynced: 0,
@@ -186,6 +218,8 @@ export function withFullSync<TInput, TOutput>(
         blocksDeleted: 0,
         errors: [],
         results: [],
+        syncSkipped: true,
+        skipReason: "could_not_acquire_write_lock",
       };
     }
 

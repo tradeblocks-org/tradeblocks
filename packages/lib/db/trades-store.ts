@@ -2,24 +2,24 @@
  * Trades Store - CRUD operations for trade data
  */
 
-import { Trade } from "../models/trade";
+import type { Trade } from "../models/trade.ts";
 import {
   combineAllLegGroups,
-  CombinedTrade,
-} from "../utils/combine-leg-groups";
+  type CombinedTrade
+} from "../utils/combine-leg-groups.ts";
 import {
   INDEXES,
   promisifyRequest,
   STORES,
   withReadTransaction,
   withWriteTransaction,
-} from "./index";
+} from "./index.ts";
 import {
   deleteCombinedTradesCache,
   getCombinedTradesCache,
   storeCombinedTradesCache,
-} from "./combined-trades-cache";
-import { deletePerformanceSnapshotCache } from "./performance-snapshot-cache";
+} from "./combined-trades-cache.ts";
+import { deletePerformanceSnapshotCache } from "./performance-snapshot-cache.ts";
 
 // Track in-flight combined cache writes to avoid redundant work when multiple callers miss the cache simultaneously.
 const combinedCacheInflight = new Map<string, Promise<void>>();

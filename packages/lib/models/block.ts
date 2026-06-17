@@ -1,11 +1,11 @@
-import {
+import type {
   PerformanceMetrics,
   PortfolioStats,
-  StrategyStats,
-} from "./portfolio-stats";
-import { StrategyAlignment } from "./strategy-alignment";
-// import { Trade } from './trade'
-// import { DailyLog } from './daily-log'
+  StrategyStats
+} from "./portfolio-stats.ts";
+import type { StrategyAlignment } from "./strategy-alignment.ts";
+// import { Trade } from './trade.ts'
+// import { DailyLog } from './daily-log.ts'
 
 /**
  * Enhanced Block interface for processed trading data

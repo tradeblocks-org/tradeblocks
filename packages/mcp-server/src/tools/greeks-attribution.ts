@@ -9,11 +9,13 @@
  */
 
 import { z } from "zod";
-import { getConnection } from "../db/connection.js";
-import { handleDecomposeGreeks } from "./exit-analysis.js";
-import type { FactorContribution } from "../utils/greeks-decomposition.js";
+import { getConnection } from "../db/connection.ts";
+import { handleDecomposeGreeks } from "./exit-analysis.ts";
+import type { FactorContribution } from "../utils/greeks-decomposition.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createToolOutput } from "../utils/output-formatter.js";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import { tradingDays } from "../utils/flatfile-importer.ts";
+import type { MarketStores } from "../market/stores/index.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -171,6 +173,7 @@ export function assessPrecision(
 export async function handleGetGreeksAttribution(
   params: z.infer<typeof getGreeksAttributionSchema>,
   baseDir: string,
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<AttributionSummaryResult | AttributionInstanceResult> {
   const { block_id, mode, trade_index, skip_quotes, detailed, strategy } = params;
@@ -179,10 +182,10 @@ export async function handleGetGreeksAttribution(
     if (trade_index == null) {
       throw new Error("trade_index is required for instance mode");
     }
-    return handleInstanceMode(block_id, trade_index, skip_quotes, detailed, baseDir, injectedConn);
+    return handleInstanceMode(block_id, trade_index, skip_quotes, detailed, baseDir, stores, injectedConn);
   }
 
-  return handleSummaryMode(block_id, skip_quotes, detailed, strategy, baseDir, injectedConn);
+  return handleSummaryMode(block_id, skip_quotes, detailed, strategy, baseDir, stores, injectedConn);
 }
 
 async function handleSummaryMode(
@@ -191,6 +194,7 @@ async function handleSummaryMode(
   detailed: boolean,
   strategy: string | undefined,
   baseDir: string,
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<AttributionSummaryResult> {
   const conn = injectedConn ?? await getConnection(baseDir);
@@ -248,6 +252,7 @@ async function handleSummaryMode(
             skip_quotes,
           },
           baseDir,
+          stores,
           injectedConn,
         ).then(result => {
           for (const factor of result.factors) {
@@ -335,6 +340,7 @@ async function handleInstanceMode(
   skip_quotes: boolean,
   detailed: boolean,
   baseDir: string,
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<AttributionInstanceResult> {
   const conn = injectedConn ?? await getConnection(baseDir);
@@ -365,20 +371,19 @@ async function handleInstanceMode(
       skip_quotes,
     },
     baseDir,
+    stores,
     injectedConn,
   );
 
   // Build per-step entries from factor step arrays
   const stepCount = result.stepCount;
 
-  // Get actual trading dates from market data for this date range
-  const datesResult = await conn.runAndReadAll(
-    `SELECT DISTINCT date FROM market.intraday
-     WHERE date >= $1 AND date <= $2
-     ORDER BY date`,
-    [tradeDate, closeDate]
-  );
-  const tradingDates = datesResult.getRows().map(r => String(r[0]));
+  // Map step indices → dates via a pure Mon-Fri trading-day iterator.
+  // Replays operate over date ranges with dense intraday coverage, so the
+  // weekday iteration matches the set of dates the decomposition produced
+  // (one step per trading day). `conn` is still used above for the trade
+  // row fetch — only the date probe is store-free.
+  const tradingDates = tradingDays(tradeDate, closeDate);
   const getStepDate = (i: number): string =>
     i < tradingDates.length ? tradingDates[i] : `day-${i}`;
 
@@ -456,7 +461,11 @@ function getStepValue(
 // Tool registration
 // ---------------------------------------------------------------------------
 
-export function registerGreeksAttributionTools(server: McpServer, baseDir: string): void {
+export function registerGreeksAttributionTools(
+  server: McpServer,
+  baseDir: string,
+  stores: MarketStores,
+): void {
   server.registerTool(
     "get_greeks_attribution",
     {
@@ -469,7 +478,7 @@ export function registerGreeksAttributionTools(server: McpServer, baseDir: strin
     },
     async (params) => {
       try {
-        const result = await handleGetGreeksAttribution(params, baseDir);
+        const result = await handleGetGreeksAttribution(params, baseDir, stores);
 
         const isSummary = !("steps" in result);
         const summary = isSummary

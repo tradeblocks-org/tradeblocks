@@ -6,19 +6,19 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock } from "../../utils/block-loader.js";
-import { createToolOutput } from "../../utils/output-formatter.js";
+import { loadBlock } from "../../utils/block-loader.ts";
+import { createToolOutput } from "../../utils/output-formatter.ts";
 import { REPORT_FIELDS, pearsonCorrelation } from "@tradeblocks/lib";
-import { filterByStrategy, filterByDateRange } from "../shared/filters.js";
+import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
 import {
   enrichTrades,
   getTradeFieldValue,
   percentile,
   type EnrichedTrade,
-} from "./helpers.js";
-import { withSyncedBlock } from "../middleware/sync-middleware.js";
-import { getConnection } from "../../db/connection.js";
-import { getProfile } from "../../db/profile-schemas.js";
+} from "./helpers.ts";
+import { withSyncedBlock } from "../middleware/sync-middleware.ts";
+import { getConnection } from "../../db/connection.ts";
+import { getProfile } from "../../db/profile-schemas.ts";
 
 /**
  * Register predictive-related report tools
@@ -254,7 +254,7 @@ export function registerPredictiveTools(
           if (strategyName) {
             try {
               const conn = await getConnection(baseDir);
-              const profile = await getProfile(conn, blockId, strategyName);
+              const profile = await getProfile(conn, blockId, strategyName, baseDir);
               if (profile && profile.entryFilters.length > 0) {
                 const profileFilterFields = new Set(
                   profile.entryFilters.map((f) => f.field)

@@ -1,6 +1,6 @@
 {
   "name": "tradeblocks-mcp",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "description": "MCP server for options trade analysis",
   "author": "David Romeo <davidmromeo@gmail.com>",
   "type": "module",
@@ -8,22 +8,142 @@
   "bin": {
     "tradeblocks-mcp": "server/index.js"
   },
+  "exports": {
+    "./utils/market-provider": {
+      "types": "./src/utils/market-provider.ts",
+      "import": "./src/utils/market-provider.ts"
+    },
+    "./utils/black-scholes": {
+      "types": "./src/utils/black-scholes.ts",
+      "import": "./src/utils/black-scholes.ts"
+    },
+    "./utils/chain-loader": {
+      "types": "./src/utils/chain-loader.ts",
+      "import": "./src/utils/chain-loader.ts"
+    },
+    "./utils/option-quote-greeks": {
+      "types": "./src/utils/option-quote-greeks.ts",
+      "import": "./src/utils/option-quote-greeks.ts"
+    },
+    "./utils/option-time": {
+      "types": "./src/utils/option-time.ts",
+      "import": "./src/utils/option-time.ts"
+    },
+    "./utils/market-enricher": {
+      "types": "./src/utils/market-enricher.ts",
+      "import": "./src/utils/market-enricher.ts"
+    },
+    "./utils/provider-capabilities": {
+      "types": "./src/utils/provider-capabilities.ts",
+      "import": "./src/utils/provider-capabilities.ts"
+    },
+    "./utils/quote-parquet-projection": {
+      "types": "./src/utils/quote-parquet-projection.ts",
+      "import": "./src/utils/quote-parquet-projection.ts"
+    },
+    "./utils/data-availability": {
+      "types": "./src/utils/data-availability.ts",
+      "import": "./src/utils/data-availability.ts"
+    },
+    "./utils/data-quality": {
+      "types": "./src/utils/data-quality.ts",
+      "import": "./src/utils/data-quality.ts"
+    },
+    "./utils/providers/thetadata": {
+      "types": "./src/utils/providers/thetadata.ts",
+      "import": "./src/utils/providers/thetadata.ts"
+    },
+    "./utils/flatfile-importer": {
+      "types": "./src/utils/flatfile-importer.ts",
+      "import": "./src/utils/flatfile-importer.ts"
+    },
+    "./utils/quote-enricher": {
+      "types": "./src/utils/quote-enricher.ts",
+      "import": "./src/utils/quote-enricher.ts"
+    },
+    "./db/connection": {
+      "types": "./src/db/connection.ts",
+      "import": "./src/db/connection.ts"
+    },
+    "./db/data-root": {
+      "types": "./src/db/data-root.ts",
+      "import": "./src/db/data-root.ts"
+    },
+    "./db/backtest-schemas": {
+      "types": "./src/db/backtest-schemas.ts",
+      "import": "./src/db/backtest-schemas.ts"
+    },
+    "./db/parquet-writer": {
+      "types": "./src/db/parquet-writer.ts",
+      "import": "./src/db/parquet-writer.ts"
+    },
+    "./db/json-store": {
+      "types": "./src/db/json-store.ts",
+      "import": "./src/db/json-store.ts"
+    },
+    "./db/market-datasets": {
+      "types": "./src/db/market-datasets.ts",
+      "import": "./src/db/market-datasets.ts"
+    },
+    "./db/market-views": {
+      "types": "./src/db/market-views.ts",
+      "import": "./src/db/market-views.ts"
+    },
+    "./db/market-schemas": {
+      "types": "./src/db/market-schemas.ts",
+      "import": "./src/db/market-schemas.ts"
+    },
+    "./market/stores": {
+      "types": "./src/market/stores/index.ts",
+      "import": "./src/market/stores/index.ts"
+    },
+    "./market/stores/types": {
+      "types": "./src/market/stores/types.ts",
+      "import": "./src/market/stores/types.ts"
+    },
+    "./market/tickers": {
+      "types": "./src/market/tickers/index.ts",
+      "import": "./src/market/tickers/index.ts"
+    },
+    "./market/tickers/registry": {
+      "types": "./src/market/tickers/registry.ts",
+      "import": "./src/market/tickers/registry.ts"
+    },
+    "./market/tickers/resolver": {
+      "types": "./src/market/tickers/resolver.ts",
+      "import": "./src/market/tickers/resolver.ts"
+    },
+    "./market/tickers/schemas": {
+      "types": "./src/market/tickers/schemas.ts",
+      "import": "./src/market/tickers/schemas.ts"
+    },
+    "./test-exports": {
+      "types": "./src/test-exports.ts",
+      "import": "./src/test-exports.ts"
+    }
+  },
   "scripts": {
-    "build": "tsup && npm run build:http-server && npm run fix-http-import",
+    "build": "tsup && node scripts/copy-provider-assets.mjs && npm run build:http-server && npm run fix-http-import",
     "build:http-server": "esbuild src/http-server.ts --bundle --outfile=server/http-server.js --format=esm --platform=node --target=node18 --packages=external",
     "fix-http-import": "node -e \"const fs=require('fs');const f='server/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/\\.\\/http-server-[A-Z0-9]+\\.js/g,'./http-server.js');fs.writeFileSync(f,c);\" && rm -f server/http-server-*.js server/http-server-*.map",
-        "dev": "tsup --watch",
+    "dev": "tsup --watch",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "verify:exports": "node scripts/verify-exports-surface.mjs",
     "mcpb:pack": "npm run build && node scripts/pack-mcpb.js",
     "pack:beta": "npm run build && npm pack --pack-destination .",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.4.4-r.3",
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "csv-parse": "^6.2.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
+    "fzstd": "^0.1.1",
     "jose": "^6.2.3",
+    "protobufjs": "^8.0.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -32,7 +152,7 @@
     "@types/node": "^25.9.3",
     "archiver": "^7.0.1",
     "jest": "^30.3.0",
-    "ts-jest": "^29.4.6",
+    "ts-jest": "^29.4.9",
     "tsup": "^8.4.0",
     "typescript": "^5.8.0"
   },
@@ -42,6 +162,7 @@
   "files": [
     "server",
     "dist",
+    "src",
     "agent-skills",
     "manifest.json"
   ],
@@ -55,7 +176,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/davidromeo/tradeblocks",
+    "url": "git+https://github.com/tradeblocks-org/tradeblocks.git",
     "directory": "packages/mcp-server"
   }
 }

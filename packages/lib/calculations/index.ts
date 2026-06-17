@@ -4,30 +4,30 @@
  * Provides comprehensive calculation functionality for portfolio analysis.
  */
 
-export * from './portfolio-stats'
-export * from './performance'
-export * from './walk-forward-analyzer'
-export * from './walk-forward-verdict'
-export * from './correlation'
-export * from './monte-carlo'
-export * from './tail-risk-analysis'
-export * from './kelly'
-export * from './daily-exposure'
-export * from './margin-timeline'
-export * from './streak-analysis'
-export * from './flexible-filter'
-export * from './regime-comparison'
-export * from './table-aggregation'
-export * from './threshold-analysis'
-export * from './static-dataset-matcher'
-export * from './trend-detection'
-export * from './period-segmentation'
-export * from './rolling-metrics'
-export * from './mc-regime-comparison'
-export * from './walk-forward-degradation'
-export * from './trade-matching'
-export * from './live-alignment'
-export * from './edge-decay-synthesis'
+export * from './portfolio-stats.ts'
+export * from './performance.ts'
+export * from './walk-forward-analyzer.ts'
+export * from './walk-forward-verdict.ts'
+export * from './correlation.ts'
+export * from './monte-carlo.ts'
+export * from './tail-risk-analysis.ts'
+export * from './kelly.ts'
+export * from './daily-exposure.ts'
+export * from './margin-timeline.ts'
+export * from './streak-analysis.ts'
+export * from './flexible-filter.ts'
+export * from './regime-comparison.ts'
+export * from './table-aggregation.ts'
+export * from './threshold-analysis.ts'
+export * from './static-dataset-matcher.ts'
+export * from './trend-detection.ts'
+export * from './period-segmentation.ts'
+export * from './rolling-metrics.ts'
+export * from './mc-regime-comparison.ts'
+export * from './walk-forward-degradation.ts'
+export * from './trade-matching.ts'
+export * from './live-alignment.ts'
+export * from './edge-decay-synthesis.ts'
 // Re-export from cumulative-distribution excluding conflicting name
 export {
   type CumulativeDistributionPoint,
@@ -36,14 +36,14 @@ export {
   type ThresholdTradeoff,
   calculateCumulativeDistribution,
   findOptimalThreshold as findOptimalDistributionThreshold,
-} from './cumulative-distribution'
-export * from './walk-forward-interpretation'
-export * from './enrich-trades'
-export * from './statistical-utils'
-export * from './mfe-mae'
+} from './cumulative-distribution.ts'
+export * from './walk-forward-interpretation.ts'
+export * from './enrich-trades.ts'
+export * from './statistical-utils.ts'
+export * from './mfe-mae.ts'
 
 // Re-export types for convenience
-export * from '../models/portfolio-stats'
+export * from '../models/portfolio-stats.ts'
 
 // Calculation cache interface
 export interface CalculationCache {
@@ -148,8 +148,8 @@ export class CalculationOrchestrator {
 export const calculationOrchestrator = new CalculationOrchestrator()
 
 // Import legacy calculation classes for compatibility
-import { PortfolioStatsCalculator } from './portfolio-stats'
-import { PerformanceCalculator } from './performance'
-import { Trade } from '../models/trade'
-import { DailyLogEntry } from '../models/daily-log'
-import { AnalysisConfig } from '../models/portfolio-stats'
+import { PortfolioStatsCalculator } from './portfolio-stats.ts'
+import { PerformanceCalculator } from './performance.ts'
+import type { Trade } from '../models/trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import type { AnalysisConfig } from '../models/portfolio-stats.ts'

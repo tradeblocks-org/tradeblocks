@@ -12,19 +12,19 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import { handleReplayTrade } from "./replay.js";
-import { getProvider } from "../utils/market-provider.js";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import { handleReplayTrade } from "./replay.ts";
+import type { MarketStores } from "../market/stores/index.ts";
 import {
   analyzeExitTriggers,
   type ExitTriggerConfig,
   type LegGroupConfig,
-} from "../utils/exit-triggers.js";
+} from "../utils/exit-triggers.ts";
 import {
   decomposeGreeks,
   type LegGroupDef,
-} from "../utils/greeks-decomposition.js";
-import { markPrice } from "../utils/trade-replay.js";
+} from "../utils/greeks-decomposition.ts";
+import { markPrice } from "../utils/trade-replay.ts";
 
 // ---------------------------------------------------------------------------
 // Shared trigger type enum
@@ -80,7 +80,7 @@ const legSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const analyzeExitTriggersSchema = z.object({
-  // Replay inputs (same as replay_trade per D-02)
+  // Replay inputs (same shape as replay_trade)
   legs: z.array(legSchema).optional(),
   block_id: z.string().optional(),
   trade_index: z.number().optional(),
@@ -88,15 +88,12 @@ export const analyzeExitTriggersSchema = z.object({
   close_date: z.string().optional(),
   multiplier: z.number().default(100),
 
-  // Trigger configs per D-03
   triggers: z.array(triggerConfigSchema)
     .describe("Exit triggers to evaluate against the P&L path"),
 
-  // Per D-05
   actual_exit_timestamp: z.string().optional()
     .describe("Actual exit time for comparison (format: YYYY-MM-DD HH:MM)"),
 
-  // Per D-06
   leg_groups: z.array(z.object({
     label: z.string(),
     leg_indices: z.array(z.number()),
@@ -120,7 +117,6 @@ export const decomposeGreeksSchema = z.object({
   close_date: z.string().optional(),
   multiplier: z.number().default(100),
 
-  // Per D-08
   leg_groups: z.array(z.object({
     label: z.string(),
     leg_indices: z.array(z.number()),
@@ -154,28 +150,48 @@ function extractUnderlyingTicker(occTicker: string): string {
 }
 
 /**
- * Fetch VIX or VIX9D minute bars and build a timestamp->price map.
+ * Read VIX, VIX9D, or underlying minute bars via SpotStore and build a
+ * timestamp->price map. Reads NEVER trigger provider calls — bars are
+ * served from the local store, with a daily-aggregate fallback when
+ * minute bars are absent (same pattern used in replay.ts for underlying
+ * fetches). An empty map on cache miss is the silent-empty contract —
+ * callers treat absent data as "trigger inactive" rather than as an
+ * error.
  */
 async function fetchPriceMap(
+  stores: MarketStores,
   ticker: string,
   from: string,
   to: string,
 ): Promise<Map<string, number>> {
   const map = new Map<string, number>();
   try {
-    const bars = await getProvider().fetchBars({
-      ticker,
-      from,
-      to,
-      timespan: "minute",
-      assetClass: "index",
-    });
+    let bars = await stores.spot.readBars(ticker, from, to);
+    if (bars.length === 0) {
+      try {
+        bars = await stores.spot.readDailyBars(ticker, from, to);
+      } catch {
+        // No daily fallback available — return empty map
+      }
+    }
+    // Defense-in-depth: skip any underlying bar with a zero/null OHLC value.
+    // The underlying ticker (SPX/QQQ/etc.) always has a real price — a zero
+    // is a provider gap that would corrupt the price map and downstream
+    // trigger comparisons. Raw bars are left unfiltered upstream so option
+    // tickers can keep legitimate "no trade" zero rows; this filter is
+    // applied at the underlying-consumer site.
     for (const b of bars) {
+      if (
+        !Number.isFinite(b.open)  || b.open  <= 0 ||
+        !Number.isFinite(b.high)  || b.high  <= 0 ||
+        !Number.isFinite(b.low)   || b.low   <= 0 ||
+        !Number.isFinite(b.close) || b.close <= 0
+      ) continue;
       const ts = `${b.date} ${b.time ?? ''}`.trim();
       map.set(ts, markPrice(b));
     }
   } catch {
-    // VIX/VIX9D data is best-effort
+    // Best-effort — empty map signals "trigger data unavailable"
   }
   return map;
 }
@@ -187,6 +203,7 @@ async function fetchPriceMap(
 export async function handleAnalyzeExitTriggers(
   params: z.infer<typeof analyzeExitTriggersSchema>,
   baseDir: string,
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<ReturnType<typeof analyzeExitTriggers>> {
   const {
@@ -209,13 +226,14 @@ export async function handleAnalyzeExitTriggers(
       skip_quotes: false,
     },
     baseDir,
+    stores,
     injectedConn,
   );
 
   const pnlPath = replayResult.pnlPath;
   const replayLegs = replayResult.legs;
 
-  // Compute entry cost for percentage-based triggers (D-11)
+  // Compute entry cost for percentage-based triggers
   const entryCost = replayLegs.reduce((sum, leg) => {
     return sum + leg.entryPrice * leg.quantity * leg.multiplier;
   }, 0);
@@ -254,14 +272,14 @@ export async function handleAnalyzeExitTriggers(
   const needsUnderlying = allTriggerTypes.has('underlyingPriceMove');
 
   if (needsVix) {
-    vixPrices = await fetchPriceMap('VIX', firstDate, lastDate);
+    vixPrices = await fetchPriceMap(stores, 'VIX', firstDate, lastDate);
   }
   if (needsVix9d) {
-    vix9dPrices = await fetchPriceMap('VIX9D', firstDate, lastDate);
+    vix9dPrices = await fetchPriceMap(stores, 'VIX9D', firstDate, lastDate);
   }
   if (needsUnderlying) {
     underlyingPrices = await fetchPriceMap(
-      underlyingTicker, firstDate, lastDate,
+      stores, underlyingTicker, firstDate, lastDate,
     );
   }
 
@@ -324,8 +342,9 @@ export async function handleAnalyzeExitTriggers(
 export async function handleDecomposeGreeks(
   params: z.infer<typeof decomposeGreeksSchema>,
   baseDir: string,
+  stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
-): Promise<import("../utils/greeks-decomposition.js").GreeksDecompositionResult> {
+): Promise<import("../utils/greeks-decomposition.ts").GreeksDecompositionResult> {
   const {
     legs: inputLegs, block_id, trade_index,
     open_date, close_date, multiplier,
@@ -346,6 +365,7 @@ export async function handleDecomposeGreeks(
       skip_quotes,
     },
     baseDir,
+    stores,
     injectedConn,
   );
 
@@ -355,7 +375,7 @@ export async function handleDecomposeGreeks(
   // 2. Check greeks data availability
   if (pnlPath.length > 0 && !pnlPath[0].legGreeks) {
     throw new Error(
-      "No greeks data available. Ensure MASSIVE_API_KEY is set and underlying price data exists."
+      "No greeks data available. Use the data-pipeline tools to backfill the option-leg quotes and underlying price data into the local cache."
     );
   }
 
@@ -424,6 +444,7 @@ export async function handleDecomposeGreeks(
 export function registerExitAnalysisTools(
   server: McpServer,
   baseDir: string,
+  stores: MarketStores,
 ): void {
   server.registerTool(
     "analyze_exit_triggers",
@@ -433,12 +454,13 @@ export function registerExitAnalysisTools(
         "-- provide block_id + trade_index or explicit legs. Evaluates 14 trigger types " +
         "(profit target, stop loss, trailing stop, DTE, DIT, clock time, underlying move, " +
         "delta, VIX moves, S/L ratio) against minute-by-minute P&L path with greeks. " +
-        "Uses cached bars from market.intraday when available; fetches from Massive.com on cache miss (requires MASSIVE_API_KEY).",
+        "Reads VIX/VIX9D/underlying bars from SpotStore (cache only); triggers that need " +
+        "missing data are silently skipped. Use the data-pipeline tools to backfill cache.",
       inputSchema: analyzeExitTriggersSchema,
     },
     async (params) => {
       try {
-        const result = await handleAnalyzeExitTriggers(params, baseDir);
+        const result = await handleAnalyzeExitTriggers(params, baseDir, stores);
 
         const summary = result.overall.summary;
         return createToolOutput(summary, result);
@@ -464,12 +486,13 @@ export function registerExitAnalysisTools(
         "vega, residual). Runs replay internally. Shows which factor drove P&L movement " +
         "and by how much. For calendar/double-calendar strategies, includes per-leg-group " +
         "vega attribution showing front vs back month IV divergence. " +
-        "Uses cached bars from market.intraday when available; fetches from Massive.com on cache miss (requires MASSIVE_API_KEY).",
+        "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
+        "missing data yields a degenerate replay. Use the data-pipeline tools to backfill cache.",
       inputSchema: decomposeGreeksSchema,
     },
     async (params) => {
       try {
-        const result = await handleDecomposeGreeks(params, baseDir);
+        const result = await handleDecomposeGreeks(params, baseDir, stores);
 
         const summary = result.summary;
         return createToolOutput(summary, result);

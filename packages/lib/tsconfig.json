@@ -1,3 +1,6 @@
+// IMPORT BOUNDARY: do NOT add `paths` entries that reach out of this repo
+// (no `../<sibling>/*` aliases). `paths` is intentionally `{}`. See root
+// tsconfig.json header for the full rationale.
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {

@@ -2,8 +2,8 @@
  * Reporting Logs Store - CRUD operations for reporting (backtest) trade data
  */
 
-import { ReportingTrade } from '../models/reporting-trade'
-import { STORES, INDEXES, withReadTransaction, withWriteTransaction, promisifyRequest } from './index'
+import type { ReportingTrade } from '../models/reporting-trade.ts'
+import { STORES, INDEXES, withReadTransaction, withWriteTransaction, promisifyRequest } from './index.ts'
 
 export interface StoredReportingTrade extends ReportingTrade {
   blockId: string

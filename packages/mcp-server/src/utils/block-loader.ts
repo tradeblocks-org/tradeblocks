@@ -17,11 +17,18 @@ import {
   isTatFormat,
   convertTatRowToReportingTrade,
 } from "@tradeblocks/lib";
-import { getConnection } from "../db/connection.js";
+import { getConnection } from "../db/connection.ts";
+import { isParquetMode } from "../db/parquet-writer.ts";
+import { getSyncMetadataJson } from "../db/json-adapters.ts";
+import { getBlocksDir } from "../sync/index.ts";
 
 // Re-export CSV discovery types and functions from shared module
-export { type CsvMappings, type CsvType, detectCsvType, discoverCsvFiles, logCsvDiscoveryWarning } from "./csv-discovery.js";
-import { type CsvType, discoverCsvFiles } from "./csv-discovery.js";
+export { type CsvMappings, type CsvType, detectCsvType, discoverCsvFiles, logCsvDiscoveryWarning } from "./csv-discovery.ts";
+import { type CsvType, discoverCsvFiles } from "./csv-discovery.ts";
+
+function resolveBlocksBaseDir(baseDir: string): string {
+  return getBlocksDir(baseDir);
+}
 
 /**
  * Block info summary for listing
@@ -362,7 +369,8 @@ export async function loadBlock(
   baseDir: string,
   blockId: string
 ): Promise<LoadedBlock> {
-  const blockPath = path.join(baseDir, blockId);
+  const blocksDir = resolveBlocksBaseDir(baseDir);
+  const blockPath = path.join(blocksDir, blockId);
 
   // Discover CSV files via header sniffing
   const { mappings } = await discoverCsvFiles(blockPath);
@@ -427,10 +435,13 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
 
   try {
     const conn = await getConnection(baseDir);
+    const blocksDir = resolveBlocksBaseDir(baseDir);
 
     // Query 1: Trade stats per block from DuckDB
-    // Safety filter: exclude backtest rows (source='tradeblocks') — they live in backtests.trade_data
-    // after Phase b72. This WHERE clause prevents regression if old data lingers.
+    // Safety filter: restrict to rows whose `source` is NULL or 'csv' (i.e., direct CSV
+    // imports). Rows populated by any optional private extension live in a separate
+    // attached DB and are ignored here (Phase b72). This WHERE clause prevents regression
+    // if stale data lingers.
     const tradeStatsReader = await conn.runAndReadAll(`
       SELECT
         t.block_id,
@@ -519,25 +530,40 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
     }
 
     // Query 3: Sync metadata to determine hasDailyLog/hasReportingLog
-    const syncReader = await conn.runAndReadAll(`
-      SELECT block_id, dailylog_hash, reportinglog_hash FROM trades._sync_metadata
-    `);
-
     const syncMeta = new Map<string, {
       hasDailyLog: boolean;
       hasReportingLog: boolean;
     }>();
 
-    for (const row of syncReader.getRows()) {
-      const blockId = row[0] as string;
-      syncMeta.set(blockId, {
-        hasDailyLog: row[1] != null,
-        hasReportingLog: row[2] != null,
-      });
+    if (isParquetMode()) {
+      // In Parquet mode, read .sync-meta.json files from blocksDir
+      const metaEntries = await fs.readdir(blocksDir, { withFileTypes: true });
+      for (const entry of metaEntries) {
+        if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+        const meta = await getSyncMetadataJson(entry.name, blocksDir);
+        if (meta) {
+          syncMeta.set(entry.name, {
+            hasDailyLog: meta.dailylog_hash != null,
+            hasReportingLog: meta.reportinglog_hash != null,
+          });
+        }
+      }
+    } else {
+      // DuckDB path (existing code)
+      const syncReader = await conn.runAndReadAll(`
+        SELECT block_id, dailylog_hash, reportinglog_hash FROM trades._sync_metadata
+      `);
+      for (const row of syncReader.getRows()) {
+        const blockId = row[0] as string;
+        syncMeta.set(blockId, {
+          hasDailyLog: row[1] != null,
+          hasReportingLog: row[2] != null,
+        });
+      }
     }
 
     // Scan filesystem for block folders (some may not be synced yet)
-    const entries = await fs.readdir(baseDir, { withFileTypes: true });
+    const entries = await fs.readdir(blocksDir, { withFileTypes: true });
     const blockFolders = new Set<string>();
 
     for (const entry of entries) {
@@ -593,7 +619,7 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
       } else if (!stats) {
         // Block folder exists but has no synced data yet.
         // Check if it has CSVs (it will sync on next tool call via middleware).
-        const blockPath = path.join(baseDir, blockId);
+        const blockPath = path.join(blocksDir, blockId);
         try {
           const { mappings } = await discoverCsvFiles(blockPath);
           if (mappings.tradelog) {
@@ -701,7 +727,8 @@ export async function loadReportingLog(
   baseDir: string,
   blockId: string
 ): Promise<ReportingTrade[]> {
-  const blockPath = path.join(baseDir, blockId);
+  const blocksDir = resolveBlocksBaseDir(baseDir);
+  const blockPath = path.join(blocksDir, blockId);
 
   // Discover CSV files via header sniffing
   const { mappings } = await discoverCsvFiles(blockPath);
@@ -858,6 +885,7 @@ export async function importCsv(
 ): Promise<ImportCsvResult> {
   const { csvPath, blockName } = options;
   let { csvType = "tradelog" } = options;
+  const blocksDir = resolveBlocksBaseDir(baseDir);
 
   // Validate source file exists
   try {
@@ -896,7 +924,7 @@ export async function importCsv(
   }
 
   // Check if block already exists
-  const blockPath = path.join(baseDir, blockId);
+  const blockPath = path.join(blocksDir, blockId);
   try {
     await fs.access(blockPath);
     throw new Error(

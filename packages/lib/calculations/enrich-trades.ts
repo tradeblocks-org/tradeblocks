@@ -5,13 +5,13 @@
  * filtering and charting in the Report Builder.
  */
 
-import { Trade } from '../models/trade'
-import { EnrichedTrade } from '../models/enriched-trade'
-import { DailyLogEntry } from '../models/daily-log'
-import { calculateMFEMAEData, MFEMAEDataPoint } from './mfe-mae'
-import type { StaticDataset, StaticDatasetRow } from '../models/static-dataset'
-import { getMatchedValuesForTrade } from './static-dataset-matcher'
-import { calculateExposureAtTradeOpen, EquityCurvePoint, ExposureAtOpen } from './daily-exposure'
+import type { Trade } from '../models/trade.ts'
+import type { EnrichedTrade } from '../models/enriched-trade.ts'
+import type { DailyLogEntry } from '../models/daily-log.ts'
+import { calculateMFEMAEData, type MFEMAEDataPoint } from './mfe-mae.ts'
+import type { StaticDataset, StaticDatasetRow } from '../models/static-dataset.ts'
+import { getMatchedValuesForTrade } from './static-dataset-matcher.ts'
+import { calculateExposureAtTradeOpen, type EquityCurvePoint, type ExposureAtOpen } from './daily-exposure.ts'
 
 /**
  * Static dataset with its rows for matching

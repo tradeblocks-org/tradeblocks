@@ -25,8 +25,8 @@ See [packages/mcp-server/README.md](../packages/mcp-server/README.md) for platfo
 ### Docker
 
 ```bash
-docker pull ghcr.io/davidromeo/tradeblocks-mcp:latest
-docker run -v ~/Trading/backtests:/data ghcr.io/davidromeo/tradeblocks-mcp /data
+docker pull ghcr.io/tradeblocks-org/tradeblocks-mcp:latest
+docker run -v ~/Trading/backtests:/data ghcr.io/tradeblocks-org/tradeblocks-mcp /data
 ```
 
 ### Environment Variables
@@ -61,7 +61,7 @@ Massive.com adds automated market data import and on-demand option bar fetching 
      }
    }
    ```
-3. Use `import_from_api` for daily OHLCV, VIX context, or intraday bars
+3. Use `fetch_bars` for daily OHLCV or intraday bars, `compute_vix_context` for VIX regime fields, or `refresh_market_data` for a combined daily refresh
 4. Replay tools fetch option bars on cache miss automatically
 
 See [Market Data Guide](market-data.md) for full details on import paths, ticker formats, and enrichment.
@@ -80,7 +80,7 @@ The web dashboard is a Next.js app for visual portfolio exploration — equity c
 ### Setup
 
 ```bash
-git clone https://github.com/davidromeo/tradeblocks.git
+git clone https://github.com/tradeblocks-org/tradeblocks.git
 cd tradeblocks
 npm install
 npm run dev

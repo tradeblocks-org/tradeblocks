@@ -4,52 +4,10 @@ import {
   collapseFactors,
   handleDecomposeGreeks,
   handleGetGreeksAttribution,
-} from "../../src/test-exports.js";
-import type {
-  AttributionSummaryResult,
-  MassiveAggregateResponse,
-} from "../../src/test-exports.js";
-
-function buildMinuteBarResponse(
-  ticker: string,
-  bars: Array<{ t: number; o: number; h: number; l: number; c: number }>
-): MassiveAggregateResponse {
-  return {
-    ticker,
-    queryCount: bars.length,
-    resultsCount: bars.length,
-    adjusted: false,
-    results: bars.map((b) => ({
-      t: b.t,
-      o: b.o,
-      h: b.h,
-      l: b.l,
-      c: b.c,
-      v: 500,
-      vw: (b.h + b.l) / 2,
-      n: 10,
-    })),
-    status: "OK",
-    request_id: "test-greeks-attribution",
-  };
-}
-
-function mockFetch(
-  responses: Map<string, MassiveAggregateResponse>
-): jest.SpiedFunction<typeof globalThis.fetch> {
-  return jest.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = typeof input === "string" ? input : input.toString();
-    for (const [pattern, response] of responses) {
-      if (url.includes(pattern)) {
-        return new Response(JSON.stringify(response), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-    }
-    return new Response("Not Found", { status: 404, statusText: "Not Found" });
-  });
-}
+} from "../../src/test-exports.ts";
+import type { AttributionSummaryResult } from "../../src/test-exports.ts";
+import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
+import type { MarketStores } from "../../src/market/stores/index.ts";
 
 const SPY_470C_BARS = [
   { t: 1737124200000, o: 5.0, h: 5.2, l: 4.9, c: 5.1 },
@@ -78,6 +36,7 @@ const SPY_UNDERLYING_DAY2_BARS = [
 describe("get_greeks_attribution integration", () => {
   let db: DuckDBInstance;
   let conn: DuckDBConnection;
+  let stores: MarketStores;
 
   beforeEach(async () => {
     db = await DuckDBInstance.create(":memory:");
@@ -103,6 +62,55 @@ describe("get_greeks_attribution integration", () => {
       )
     `);
 
+    // handleReplayTrade (called by greeks-attribution) reads underlying bars
+    // via stores.spot.readBars + VIX IVP via stores.enriched.read. Create the
+    // minimal market schema in this in-memory DuckDB so the store-backed
+    // handler calls succeed (empty data matches the prior fetch-based
+    // behavior since the test mocks fetch).
+    await conn.run(`CREATE SCHEMA IF NOT EXISTS market`);
+    await conn.run(`
+      CREATE TABLE market.spot (
+        ticker VARCHAR NOT NULL,
+        date   VARCHAR NOT NULL,
+        time   VARCHAR NOT NULL,
+        open   DOUBLE,
+        high   DOUBLE,
+        low    DOUBLE,
+        close  DOUBLE,
+        bid    DOUBLE,
+        ask    DOUBLE,
+        PRIMARY KEY (ticker, date, time)
+      )
+    `);
+    await conn.run(`
+      CREATE TABLE market.enriched (
+        ticker VARCHAR NOT NULL,
+        date   VARCHAR NOT NULL,
+        ivp    DOUBLE,
+        PRIMARY KEY (ticker, date)
+      )
+    `);
+
+    // Option-leg reads flow through stores.quote.readQuotes →
+    // market.option_quote_minutes. Schema mirrors production market-schemas.ts
+    // (PK underlying, date, ticker, time).
+    await conn.run(`
+      CREATE TABLE market.option_quote_minutes (
+        underlying      VARCHAR NOT NULL,
+        date            VARCHAR NOT NULL,
+        ticker          VARCHAR NOT NULL,
+        time            VARCHAR NOT NULL,
+        bid             DOUBLE,
+        ask             DOUBLE,
+        mid             DOUBLE,
+        last_updated_ns BIGINT,
+        source          VARCHAR,
+        PRIMARY KEY (underlying, date, ticker, time)
+      )
+    `);
+
+    stores = buildTestStores({ conn, dataDir: "/tmp/test-greeks-attribution" });
+
     process.env.MASSIVE_API_KEY = "test-key-attribution";
   });
 
@@ -112,6 +120,55 @@ describe("get_greeks_attribution integration", () => {
     conn.closeSync();
   });
 
+  // Seed SPY underlying bars directly into market.spot since handleReplayTrade
+  // reads underlying via stores.spot (not fetch). ET wallclock: 2025-01-17 is
+  // in EST (UTC-5). SPY_UNDERLYING_DAY1_BARS use UTC ms aligned to
+  // 14:30 UTC = 09:30 ET.
+  const seedSpyUnderlying = async (
+    bars: Array<{ t: number; o: number; h: number; l: number; c: number }>,
+  ) => {
+    for (const b of bars) {
+      const date = new Date(b.t).toISOString().slice(0, 10);
+      const utcMinutes = Math.floor((b.t / 60_000) % (60 * 24));
+      const etHours = Math.floor(utcMinutes / 60) - 5;
+      const mm = String(utcMinutes % 60).padStart(2, "0");
+      const etTime = `${String(etHours).padStart(2, "0")}:${mm}`;
+      await conn.run(
+        `INSERT INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+         VALUES ('SPY', $1, $2, $3, $4, $5, $6, NULL, NULL)`,
+        [date, etTime, b.o, b.h, b.l, b.c],
+      );
+    }
+  };
+
+  // Seed option_quote_minutes for the option-leg tests. Mirrors
+  // trade-replay.test.ts seedOptionQuotes (HL2-anchored bid/ask split with
+  // 0.05 spread → mid = bar.close).
+  const seedOptionQuotes = async (
+    occTicker: string,
+    underlying: string,
+    bars: Array<{ t: number; o: number; h: number; l: number; c: number }>,
+  ) => {
+    for (const b of bars) {
+      const date = new Date(b.t).toISOString().slice(0, 10);
+      const utcMinutes = Math.floor((b.t / 60_000) % (60 * 24));
+      const etHours = Math.floor(utcMinutes / 60) - 5;
+      const mm = String(utcMinutes % 60).padStart(2, "0");
+      const etTime = `${String(etHours).padStart(2, "0")}:${mm}`;
+      const bid = b.c - 0.05;
+      const ask = b.c + 0.05;
+      const mid = (bid + ask) / 2;
+      await conn.run(
+        `INSERT INTO market.option_quote_minutes
+           (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, 'fixture')`,
+        [underlying, date, occTicker, etTime, bid, ask, mid],
+      );
+    }
+  };
+
+  // Option-leg quotes seeded directly into market.option_quote_minutes via
+  // seedOptionQuotes (replaces mockFetch).
   test("summary mode keeps raw factor P&Ls and reports execution edge separately", async () => {
     await conn.run(`
       INSERT INTO trades.trade_data
@@ -120,10 +177,8 @@ describe("get_greeks_attribution integration", () => {
         ('test-block', '2025-01-17', '2025-01-17', 'calendar', 'SPY 470C', 500.0, 1, 250.0, 'SPY')
     `);
 
-    mockFetch(new Map([
-      ["SPY250117C00470000", buildMinuteBarResponse("O:SPY250117C00470000", SPY_470C_BARS)],
-      ["/ticker/SPY/", buildMinuteBarResponse("SPY", SPY_UNDERLYING_DAY1_BARS)],
-    ]));
+    await seedSpyUnderlying(SPY_UNDERLYING_DAY1_BARS);
+    await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
 
     const decomp = await handleDecomposeGreeks(
       {
@@ -134,6 +189,7 @@ describe("get_greeks_attribution integration", () => {
         skip_quotes: true,
       },
       "/tmp/test-greeks-attribution",
+      stores,
       conn,
     );
 
@@ -144,6 +200,7 @@ describe("get_greeks_attribution integration", () => {
         skip_quotes: true,
       },
       "/tmp/test-greeks-attribution",
+      stores,
       conn,
     ) as AttributionSummaryResult;
 
@@ -172,11 +229,11 @@ describe("get_greeks_attribution integration", () => {
         ('test-block', '2025-01-18', '2025-01-18', 'second', 'SPY 475C', 300.0, 1, -80.0, 'SPY')
     `);
 
-    mockFetch(new Map([
-      ["SPY250117C00470000", buildMinuteBarResponse("O:SPY250117C00470000", SPY_470C_BARS)],
-      ["SPY250118C00475000", buildMinuteBarResponse("O:SPY250118C00475000", SPY_475C_BARS)],
-      ["/ticker/SPY/", buildMinuteBarResponse("SPY", [...SPY_UNDERLYING_DAY1_BARS, ...SPY_UNDERLYING_DAY2_BARS])],
-    ]));
+    await seedSpyUnderlying([...SPY_UNDERLYING_DAY1_BARS, ...SPY_UNDERLYING_DAY2_BARS]);
+    // Option-leg quotes seeded directly into market.option_quote_minutes
+    // (replaces mockFetch on option tickers).
+    await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+    await seedOptionQuotes("SPY250118C00475000", "SPY", SPY_475C_BARS);
 
     const direct = await handleDecomposeGreeks(
       {
@@ -187,6 +244,7 @@ describe("get_greeks_attribution integration", () => {
         skip_quotes: true,
       },
       "/tmp/test-greeks-attribution",
+      stores,
       conn,
     );
 
@@ -198,6 +256,7 @@ describe("get_greeks_attribution integration", () => {
         skip_quotes: true,
       },
       "/tmp/test-greeks-attribution",
+      stores,
       conn,
     ) as AttributionSummaryResult;
 

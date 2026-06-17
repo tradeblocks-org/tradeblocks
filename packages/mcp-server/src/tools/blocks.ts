@@ -11,4 +11,4 @@
  * - health.ts: portfolio_health_check
  */
 
-export { registerBlockTools } from "./blocks/index.js";
+export { registerBlockTools } from "./blocks/index.ts";

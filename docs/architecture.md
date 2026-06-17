@@ -44,9 +44,10 @@ TradeBlocks is an options trading analytics platform with two main components:
 | Table | Purpose |
 |-------|---------|
 | `market.daily` | Daily OHLCV + enriched indicators + VIX ivr/ivp, keyed by `ticker, date` |
-| `market._context_derived` | Cross-ticker derived fields (Vol_Regime, Term_Structure_State, Trend_Direction), keyed by `date` |
+| `market.date_context` | Cross-ticker derived fields (Vol_Regime, Term_Structure_State, Trend_Direction), keyed by `date` |
 | `market.intraday` | Minute/hourly bars + cached option bars from replay, keyed by `ticker, date, time` |
-| `market.context` | Legacy VIX table — preserved for backward compat, no longer primary data source |
+| `market.option_chain` | Contract-universe snapshots by underlying/date/ticker |
+| `market.option_quote_minutes` | Dense option quote cache by `ticker, date, time` |
 | `market._sync_metadata` | Import tracking, enrichment watermarks, migration state |
 
 VIX tenors (VIX, VIX9D, VIX3M, etc.) are stored as regular ticker rows in `market.daily` with `ivr` and `ivp` columns. The enrichment pipeline discovers them dynamically.

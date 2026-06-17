@@ -2,10 +2,10 @@
  * Batch Exit Analysis Tool
  *
  * MCP tool that evaluates a candidate exit policy across multiple trades in a
- * block. Queries trades from DuckDB, replays each one (checking market.intraday
- * cache before fetching from Massive), evaluates the candidate policy via the
- * pure batch exit analysis engine, and returns aggregate statistics with
- * per-trigger attribution.
+ * block. Queries trades from DuckDB, replays each one from the local
+ * market-data cache, evaluates the candidate policy via the pure batch exit
+ * analysis engine, and returns aggregate statistics with per-trigger
+ * attribution.
  *
  * Tools registered:
  *   - batch_exit_analysis -- Evaluate a candidate exit policy across an entire block
@@ -13,17 +13,18 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection } from "../db/connection.js";
-import { createToolOutput } from "../utils/output-formatter.js";
-import { handleReplayTrade } from "./replay.js";
+import { getConnection } from "../db/connection.ts";
+import { createToolOutput } from "../utils/output-formatter.ts";
+import { handleReplayTrade } from "./replay.ts";
 import {
   analyzeBatch,
   type TradeInput,
   type BatchExitConfig,
   type BatchExitResult,
-} from "../utils/batch-exit-analysis.js";
-import { getProfile } from "../db/profile-schemas.js";
-import type { ExitTriggerConfig, LegGroupConfig } from "../utils/exit-triggers.js";
+} from "../utils/batch-exit-analysis.ts";
+import { getProfile } from "../db/profile-schemas.ts";
+import type { ExitTriggerConfig, LegGroupConfig } from "../utils/exit-triggers.ts";
+import type { MarketStores } from "../market/stores/index.ts";
 
 // ---------------------------------------------------------------------------
 // Concurrency limiter — hand-rolled semaphore, no external dependency (D-15)
@@ -139,6 +140,7 @@ export const batchExitAnalysisSchema = z.object({
 export async function handleBatchExitAnalysis(
   params: z.infer<typeof batchExitAnalysisSchema>,
   baseDir: string,
+  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<BatchExitResult> {
   const {
@@ -257,6 +259,7 @@ export async function handleBatchExitAnalysis(
             skip_quotes: false,
           },
           baseDir,
+          stores,
           injectedConn,
         );
 
@@ -330,7 +333,7 @@ export async function handleBatchExitAnalysis(
   if (strategy) {
     try {
       const profileConn = injectedConn ?? await getConnection(baseDir);
-      const profile = await getProfile(profileConn, block_id, strategy);
+      const profile = await getProfile(profileConn, block_id, strategy, baseDir);
       if (profile) {
         result.profileContext = {
           structureType: profile.structureType,
@@ -354,6 +357,7 @@ export async function handleBatchExitAnalysis(
 export function registerBatchExitAnalysisTools(
   server: McpServer,
   baseDir: string,
+  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
 ): void {
   server.registerTool(
     "batch_exit_analysis",
@@ -363,13 +367,14 @@ export function registerBatchExitAnalysisTools(
         "Replays each matching trade, evaluates exit triggers against the minute-level P&L path, " +
         "and returns aggregate statistics (win rate, Sharpe, profit factor, drawdown) comparable " +
         "to get_statistics. Includes per-trigger attribution showing which triggers drive outcomes. " +
-        "Uses cached bars from market.intraday when available; fetches from Massive.com on cache miss " +
-        "(requires MASSIVE_API_KEY). Use with strategy profiles to iterate on exit rules.",
+        "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
+        "trades with missing data are skipped. Use the data-pipeline tools to backfill cache, " +
+        "and strategy profiles to iterate on exit rules.",
       inputSchema: batchExitAnalysisSchema,
     },
     async (params) => {
       try {
-        const result = await handleBatchExitAnalysis(params, baseDir);
+        const result = await handleBatchExitAnalysis(params, baseDir, stores);
         return createToolOutput(result.summary, result);
       } catch (error) {
         return {

@@ -50,7 +50,12 @@ All exit tools use cached bars from `market.intraday` — no Massive.com subscri
 |------|-------------|
 | `import_market_csv` | Import OHLCV data from a local CSV file with column mapping |
 | `import_from_database` | Import from an external DuckDB database via SQL query |
-| `import_from_api` | Import from configured data provider (daily, context, intraday, options). Default: Massive.com (`MASSIVE_API_KEY`). Set `MARKET_DATA_PROVIDER` env var for alternatives. |
+| `import_flat_file` | Import a local Parquet or CSV flat file for a specific ticker and timespan |
+| `fetch_bars` | Fetch daily or intraday OHLCV bars from the configured provider and write to Parquet |
+| `fetch_quotes` | Fetch option minute quotes from the configured provider and write to Parquet |
+| `fetch_chain` | Fetch option chain snapshot for an underlying on a given date |
+| `compute_vix_context` | Compute cross-ticker VIX regime fields (Vol_Regime, Term_Structure_State, etc.) for a date range |
+| `refresh_market_data` | Composite daily refresh: fetch bars for all tickers, auto-fire VIX context, return coverage report |
 | `enrich_market_data` | Run enrichment pipeline to compute derived indicators |
 | `purge_market_table` | Delete all data from a market table for re-import |
 

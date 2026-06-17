@@ -8,17 +8,17 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { hashFileContent } from "./hasher.js";
+import { hashFileContent } from "./hasher.ts";
 import {
   getSyncMetadata,
   upsertSyncMetadata,
   deleteSyncMetadata,
   getAllSyncedBlockIds,
   type BlockSyncMetadata,
-} from "./metadata.js";
-import { resolveTickerFromCsvRow } from "../utils/ticker.js";
-import { convertToReportingTrade } from "../utils/block-loader.js";
-import { discoverCsvFiles } from "../utils/csv-discovery.js";
+} from "./metadata.ts";
+import { resolveTickerFromCsvRow } from "../utils/ticker.ts";
+import { convertToReportingTrade } from "../utils/block-loader.ts";
+import { discoverCsvFiles } from "../utils/csv-discovery.ts";
 import type { ReportingTrade } from "@tradeblocks/lib";
 
 /**
@@ -349,9 +349,10 @@ export async function syncBlockInternal(
   blockId: string,
   blockPath: string
 ): Promise<BlockSyncResult> {
+  const blocksDir = path.dirname(blockPath);
   try {
     // Get existing metadata early (needed for missing-file cleanup logic)
-    const existingMetadata = await getSyncMetadata(conn, blockId);
+    const existingMetadata = await getSyncMetadata(conn, blockId, blocksDir);
 
     // Find the tradelog file via header-sniffing discovery
     const tradelogFilename = await findTradelogFile(blockPath);
@@ -368,7 +369,7 @@ export async function syncBlockInternal(
             "DELETE FROM trades.reporting_data WHERE block_id = $1",
             [blockId]
           );
-          await deleteSyncMetadata(conn, blockId);
+          await deleteSyncMetadata(conn, blockId, blocksDir);
           await conn.run("COMMIT");
           return { blockId, status: "deleted" };
         } catch (err) {
@@ -497,7 +498,7 @@ export async function syncBlockInternal(
         synced_at: new Date(),
         sync_version: (existingMetadata?.sync_version ?? 0) + 1,
       };
-      await upsertSyncMetadata(conn, newMetadata);
+      await upsertSyncMetadata(conn, newMetadata, blocksDir);
 
       // Commit transaction
       await conn.run("COMMIT");
@@ -524,7 +525,7 @@ export async function syncBlockInternal(
             "DELETE FROM trades.reporting_data WHERE block_id = $1",
             [blockId]
           );
-          await deleteSyncMetadata(conn, blockId);
+          await deleteSyncMetadata(conn, blockId, blocksDir);
           await conn.run("COMMIT");
         } catch {
           // Best effort cleanup failed, but we'll report the original error
@@ -567,7 +568,7 @@ export async function detectBlockChanges(
   const toDelete: string[] = [];
 
   // Get all synced block IDs from metadata
-  const syncedBlockIds = new Set(await getAllSyncedBlockIds(conn));
+  const syncedBlockIds = new Set(await getAllSyncedBlockIds(conn, baseDir));
 
   // List all directories in baseDir
   const entries = await fs.readdir(baseDir, { withFileTypes: true });
@@ -604,7 +605,7 @@ export async function detectBlockChanges(
     try {
       const tradelogPath = path.join(blockPath, tradelogFilename);
       const currentHash = versionedHash(await hashFileContent(tradelogPath));
-      const metadata = await getSyncMetadata(conn, blockId);
+      const metadata = await getSyncMetadata(conn, blockId, baseDir);
 
       if (!metadata || metadata.tradelog_hash !== currentHash) {
         toSync.push(blockId);
@@ -649,7 +650,8 @@ export async function detectBlockChanges(
  */
 export async function cleanupDeletedBlocks(
   conn: DuckDBConnection,
-  deletedBlockIds: string[]
+  deletedBlockIds: string[],
+  blocksDir?: string
 ): Promise<void> {
   for (const blockId of deletedBlockIds) {
     await conn.run("BEGIN TRANSACTION");
@@ -662,7 +664,7 @@ export async function cleanupDeletedBlocks(
         "DELETE FROM trades.reporting_data WHERE block_id = $1",
         [blockId]
       );
-      await deleteSyncMetadata(conn, blockId);
+      await deleteSyncMetadata(conn, blockId, blocksDir);
       await conn.run("COMMIT");
     } catch (err) {
       await conn.run("ROLLBACK");

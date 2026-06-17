@@ -6,10 +6,10 @@ TradeBlocks supports multiple paths for importing market data: CSV files, the Ma
 
 TradeBlocks uses a provider abstraction for external API calls. The active provider is selected via the `MARKET_DATA_PROVIDER` environment variable (default: `"massive"`).
 
-| Provider | Env Var | API Key Env Var | Status |
-|----------|---------|-----------------|--------|
+| Provider | Env Var | Credentials | Status |
+|----------|---------|-------------|--------|
 | Massive.com (Polygon) | `massive` | `MASSIVE_API_KEY` | Shipped |
-| ThetaData | `thetadata` | `THETADATA_API_KEY` | Stub — implement your own |
+| ThetaData MDDS | `thetadata` | `THETADATA_EMAIL` + `THETADATA_PASSWORD`, or `THETADATA_CREDENTIALS_FILE` | Direct MDDS/gRPC provider |
 
 All providers implement the same `MarketDataProvider` interface and normalize responses to the same `BarRow` and `OptionContract` types. Downstream tools (replay, exit analysis, enrichment) work identically regardless of provider.
 
@@ -158,47 +158,126 @@ Import data from an external DuckDB file via SQL query. Reference tables using t
 }
 ```
 
-## Massive.com API Import
+## Provider-Native API Import
 
 ### Setup
 
-See [Getting Started](getting-started.md#massivecom-api-optional) for API key configuration.
+See [Getting Started](getting-started.md#massivecom-api-optional) for Massive.com API key configuration.
 
-### import_from_api
+The active provider is selected via `MARKET_DATA_PROVIDER` env var (default: `massive`). Massive.com reads `MASSIVE_API_KEY`.
 
-Import market data from the configured data provider (default: Massive.com). Set `MARKET_DATA_PROVIDER` env var to switch providers (e.g., `thetadata`). Each provider reads its own API key (`MASSIVE_API_KEY`, `THETADATA_API_KEY`, etc.).
+For ThetaData, set `MARKET_DATA_PROVIDER=thetadata`. The provider connects directly to ThetaData MDDS over gRPC; it does not use ThetaTerminal, a local JVM, or the ThetaData REST terminal service.
+
+Configure MDDS credentials with either:
+
+```bash
+export THETADATA_EMAIL="you@example.com"
+export THETADATA_PASSWORD="your-password"
+```
+
+Or place credentials in a file and point TradeBlocks at it:
+
+```bash
+export THETADATA_CREDENTIALS_FILE="/path/to/thetadata-creds.txt"
+```
+
+The credentials file format is:
+
+```text
+you@example.com
+your-password
+```
+
+Do not commit credentials or put secrets directly in checked-in service files.
+
+Advanced ThetaData MDDS settings are optional:
+
+| Variable | Description |
+|----------|-------------|
+| `THETADATA_MDDS_HOST` | Override the MDDS host |
+| `THETADATA_MDDS_PORT` | Override the MDDS port |
+| `THETADATA_MDDS_MAX_CONCURRENCY` | Limit concurrent MDDS requests |
+| `THETADATA_MDDS_RETRY_ATTEMPTS` | Override retry attempts |
+| `THETADATA_MDDS_RETRY_BASE_MS` | Override retry base delay |
+| `THETADATA_MDDS_RETRY_MAX_MS` | Override retry max delay |
+
+ThetaTerminal-specific settings from the old terminal/REST path no longer apply to `MARKET_DATA_PROVIDER=thetadata`, including `THETADATA_BASE_URL`, `THETADATA_HOME`, `THETADATA_JAR`, `THETADATA_CREDS_FILE`, `THETADATA_SKIP_AUTO_START`, and terminal auto-start flags. `THETADATA_MDDS_CLIENT_TYPE=terminal` is only the MDDS client identity string and does not mean TradeBlocks launches or depends on ThetaTerminal.
+
+ThetaData MDDS supports daily and intraday bars (stocks, indices), option minute quotes, contract lists, and first-order greeks. The option snapshot tool is not yet wired to MDDS — use Massive.com for `fetch_chain` until the MDDS snapshot endpoint lands.
+
+### fetch_bars
+
+Fetch daily or intraday OHLCV bars from the configured provider and write directly to Parquet. Both Massive.com and ThetaData MDDS support this tool; the MDDS path uses stock and index OHLC/EOD endpoints.
 
 **Parameters:**
-- `ticker` — plain ticker symbol (e.g., `SPX`, `VIX`, `SPY`). Provider-specific prefixes added automatically.
+- `tickers` — array of plain ticker symbols (e.g., `["SPX", "VIX", "SPY"]`)
 - `from` — start date (`YYYY-MM-DD`)
 - `to` — end date (`YYYY-MM-DD`)
-- `target_table` — destination: `"daily"`, `"context"`, or `"intraday"`
-- `skip_enrichment` — (optional) skip auto-enrichment after import
-- `timespan` — (optional) bar size for intraday: `"1m"`, `"5m"`, `"15m"`, `"1h"` (default: `"1m"`)
-- `asset_class` — (optional) auto-detected: `"index"`, `"stock"`, `"option"`
-- `dry_run` — (optional) validate without writing
+- `timespan` — bar size: `"1d"` (daily), `"1m"`, `"5m"`, `"15m"`, `"1h"` (default: `"1d"`)
 
 **Daily OHLCV import:**
+```json
+{ "tickers": ["SPX"], "timespan": "1d", "from": "2024-01-01", "to": "2024-12-31" }
 ```
-import_from_api ticker=SPX from=2024-01-01 to=2024-12-31 target_table=daily
-```
-
-**VIX context import (convenience shorthand):**
-```
-import_from_api ticker=VIX target_table=context from=2024-01-01 to=2024-12-31
-```
-
-When `target_table="context"`, the tool automatically fetches VIX, VIX9D, and VIX3M and stores them as ticker rows in `market.daily`, then triggers enrichment.
 
 **Intraday minute bars:**
-```
-import_from_api ticker=SPX from=2024-06-01 to=2024-06-30 target_table=intraday timespan=5m
+```json
+{ "tickers": ["SPX"], "timespan": "1m", "from": "2024-06-01", "to": "2024-06-30" }
 ```
 
-**Option minute bars:**
+**Fetch VIX tenors (for VIX context):**
+```json
+{ "tickers": ["VIX", "VIX9D", "VIX3M"], "timespan": "1d", "from": "2024-01-01", "to": "2024-12-31" }
 ```
-import_from_api ticker=SPX250117C05000000 from=2025-01-13 to=2025-01-17 target_table=intraday asset_class=option
-```
+
+### fetch_quotes
+
+Fetch option minute quotes from the configured provider and write to Parquet.
+
+**Parameters:**
+- `tickers` — array of OCC option tickers (e.g., `["SPY250117C00470000"]`)
+- `from` — start date (`YYYY-MM-DD`)
+- `to` — end date (`YYYY-MM-DD`)
+
+### fetch_chain
+
+Fetch an option chain snapshot for an underlying on a given date.
+
+**Parameters:**
+- `underlying` — root symbol (e.g., `"SPX"`)
+- `date` — snapshot date (`YYYY-MM-DD`)
+
+ThetaData MDDS supports contract-list retrieval for this path. Full option snapshot support remains unavailable until the MDDS snapshot endpoint is wired.
+
+### compute_vix_context
+
+Compute cross-ticker VIX regime fields for a date range. Run this after fetching VIX-family tickers via `fetch_bars`.
+
+**Parameters:**
+- `from` — start date (`YYYY-MM-DD`)
+- `to` — end date (`YYYY-MM-DD`)
+
+Writes to `market.enriched_context`: `Vol_Regime`, `Term_Structure_State`, `Trend_Direction`, `VIX_Spike_Pct`, `VIX_Gap_Pct`.
+
+### refresh_market_data
+
+Composite daily-refresh tool. Calls `fetch_bars` for all specified tickers, then automatically fires `compute_vix_context` when VIX-family tickers are included, and returns a coverage report.
+
+**Parameters:**
+- `tickers` — array of tickers to refresh
+- `from` — start date (`YYYY-MM-DD`)
+- `to` — end date (`YYYY-MM-DD`)
+
+Use this for routine end-of-day data updates instead of calling `fetch_bars` + `compute_vix_context` separately.
+
+### import_flat_file
+
+Import a local Parquet or CSV flat file for a specific ticker and timespan. Useful for bulk loading pre-downloaded data.
+
+**Parameters:**
+- `file_path` — path to local file
+- `ticker` — plain ticker symbol
+- `timespan` — `"1d"` or `"1m"`
 
 ### Ticker Formats
 
@@ -208,7 +287,7 @@ import_from_api ticker=SPX250117C05000000 from=2025-01-13 to=2025-01-17 target_t
 | Index | VIX | I:VIX | VIX |
 | Option | SPY250117C00470000 | O:SPY250117C00470000 | SPY250117C00470000 |
 
-The API client automatically adds and removes `I:` and `O:` prefixes. Always use plain tickers in tool calls.
+Provider adapters automatically add and remove `I:` and `O:` prefixes. Always use plain tickers in tool calls.
 
 ### OCC Option Ticker Format
 
@@ -218,6 +297,16 @@ Examples:
 - SPY Jan 17, 2025 $470 Call: `SPY250117C00470000`
 - SPX Dec 19, 2025 $4500 Put: `SPX251219P04500000`
 - QQQ Mar 21, 2025 $450.50 Call: `QQQ250321C00450500`
+
+## Migration from `import_from_api`
+
+`import_from_api` has been replaced by provider-native tools. The mapping:
+
+| Old call | New call |
+|---|---|
+| `import_from_api { target_table: "daily", ticker: "SPX", from, to }` | `fetch_bars { tickers: ["SPX"], timespan: "1d", from, to }` |
+| `import_from_api { target_table: "intraday", ticker: "SPX", timespan: "1m", from, to }` | `fetch_bars { tickers: ["SPX"], timespan: "1m", from, to }` |
+| `import_from_api { target_table: "date_context", from, to }` | `fetch_bars { tickers: ["VIX","VIX9D","VIX3M"], timespan: "1d", from, to }` followed by `compute_vix_context { from, to }` |
 
 ## Trade Replay
 
@@ -268,7 +357,7 @@ Runs when VIX-family tickers exist in `market.daily`. Discovers tickers dynamica
 | ivr | Implied Volatility Rank (252-day): position in min-max range (0-100) |
 | ivp | Implied Volatility Percentile (252-day): % of days at or below current (0-100) |
 
-**Cross-ticker derived (written to `market._context_derived`):**
+**Cross-ticker derived (written to `market.date_context`):**
 
 | Field | Description |
 |-------|-------------|
@@ -296,7 +385,8 @@ Runs when `market.intraday` has bars for the ticker. Written to `market.daily`:
 | Table | Key | Purpose |
 |-------|-----|---------|
 | `market.daily` | `ticker, date` | Daily OHLCV + Tier 1 indicators + VIX ivr/ivp |
-| `market._context_derived` | `date` | Cross-ticker derived fields (Vol_Regime, Term_Structure_State, etc.) |
+| `market.date_context` | `date` | Cross-ticker derived fields (Vol_Regime, Term_Structure_State, etc.) |
 | `market.intraday` | `ticker, date, time` | Minute/hourly bars, including cached option bars from replay |
-| `market.context` | `date` | Legacy VIX table — preserved for backward compatibility, no longer primary |
+| `market.option_chain` | `underlying, date, ticker` | Option contract-universe snapshots |
+| `market.option_quote_minutes` | `ticker, date, time` | Dense option quote cache for replay/backtests |
 | `market._sync_metadata` | `source, ticker, target_table` | Import tracking and enrichment watermarks |

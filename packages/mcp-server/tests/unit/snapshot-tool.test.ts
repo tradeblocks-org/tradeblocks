@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
-import { handleGetOptionSnapshot } from "../../src/tools/snapshot.js";
-import { getProvider, _resetProvider } from "../../src/utils/market-provider.js";
+import { handleGetOptionSnapshot } from "../../src/tools/snapshot.ts";
+import { getProvider, _resetProvider } from "../../src/utils/market-provider.ts";
 
 /**
  * Unit tests for handleGetOptionSnapshot handler.

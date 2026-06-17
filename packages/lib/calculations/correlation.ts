@@ -1,6 +1,6 @@
-import { Trade } from "../models/trade";
+import type { Trade } from "../models/trade.ts";
 import { mean } from "mathjs";
-import { getRanks } from "./statistical-utils";
+import { getRanks } from "./statistical-utils.ts";
 
 export type CorrelationMethod = "pearson" | "spearman" | "kendall";
 export type CorrelationAlignment = "shared" | "zero-pad";
@@ -273,7 +273,7 @@ function kendallCorrelation(x: number[], y: number[]): number {
 }
 
 // Re-export getRanks for backwards compatibility
-export { getRanks } from "./statistical-utils";
+export { getRanks } from "./statistical-utils.ts";
 
 function normalizeReturn(
   trade: Trade,

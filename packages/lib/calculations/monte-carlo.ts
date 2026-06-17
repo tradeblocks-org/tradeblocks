@@ -5,7 +5,7 @@
  * and calculate risk metrics like Value at Risk (VaR) and maximum drawdown distributions.
  */
 
-import { Trade } from "../models/trade";
+import type { Trade } from "../models/trade.ts";
 
 /**
  * Parameters for Monte Carlo simulation

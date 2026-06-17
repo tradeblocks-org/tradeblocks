@@ -10,10 +10,10 @@
  * Consumed by the MCP tool in Plan 02 and by verdict synthesis in Phase 50.
  */
 
-import { Trade } from '../models/trade'
-import { runMonteCarloSimulation, calculateMarginReturns } from './monte-carlo'
-import type { MonteCarloParams, SimulationStatistics } from './monte-carlo'
-import { calculateDefaultRecentWindow } from './rolling-metrics'
+import type { Trade } from '../models/trade.ts'
+import { runMonteCarloSimulation, calculateMarginReturns } from './monte-carlo.ts'
+import type { MonteCarloParams, SimulationStatistics } from './monte-carlo.ts'
+import { calculateDefaultRecentWindow } from './rolling-metrics.ts'
 
 // ---------------------------------------------------------------------------
 // Types

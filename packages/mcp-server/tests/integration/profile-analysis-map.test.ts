@@ -15,10 +15,11 @@ import { tmpdir } from "os";
 import {
   getConnection,
   closeConnection,
+  upgradeToReadWrite,
   handlePortfolioStructureMap,
   upsertProfile,
   ensureProfilesSchema,
-} from "../../src/test-exports.js";
+} from "../../src/test-exports.ts";
 
 let tempDir: string;
 
@@ -45,9 +46,9 @@ async function createBlockWithTrades(
 }
 
 /**
- * Insert market data rows into DuckDB (market.daily + market._context_derived).
- * Phase 75: Vol_Regime and Trend_Direction moved to market._context_derived.
- * Each row needs: date, Vol_Regime, Trend_Direction, and basic OHLC.
+ * Insert market data rows into DuckDB. Writes to v3.0 canonical tables
+ * (market.enriched + market.enriched_context + market.spot) that Phase 6 Wave 1
+ * SQL builders target. Each row needs: date, Vol_Regime, Trend_Direction.
  */
 async function insertMarketData(
   conn: unknown,
@@ -62,30 +63,38 @@ async function insertMarketData(
   };
 
   for (const row of rows) {
-    // Insert market.daily row for SPX (needed for buildLookaheadFreeQuery LAG CTE)
+    // market.enriched (SPX) — computed indicators (no OHLCV).
     await c.run(
-      `INSERT OR IGNORE INTO market.daily (ticker, date, Open, High, Low, Close, Prior_Close, Gap_Pct)
-       VALUES ('SPX', '${row.date}', 4500, 4520, 4480, 4510, 4490, 0.1)`
+      `INSERT OR IGNORE INTO market.enriched (ticker, date, Prior_Close, Gap_Pct)
+       VALUES ('SPX', '${row.date}', 4490, 0.1)`
     );
 
-    // Insert market.daily VIX ticker row (Phase 75: VIX_Close source)
+    // market.spot (SPX minute bars) — two bars so spot_daily VIEW aggregates.
     await c.run(
-      `INSERT OR IGNORE INTO market.daily (ticker, date, Open, High, Low, Close, Prior_Close)
-       VALUES ('VIX', '${row.date}', 18.0, 18.5, 17.5, 17.5, 17.8)`
+      `INSERT OR IGNORE INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+       VALUES ('SPX', '${row.date}', '09:30', 4500, 4520, 4480, 4505, 4499, 4501),
+              ('SPX', '${row.date}', '16:00', 4505, 4520, 4480, 4510, 4509, 4511)`
     );
 
-    // Insert market._context_derived row with Vol_Regime and Trend_Direction (Phase 75)
+    // market.enriched (VIX) — VIX-family IVR/IVP post-Phase-6.
+    await c.run(
+      `INSERT OR IGNORE INTO market.enriched (ticker, date, ivr, ivp)
+       VALUES ('VIX', '${row.date}', 50, 50)`
+    );
+
+    // market.spot (VIX minute bars) — source for spot_daily VIX OHLCV.
+    await c.run(
+      `INSERT OR IGNORE INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+       VALUES ('VIX', '${row.date}', '09:30', 18.0, 18.5, 17.5, 18.0, 17.9, 18.1),
+              ('VIX', '${row.date}', '16:00', 18.0, 18.5, 17.5, 17.5, 17.4, 17.6)`
+    );
+
+    // market.enriched_context — cross-ticker Vol_Regime + Trend_Direction.
     const trendVal =
       row.trendDirection === null ? "NULL" : `'${row.trendDirection}'`;
     await c.run(
-      `INSERT OR IGNORE INTO market._context_derived (date, Vol_Regime, Trend_Direction)
+      `INSERT OR IGNORE INTO market.enriched_context (date, Vol_Regime, Trend_Direction)
        VALUES ('${row.date}', ${row.volRegime}, ${trendVal})`
-    );
-
-    // Also insert into market.context for backward compat (legacy queries)
-    await c.run(
-      `INSERT OR IGNORE INTO market.context (date, Vol_Regime, Trend_Direction, VIX_Open, VIX_Close)
-       VALUES ('${row.date}', ${row.volRegime}, ${trendVal}, 18.0, 17.5)`
     );
   }
 }
@@ -139,7 +148,8 @@ function parseToolData(result: {
 
 beforeEach(async () => {
   tempDir = await fs.mkdtemp(path.join(tmpdir(), "profile-analysis-map-"));
-  const conn = await getConnection(tempDir);
+  await getConnection(tempDir);
+  const conn = await upgradeToReadWrite(tempDir);
   await ensureProfilesSchema(conn);
 });
 

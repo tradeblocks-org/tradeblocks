@@ -14,8 +14,8 @@ import {
   type TriggerType,
   type LegGroupConfig,
   type PartialClose,
-} from './exit-triggers.js';
-import type { PnlPoint, ReplayLeg } from './trade-replay.js';
+} from './exit-triggers.ts';
+import type { PnlPoint, ReplayLeg } from './trade-replay.ts';
 
 // ---------------------------------------------------------------------------
 // Types

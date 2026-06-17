@@ -4,7 +4,7 @@
  * Verifies bid/ask mid preference with HL2 fallback behavior.
  */
 
-import { markPrice } from '../../src/test-exports.js';
+import { markPrice } from '../../src/test-exports.ts';
 
 describe('markPrice', () => {
   it('returns HL2 when no bid/ask present', () => {

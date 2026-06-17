@@ -9,12 +9,12 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadBlock, loadReportingLog } from "../../utils/block-loader.js";
+import { loadBlock, loadReportingLog } from "../../utils/block-loader.ts";
 import {
   createToolOutput,
   formatPercent,
   formatRatio,
-} from "../../utils/output-formatter.js";
+} from "../../utils/output-formatter.ts";
 import {
   PortfolioStatsCalculator,
   calculateCorrelationMatrix,
@@ -24,21 +24,21 @@ import {
   normalizeToOneLot,
 } from "@tradeblocks/lib";
 import type { MonteCarloParams, Trade } from "@tradeblocks/lib";
-import { withSyncedBlock } from "../middleware/sync-middleware.js";
-import { getConnection } from "../../db/connection.js";
-import { listProfiles } from "../../db/profile-schemas.js";
-import { computeSliceStats, type SliceStats } from "../../utils/analysis-stats.js";
+import { withSyncedBlock } from "../middleware/sync-middleware.ts";
+import { getConnection } from "../../db/connection.ts";
+import { listProfiles } from "../../db/profile-schemas.ts";
+import { computeSliceStats, type SliceStats } from "../../utils/analysis-stats.ts";
 import {
   buildLookaheadFreeQuery,
   type MarketLookupKey,
-} from "../../utils/field-timing.js";
+} from "../../utils/field-timing.ts";
 import {
   DEFAULT_MARKET_TICKER,
   marketTickerDateKey,
   resolveTradeTicker,
-} from "../../utils/ticker.js";
-import { filterByStrategy } from "../shared/filters.js";
-import type { StrategyProfile } from "../../models/strategy-profile.js";
+} from "../../utils/ticker.ts";
+import { filterByStrategy } from "../shared/filters.ts";
+import type { StrategyProfile } from "../../models/strategy-profile.ts";
 
 // =============================================================================
 // Constants
@@ -944,7 +944,7 @@ export function registerHealthBlockTools(
         let profiles: StrategyProfile[] = [];
         try {
           const conn = await getConnection(baseDir);
-          profiles = await listProfiles(conn, blockId);
+          profiles = await listProfiles(conn, blockId, baseDir);
           useNormalization = profiles.some(
             (p) => p.positionSizing?.method === "pct_of_portfolio"
           );

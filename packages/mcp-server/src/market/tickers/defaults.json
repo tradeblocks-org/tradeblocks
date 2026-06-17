@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "underlyings": [
+    { "underlying": "SPX",   "roots": ["SPX", "SPXW", "SPXQ"] },
+    { "underlying": "QQQ",   "roots": ["QQQ", "QQQX"] },
+    { "underlying": "VIX",   "roots": ["VIX"] },
+    { "underlying": "VIX9D", "roots": ["VIX9D"] },
+    { "underlying": "VIX3M", "roots": ["VIX3M"] },
+    { "underlying": "ES",    "roots": ["ES"] },
+    { "underlying": "NDX",   "roots": ["NDX", "NDXP"] },
+    { "underlying": "RUT",   "roots": ["RUT", "RUTW"] }
+  ]
+}

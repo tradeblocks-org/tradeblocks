@@ -10,9 +10,9 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerDiscrepancyTool } from "./discrepancies.js";
-import { registerStrategyMatchesTool } from "./strategy-matches.js";
-import { registerSlippageTrendsTool } from "./slippage-trends.js";
+import { registerDiscrepancyTool } from "./discrepancies.ts";
+import { registerStrategyMatchesTool } from "./strategy-matches.ts";
+import { registerSlippageTrendsTool } from "./slippage-trends.ts";
 
 /**
  * Register slippage-related report tools

@@ -1,4 +1,4 @@
-import { Trade } from '../models/trade'
+import type { Trade } from '../models/trade.ts'
 
 /**
  * Standard options multiplier used to convert per-contract values into notional dollars.

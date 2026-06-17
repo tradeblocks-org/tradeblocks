@@ -91,7 +91,7 @@ npm test -- path/to/test-file.test.ts -t "test name pattern"
 
 **Date Comparison Rules (MCP Server)**: There are **two kinds of dates** in the MCP server, and they require different handling:
 
-1. **Calendar dates from CSVs** (Option Omega trade logs): These are Eastern Time trading dates like "2025-01-07" parsed via `parseDatePreservingCalendarDay()` → `new Date(year, month, day)`. The Date is created at **local midnight**, NOT Eastern midnight. The calendar date "7" is just temporarily stored inside a Date object — it's not a real timestamp. To read it back, you MUST use the same local-timezone methods (`getFullYear`/`getMonth`/`getDate`), which always return the original calendar date regardless of server timezone. This works because the write path (constructor) and read path (getters) both use local timezone — they're symmetric and cancel out.
+1. **Calendar dates from CSVs** (trade-log exports): These are Eastern Time trading dates like "2025-01-07" parsed via `parseDatePreservingCalendarDay()` → `new Date(year, month, day)`. The Date is created at **local midnight**, NOT Eastern midnight. The calendar date "7" is just temporarily stored inside a Date object — it's not a real timestamp. To read it back, you MUST use the same local-timezone methods (`getFullYear`/`getMonth`/`getDate`), which always return the original calendar date regardless of server timezone. This works because the write path (constructor) and read path (getters) both use local timezone — they're symmetric and cancel out.
 
 2. **Absolute timestamps** (TradingView Unix epoch in market CSVs): These ARE real UTC instants representing a specific moment in time. To get the correct Eastern trading date, you MUST convert to ET via `toLocaleDateString("en-CA", { timeZone: "America/New_York" })`. This is the one place ET conversion is correct.
 
@@ -105,7 +105,7 @@ Rules for type 1 (trade dates from CSVs):
 - **DON'T**: Use `toLocaleDateString()` with explicit `timeZone` on these dates — this re-interprets the local-midnight date in a different timezone and can shift it by a day.
 - **DON'T**: Use `.toISOString().split("T")[0]` on these dates — this converts to UTC first and can shift the calendar date.
 
-**Market Data Lookahead Rules (MCP Server)**: When joining trades with market data, `buildLookaheadFreeQuery()` from `utils/field-timing.ts` JOINs `market.daily` and `market.context` before applying `LAG()`. Close-derived fields (38 fields including `RSI_14`, `VIX_Close`, `Vol_Regime`, `BB_Width`, `Opening_Drive_Strength`) are only known after market close and MUST use `LAG()` to get the prior trading day's value. Open-known fields (10 fields: `Gap_Pct`, `VIX_Open`, `VIX_RTH_Open`, `Prior_Close`, `Prior_Range_vs_ATR`, etc.) and static fields (3: `Day_of_Week`, `Month`, `Is_Opex`) are safe to use same-day. See `utils/schema-metadata.ts` for the authoritative field classification.
+**Market Data Lookahead Rules (MCP Server)**: When joining trades with market data, `buildLookaheadFreeQuery()` from `utils/field-timing.ts` JOINs `market.enriched` (ticker-keyed indicators), `market.spot_daily` (RTH-aggregated OHLCV derived from `market.spot`), and `market.enriched_context` (cross-ticker regime fields) before applying `LAG()`. Close-derived fields (38 fields including `RSI_14`, `VIX_Close`, `Vol_Regime`, `BB_Width`, `Opening_Drive_Strength`) are only known after market close and MUST use `LAG()` to get the prior trading day's value. Open-known fields (10 fields: `Gap_Pct`, `VIX_Open`, `VIX_RTH_Open`, `Prior_Close`, `Prior_Range_vs_ATR`, etc.) and static fields (3: `Day_of_Week`, `Month`, `Is_Opex`) are safe to use same-day. See `utils/schema-metadata.ts` for the authoritative field classification.
 
 **Date Handling**: Trades use separate `dateOpened` (Date object) and `timeOpened` (string) fields. When processing CSVs, parse dates carefully and maintain consistency with legacy format.
 
@@ -129,6 +129,24 @@ Rules for type 1 (trade dates from CSVs):
 
 ### MCP Server Considerations
 
+**Design principle — the LLM is the intelligence layer.** When designing MCP tools, push sniffing, classification, and config decisions UP to the caller instead of hardcoding them into a dispatch matrix. The LLM has `describe_database`, `run_sql` with path-gated `read_parquet`/`read_csv`/`read_json`, and schema context — it can inspect any file, match it to a target store, and supply a transforming SELECT. Tools should accept that config (e.g., `{file_path, dataset_type, select_sql, partition}`) rather than bake in per-provider or per-format parsers.
+
+Symptoms you're building in the wrong place:
+- Adding a "format registry" or per-format parser class to the server
+- Dispatching by `(provider, asset_class, dataset)` tuples
+- Sniffing file schemas inside a tool handler
+- Growing a `switch` on provider names inside shared code
+
+Symptoms you're in the right place:
+- Tool signatures accept a typed config from the caller
+- Stores expose a single mode-aware write primitive (`writeX` or `writeFromSelect`) and nothing more
+- Providers own fetch/download only; everything after the bytes hit disk is provider-agnostic
+- Adding a new format or dataset needs zero server-code changes when the LLM can compose a SELECT
+
+This principle applies to flat-file ingestion, CSV import, enrichment configuration, and any future "take arbitrary input and route to the right place" surface.
+
+---
+
 When adding new metrics, calculations, or chart data to the UI, **consider whether it should also be exposed via the MCP server** (`packages/mcp-server/`). The MCP server allows Claude to programmatically access portfolio data and statistics.
 
 **Key MCP tools to consider updating:**
@@ -148,33 +166,93 @@ When adding new metrics, calculations, or chart data to the UI, **consider wheth
 - `src/tools/market-data.ts` - Market regime analysis, filter suggestions, ORB calculation, trade enrichment
 - `src/tools/market-imports.ts` - import_market_csv, import_from_database
 - `src/tools/market-enrichment.ts` - enrich_market_data
+- `src/tools/market-ingestor.ts` - fetch_bars, fetch_quotes, fetch_chain, import_flat_file, compute_vix_context, refresh_market_data
 - `src/tools/profiles.ts` - Strategy profile CRUD (profile_strategy, get_strategy_profile, list_profiles, delete_profile)
 - `src/tools/profile-analysis.ts` - Structure-aware analysis (analyze_structure_fit, validate_entry_filters, portfolio_structure_map)
 
-### Using MCP Tools Natively
+### Using MCP Tools
 
-The TradeBlocks MCP server is configured in `.mcp.json` to run directly from the built server entry point (`packages/mcp-server/server/index.js`), making tools available as `mcp__tradeblocks__*`. After changing MCP server source code, run `npm run build` in `packages/mcp-server/` and restart the Claude Code session for changes to take effect.
+**Primary dev path — Claude Code's native MCP tool-use.** The tradeblocks MCP server loads from `.mcp.json` at session start, so tools are available directly inside Claude Code as `mcp__tradeblocks__<tool_name>`. After `npm run build` in `packages/mcp-server/`, type `/reload` in Claude Code to restart the session and pick up the rebuilt server — the wrapper shell function (`clp`) catches the SIGHUP exit and relaunches with `--continue` to preserve conversation history. Zero tokens consumed by the restart. This replaces the prior `mcptools`-from-Bash pattern — Claude Code renders MCP resource content (e.g., `run_sql` result rows) natively, and the session persists across rebuilds.
 
-**Available tools** (use `ToolSearch` to load before first use):
-- `mcp__tradeblocks__list_blocks` - List all portfolio blocks (START HERE)
-- `mcp__tradeblocks__get_statistics` - Get portfolio statistics for a block
-- `mcp__tradeblocks__get_trades` - Get individual trades
-- `mcp__tradeblocks__get_performance_charts` - Get chart data (equity curve, drawdown, etc.)
-- `mcp__tradeblocks__run_monte_carlo` - Run Monte Carlo simulations
-- `mcp__tradeblocks__compare_backtest_to_actual` - Compare theoretical vs actual results
+**Secondary path — shell scripting via MCP Inspector `--cli`.** For bulk ops invoked from harness scripts (CI, `/tmp/bulk-fill.mjs`-style one-offs). Run via `npx` — no install, just invoke it. The official `@modelcontextprotocol/inspector` package reads our `.mcp.json` directly (env block and all) via `--config` + `--server`, and returns the **raw MCP envelope** as JSON on stdout so downstream `jq` can extract fields.
 
-**Example workflow:**
+**Avoid the alternatives** — both have silent-failure bugs that bit us:
+- `f/mcptools` deadlocks on any ~30s+ response (stdio-chunking bug in `mark3labs/mcp-go`)
+- `philschmid/mcp-cli`'s daemon mode drops responses >8KB, and its text formatter silently drops `resource` content blocks (so `run_sql` rows never render)
+
+**Example — query row count:**
+```bash
+npx --yes @modelcontextprotocol/inspector --cli \
+  --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
+  --method tools/call --tool-name run_sql \
+  --tool-arg 'query=SELECT COUNT(*) AS n FROM market.option_quote_minutes'
 ```
-1. ToolSearch: "select:mcp__tradeblocks__list_blocks"
-2. Call mcp__tradeblocks__list_blocks to see available blocks
-3. Call mcp__tradeblocks__get_statistics with a blockId
+
+The response is JSON with two content blocks — `type:"text"` (summary) and `type:"resource"` (JSON rows). Pipe through `jq -r '.content[] | select(.type=="resource").resource.text | fromjson'` to get the row payload.
+
+**Example — bulk ingestion:**
+```bash
+MCP_SERVER_REQUEST_TIMEOUT=3600000 npx --yes @modelcontextprotocol/inspector --cli \
+  --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
+  --method tools/call --tool-name fetch_quotes \
+  --tool-arg 'underlyings=["SPX"]' --tool-arg 'from=2026-04-15' --tool-arg 'to=2026-04-17'
 ```
+
+The default request timeout is 5 minutes; bump it via `MCP_SERVER_REQUEST_TIMEOUT` (ms) for multi-day fetches.
+
+**DuckDB lock contention caveat:** running Inspector against the tradeblocks server while another session-level tradeblocks MCP is live can contend for the same DuckDB lock. Prefer the primary path (`mcp__tradeblocks__*`) while inside Claude Code; reserve Inspector for standalone shell scripts running outside an active session.
+
+The v3.0 market views are: `market.spot` (raw minute OHLCV bars), `market.spot_daily` (RTH-aggregated daily OHLCV derived from `market.spot`), `market.enriched` (per-ticker computed indicators like `RSI_14`, `VIX_Close`, `ivr`), `market.enriched_context` (cross-ticker regime fields like `Vol_Regime`, `Term_Structure_State`), `market.option_chain` (contract universe snapshots), `market.option_quote_minutes` (dense per-minute option quotes), and `market._sync_metadata` (coverage tracking).
+
+**Example — list tools + tool schema:**
+```bash
+npx --yes @modelcontextprotocol/inspector --cli \
+  --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
+  --method tools/list
+```
+
+**Key tools:** `list_blocks`, `get_statistics`, `get_performance_charts`, `run_sql`, `describe_database`, `run_monte_carlo`, `compare_backtest_to_actual`, `analyze_regime_performance`, `suggest_filters`, `enrich_trades`, `fetch_bars`, `fetch_quotes`, `fetch_chain`, `import_flat_file`, `compute_vix_context`, `refresh_market_data`
+
+**After changing MCP server source code:** Run `npm run build` in `packages/mcp-server/`. If working inside Claude Code (primary path), type `/reload` to restart with `--continue`. If calling from Inspector (secondary path), no restart needed — each `npx` call spawns a fresh server automatically.
+
+**MANDATORY after implementation work on the MCP server:** Build AND run a live Inspector smoke before reporting completion. Unit tests cover isolated code paths; only a real MCP server startup against a populated data root catches lifecycle issues that fixture-based tests miss (e.g., pre-existing DuckDB state, DROP VIEW vs DROP TABLE type mismatches, connection setup ordering, view registration over real Parquet directories). Minimum smoke:
+
+```bash
+cd <repo-root>/packages/mcp-server && npm run build && \
+  npx --yes @modelcontextprotocol/inspector --cli \
+    --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
+    --method tools/list 2>&1 | head -30
+```
+
+**Data directory location:** The DuckDB files (`market.duckdb`, `analytics.duckdb`, `backtests.duckdb`) live under `$DATA_ROOT/database/`. The server config in `.mcp.json` already points at this path (and at `--data-root $DATA_ROOT`, which contains sibling folders `blocks/`, `market/`, `market-meta/`, `strategies/`). Don't need to re-specify these on the command line — Inspector reads them from the `--config` file.
+
+**PROVIDER TESTING:** The configured market data provider is selected via the `MARKET_DATA_PROVIDER` env var. Verification gates that exercise provider-capability paths (fetch_bars, fetch_quotes, fetch_chain ingest orchestration) should run against each provider you intend to support — a migration that works for one provider but breaks another ships a regression. Reads never trigger provider calls, so that gate is provider-agnostic and one run suffices.
+
+```bash
+MARKET_DATA_PROVIDER=<provider> npx --yes @modelcontextprotocol/inspector --cli \
+  --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
+  --method tools/call --tool-name fetch_bars \
+  --tool-arg 'tickers=["SPX"]' --tool-arg 'timespan=1d' \
+  --tool-arg 'from=2024-01-01' --tool-arg 'to=2024-01-31'
+```
+
+If the server fails to start or init times out, fix the issue BEFORE declaring any work complete. "Tests pass" is not equivalent to "server starts."
+
+**DuckDB connection model:** The server opens read-write for initialization (schema/view creation), then downgrades to read-only. Write tools call `upgradeToReadWrite()` on demand. This means concurrent read access (tests, other scripts) works while the server is idle.
 
 **Market data access:**
-- Market data in separate `market.duckdb`: `market.daily`, `market.context`, `market.intraday`
-- Import via `mcp__tradeblocks__import_market_csv`, enrich via `mcp__tradeblocks__enrich_market_data`
-- Use `mcp__tradeblocks__run_sql` or `mcp__tradeblocks__describe_database` for schema discovery
-- Dedicated tools: `analyze_regime_performance`, `suggest_filters`, `calculate_orb`, `enrich_trades`
+- Market data served from Parquet views registered by shared `db/market-views.ts` (`createMarketParquetViews()`) when `~/tradeblocks-data/market/` directory exists
+- View surface: `market.spot` / `market.spot_daily` / `market.enriched` / `market.enriched_context` / `market.option_chain` / `market.option_quote_minutes`
+- Falls back to physical DuckDB tables (same names) when Parquet files are absent (public repo behavior)
+- Mutable metadata table (`_sync_metadata`) is always a physical DuckDB table
+
+**Provider-native ingestor tools (Plan A/B):**
+- `fetch_bars { tickers, timespan, from, to }` — fetch daily or intraday OHLCV bars from the configured provider and write to Parquet
+- `fetch_quotes { tickers, from, to }` — fetch option minute quotes and write to Parquet
+- `fetch_chain { underlying, date }` — fetch option chain snapshot and write to Parquet
+- `import_flat_file { file_path, dataset_type, select_sql, partition }` — dispatch any DuckDB-readable file (parquet, csv, jsonl, gz) to a target market store (`spot_bars` / `option_quotes` / `option_chain`) via an LLM-composed SELECT. Workflow: run_sql to sniff the file, describe_database for the target shape, compose a bridging SELECT, then call import_flat_file. See `releases/v3.0.md` for details.
+- `compute_vix_context { from, to }` — compute cross-ticker VIX regime fields (Vol_Regime, Term_Structure_State, etc.) for a date range
+- `refresh_market_data { tickers, from, to }` — composite daily-refresh: calls fetch_bars for all tickers, then auto-fires compute_vix_context when VIX-family tickers are present, and returns a coverage report. Use this for routine end-of-day data updates.
 
 ### Trading Calendar Data Model
 
