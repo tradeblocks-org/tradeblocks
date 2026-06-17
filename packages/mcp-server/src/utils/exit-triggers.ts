@@ -47,7 +47,7 @@ export interface ExitTriggerConfig {
   openDate?: string;                            // YYYY-MM-DD for ditExit
   clockTime?: string;                           // "HH:MM" for clockTimeExit (threshold ignored)
   trailAmount?: number;                         // Dollar trail for trailingStop
-  // Directional delta fields (OO-style per-leg exits):
+  // Directional delta fields (per-leg directional exits):
   legIndex?: number;                            // 0-based leg index for perLegDelta — targets specific leg
   exitAbove?: number;                           // Fire when value > exitAbove (directional, no abs)
   exitBelow?: number;                           // Fire when value < exitBelow (directional, no abs)
@@ -59,7 +59,7 @@ export interface ExitTriggerConfig {
   spreadWidth?: number;                          // Width of spread in dollars
   contracts?: number;                            // Number of contracts
   multiplier?: number;                           // Default 100
-  // profitTarget confirmation: N synchronized-quote bars at-or-above threshold required before firing (default 2)
+  // profitTarget confirmation: N synchronized-quote bars at-or-above threshold required before firing (default 1 = fire on first cross)
   requiredHits?: number;
   // Internal: set by handler when unit='percent' to compute dollar threshold
   entryCost?: number;                            // D-11: cost/credit of entry (negative = credit received)
@@ -296,7 +296,7 @@ export function evaluateTrigger(
       case 'profitTarget': {
         // unit='percent' requires entryCost; if missing, cannot compute — no fire
         if (trigger.unit === 'percent' && trigger.entryCost == null) break;
-        const requiredHits = trigger.requiredHits ?? 2;
+        const requiredHits = trigger.requiredHits ?? 1;
         const dollarThresholdPT = trigger.unit === 'percent'
           ? threshold * Math.abs(trigger.entryCost!)
           : threshold;
