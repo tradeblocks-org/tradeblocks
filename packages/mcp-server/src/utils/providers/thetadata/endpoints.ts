@@ -4,6 +4,7 @@ import type {
   ThetaImpliedVolatilityRow,
   ThetaIndexEodRow,
   ThetaIndexOhlcRow,
+  ThetaOpenInterestRow,
   ThetaQuoteRow,
   ThetaRight,
   ThetaStockEodRow,
@@ -14,6 +15,7 @@ import {
   thetaTimestampToEtMinute,
   type ThetaCellValue,
 } from "./decode.ts";
+import { buildOccTicker } from "../../trade-replay.ts";
 import type { ThetaMddsClient } from "./client.ts";
 
 type ThetaResponseData = {
@@ -123,6 +125,30 @@ export function normalizeThetaContractListRow(
     expiration: requiredText(row.expiration, "contract-list row", "expiration"),
     strike: requiredNumber(row.strike, "contract-list row", "strike"),
     right: normalizeRight(row.right),
+  };
+}
+
+export function normalizeThetaOpenInterestRow(
+  row: Record<string, ThetaCellValue>,
+): ThetaOpenInterestRow {
+  const symbol = requiredText(row.symbol, "open-interest row", "symbol").toUpperCase();
+  const expiration = requiredText(row.expiration, "open-interest row", "expiration");
+  const strike = requiredNumber(row.strike, "open-interest row", "strike");
+  const right = normalizeRight(row.right);
+  // The gRPC OI stream names the report-date column `timestamp` (carrying a
+  // "YYYY-MM-DD HH:MM" ET value), matching the REST v3 OI response header.
+  // Accept `date` too for any provider variant; normalizeThetaDate strips the
+  // leading calendar date off either shape.
+  const date = normalizeThetaDate(row.timestamp ?? row.date, "open-interest row");
+  const rightChar = right === "call" ? "C" : "P";
+  return {
+    ticker: buildOccTicker(symbol, expiration, rightChar, strike),
+    symbol,
+    expiration,
+    strike,
+    right,
+    date,
+    openInterest: requiredNumber(row.open_interest, "open-interest row", "open_interest"),
   };
 }
 
@@ -634,6 +660,54 @@ export async function optionHistoryQuoteBand(
     }),
   );
   return decodeThetaRows(chunks).map(normalizeThetaQuoteRow);
+}
+
+/**
+ * Daily open-interest endpoint: GetOptionHistoryOpenInterest.
+ *
+ * Returns one open-interest value per contract per day across the
+ * [startDate, endDate] range (open interest is daily granularity). Modeled on
+ * the date-range EOD wrappers — the request query carries `start_date` /
+ * `end_date` rather than a single intraday `date`.
+ *
+ * Accepts the `"*"` expiration wildcard like `optionHistoryQuoteBand` — the
+ * MDDS server returns every active expiration in one stream (each row carries
+ * its own expiration). Subject to the same one-wildcard-stream-per-session cap
+ * as wildcard quote calls.
+ */
+export async function optionHistoryOpenInterest(
+  client: ThetaMddsClient,
+  params: {
+    symbol: string;
+    expiration: string;
+    startDate: string;
+    endDate: string;
+    strikeRange?: number;
+  },
+): Promise<ThetaOpenInterestRow[]> {
+  const symbol = validateSymbol(params.symbol);
+  const expiration = params.expiration === "*"
+    ? "*"
+    : validateHyphenDate(params.expiration, "expiration");
+  const startDate = validateHyphenDate(params.startDate, "date");
+  const endDate = validateHyphenDate(params.endDate, "date");
+  const strikeRange = optionalPositiveInteger(params.strikeRange, "strike_range");
+  const chunks = await client.callStream<ThetaResponseData>(
+    "GetOptionHistoryOpenInterest",
+    endpointRequest(client.queryInfo(), {
+      contractSpec: {
+        symbol,
+        expiration,
+        strike: THETA_WILDCARD_STRIKE,
+        right: "both",
+      },
+      expiration,
+      startDate,
+      endDate,
+      ...(strikeRange == null ? {} : { strikeRange }),
+    }),
+  );
+  return decodeThetaRows(chunks).map(normalizeThetaOpenInterestRow);
 }
 
 export async function optionListContracts(

@@ -30,6 +30,7 @@ import { ParquetChainStore } from "./parquet-chain-store.ts";
 import { DuckdbChainStore } from "./duckdb-chain-store.ts";
 import { ParquetQuoteStore } from "./parquet-quote-store.ts";
 import { DuckdbQuoteStore } from "./duckdb-quote-store.ts";
+import { ParquetOiDailyStore } from "./parquet-oi-daily-store.ts";
 
 import type { StoreContext } from "./types.ts";
 
@@ -38,6 +39,7 @@ export interface MarketStores {
   enriched: EnrichedStore;
   chain: ChainStore;
   quote: QuoteStore;
+  oiDaily: ParquetOiDailyStore;
 }
 
 /**
@@ -50,18 +52,23 @@ export interface MarketStores {
  * reads without any separate lookup.
  */
 export function createMarketStores(ctx: StoreContext): MarketStores {
+  // Open interest is daily-granularity option market data persisted Parquet-
+  // native (one row per contract per day), so the same store serves both
+  // modes — it always writes/reads Hive-partitioned Parquet under the data
+  // archive, like the option-quote and option-chain partitions.
+  const oiDaily = new ParquetOiDailyStore(ctx);
   if (ctx.parquetMode) {
     const spot = new ParquetSpotStore(ctx);
     const enriched = new ParquetEnrichedStore(ctx, spot);
     const chain = new ParquetChainStore(ctx);
     const quote = new ParquetQuoteStore(ctx);
-    return { spot, enriched, chain, quote };
+    return { spot, enriched, chain, quote, oiDaily };
   }
   const spot = new DuckdbSpotStore(ctx);
   const enriched = new DuckdbEnrichedStore(ctx, spot);
   const chain = new DuckdbChainStore(ctx);
   const quote = new DuckdbQuoteStore(ctx);
-  return { spot, enriched, chain, quote };
+  return { spot, enriched, chain, quote, oiDaily };
 }
 
 export { SpotStore, EnrichedStore, ChainStore, QuoteStore };

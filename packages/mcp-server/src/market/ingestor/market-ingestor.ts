@@ -9,6 +9,7 @@ import type {
   IngestBarsOptions,
   IngestQuotesOptions,
   IngestChainOptions,
+  IngestOpenInterestOptions,
   IngestFlatFileOptions,
   ComputeVixContextOptions,
   RefreshOptions,
@@ -18,7 +19,7 @@ import type {
   RefreshResult,
   BulkProgressReporter,
 } from "./types.ts";
-import type { QuoteRow } from "../stores/types.ts";
+import type { OiDailyRow, QuoteRow } from "../stores/types.ts";
 import { applyQuoteGreeks, type QuoteGreeksStats } from "../../utils/option-quote-greeks.ts";
 
 export interface MarketIngestorDeps {
@@ -980,6 +981,88 @@ export class MarketIngestor {
     };
   }
 
+  async ingestOpenInterest(opts: IngestOpenInterestOptions): Promise<IngestResult> {
+    const provider = this.resolveProvider(opts.provider);
+
+    const caps = provider.capabilities();
+    if (!caps.bulkByRoot || typeof provider.fetchOpenInterest !== "function") {
+      return {
+        status: "unsupported",
+        rowsWritten: 0,
+        error: `Provider ${provider.name} does not support open-interest ingest (capability.bulkByRoot=${caps.bulkByRoot})`,
+      };
+    }
+
+    if (opts.dryRun) {
+      return { status: "skipped", rowsWritten: 0, details: { reason: "dry_run" } };
+    }
+
+    const tickerRegistry = this.deps.stores.quote.tickers;
+    let totalRows = 0;
+    let minDate: string | undefined;
+    let maxDate: string | undefined;
+
+    for (const underlying of opts.underlyings) {
+      const upperUnderlying = underlying.toUpperCase();
+      let oiRows: Awaited<ReturnType<NonNullable<MarketDataProvider["fetchOpenInterest"]>>>;
+      try {
+        oiRows = await provider.fetchOpenInterest!({
+          underlying: upperUnderlying,
+          from: opts.from,
+          to: opts.to,
+        });
+      } catch (error) {
+        const mapped = this.mapProviderFailure(provider, "chain", upperUnderlying, error, "option");
+        if (mapped) return mapped;
+        throw error;
+      }
+
+      // Bucket by (resolved underlying, date) — one partition per pair, matching
+      // the option_oi_daily/underlying=X/date=Y layout.
+      const byPartition = new Map<string, OiDailyRow[]>();
+      const resolvedCache = new Map<string, string>();
+      for (const row of oiRows) {
+        const root = extractRoot(row.ticker);
+        let resolved = resolvedCache.get(root);
+        if (resolved === undefined) {
+          resolved = tickerRegistry.resolve(root);
+          resolvedCache.set(root, resolved);
+        }
+        const key = `${resolved} ${row.date}`;
+        let list = byPartition.get(key);
+        if (!list) {
+          list = [];
+          byPartition.set(key, list);
+        }
+        list.push({
+          occ_ticker: row.ticker,
+          underlying: resolved,
+          date: row.date,
+          expiration: row.expiration,
+          strike: row.strike,
+          right: row.right,
+          open_interest: row.open_interest,
+          source: provider.name,
+        });
+      }
+
+      for (const [key, rows] of byPartition) {
+        if (rows.length === 0) continue;
+        const [resolved, date] = key.split(" ");
+        await this.deps.stores.oiDaily.writeOiDaily(resolved, date, rows);
+        totalRows += rows.length;
+        if (!minDate || date < minDate) minDate = date;
+        if (!maxDate || date > maxDate) maxDate = date;
+      }
+    }
+
+    return {
+      status: "ok",
+      rowsWritten: totalRows,
+      dateRange: minDate ? { from: minDate, to: maxDate! } : { from: opts.from, to: opts.to },
+    };
+  }
+
   private enumerateDates(from: string, to: string): string[] {
     const dates: string[] = [];
     const current = new Date(`${from}T12:00:00Z`);
@@ -1095,7 +1178,7 @@ export class MarketIngestor {
     if (isNonTradingDay(opts.asOf)) {
       return {
         status: "skipped",
-        perOperation: { spot: [], chain: [], quotes: [], vixContext: null },
+        perOperation: { spot: [], chain: [], quotes: [], openInterest: [], vixContext: null },
         coverage: {},
         errors: [],
       };
@@ -1163,6 +1246,22 @@ export class MarketIngestor {
       if (result.status === "error") errors.push(`quotes (underlyings): ${result.error}`);
     }
 
+    // Step 3b — open interest (opt-in only). Daily-granularity option OI lands
+    // in its own store; it does NOT run unless the caller explicitly supplies
+    // openInterestUnderlyings — no silent default that would write OI on every
+    // refresh.
+    const openInterestResults: IngestResult[] = [];
+    if (opts.openInterestUnderlyings && opts.openInterestUnderlyings.length > 0) {
+      const result = await this.ingestOpenInterest({
+        underlyings: opts.openInterestUnderlyings,
+        from: opts.asOf,
+        to: opts.asOf,
+        provider: opts.provider,
+      });
+      openInterestResults.push(result);
+      if (result.status === "error") errors.push(`open interest: ${result.error}`);
+    }
+
     // Step 4 — VIX context (only if flag AND any VIX-family ticker in spot list)
     let vixContext: IngestResult | null = null;
     const hasVixFamily = opts.spotTickers.some((t) => VIX_FAMILY.has(t.toUpperCase()));
@@ -1195,6 +1294,7 @@ export class MarketIngestor {
     for (const r of spotResults) collect(r);
     for (const r of chainResults) collect(r);
     for (const r of quoteResults) collect(r);
+    for (const r of openInterestResults) collect(r);
     collect(vixContext);
 
     let status: IngestStatus;
@@ -1204,7 +1304,7 @@ export class MarketIngestor {
 
     return {
       status,
-      perOperation: { spot: spotResults, chain: chainResults, quotes: quoteResults, vixContext },
+      perOperation: { spot: spotResults, chain: chainResults, quotes: quoteResults, openInterest: openInterestResults, vixContext },
       coverage,
       errors,
       ...(aggregateSkipped.length > 0 ? { skipped: aggregateSkipped } : {}),

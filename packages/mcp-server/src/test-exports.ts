@@ -389,6 +389,7 @@ export {
   normalizeThetaFirstOrderGreekRow,
   normalizeThetaIndexEodRow,
   normalizeThetaIndexOhlcRow,
+  normalizeThetaOpenInterestRow,
   normalizeThetaStockEodRow,
   normalizeThetaStockOhlcRow,
   OPTION_QUOTE_MID_GREEKS_GAMMA_SOURCE,
@@ -397,6 +398,7 @@ export {
   optionHistoryGreeksFirstOrderBand,
   optionHistoryGreeksFirstOrder,
   optionHistoryImpliedVolatilityBand,
+  optionHistoryOpenInterest,
   optionHistoryQuote,
   optionHistoryQuoteBand,
   optionListContracts,
@@ -527,6 +529,7 @@ export {
   writeSpotPartition,
   writeChainPartition,
   writeQuoteMinutesPartition,
+  writeOiDailyPartition,
   writeEnrichedTickerFile,
   writeEnrichedContext,
 } from './db/market-datasets.ts';
@@ -596,6 +599,9 @@ export { DuckdbChainStore } from './market/stores/duckdb-chain-store.ts';
 // Concrete Quote store pair
 export { ParquetQuoteStore } from './market/stores/parquet-quote-store.ts';
 export { DuckdbQuoteStore } from './market/stores/duckdb-quote-store.ts';
+
+// Daily open-interest store
+export { ParquetOiDailyStore } from './market/stores/parquet-oi-daily-store.ts';
 
 // ============================================================================
 // Concrete Enriched stores

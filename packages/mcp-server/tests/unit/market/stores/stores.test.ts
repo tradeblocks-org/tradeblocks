@@ -29,6 +29,7 @@ import {
   DuckdbChainStore,
   ParquetQuoteStore,
   DuckdbQuoteStore,
+  ParquetOiDailyStore,
 } from "../../../../src/test-exports.ts";
 import type {
   StoreContext,
@@ -93,16 +94,18 @@ describe("createMarketStores factory (Pitfall 6 resolution — real DuckDB fixtu
     const fixture = await buildStoreFixture({ parquetMode: false });
     try {
       const stores: MarketStores = createMarketStores(fixture.ctx);
-      expect(Object.keys(stores).sort()).toEqual(["chain", "enriched", "quote", "spot"]);
+      expect(Object.keys(stores).sort()).toEqual(["chain", "enriched", "oiDaily", "quote", "spot"]);
       expect(stores.spot).toBeInstanceOf(SpotStore);
       expect(stores.enriched).toBeInstanceOf(EnrichedStore);
       expect(stores.chain).toBeInstanceOf(ChainStore);
       expect(stores.quote).toBeInstanceOf(QuoteStore);
+      expect(stores.oiDaily).toBeInstanceOf(ParquetOiDailyStore);
       // Ensure the placeholder is gone — none of these should be null.
       expect(stores.spot).not.toBeNull();
       expect(stores.enriched).not.toBeNull();
       expect(stores.chain).not.toBeNull();
       expect(stores.quote).not.toBeNull();
+      expect(stores.oiDaily).not.toBeNull();
     } finally {
       fixture.cleanup();
     }

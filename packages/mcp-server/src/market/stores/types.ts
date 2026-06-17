@@ -57,6 +57,24 @@ export interface QuoteRow {
 }
 
 /**
+ * Daily open-interest snapshot for a single option contract.
+ *
+ * The OI store persists one row per (occ_ticker, date) — open interest is
+ * reported at daily granularity. `source` carries provenance (e.g. the
+ * provider name) the same way `QuoteRow.source` does.
+ */
+export interface OiDailyRow {
+  occ_ticker: string;
+  underlying: string;
+  date: string;
+  expiration: string;
+  strike: number;
+  right: "call" | "put";
+  open_interest: number;
+  source?: string | null;
+}
+
+/**
  * Result of `store.getCoverage(...)`.
  *
  * `earliest` / `latest` are ISO date strings (YYYY-MM-DD) or `null` when no data

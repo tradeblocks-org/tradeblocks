@@ -86,6 +86,7 @@ export const DATASETS_V3: Record<string, DatasetDef> = {
   enriched_context:     { subdir: "enriched/context",     partitionKeys: [],                     filename: "data.parquet" },
   option_chain:         { subdir: "option_chain",         partitionKeys: ["underlying", "date"], filename: "data.parquet" },
   option_quote_minutes: { subdir: "option_quote_minutes", partitionKeys: ["underlying", "date"], filename: "data.parquet" },
+  option_oi_daily:      { subdir: "option_oi_daily",      partitionKeys: ["underlying", "date"], filename: "data.parquet" },
 };
 
 // ------ Per-dataset write helpers ------
@@ -150,6 +151,26 @@ export async function writeQuoteMinutesPartition(
   // re-sort existing partitions. The tool is idempotent (skips
   // already-sorted files via row-group ticker stats).
   const sortedSelect = `SELECT * FROM (${args.selectQuery}) AS q ORDER BY q.ticker, q.time`;
+  return writeParquetPartition(conn, {
+    baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
+    partitions: { underlying: args.underlying, date: args.date },
+    selectQuery: sortedSelect,
+    compression: args.compression,
+    filename: def.filename,
+  });
+}
+
+export async function writeOiDailyPartition(
+  conn: DuckDBConnection,
+  args: { dataDir: string; underlying: string; date: string; selectQuery: string; compression?: string },
+): Promise<{ rowCount: number }> {
+  const def = DATASETS_V3.option_oi_daily;
+  // Sort rows by ticker before writing so DuckDB row groups carry tight
+  // min/max statistics on `ticker` — the dominant read pattern is a
+  // ticker-windowed scan within a (underlying, date) partition, matching the
+  // quote store's (ticker, time) sort rationale (one value per ticker per day
+  // here, so ticker alone is the sort key).
+  const sortedSelect = `SELECT * FROM (${args.selectQuery}) AS q ORDER BY q.ticker`;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
     partitions: { underlying: args.underlying, date: args.date },
