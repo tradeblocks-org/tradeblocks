@@ -78,6 +78,6 @@ jobs:
 
       # Heap ceiling is 6144 MB per worker as headroom for `workerIdleMemoryLimit`
       # (set in packages/mcp-server/jest.config.js) to recycle workers cleanly
-      # before V8 aborts. See .planning/debug/ci-jest-oom.md for the full writeup.
+      # before V8 aborts under the Jest suite's peak memory.
       - name: Run MCP Server Tests
         run: NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=6144' npx jest --config packages/mcp-server/jest.config.js

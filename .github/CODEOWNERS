@@ -1,9 +1,8 @@
 # CODEOWNERS — tradeblocks-org/tradeblocks
 #
-# Path-based review routing. Both Admirals on every line by design — see
-# tradeblocks-org/enterprise CODEOWNERS for the full rationale.
+# Path-based review routing. Both maintainers review every path by design.
 
-# Public-facing — anything that ships to OO users (Tier 3)
+# Public-facing application and library code
 /packages/                              @davidromeo @longpshorn
 /app/                                   @davidromeo @longpshorn
 /components/                            @davidromeo @longpshorn
@@ -14,7 +13,7 @@
 /tools/                                 @davidromeo @longpshorn
 /gpt/                                   @davidromeo @longpshorn
 
-# Build / CI / publish config — Tier 3
+# Build / CI / publish config
 /package.json                           @davidromeo @longpshorn
 /.github/workflows/                     @davidromeo @longpshorn
 /.github/CODEOWNERS                     @davidromeo @longpshorn

@@ -656,12 +656,6 @@ export {
 export type { GroupResult } from './utils/migrate-option-data-helpers.ts';
 
 // ============================================================================
-// Tool dependency registry
-// ============================================================================
-export { TOOL_TICKER_DEPS, unionTickerDeps } from './utils/tool-ticker-deps.ts';
-// ============================================================================
-
-// ============================================================================
 // Spot backfill + enrichment-rebuild support
 //
 // Verification helper, sample-date selector, calibration probe.
