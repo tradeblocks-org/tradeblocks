@@ -375,7 +375,7 @@ export async function handleDecomposeGreeks(
   // 2. Check greeks data availability
   if (pnlPath.length > 0 && !pnlPath[0].legGreeks) {
     throw new Error(
-      "No greeks data available. Ensure MASSIVE_API_KEY is set and underlying price data exists."
+      "No greeks data available. Use the data-pipeline tools to backfill the option-leg quotes and underlying price data into the local cache."
     );
   }
 
