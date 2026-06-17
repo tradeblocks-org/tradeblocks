@@ -106,10 +106,10 @@ A Next.js 15 application for analyzing options trading performance. Processes CS
 | @duckdb/node-api 1.4.4 | Node.js 22 | Already validated by existing test suite |
 ## Sources
 - Runtime verification: `node --version` → v22.22.0; `node -e "console.log(typeof fetch)"` → `function` (HIGH confidence)
-- `/home/david/code/tradeblocks/packages/mcp-server/package.json` — confirmed installed deps and versions (HIGH confidence)
-- `/home/david/code/tradeblocks/.planning/PROJECT.md` — "No new dependencies for core: Massive API calls use native fetch" constraint (HIGH confidence)
-- `/home/david/code/tradeblocks/packages/mcp-server/src/db/connection.ts` — `process.env.*` pattern (HIGH confidence)
-- `/home/david/code/tradeblocks/packages/mcp-server/jest.config.js` — ESM + ts-jest preset confirmed (HIGH confidence)
+- `packages/mcp-server/package.json` — confirmed installed deps and versions (HIGH confidence)
+- Project dependency constraint — "no new dependencies for core; native fetch for API calls" (HIGH confidence)
+- `packages/mcp-server/src/db/connection.ts` — `process.env.*` pattern (HIGH confidence)
+- `packages/mcp-server/jest.config.js` — ESM + ts-jest preset confirmed (HIGH confidence)
 - Node.js 22 fetch stabilization: https://nodejs.org/en/blog/release/v22.0.0 (HIGH confidence — fetch stable, not experimental, since Node.js 21)
 - Jest 30 global spy pattern: jest.spyOn(globalThis, 'fetch') — standard pattern for mocking native fetch globals in Jest; confirmed consistent with Jest 30 release notes approach to ESM globals (MEDIUM confidence — verified via Jest docs cross-reference, not live Context7 query)
 <!-- GSD:stack-end -->

@@ -119,8 +119,8 @@ export async function ensureTradeDataTable(conn: DuckDBConnection): Promise<void
     await conn.run(`ALTER TABLE trades.trade_data ADD COLUMN ticker VARCHAR`);
   }
   // Migration: add source column for trade provenance tracking.
-  // 'csv' = imported from Option Omega CSV; other values may be populated by
-  // optional private extensions when present.
+  // 'csv' = imported from Option Omega CSV; other values may be
+  // populated by additional importers when present.
   if (!(await hasColumn(conn, "trades", "trade_data", "source"))) {
     await conn.run(`ALTER TABLE trades.trade_data ADD COLUMN source VARCHAR DEFAULT 'csv'`);
     await conn.run(`UPDATE trades.trade_data SET source = 'csv' WHERE source IS NULL`);

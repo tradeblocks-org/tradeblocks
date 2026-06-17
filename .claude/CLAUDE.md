@@ -91,7 +91,7 @@ npm test -- path/to/test-file.test.ts -t "test name pattern"
 
 **Date Comparison Rules (MCP Server)**: There are **two kinds of dates** in the MCP server, and they require different handling:
 
-1. **Calendar dates from CSVs** (Option Omega trade logs): These are Eastern Time trading dates like "2025-01-07" parsed via `parseDatePreservingCalendarDay()` → `new Date(year, month, day)`. The Date is created at **local midnight**, NOT Eastern midnight. The calendar date "7" is just temporarily stored inside a Date object — it's not a real timestamp. To read it back, you MUST use the same local-timezone methods (`getFullYear`/`getMonth`/`getDate`), which always return the original calendar date regardless of server timezone. This works because the write path (constructor) and read path (getters) both use local timezone — they're symmetric and cancel out.
+1. **Calendar dates from CSVs** (trade-log exports): These are Eastern Time trading dates like "2025-01-07" parsed via `parseDatePreservingCalendarDay()` → `new Date(year, month, day)`. The Date is created at **local midnight**, NOT Eastern midnight. The calendar date "7" is just temporarily stored inside a Date object — it's not a real timestamp. To read it back, you MUST use the same local-timezone methods (`getFullYear`/`getMonth`/`getDate`), which always return the original calendar date regardless of server timezone. This works because the write path (constructor) and read path (getters) both use local timezone — they're symmetric and cancel out.
 
 2. **Absolute timestamps** (TradingView Unix epoch in market CSVs): These ARE real UTC instants representing a specific moment in time. To get the correct Eastern trading date, you MUST convert to ET via `toLocaleDateString("en-CA", { timeZone: "America/New_York" })`. This is the one place ET conversion is correct.
 
@@ -183,7 +183,7 @@ When adding new metrics, calculations, or chart data to the UI, **consider wheth
 **Example — query row count:**
 ```bash
 npx --yes @modelcontextprotocol/inspector --cli \
-  --config /Users/davidromeo/Code/tradeblocks-private/.mcp.json --server tradeblocks \
+  --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
   --method tools/call --tool-name run_sql \
   --tool-arg 'query=SELECT COUNT(*) AS n FROM market.option_quote_minutes'
 ```
@@ -193,21 +193,21 @@ The response is JSON with two content blocks — `type:"text"` (summary) and `ty
 **Example — bulk ingestion:**
 ```bash
 MCP_SERVER_REQUEST_TIMEOUT=3600000 npx --yes @modelcontextprotocol/inspector --cli \
-  --config /Users/davidromeo/Code/tradeblocks-private/.mcp.json --server tradeblocks \
+  --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
   --method tools/call --tool-name fetch_quotes \
   --tool-arg 'underlyings=["SPX"]' --tool-arg 'from=2026-04-15' --tool-arg 'to=2026-04-17'
 ```
 
 The default request timeout is 5 minutes; bump it via `MCP_SERVER_REQUEST_TIMEOUT` (ms) for multi-day fetches.
 
-**DuckDB lock contention caveat:** running Inspector against the tradeblocks server while Claude Code's session-level tradeblocks MCP is live will make one force-recover the DuckDB lock from the other. Prefer the primary path (`mcp__tradeblocks__*`) while inside Claude Code; reserve Inspector for standalone shell scripts running outside an active Claude Code session.
+**DuckDB lock contention caveat:** running Inspector against the tradeblocks server while another session-level tradeblocks MCP is live can contend for the same DuckDB lock. Prefer the primary path (`mcp__tradeblocks__*`) while inside Claude Code; reserve Inspector for standalone shell scripts running outside an active session.
 
 The v3.0 market views are: `market.spot` (raw minute OHLCV bars), `market.spot_daily` (RTH-aggregated daily OHLCV derived from `market.spot`), `market.enriched` (per-ticker computed indicators like `RSI_14`, `VIX_Close`, `ivr`), `market.enriched_context` (cross-ticker regime fields like `Vol_Regime`, `Term_Structure_State`), `market.option_chain` (contract universe snapshots), `market.option_quote_minutes` (dense per-minute option quotes), and `market._sync_metadata` (coverage tracking).
 
 **Example — list tools + tool schema:**
 ```bash
 npx --yes @modelcontextprotocol/inspector --cli \
-  --config /Users/davidromeo/Code/tradeblocks-private/.mcp.json --server tradeblocks \
+  --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
   --method tools/list
 ```
 
@@ -215,38 +215,28 @@ npx --yes @modelcontextprotocol/inspector --cli \
 
 **After changing MCP server source code:** Run `npm run build` in `packages/mcp-server/`. If working inside Claude Code (primary path), type `/reload` to restart with `--continue`. If calling from Inspector (secondary path), no restart needed — each `npx` call spawns a fresh server automatically.
 
-**MANDATORY after implementation work on the MCP server:** Build AND run a live Inspector smoke before reporting completion. Unit tests cover isolated code paths; only a real MCP server startup against `~/tradeblocks-data/database` catches lifecycle issues that fixture-based tests miss (e.g., pre-existing DuckDB state, DROP VIEW vs DROP TABLE type mismatches, connection.ext.ts ordering, view registration over real Parquet directories). Minimum smoke:
+**MANDATORY after implementation work on the MCP server:** Build AND run a live Inspector smoke before reporting completion. Unit tests cover isolated code paths; only a real MCP server startup against a populated data root catches lifecycle issues that fixture-based tests miss (e.g., pre-existing DuckDB state, DROP VIEW vs DROP TABLE type mismatches, connection setup ordering, view registration over real Parquet directories). Minimum smoke:
 
 ```bash
-cd /Users/davidromeo/Code/tradeblocks-private/packages/mcp-server && npm run build && \
+cd <repo-root>/packages/mcp-server && npm run build && \
   npx --yes @modelcontextprotocol/inspector --cli \
-    --config /Users/davidromeo/Code/tradeblocks-private/.mcp.json --server tradeblocks \
+    --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
     --method tools/list 2>&1 | head -30
 ```
 
-**Data directory location:** The DuckDB files (`market.duckdb`, `analytics.duckdb`, `backtests.duckdb`) live at `~/tradeblocks-data/database/`. The server config in `.mcp.json` already points at this path (and at `--data-root ~/tradeblocks-data`, which contains sibling Syncthing-synced folders `blocks/`, `market/`, `market-meta/`, `strategies/`). Don't need to re-specify these on the command line — Inspector reads them from the `--config` file.
+**Data directory location:** The DuckDB files (`market.duckdb`, `analytics.duckdb`, `backtests.duckdb`) live under `$DATA_ROOT/database/`. The server config in `.mcp.json` already points at this path (and at `--data-root $DATA_ROOT`, which contains sibling folders `blocks/`, `market/`, `market-meta/`, `strategies/`). Don't need to re-specify these on the command line — Inspector reads them from the `--config` file.
 
-**MULTI-PROVIDER TESTING (REQUIRED):** Two market data providers ship in production: `massive` (default) and `thetadata`. Provider is selected via `MARKET_DATA_PROVIDER` env var. Phase verification gates that exercise provider-capability paths (fetch_bars, fetch_quotes, fetch_chain ingest orchestration) MUST run against BOTH providers — a migration that works on Massive but breaks ThetaData (or vice-versa) ships a regression. SEP-01 ("reads never trigger provider calls") is provider-agnostic by definition, so one run suffices for that gate.
+**PROVIDER TESTING:** The configured market data provider is selected via the `MARKET_DATA_PROVIDER` env var. Verification gates that exercise provider-capability paths (fetch_bars, fetch_quotes, fetch_chain ingest orchestration) should run against each provider you intend to support — a migration that works for one provider but breaks another ships a regression. Reads never trigger provider calls, so that gate is provider-agnostic and one run suffices.
 
 ```bash
-# Massive (default — no env needed):
-MARKET_DATA_PROVIDER=massive npx --yes @modelcontextprotocol/inspector --cli \
-  --config /Users/davidromeo/Code/tradeblocks-private/.mcp.json --server tradeblocks \
-  --method tools/call --tool-name fetch_bars \
-  --tool-arg 'tickers=["SPX"]' --tool-arg 'timespan=1d' \
-  --tool-arg 'from=2024-01-01' --tool-arg 'to=2024-01-31'
-
-# ThetaData:
-MARKET_DATA_PROVIDER=thetadata npx --yes @modelcontextprotocol/inspector --cli \
-  --config /Users/davidromeo/Code/tradeblocks-private/.mcp.json --server tradeblocks \
+MARKET_DATA_PROVIDER=<provider> npx --yes @modelcontextprotocol/inspector --cli \
+  --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
   --method tools/call --tool-name fetch_bars \
   --tool-arg 'tickers=["SPX"]' --tool-arg 'timespan=1d' \
   --tool-arg 'from=2024-01-01' --tool-arg 'to=2024-01-31'
 ```
 
-ThetaData notes: terminal needs to be running. `pkill -9 -f "Thetadata/lib"` + `pkill -9 -f "ThetaTerminal"` to fully stop before re-testing if you hit "478 — multiple terminals" errors.
-
-If the server fails to start or init times out, fix the issue BEFORE declaring any phase/plan complete. "Tests pass" is not equivalent to "server starts."
+If the server fails to start or init times out, fix the issue BEFORE declaring any work complete. "Tests pass" is not equivalent to "server starts."
 
 **DuckDB connection model:** The server opens read-write for initialization (schema/view creation), then downgrades to read-only. Write tools call `upgradeToReadWrite()` on demand. This means concurrent read access (tests, other scripts) works while the server is idle.
 

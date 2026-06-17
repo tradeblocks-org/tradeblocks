@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "tradeblocks",
   "display_name": "TradeBlocks",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Options trading analysis - backtest stats, walk-forward analysis, Monte Carlo simulations, and risk metrics",
   "long_description": "TradeBlocks MCP server provides comprehensive options trading analysis capabilities. Import your trade logs and get detailed performance statistics, run walk-forward analysis to detect overfitting, perform Monte Carlo simulations for risk assessment, calculate optimal position sizing with Kelly criterion, and compare backtest results against actual trading performance. All analysis runs locally on your machine.",
   "author": {
