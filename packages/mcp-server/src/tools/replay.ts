@@ -2,7 +2,7 @@
  * Trade Replay Tools
  *
  * MCP tool for replaying trades using historical minute-level option bars
- * from Massive.com. Supports two modes:
+ * read from the local market-data cache. Supports two modes:
  *   A) Hypothetical replay — explicit legs with strikes/expiry/dates
  *   B) Tradelog replay — block_id + trade_index to replay from existing trade data
  *
@@ -532,7 +532,8 @@ export function registerReplayTools(
     {
       description:
         "Replay a trade using historical minute-level option bars. " +
-        "Uses cached bars from market.spot if available; fetches from Massive.com API on cache miss (requires MASSIVE_API_KEY). " +
+        "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
+        "missing data yields a degenerate replay. Use the data-pipeline tools to backfill cache. " +
         "Returns minute-by-minute P&L path with MFE (Maximum Favorable Excursion) and MAE (Maximum Adverse Excursion). " +
         "Two modes: (A) Hypothetical — provide explicit legs with strikes, expiry, entry prices. " +
         "(B) Tradelog — provide block_id + trade_index to replay an existing trade from your data.",

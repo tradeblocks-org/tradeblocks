@@ -2,10 +2,10 @@
  * Batch Exit Analysis Tool
  *
  * MCP tool that evaluates a candidate exit policy across multiple trades in a
- * block. Queries trades from DuckDB, replays each one (checking the market.spot
- * cache before fetching from Massive), evaluates the candidate policy via the
- * pure batch exit analysis engine, and returns aggregate statistics with
- * per-trigger attribution.
+ * block. Queries trades from DuckDB, replays each one from the local
+ * market-data cache, evaluates the candidate policy via the pure batch exit
+ * analysis engine, and returns aggregate statistics with per-trigger
+ * attribution.
  *
  * Tools registered:
  *   - batch_exit_analysis -- Evaluate a candidate exit policy across an entire block
@@ -367,8 +367,9 @@ export function registerBatchExitAnalysisTools(
         "Replays each matching trade, evaluates exit triggers against the minute-level P&L path, " +
         "and returns aggregate statistics (win rate, Sharpe, profit factor, drawdown) comparable " +
         "to get_statistics. Includes per-trigger attribution showing which triggers drive outcomes. " +
-        "Uses cached bars from market.spot when available; fetches from Massive.com on cache miss " +
-        "(requires MASSIVE_API_KEY). Use with strategy profiles to iterate on exit rules.",
+        "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
+        "trades with missing data are skipped. Use the data-pipeline tools to backfill cache, " +
+        "and strategy profiles to iterate on exit rules.",
       inputSchema: batchExitAnalysisSchema,
     },
     async (params) => {
