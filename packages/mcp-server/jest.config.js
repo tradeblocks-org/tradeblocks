@@ -15,6 +15,11 @@ export default {
   },
   testMatch: ['**/tests/**/*.test.ts'],
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts'],
+  // Builds src/utils/iv-solver-worker.js before any test runs so the
+  // worker pool can spawn a plain-Node-loadable bundle under ts-jest. See
+  // tests/global-setup.mjs for why this is needed (CI's Node 20 rejects the
+  // .ts worker fallback that resolveWorkerUrl uses when the .js is absent).
+  globalSetup: '<rootDir>/tests/global-setup.mjs',
   // --------------------------------------------------------------------------
   // Worker recycling — see .planning/debug/ci-jest-oom.md for the full writeup.
   //
