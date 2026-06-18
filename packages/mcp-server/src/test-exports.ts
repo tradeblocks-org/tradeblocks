@@ -278,11 +278,19 @@ export {
 export { computeFractionalDte } from './utils/option-time.ts';
 export {
   applyQuoteGreeks,
+  applyQuoteGreeksParallel,
   hasQuoteGreeks,
   OPTION_QUOTE_GREEKS_REVISION,
   type QuoteGreeksMode,
   type QuoteGreeksSource,
 } from './utils/option-quote-greeks.ts';
+export {
+  IvSolverPool,
+  getSharedIvSolverPool,
+  destroySharedIvSolverPool,
+  type IvSolveJob,
+  type IvSolveJobResult,
+} from './utils/iv-solver-pool.ts';
 export {
   describeReadParquetColumns,
   quoteParquetCanonicalProjection,

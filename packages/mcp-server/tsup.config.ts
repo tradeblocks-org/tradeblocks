@@ -31,4 +31,9 @@ export default defineConfig([
     // Bundle workspace package content
     noExternal: [/^@tradeblocks\//],
   }
+  // iv-solver-worker is NOT a tsup entry — tsup's multi-entry code-splitting
+  // breaks the worker's self-containment and drops its side-effect message
+  // handler. It is built as a standalone esbuild bundle (see the
+  // build:iv-worker script in package.json), one flat file per output dir, so
+  // the worker pool can spawn it as a sibling of the runtime that loads it.
 ]);
