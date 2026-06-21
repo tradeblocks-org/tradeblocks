@@ -1,6 +1,6 @@
 {
   "name": "tradeblocks-mcp",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "MCP server for options trade analysis",
   "author": "David Romeo <davidmromeo@gmail.com>",
   "type": "module",
