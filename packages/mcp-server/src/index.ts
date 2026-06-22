@@ -384,10 +384,27 @@ export async function startTradeBlocksMcp(
   process.on("SIGTERM", shutdown);
 }
 
-const entrypoint = process.argv[1] ? path.resolve(process.argv[1]) : "";
-const currentFile = fileURLToPath(import.meta.url);
+// Resolve the entrypoint path to the actual file that was executed
+// Needed in case command is executed via symlink, often used by node version managers.
+async function resolveEntrypointPath(filePath: string): Promise<string> {
+  const resolved = path.resolve(filePath);
+  try {
+    return await fs.realpath(resolved);
+  } catch {
+    return resolved;
+  }
+}
 
-if (entrypoint === currentFile) {
+async function isDirectEntrypoint(): Promise<boolean> {
+  if (!process.argv[1]) return false;
+
+  const entrypoint = await resolveEntrypointPath(process.argv[1]);
+  const currentFile = await resolveEntrypointPath(fileURLToPath(import.meta.url));
+
+  return entrypoint === currentFile;
+}
+
+if (await isDirectEntrypoint()) {
   startTradeBlocksMcp().catch((error) => {
     console.error("Error:", error.message || error);
     process.exit(1);
