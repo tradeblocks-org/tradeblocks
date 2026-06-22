@@ -13,7 +13,10 @@ describe("MarketIngestor.computeVixContext", () => {
   let conn: Awaited<ReturnType<DuckDBInstance["connect"]>>;
 
   beforeEach(async () => {
-    dataDir = join(tmpdir(), `ingestor-vix-ctx-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    dataDir = join(
+      tmpdir(),
+      `ingestor-vix-ctx-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     mkdirSync(dataDir, { recursive: true });
     instance = await DuckDBInstance.create(":memory:");
     conn = await instance.connect();
@@ -22,7 +25,11 @@ describe("MarketIngestor.computeVixContext", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -35,7 +42,9 @@ describe("MarketIngestor.computeVixContext", () => {
     const ingestor = new MarketIngestor({
       stores,
       dataRoot: dataDir,
-      providerFactory: () => { throw new Error("should not call provider"); },
+      providerFactory: () => {
+        throw new Error("should not call provider");
+      },
     });
 
     const result = await ingestor.computeVixContext({

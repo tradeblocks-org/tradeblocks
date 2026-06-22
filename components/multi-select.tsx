@@ -1,11 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import {
-  CheckIcon,
-  ChevronDown,
-  WandSparkles,
-  XCircle,
-  XIcon,
-} from "lucide-react";
+import { CheckIcon, ChevronDown, WandSparkles, XCircle, XIcon } from "lucide-react";
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,18 +13,9 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, truncateStrategyName } from "@tradeblocks/lib";
 
 /**
@@ -115,10 +100,8 @@ interface MultiSelectGroup {
  * Props for MultiSelect component
  */
 interface MultiSelectProps
-  extends Omit<
-      React.ButtonHTMLAttributes<HTMLButtonElement>,
-      "animationConfig"
-    >,
+  extends
+    Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "animationConfig">,
     VariantProps<typeof multiSelectVariants> {
   /**
    * An array of option objects or groups to be displayed in the multi-select component.
@@ -339,10 +322,9 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       closeOnSelect = false,
       ...props
     },
-    ref
+    ref,
   ) => {
-    const [selectedValues, setSelectedValues] =
-      React.useState<string[]>(defaultValue);
+    const [selectedValues, setSelectedValues] = React.useState<string[]>(defaultValue);
     const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
     const [isAnimating, setIsAnimating] = React.useState(false);
     const [searchValue, setSearchValue] = React.useState("");
@@ -363,7 +345,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
           setTimeout(() => setPoliteMessage(""), 100);
         }
       },
-      []
+      [],
     );
 
     const multiSelectId = React.useId();
@@ -374,23 +356,18 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     const prevDefaultValueRef = React.useRef<string[]>(defaultValue);
 
     const isGroupedOptions = React.useCallback(
-      (
-        opts: MultiSelectOption[] | MultiSelectGroup[]
-      ): opts is MultiSelectGroup[] => {
+      (opts: MultiSelectOption[] | MultiSelectGroup[]): opts is MultiSelectGroup[] => {
         return opts.length > 0 && "heading" in opts[0];
       },
-      []
+      [],
     );
 
-    const arraysEqual = React.useCallback(
-      (a: string[], b: string[]): boolean => {
-        if (a.length !== b.length) return false;
-        const sortedA = [...a].sort();
-        const sortedB = [...b].sort();
-        return sortedA.every((val, index) => val === sortedB[index]);
-      },
-      []
-    );
+    const arraysEqual = React.useCallback((a: string[], b: string[]): boolean => {
+      if (a.length !== b.length) return false;
+      const sortedA = [...a].sort();
+      const sortedB = [...b].sort();
+      return sortedA.every((val, index) => val === sortedB[index]);
+    }, []);
 
     const resetToDefault = React.useCallback(() => {
       setSelectedValues(defaultValue);
@@ -430,12 +407,10 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
           }
         },
       }),
-      [resetToDefault, selectedValues, onValueChange]
+      [resetToDefault, selectedValues, onValueChange],
     );
 
-    const [screenSize, setScreenSize] = React.useState<
-      "mobile" | "tablet" | "desktop"
-    >("desktop");
+    const [screenSize, setScreenSize] = React.useState<"mobile" | "tablet" | "desktop">("desktop");
 
     React.useEffect(() => {
       if (typeof window === "undefined") return;
@@ -493,9 +468,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       if (animationConfig?.badgeAnimation) {
         switch (animationConfig.badgeAnimation) {
           case "bounce":
-            return isAnimating
-              ? "animate-bounce"
-              : "hover:-translate-y-1 hover:scale-110";
+            return isAnimating ? "animate-bounce" : "hover:-translate-y-1 hover:scale-110";
           case "pulse":
             return "hover:animate-pulse";
           case "wiggle":
@@ -556,18 +529,14 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         }
       });
       if (process.env.NODE_ENV === "development" && duplicates.length > 0) {
-        const action = deduplicateOptions
-          ? "automatically removed"
-          : "detected";
+        const action = deduplicateOptions ? "automatically removed" : "detected";
         console.warn(
-          `MultiSelect: Duplicate option values ${action}: ${duplicates.join(
-            ", "
-          )}. ` +
+          `MultiSelect: Duplicate option values ${action}: ${duplicates.join(", ")}. ` +
             `${
               deduplicateOptions
                 ? "Duplicates have been removed automatically."
                 : "This may cause unexpected behavior. Consider setting 'deduplicateOptions={true}' or ensure all option values are unique."
-            }`
+            }`,
         );
       }
       return deduplicateOptions ? uniqueOptions : allOptions;
@@ -577,13 +546,11 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       (value: string): MultiSelectOption | undefined => {
         const option = getAllOptions().find((option) => option.value === value);
         if (!option && process.env.NODE_ENV === "development") {
-          console.warn(
-            `MultiSelect: Option with value "${value}" not found in options list`
-          );
+          console.warn(`MultiSelect: Option with value "${value}" not found in options list`);
         }
         return option;
       },
-      [getAllOptions]
+      [getAllOptions],
     );
 
     const filteredOptions = React.useMemo(() => {
@@ -595,10 +562,8 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
             ...group,
             options: group.options.filter(
               (option) =>
-                option.label
-                  .toLowerCase()
-                  .includes(searchValue.toLowerCase()) ||
-                option.value.toLowerCase().includes(searchValue.toLowerCase())
+                option.label.toLowerCase().includes(searchValue.toLowerCase()) ||
+                option.value.toLowerCase().includes(searchValue.toLowerCase()),
             ),
           }))
           .filter((group) => group.options.length > 0);
@@ -606,13 +571,11 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       return options.filter(
         (option) =>
           option.label.toLowerCase().includes(searchValue.toLowerCase()) ||
-          option.value.toLowerCase().includes(searchValue.toLowerCase())
+          option.value.toLowerCase().includes(searchValue.toLowerCase()),
       );
     }, [options, searchValue, searchable, isGroupedOptions]);
 
-    const handleInputKeyDown = (
-      event: React.KeyboardEvent<HTMLInputElement>
-    ) => {
+    const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Enter") {
         setIsPopoverOpen(true);
       } else if (event.key === "Backspace" && !event.currentTarget.value) {
@@ -650,10 +613,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 
     const clearExtraOptions = () => {
       if (disabled) return;
-      const newSelectedValues = selectedValues.slice(
-        0,
-        responsiveSettings.maxCount
-      );
+      const newSelectedValues = selectedValues.slice(0, responsiveSettings.maxCount);
       setSelectedValues(newSelectedValues);
       onValueChange(newSelectedValues);
     };
@@ -713,24 +673,20 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         if (diff > 0) {
           const addedItems = selectedValues.slice(-diff);
           const addedLabels = addedItems
-            .map(
-              (value) => allOptions.find((opt) => opt.value === value)?.label
-            )
+            .map((value) => allOptions.find((opt) => opt.value === value)?.label)
             .filter(Boolean);
 
           if (addedLabels.length === 1) {
             announce(
-              `${addedLabels[0]} selected. ${selectedCount} of ${totalOptions} options selected.`
+              `${addedLabels[0]} selected. ${selectedCount} of ${totalOptions} options selected.`,
             );
           } else {
             announce(
-              `${addedLabels.length} options selected. ${selectedCount} of ${totalOptions} total selected.`
+              `${addedLabels.length} options selected. ${selectedCount} of ${totalOptions} total selected.`,
             );
           }
         } else if (diff < 0) {
-          announce(
-            `Option removed. ${selectedCount} of ${totalOptions} options selected.`
-          );
+          announce(`Option removed. ${selectedCount} of ${totalOptions} options selected.`);
         }
         prevSelectedCount.current = selectedCount;
       }
@@ -738,7 +694,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       if (isPopoverOpen !== prevIsOpen.current) {
         if (isPopoverOpen) {
           announce(
-            `Dropdown opened. ${totalOptions} options available. Use arrow keys to navigate.`
+            `Dropdown opened. ${totalOptions} options available. Use arrow keys to navigate.`,
           );
         } else {
           announce("Dropdown closed.");
@@ -746,21 +702,16 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         prevIsOpen.current = isPopoverOpen;
       }
 
-      if (
-        searchValue !== prevSearchValue.current &&
-        searchValue !== undefined
-      ) {
+      if (searchValue !== prevSearchValue.current && searchValue !== undefined) {
         if (searchValue && isPopoverOpen) {
           const filteredCount = allOptions.filter(
             (opt) =>
               opt.label.toLowerCase().includes(searchValue.toLowerCase()) ||
-              opt.value.toLowerCase().includes(searchValue.toLowerCase())
+              opt.value.toLowerCase().includes(searchValue.toLowerCase()),
           ).length;
 
           announce(
-            `${filteredCount} option${
-              filteredCount === 1 ? "" : "s"
-            } found for "${searchValue}"`
+            `${filteredCount} option${filteredCount === 1 ? "" : "s"} found for "${searchValue}"`,
           );
         }
         prevSearchValue.current = searchValue;
@@ -778,14 +729,9 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
           </div>
         </div>
 
-        <Popover
-          open={isPopoverOpen}
-          onOpenChange={setIsPopoverOpen}
-          modal={modalPopover}
-        >
+        <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen} modal={modalPopover}>
           <div id={triggerDescriptionId} className="sr-only">
-            Multi-select dropdown. Use arrow keys to navigate, Enter to select,
-            and Escape to close.
+            Multi-select dropdown. Use arrow keys to navigate, Enter to select, and Escape to close.
           </div>
           <div id={selectedCountId} className="sr-only" aria-live="polite">
             {selectedValues.length === 0
@@ -818,7 +764,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                 responsiveSettings.compactMode && "min-h-8 text-sm",
                 screenSize === "mobile" && "min-h-12 text-base",
                 disabled && "opacity-50 cursor-not-allowed",
-                className
+                className,
               )}
               style={{
                 ...widthConstraints,
@@ -831,10 +777,8 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                     <div
                       className={cn(
                         "flex items-center gap-1",
-                        singleLine
-                          ? "overflow-x-auto multiselect-singleline-scroll"
-                          : "flex-wrap",
-                        responsiveSettings.compactMode && "gap-0.5"
+                        singleLine ? "overflow-x-auto multiselect-singleline-scroll" : "flex-wrap",
+                        responsiveSettings.compactMode && "gap-0.5",
                       )}
                       style={
                         singleLine
@@ -845,145 +789,118 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                       }
                     >
                       {selectedValues
-                      .slice(0, responsiveSettings.maxCount)
-                      .map((value) => {
-                        const option = getOptionByValue(value);
-                        const IconComponent = option?.icon;
-                        const customStyle = option?.style;
-                        if (!option) {
-                          return null;
-                        }
-                        const badgeStyle: React.CSSProperties = {
-                          animationDuration: `${animation}s`,
-                          ...(customStyle?.badgeColor && {
-                            backgroundColor: customStyle.badgeColor,
-                          }),
-                          ...(customStyle?.gradient && {
-                            background: customStyle.gradient,
-                            color: "white",
-                          }),
-                        };
-                        const truncatedLabel = truncateStrategyName(
-                          option.label,
-                          40
-                        );
-                        const shouldShowTooltip =
-                          option.label.length > 40;
+                        .slice(0, responsiveSettings.maxCount)
+                        .map((value) => {
+                          const option = getOptionByValue(value);
+                          const IconComponent = option?.icon;
+                          const customStyle = option?.style;
+                          if (!option) {
+                            return null;
+                          }
+                          const badgeStyle: React.CSSProperties = {
+                            animationDuration: `${animation}s`,
+                            ...(customStyle?.badgeColor && {
+                              backgroundColor: customStyle.badgeColor,
+                            }),
+                            ...(customStyle?.gradient && {
+                              background: customStyle.gradient,
+                              color: "white",
+                            }),
+                          };
+                          const truncatedLabel = truncateStrategyName(option.label, 40);
+                          const shouldShowTooltip = option.label.length > 40;
 
-                        const badgeElement = (
-                          <Badge
-                            className={cn(
-                              getBadgeAnimationClass(),
-                              multiSelectVariants({ variant }),
-                              customStyle?.gradient &&
-                                "text-white border-transparent",
-                              responsiveSettings.compactMode &&
-                                "text-xs px-1.5 py-0.5",
-                              screenSize === "mobile" &&
-                                "max-w-[120px] truncate",
-                              singleLine && "flex-shrink-0 whitespace-nowrap",
-                              "[&>svg]:pointer-events-auto"
-                            )}
-                            style={{
-                              ...badgeStyle,
-                              animationDuration: `${
-                                animationConfig?.duration || animation
-                              }s`,
-                              animationDelay: `${animationConfig?.delay || 0}s`,
-                            }}
-                          >
-                            {IconComponent && !responsiveSettings.hideIcons && (
-                              <IconComponent
-                                className={cn(
-                                  "h-4 w-4 mr-2",
-                                  responsiveSettings.compactMode &&
-                                    "h-3 w-3 mr-1",
-                                  customStyle?.iconColor && "text-current"
-                                )}
-                                {...(customStyle?.iconColor && {
-                                  style: { color: customStyle.iconColor },
-                                })}
-                              />
-                            )}
-                            <span
+                          const badgeElement = (
+                            <Badge
                               className={cn(
-                                screenSize === "mobile" && "truncate"
+                                getBadgeAnimationClass(),
+                                multiSelectVariants({ variant }),
+                                customStyle?.gradient && "text-white border-transparent",
+                                responsiveSettings.compactMode && "text-xs px-1.5 py-0.5",
+                                screenSize === "mobile" && "max-w-[120px] truncate",
+                                singleLine && "flex-shrink-0 whitespace-nowrap",
+                                "[&>svg]:pointer-events-auto",
                               )}
-                            >
-                              {truncatedLabel}
-                            </span>
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                toggleOption(value);
+                              style={{
+                                ...badgeStyle,
+                                animationDuration: `${animationConfig?.duration || animation}s`,
+                                animationDelay: `${animationConfig?.delay || 0}s`,
                               }}
-                              onKeyDown={(event) => {
-                                if (
-                                  event.key === "Enter" ||
-                                  event.key === " "
-                                ) {
-                                  event.preventDefault();
+                            >
+                              {IconComponent && !responsiveSettings.hideIcons && (
+                                <IconComponent
+                                  className={cn(
+                                    "h-4 w-4 mr-2",
+                                    responsiveSettings.compactMode && "h-3 w-3 mr-1",
+                                    customStyle?.iconColor && "text-current",
+                                  )}
+                                  {...(customStyle?.iconColor && {
+                                    style: { color: customStyle.iconColor },
+                                  })}
+                                />
+                              )}
+                              <span className={cn(screenSize === "mobile" && "truncate")}>
+                                {truncatedLabel}
+                              </span>
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={(event) => {
                                   event.stopPropagation();
                                   toggleOption(value);
-                                }
-                              }}
-                              aria-label={`Remove ${option.label} from selection`}
-                              className="ml-2 h-4 w-4 cursor-pointer hover:bg-white/20 rounded-sm p-0.5 -m-0.5 focus:outline-none focus:ring-1 focus:ring-white/50"
-                            >
-                              <XCircle
-                                className={cn(
-                                  "h-3 w-3",
-                                  responsiveSettings.compactMode &&
-                                    "h-2.5 w-2.5"
-                                )}
-                              />
-                            </div>
-                          </Badge>
-                        );
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    toggleOption(value);
+                                  }
+                                }}
+                                aria-label={`Remove ${option.label} from selection`}
+                                className="ml-2 h-4 w-4 cursor-pointer hover:bg-white/20 rounded-sm p-0.5 -m-0.5 focus:outline-none focus:ring-1 focus:ring-white/50"
+                              >
+                                <XCircle
+                                  className={cn(
+                                    "h-3 w-3",
+                                    responsiveSettings.compactMode && "h-2.5 w-2.5",
+                                  )}
+                                />
+                              </div>
+                            </Badge>
+                          );
 
-                        return shouldShowTooltip ? (
-                          <Tooltip key={value}>
-                            <TooltipTrigger asChild>
-                              {badgeElement}
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">{option.label}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <React.Fragment key={value}>
-                            {badgeElement}
-                          </React.Fragment>
-                        );
-                      })
-                      .filter(Boolean)}
+                          return shouldShowTooltip ? (
+                            <Tooltip key={value}>
+                              <TooltipTrigger asChild>{badgeElement}</TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">{option.label}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <React.Fragment key={value}>{badgeElement}</React.Fragment>
+                          );
+                        })
+                        .filter(Boolean)}
                       {selectedValues.length > responsiveSettings.maxCount && (
                         <Badge
                           className={cn(
                             "bg-transparent text-foreground border-foreground/1 hover:bg-transparent",
                             getBadgeAnimationClass(),
                             multiSelectVariants({ variant }),
-                            responsiveSettings.compactMode &&
-                              "text-xs px-1.5 py-0.5",
+                            responsiveSettings.compactMode && "text-xs px-1.5 py-0.5",
                             singleLine && "flex-shrink-0 whitespace-nowrap",
-                            "[&>svg]:pointer-events-auto"
+                            "[&>svg]:pointer-events-auto",
                           )}
                           style={{
-                            animationDuration: `${
-                              animationConfig?.duration || animation
-                            }s`,
+                            animationDuration: `${animationConfig?.duration || animation}s`,
                             animationDelay: `${animationConfig?.delay || 0}s`,
                           }}
                         >
-                          {`+ ${
-                            selectedValues.length - responsiveSettings.maxCount
-                          } more`}
+                          {`+ ${selectedValues.length - responsiveSettings.maxCount} more`}
                           <XCircle
                             className={cn(
                               "ml-2 h-4 w-4 cursor-pointer",
-                              responsiveSettings.compactMode && "ml-1 h-3 w-3"
+                              responsiveSettings.compactMode && "ml-1 h-3 w-3",
                             )}
                             onClick={(event) => {
                               event.stopPropagation();
@@ -1014,10 +931,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                     >
                       <XIcon className="h-4 w-4" />
                     </div>
-                    <Separator
-                      orientation="vertical"
-                      className="flex min-h-6 h-full"
-                    />
+                    <Separator orientation="vertical" className="flex min-h-6 h-full" />
                     <ChevronDown
                       className="h-4 mx-2 cursor-pointer text-muted-foreground"
                       aria-hidden="true"
@@ -1026,9 +940,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                 </div>
               ) : (
                 <div className="flex items-center justify-between w-full mx-auto">
-                  <span className="text-sm text-muted-foreground mx-3">
-                    {placeholder}
-                  </span>
+                  <span className="text-sm text-muted-foreground mx-3">{placeholder}</span>
                   <ChevronDown className="h-4 cursor-pointer text-muted-foreground mx-2" />
                 </div>
               )}
@@ -1045,7 +957,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
               screenSize === "mobile" && "w-[85vw] max-w-[280px]",
               screenSize === "tablet" && "w-[70vw] max-w-md",
               screenSize === "desktop" && "min-w-[300px]",
-              popoverClassName
+              popoverClassName,
             )}
             style={{
               animationDuration: `${animationConfig?.duration || animation}s`,
@@ -1077,12 +989,10 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                 className={cn(
                   "max-h-[40vh] overflow-y-auto multiselect-scrollbar",
                   screenSize === "mobile" && "max-h-[50vh]",
-                  "overscroll-behavior-y-contain"
+                  "overscroll-behavior-y-contain",
                 )}
               >
-                <CommandEmpty>
-                  {emptyIndicator || "No results found."}
-                </CommandEmpty>{" "}
+                <CommandEmpty>{emptyIndicator || "No results found."}</CommandEmpty>{" "}
                 {!hideSelectAll && !searchValue && (
                   <CommandGroup>
                     <CommandItem
@@ -1093,19 +1003,16 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                         selectedValues.length ===
                         getAllOptions().filter((opt) => !opt.disabled).length
                       }
-                      aria-label={`Select all ${
-                        getAllOptions().length
-                      } options`}
+                      aria-label={`Select all ${getAllOptions().length} options`}
                       className="cursor-pointer"
                     >
                       <div
                         className={cn(
                           "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
                           selectedValues.length ===
-                            getAllOptions().filter((opt) => !opt.disabled)
-                              .length
+                            getAllOptions().filter((opt) => !opt.disabled).length
                             ? "bg-primary text-primary-foreground"
-                            : "opacity-50 [&_svg]:invisible"
+                            : "opacity-50 [&_svg]:invisible",
                         )}
                         aria-hidden="true"
                       >
@@ -1113,10 +1020,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                       </div>
                       <span>
                         (Select All
-                        {getAllOptions().length > 20
-                          ? ` - ${getAllOptions().length} options`
-                          : ""}
-                        )
+                        {getAllOptions().length > 20 ? ` - ${getAllOptions().length} options` : ""})
                       </span>
                     </CommandItem>
                   </CommandGroup>
@@ -1125,9 +1029,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                   filteredOptions.map((group) => (
                     <CommandGroup key={group.heading} heading={group.heading}>
                       {group.options.map((option) => {
-                        const isSelected = selectedValues.includes(
-                          option.value
-                        );
+                        const isSelected = selectedValues.includes(option.value);
                         return (
                           <CommandItem
                             key={option.value}
@@ -1140,7 +1042,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                             }${option.disabled ? ", disabled" : ""}`}
                             className={cn(
                               "cursor-pointer",
-                              option.disabled && "opacity-50 cursor-not-allowed"
+                              option.disabled && "opacity-50 cursor-not-allowed",
                             )}
                             disabled={option.disabled}
                           >
@@ -1149,7 +1051,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
                                 isSelected
                                   ? "bg-primary text-primary-foreground"
-                                  : "opacity-50 [&_svg]:invisible"
+                                  : "opacity-50 [&_svg]:invisible",
                               )}
                               aria-hidden="true"
                             >
@@ -1163,11 +1065,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                             )}
                             <span
                               className="truncate max-w-[300px]"
-                              title={
-                                option.label.length > 40
-                                  ? option.label
-                                  : undefined
-                              }
+                              title={option.label.length > 40 ? option.label : undefined}
                             >
                               {option.label}
                             </span>
@@ -1192,7 +1090,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                           }${option.disabled ? ", disabled" : ""}`}
                           className={cn(
                             "cursor-pointer",
-                            option.disabled && "opacity-50 cursor-not-allowed"
+                            option.disabled && "opacity-50 cursor-not-allowed",
                           )}
                           disabled={option.disabled}
                         >
@@ -1201,7 +1099,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                               "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
                               isSelected
                                 ? "bg-primary text-primary-foreground"
-                                : "opacity-50 [&_svg]:invisible"
+                                : "opacity-50 [&_svg]:invisible",
                             )}
                             aria-hidden="true"
                           >
@@ -1215,11 +1113,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                           )}
                           <span
                             className="truncate max-w-[300px]"
-                            title={
-                              option.label.length > 40
-                                ? option.label
-                                : undefined
-                            }
+                            title={option.label.length > 40 ? option.label : undefined}
                           >
                             {option.label}
                           </span>
@@ -1239,10 +1133,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                         >
                           Clear
                         </CommandItem>
-                        <Separator
-                          orientation="vertical"
-                          className="flex min-h-6 h-full"
-                        />
+                        <Separator orientation="vertical" className="flex min-h-6 h-full" />
                       </>
                     )}
                     <CommandItem
@@ -1260,7 +1151,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
             <WandSparkles
               className={cn(
                 "cursor-pointer my-2 text-foreground bg-background w-3 h-3",
-                isAnimating ? "" : "text-muted-foreground"
+                isAnimating ? "" : "text-muted-foreground",
               )}
               onClick={() => setIsAnimating(!isAnimating)}
             />
@@ -1268,7 +1159,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         </Popover>
       </>
     );
-  }
+  },
 );
 
 MultiSelect.displayName = "MultiSelect";

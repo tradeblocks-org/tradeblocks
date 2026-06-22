@@ -100,9 +100,7 @@ export function StrategyKellyTable({
                     <TableCell>
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={(checked) =>
-                          onSelectionChange(strategy.name, !!checked)
-                        }
+                        onCheckedChange={(checked) => onSelectionChange(strategy.name, !!checked)}
                         aria-label={`Select ${strategy.name}`}
                       />
                     </TableCell>
@@ -118,9 +116,7 @@ export function StrategyKellyTable({
                       <div className="flex items-center gap-3">
                         <Slider
                           value={[kellyValue]}
-                          onValueChange={(values) =>
-                            onKellyChange(strategy.name, values[0])
-                          }
+                          onValueChange={(values) => onKellyChange(strategy.name, values[0])}
                           min={0}
                           max={200}
                           step={1}
@@ -132,12 +128,8 @@ export function StrategyKellyTable({
                             type="number"
                             inputMode="numeric"
                             value={kellyValue}
-                            onChange={(e) =>
-                              onKellyChange(strategy.name, Number(e.target.value))
-                            }
-                            onBlur={(e) =>
-                              onKellyChange(strategy.name, Number(e.target.value))
-                            }
+                            onChange={(e) => onKellyChange(strategy.name, Number(e.target.value))}
+                            onBlur={(e) => onKellyChange(strategy.name, Number(e.target.value))}
                             min={0}
                             max={200}
                             step={1}

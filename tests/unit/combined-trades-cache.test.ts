@@ -22,7 +22,7 @@ function createMockTrade(overrides: Partial<Trade> = {}): Trade {
     openingPrice: 4500,
     legs: "CALL 4500",
     premium: 100,
-    premiumPrecision: 'dollars',
+    premiumPrecision: "dollars",
     closingPrice: 50,
     dateClosed: new Date("2024-01-20"),
     timeClosed: "15:00:00",
@@ -101,9 +101,7 @@ describe("Combined Trades Cache", () => {
     });
 
     it("should not throw error when deleting non-existent cache", async () => {
-      await expect(
-        deleteCombinedTradesCache("non-existent-block")
-      ).resolves.not.toThrow();
+      await expect(deleteCombinedTradesCache("non-existent-block")).resolves.not.toThrow();
     });
   });
 

@@ -25,10 +25,7 @@ const DEFAULT_SEARCH_PATHS = [
 /**
  * Search for a file by name in multiple directories
  */
-async function findFile(
-  filename: string,
-  searchPaths: string[]
-): Promise<string | null> {
+async function findFile(filename: string, searchPaths: string[]): Promise<string | null> {
   for (const dir of searchPaths) {
     const fullPath = path.join(dir, filename);
     try {
@@ -59,28 +56,28 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           .string()
           .describe(
             "Path to the CSV file. Can be: (1) absolute path like '/Users/me/data.csv', " +
-            "(2) path with ~ like '~/Downloads/data.csv', or (3) just filename like 'data.csv' " +
-            "(will search Downloads, Desktop, Documents)"
+              "(2) path with ~ like '~/Downloads/data.csv', or (3) just filename like 'data.csv' " +
+              "(will search Downloads, Desktop, Documents)",
           ),
         blockName: z
           .string()
           .describe(
             "Name for the new block. Will be converted to kebab-case for the block ID. " +
-            "Example: 'My Strategy 2024' becomes block ID 'my-strategy-2024'"
+              "Example: 'My Strategy 2024' becomes block ID 'my-strategy-2024'",
           ),
         csvType: z
           .enum(["tradelog", "dailylog", "reportinglog"])
           .default("tradelog")
           .describe(
             "Type of CSV: 'tradelog' (default) for trade records with P/L, " +
-            "'dailylog' for daily portfolio values, 'reportinglog' for actual/reported trades"
+              "'dailylog' for daily portfolio values, 'reportinglog' for actual/reported trades",
           ),
         searchPaths: z
           .array(z.string())
           .optional()
           .describe(
             "Additional directories to search if csvPath is just a filename. " +
-            "Defaults to ~/Downloads, ~/Desktop, ~/Documents"
+              "Defaults to ~/Downloads, ~/Desktop, ~/Documents",
           ),
       }),
     },
@@ -105,7 +102,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
             const searchedDirs = dirsToSearch.join(", ");
             throw new Error(
               `File "${resolvedPath}" not found. Searched: ${searchedDirs}. ` +
-              `Please provide the full path to the file, or move it to one of these directories.`
+                `Please provide the full path to the file, or move it to one of these directories.`,
             );
           }
           resolvedPath = foundPath;
@@ -117,7 +114,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
         } catch {
           throw new Error(
             `File not found: ${resolvedPath}. ` +
-            `Please check the path is correct. If the file is in Downloads, try: ~/Downloads/${path.basename(csvPath)}`
+              `Please check the path is correct. If the file is in Downloads, try: ~/Downloads/${path.basename(csvPath)}`,
           );
         }
 
@@ -159,6 +156,6 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           isError: true,
         };
       }
-    }
+    },
   );
 }

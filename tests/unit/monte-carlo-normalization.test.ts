@@ -14,7 +14,7 @@ import {
 function createMockTrade(
   pl: number,
   numContracts: number,
-  dateOpened: Date = new Date("2024-01-01")
+  dateOpened: Date = new Date("2024-01-01"),
 ): Trade {
   return {
     dateOpened,
@@ -139,8 +139,8 @@ describe("runMonteCarloSimulation with normalization", () => {
     createMockTrade(
       (i % 2 === 0 ? 1 : -1) * (100 + i * 10) * 10, // P&L scaled by 10 contracts
       10, // Always 10 contracts
-      new Date(2024, 0, i + 1)
-    )
+      new Date(2024, 0, i + 1),
+    ),
   );
 
   it("should produce smaller drawdowns with normalization enabled", () => {
@@ -158,18 +158,11 @@ describe("runMonteCarloSimulation with normalization", () => {
       normalizeTo1Lot: true,
     };
 
-    const resultWithoutNorm = runMonteCarloSimulation(
-      multiLotTrades,
-      paramsWithoutNorm
-    );
-    const resultWithNorm = runMonteCarloSimulation(
-      multiLotTrades,
-      paramsWithNorm
-    );
+    const resultWithoutNorm = runMonteCarloSimulation(multiLotTrades, paramsWithoutNorm);
+    const resultWithNorm = runMonteCarloSimulation(multiLotTrades, paramsWithNorm);
 
     // Normalized results should have smaller drawdowns (approximately 1/10th)
-    const avgDrawdownWithoutNorm =
-      resultWithoutNorm.statistics.meanMaxDrawdown;
+    const avgDrawdownWithoutNorm = resultWithoutNorm.statistics.meanMaxDrawdown;
     const avgDrawdownWithNorm = resultWithNorm.statistics.meanMaxDrawdown;
 
     expect(avgDrawdownWithNorm).toBeLessThan(avgDrawdownWithoutNorm);
@@ -198,8 +191,8 @@ describe("runMonteCarloSimulation with normalization", () => {
       createMockTrade(
         (i % 2 === 0 ? 1 : -1) * (100 + i * 10),
         1, // Single contract
-        new Date(2024, 0, i + 1)
-      )
+        new Date(2024, 0, i + 1),
+      ),
     );
 
     const params = {

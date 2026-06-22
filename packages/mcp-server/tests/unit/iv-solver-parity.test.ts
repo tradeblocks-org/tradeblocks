@@ -23,9 +23,7 @@ import {
   applyQuoteGreeksParallel,
   IvSolverPool,
 } from "../../src/test-exports.ts";
-import type {
-  QuoteGreeksContractMeta,
-} from "../../src/utils/option-quote-greeks.ts";
+import type { QuoteGreeksContractMeta } from "../../src/utils/option-quote-greeks.ts";
 
 const TOLERANCE = 1e-9;
 
@@ -169,7 +167,7 @@ function syntheticFixture(): Fixture {
   // Penny mids / wide illiquid wing.
   add("09:36", 0.01, 0.05, 5600, "call", farExp);
   add("09:36", 0.0, 0.05, 5800, "call", farExp); // zero bid (mid = 0.025)
-  add("09:36", 0.05, 0.10, 4500, "put", farExp);
+  add("09:36", 0.05, 0.1, 4500, "put", farExp);
   // Near-expiry (same day) → Bachelier branch.
   add("15:30", 5.0, 5.5, 5150, "call", expiration);
   add("15:30", 4.0, 4.5, 5150, "put", expiration);
@@ -238,8 +236,7 @@ describe("IV solver parity — synthetic edge cases", () => {
 // Real parquet-day fixture (runs locally; skips when data root absent)
 // ---------------------------------------------------------------------------
 
-const DATA_ROOT = process.env.TRADEBLOCKS_PARITY_DATA_ROOT
-  ?? "/home/romeo/tradeblocks-data/market";
+const DATA_ROOT = process.env.TRADEBLOCKS_PARITY_DATA_ROOT ?? "/home/romeo/tradeblocks-data/market";
 const PARITY_DATE = process.env.TRADEBLOCKS_PARITY_DATE ?? "2024-03-15";
 const QUOTE_PARQUET = `${DATA_ROOT}/option_quote_minutes/underlying=SPX/date=${PARITY_DATE}/data.parquet`;
 const CHAIN_GLOB = `${DATA_ROOT}/option_chain/underlying=SPX/date=${PARITY_DATE}/*.parquet`;

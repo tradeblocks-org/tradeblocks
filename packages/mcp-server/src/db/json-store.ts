@@ -23,7 +23,9 @@ import * as path from "path";
 
 /** Check for Node.js ENOENT errors */
 function isEnoent(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as Record<string, unknown>).code === "ENOENT";
+  return (
+    typeof err === "object" && err !== null && (err as Record<string, unknown>).code === "ENOENT"
+  );
 }
 
 /**
@@ -94,8 +96,8 @@ export async function listJsonFiles(dirPath: string, suffix = ".json"): Promise<
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     return entries
-      .filter(e => e.isFile() && e.name.endsWith(suffix))
-      .map(e => path.join(dirPath, e.name))
+      .filter((e) => e.isFile() && e.name.endsWith(suffix))
+      .map((e) => path.join(dirPath, e.name))
       .sort();
   } catch (err: unknown) {
     if (isEnoent(err)) {

@@ -18,10 +18,9 @@ function srcDirPath(): string {
 describe("COV-01 / D-11: no code references market.data_coverage", () => {
   it("zero matches for 'market.data_coverage' under packages/mcp-server/src/", () => {
     const srcDir = srcDirPath();
-    const result = execSync(
-      `grep -rE "market\\.data_coverage" "${srcDir}" || true`,
-      { encoding: "utf8" },
-    );
+    const result = execSync(`grep -rE "market\\.data_coverage" "${srcDir}" || true`, {
+      encoding: "utf8",
+    });
     expect(result.trim()).toBe("");
   });
 

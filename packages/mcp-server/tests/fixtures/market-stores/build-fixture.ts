@@ -42,13 +42,8 @@ export interface BuildFixtureOpts {
  *     mixed-underlying validation branch in `readQuotes` is testable
  *   - Unique tmp directory under `os.tmpdir()` so Parquet writes do not collide
  */
-export async function buildStoreFixture(
-  opts: BuildFixtureOpts,
-): Promise<FixtureHandle> {
-  const tmpDir = join(
-    tmpdir(),
-    `mkt-store-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
+export async function buildStoreFixture(opts: BuildFixtureOpts): Promise<FixtureHandle> {
+  const tmpDir = join(tmpdir(), `mkt-store-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(join(tmpDir, "market"), { recursive: true });
 
   const db = await DuckDBInstance.create(":memory:");

@@ -22,10 +22,7 @@ import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 /**
  * Register analysis block tools
  */
-export function registerAnalysisBlockTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerAnalysisBlockTools(server: McpServer, baseDir: string): void {
   const calculator = new PortfolioStatsCalculator();
 
   // Tool 7: stress_test
@@ -40,7 +37,7 @@ export function registerAnalysisBlockTools(
           .array(z.string())
           .optional()
           .describe(
-            "Specific scenario names to test (e.g., 'covid_crash', 'bear_2022'). If omitted, runs all built-in scenarios."
+            "Specific scenario names to test (e.g., 'covid_crash', 'bear_2022'). If omitted, runs all built-in scenarios.",
           ),
         customScenarios: z
           .array(
@@ -48,7 +45,7 @@ export function registerAnalysisBlockTools(
               name: z.string().describe("Custom scenario name"),
               startDate: z.string().describe("Start date (YYYY-MM-DD)"),
               endDate: z.string().describe("End date (YYYY-MM-DD)"),
-            })
+            }),
           )
           .optional()
           .describe("User-defined scenarios with custom date ranges"),
@@ -57,21 +54,18 @@ export function registerAnalysisBlockTools(
           .optional()
           .default(false)
           .describe(
-            "Include scenarios with no trades in the results. Default false - only shows scenarios with data coverage."
+            "Include scenarios with no trades in the results. Default false - only shows scenarios with data coverage.",
           ),
       }),
     },
-    withSyncedBlock(
-      baseDir,
-      async ({ blockId, scenarios, customScenarios, includeEmpty }) => {
-        try {
-          const block = await loadBlock(baseDir, blockId);
+    withSyncedBlock(baseDir, async ({ blockId, scenarios, customScenarios, includeEmpty }) => {
+      try {
+        const block = await loadBlock(baseDir, blockId);
         const trades = block.trades;
 
         // Get portfolio date range for context and pre-filtering
         const sortedTrades = [...trades].sort(
-          (a, b) =>
-            new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime()
+          (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
         );
         const portfolioStartDate = sortedTrades[0]?.dateOpened
           ? new Date(sortedTrades[0].dateOpened).toISOString().split("T")[0]
@@ -82,15 +76,19 @@ export function registerAnalysisBlockTools(
           : null;
 
         // Build list of scenarios to run
-        const scenariosToRun: Array<{ name: string; startDate: string; endDate: string; description: string; isCustom: boolean }> = [];
+        const scenariosToRun: Array<{
+          name: string;
+          startDate: string;
+          endDate: string;
+          description: string;
+          isCustom: boolean;
+        }> = [];
         const preFilteredScenarioNames: string[] = [];
 
         // Add built-in scenarios
         if (scenarios && scenarios.length > 0) {
           // Validate requested scenarios exist
-          const invalidScenarios = scenarios.filter(
-            (s) => !STRESS_SCENARIOS[s]
-          );
+          const invalidScenarios = scenarios.filter((s) => !STRESS_SCENARIOS[s]);
           if (invalidScenarios.length > 0) {
             return {
               content: [
@@ -152,8 +150,23 @@ export function registerAnalysisBlockTools(
         }
 
         // Calculate stats for each scenario
-        type ScenarioStats = { netPl: number; winRate: number; maxDrawdown: number; profitFactor: number | null; avgWin: number | null; avgLoss: number | null };
-        const scenarioResults: Array<{ name: string; description: string; dateRange: { start: string; end: string }; tradeCount: number; stats: ScenarioStats | null; isCustom: boolean; noCoverage?: boolean }> = [];
+        type ScenarioStats = {
+          netPl: number;
+          winRate: number;
+          maxDrawdown: number;
+          profitFactor: number | null;
+          avgWin: number | null;
+          avgLoss: number | null;
+        };
+        const scenarioResults: Array<{
+          name: string;
+          description: string;
+          dateRange: { start: string; end: string };
+          tradeCount: number;
+          stats: ScenarioStats | null;
+          isCustom: boolean;
+          noCoverage?: boolean;
+        }> = [];
 
         let worstScenario: { name: string; netPl: number } | null = null;
         let bestScenario: { name: string; netPl: number } | null = null;
@@ -163,11 +176,7 @@ export function registerAnalysisBlockTools(
 
         for (const scenario of scenariosToRun) {
           // Filter trades to scenario date range
-          const scenarioTrades = filterByDateRange(
-            trades,
-            scenario.startDate,
-            scenario.endDate
-          );
+          const scenarioTrades = filterByDateRange(trades, scenario.startDate, scenario.endDate);
 
           if (scenarioTrades.length === 0) {
             // Genuine coverage gap (had date overlap but zero trades)
@@ -189,7 +198,7 @@ export function registerAnalysisBlockTools(
             const stats = calculator.calculatePortfolioStats(
               scenarioTrades,
               undefined, // No daily logs
-              true // Force trade-based calculations
+              true, // Force trade-based calculations
             );
 
             scenarioResults.push({
@@ -226,7 +235,9 @@ export function registerAnalysisBlockTools(
           scenariosWithTrades,
           scenariosSkipped,
           ...(skippedScenarioNames.length > 0 ? { skippedScenarios: skippedScenarioNames } : {}),
-          ...(preFilteredScenarioNames.length > 0 ? { preFilteredScenarios: preFilteredScenarioNames } : {}),
+          ...(preFilteredScenarioNames.length > 0
+            ? { preFilteredScenarios: preFilteredScenarioNames }
+            : {}),
           worstScenario: worstScenario?.name ?? null,
           bestScenario: bestScenario?.name ?? null,
           portfolioDateRange: {
@@ -237,9 +248,7 @@ export function registerAnalysisBlockTools(
 
         // Brief summary for user display
         const skippedNote =
-          scenariosSkipped > 0
-            ? ` (${scenariosSkipped} skipped - no data coverage)`
-            : "";
+          scenariosSkipped > 0 ? ` (${scenariosSkipped} skipped - no data coverage)` : "";
         const preFilterNote =
           preFilteredScenarioNames.length > 0
             ? ` (${preFilteredScenarioNames.length} excluded - outside portfolio date range)`
@@ -254,20 +263,19 @@ export function registerAnalysisBlockTools(
           availableBuiltInScenarios: Object.keys(STRESS_SCENARIOS),
         };
 
-          return createToolOutput(summary, structuredData);
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Error running stress test: ${(error as Error).message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
+        return createToolOutput(summary, structuredData);
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error running stress test: ${(error as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
       }
-    )
+    }),
   );
 
   // Tool 8: drawdown_attribution
@@ -281,9 +289,7 @@ export function registerAnalysisBlockTools(
         strategy: z
           .string()
           .optional()
-          .describe(
-            "Optional: Filter to specific strategy before calculating drawdown"
-          ),
+          .describe("Optional: Filter to specific strategy before calculating drawdown"),
         topN: z
           .number()
           .int()
@@ -328,15 +334,12 @@ export function registerAnalysisBlockTools(
         // Build equity curve from trades
         // Initial capital = first trade's fundsAtClose - pl
         const firstTrade = sortedTrades[0];
-        const initialCapital =
-          (firstTrade.fundsAtClose ?? 10000) - firstTrade.pl;
+        const initialCapital = (firstTrade.fundsAtClose ?? 10000) - firstTrade.pl;
 
         // Track peak equity and drawdown
         let equity = initialCapital;
         let peakEquity = initialCapital;
-        let peakDate: Date = new Date(
-          firstTrade.dateClosed ?? firstTrade.dateOpened
-        );
+        let peakDate: Date = new Date(firstTrade.dateClosed ?? firstTrade.dateOpened);
         let maxDrawdown = 0;
         let maxDrawdownPct = 0;
         let troughDate: Date | null = null;
@@ -363,8 +366,7 @@ export function registerAnalysisBlockTools(
 
           // Calculate current drawdown from peak
           const drawdown = peakEquity - equity;
-          const drawdownPct =
-            peakEquity > 0 ? (drawdown / peakEquity) * 100 : 0;
+          const drawdownPct = peakEquity > 0 ? (drawdown / peakEquity) * 100 : 0;
 
           equityPoints.push({
             date: closeDate,
@@ -404,7 +406,10 @@ export function registerAnalysisBlockTools(
         });
 
         // Group trades by strategy and calculate attribution
-        const strategyPl = new Map<string, { pl: number; trades: number; wins: number; losses: number }>();
+        const strategyPl = new Map<
+          string,
+          { pl: number; trades: number; wins: number; losses: number }
+        >();
 
         let totalLossDuringDrawdown = 0;
 
@@ -429,10 +434,18 @@ export function registerAnalysisBlockTools(
         // Contribution %: strategy's P/L as % of total loss (most negative = highest contribution)
         const attribution = Array.from(strategyPl.entries())
           .map(([strategyName, data]) => ({
-            strategy: strategyName, pl: data.pl, trades: data.trades, wins: data.wins, losses: data.losses,
-            contributionPct: totalLossDuringDrawdown !== 0 ? Math.abs((data.pl / totalLossDuringDrawdown) * 100) : 0,
+            strategy: strategyName,
+            pl: data.pl,
+            trades: data.trades,
+            wins: data.wins,
+            losses: data.losses,
+            contributionPct:
+              totalLossDuringDrawdown !== 0
+                ? Math.abs((data.pl / totalLossDuringDrawdown) * 100)
+                : 0,
           }))
-          .sort((a, b) => a.pl - b.pl).slice(0, topN);
+          .sort((a, b) => a.pl - b.pl)
+          .slice(0, topN);
 
         // Calculate duration in days
         const durationMs = troughDate.getTime() - drawdownPeakDate.getTime();
@@ -479,7 +492,7 @@ export function registerAnalysisBlockTools(
           isError: true,
         };
       }
-    })
+    }),
   );
 
   // Tool 9: marginal_contribution
@@ -494,7 +507,7 @@ export function registerAnalysisBlockTools(
           .string()
           .optional()
           .describe(
-            "Calculate for specific strategy only. If omitted, calculates for all strategies."
+            "Calculate for specific strategy only. If omitted, calculates for all strategies.",
           ),
         topN: z
           .number()
@@ -503,7 +516,7 @@ export function registerAnalysisBlockTools(
           .max(50)
           .default(5)
           .describe(
-            "Number of top contributors to return when targetStrategy is omitted (default: 5)"
+            "Number of top contributors to return when targetStrategy is omitted (default: 5)",
           ),
       }),
     },
@@ -524,14 +537,12 @@ export function registerAnalysisBlockTools(
         }
 
         // Get unique strategies
-        const strategies = Array.from(
-          new Set(trades.map((t) => t.strategy))
-        ).sort();
+        const strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
 
         // Validate targetStrategy if provided
         if (targetStrategy) {
           const matchedStrategy = strategies.find(
-            (s) => s.toLowerCase() === targetStrategy.toLowerCase()
+            (s) => s.toLowerCase() === targetStrategy.toLowerCase(),
           );
           if (!matchedStrategy) {
             return {
@@ -549,11 +560,9 @@ export function registerAnalysisBlockTools(
         // Edge case: single strategy portfolio
         if (strategies.length === 1) {
           // Use daily logs for baseline when available (consistent with get_statistics)
-          const dailyLogs = block.dailyLogs && block.dailyLogs.length > 0 ? block.dailyLogs : undefined;
-          const baselineStats = calculator.calculatePortfolioStats(
-            trades,
-            dailyLogs,
-          );
+          const dailyLogs =
+            block.dailyLogs && block.dailyLogs.length > 0 ? block.dailyLogs : undefined;
+          const baselineStats = calculator.calculatePortfolioStats(trades, dailyLogs);
 
           const summary = `Marginal Contribution: ${blockId} | Single strategy portfolio - cannot calculate marginal contribution`;
 
@@ -587,33 +596,34 @@ export function registerAnalysisBlockTools(
 
         // Calculate baseline portfolio metrics using ALL trades
         // Use daily logs for baseline when available (consistent with get_statistics)
-        const dailyLogs = block.dailyLogs && block.dailyLogs.length > 0 ? block.dailyLogs : undefined;
-        const baselineStats = calculator.calculatePortfolioStats(
-          trades,
-          dailyLogs,
-        );
+        const dailyLogs =
+          block.dailyLogs && block.dailyLogs.length > 0 ? block.dailyLogs : undefined;
+        const baselineStats = calculator.calculatePortfolioStats(trades, dailyLogs);
 
         // Determine which strategies to analyze
         const strategiesToAnalyze = targetStrategy
-          ? strategies.filter(
-              (s) => s.toLowerCase() === targetStrategy.toLowerCase()
-            )
+          ? strategies.filter((s) => s.toLowerCase() === targetStrategy.toLowerCase())
           : strategies;
 
         // Calculate marginal contribution for each strategy
         // NOTE: Baseline uses daily-log Sharpe (matching get_statistics), but "without" uses
         // trade-based Sharpe because daily logs include the removed strategy's impact.
         // This means marginal deltas are mixed-basis, but the baseline values match get_statistics.
-        type Contribution = { strategy: string; trades: number; marginalSharpe: number | null; marginalSortino: number | null };
+        type Contribution = {
+          strategy: string;
+          trades: number;
+          marginalSharpe: number | null;
+          marginalSortino: number | null;
+        };
         const contributions: Contribution[] = [];
 
         for (const strategy of strategiesToAnalyze) {
           // Filter OUT this strategy's trades (portfolio WITHOUT this strategy)
           const tradesWithout = trades.filter(
-            (t) => t.strategy.toLowerCase() !== strategy.toLowerCase()
+            (t) => t.strategy.toLowerCase() !== strategy.toLowerCase(),
           );
           const strategyTrades = trades.filter(
-            (t) => t.strategy.toLowerCase() === strategy.toLowerCase()
+            (t) => t.strategy.toLowerCase() === strategy.toLowerCase(),
           );
 
           // Edge case: removing this strategy leaves nothing
@@ -632,14 +642,20 @@ export function registerAnalysisBlockTools(
           const withoutStats = calculator.calculatePortfolioStats(
             tradesWithout,
             undefined,
-            true // Force trade-based - daily logs include the removed strategy's impact
+            true, // Force trade-based - daily logs include the removed strategy's impact
           );
 
           // Marginal contribution = baseline - without (positive = improves, negative = hurts)
-          const hasValidSharpe = baselineStats.sharpeRatio != null && withoutStats.sharpeRatio != null;
-          const hasValidSortino = baselineStats.sortinoRatio != null && withoutStats.sortinoRatio != null;
-          const marginalSharpe = hasValidSharpe ? baselineStats.sharpeRatio! - withoutStats.sharpeRatio! : null;
-          const marginalSortino = hasValidSortino ? baselineStats.sortinoRatio! - withoutStats.sortinoRatio! : null;
+          const hasValidSharpe =
+            baselineStats.sharpeRatio != null && withoutStats.sharpeRatio != null;
+          const hasValidSortino =
+            baselineStats.sortinoRatio != null && withoutStats.sortinoRatio != null;
+          const marginalSharpe = hasValidSharpe
+            ? baselineStats.sharpeRatio! - withoutStats.sharpeRatio!
+            : null;
+          const marginalSortino = hasValidSortino
+            ? baselineStats.sortinoRatio! - withoutStats.sortinoRatio!
+            : null;
 
           contributions.push({
             strategy,
@@ -659,19 +675,22 @@ export function registerAnalysisBlockTools(
         });
 
         // Apply topN limit (only when not filtering by targetStrategy)
-        const limitedContributions = targetStrategy
-          ? contributions
-          : contributions.slice(0, topN);
+        const limitedContributions = targetStrategy ? contributions : contributions.slice(0, topN);
 
         // Find most and least beneficial
         const validContributions = contributions.filter((c) => c.marginalSharpe !== null);
-        const mostBeneficial = validContributions.length > 0
-          ? { strategy: validContributions[0].strategy, sharpe: validContributions[0].marginalSharpe }
-          : null;
+        const mostBeneficial =
+          validContributions.length > 0
+            ? {
+                strategy: validContributions[0].strategy,
+                sharpe: validContributions[0].marginalSharpe,
+              }
+            : null;
         const lastValid = validContributions[validContributions.length - 1];
-        const leastBeneficial = validContributions.length > 0
-          ? { strategy: lastValid.strategy, sharpe: lastValid.marginalSharpe }
-          : null;
+        const leastBeneficial =
+          validContributions.length > 0
+            ? { strategy: lastValid.strategy, sharpe: lastValid.marginalSharpe }
+            : null;
 
         // Build summary line
         const summaryParts: string[] = [`Marginal Contribution: ${blockId}`];
@@ -680,9 +699,7 @@ export function registerAnalysisBlockTools(
             mostBeneficial.sharpe >= 0
               ? `+${formatRatio(mostBeneficial.sharpe)}`
               : formatRatio(mostBeneficial.sharpe);
-          summaryParts.push(
-            `Top: ${mostBeneficial.strategy} (Sharpe ${sharpeStr})`
-          );
+          summaryParts.push(`Top: ${mostBeneficial.strategy} (Sharpe ${sharpeStr})`);
         }
         if (
           leastBeneficial &&
@@ -693,9 +710,7 @@ export function registerAnalysisBlockTools(
             leastBeneficial.sharpe >= 0
               ? `+${formatRatio(leastBeneficial.sharpe)}`
               : formatRatio(leastBeneficial.sharpe);
-          summaryParts.push(
-            `Worst: ${leastBeneficial.strategy} (Sharpe ${sharpeStr})`
-          );
+          summaryParts.push(`Worst: ${leastBeneficial.strategy} (Sharpe ${sharpeStr})`);
         }
         const summary = summaryParts.join(" | ");
 
@@ -728,6 +743,6 @@ export function registerAnalysisBlockTools(
           isError: true,
         };
       }
-    })
+    }),
   );
 }

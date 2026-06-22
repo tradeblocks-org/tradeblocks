@@ -98,10 +98,7 @@ export function formatPercent(value: number, decimals: number = 2): string {
 /**
  * Format a ratio with specified decimals
  */
-export function formatRatio(
-  value: number | undefined,
-  decimals: number = 2
-): string {
+export function formatRatio(value: number | undefined, decimals: number = 2): string {
   if (value === undefined || value === null || !isFinite(value)) {
     return "N/A";
   }

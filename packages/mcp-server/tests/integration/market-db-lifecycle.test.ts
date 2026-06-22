@@ -16,7 +16,13 @@ import { tmpdir } from "os";
 import { DuckDBInstance } from "@duckdb/node-api";
 
 // @ts-expect-error - importing from bundled output
-import { getConnection, closeConnection, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../../src/test-exports.ts";
+import {
+  getConnection,
+  closeConnection,
+  upgradeToReadWrite,
+  downgradeToReadOnly,
+  getConnectionMode,
+} from "../../src/test-exports.ts";
 
 describe("Market DB Lifecycle", () => {
   let testDir: string;
@@ -56,17 +62,17 @@ describe("Market DB Lifecycle", () => {
     for (const table of tables) {
       // runAndReadAll throws if table doesn't exist
       await expect(
-        conn.runAndReadAll(`SELECT COUNT(*) FROM ${table} WHERE 1=0`)
+        conn.runAndReadAll(`SELECT COUNT(*) FROM ${table} WHERE 1=0`),
       ).resolves.toBeDefined();
     }
 
     // Upgrade to RW to verify market.spot is writable (basic INSERT)
     const rwConn = await upgradeToReadWrite(testDir);
     await rwConn.run(
-      `INSERT INTO market.spot (ticker, date, time, open) VALUES ('SPX', '2025-01-01', '09:30', 100.0)`
+      `INSERT INTO market.spot (ticker, date, time, open) VALUES ('SPX', '2025-01-01', '09:30', 100.0)`,
     );
     const result = await rwConn.runAndReadAll(
-      `SELECT COUNT(*) FROM market.spot WHERE ticker = 'SPX'`
+      `SELECT COUNT(*) FROM market.spot WHERE ticker = 'SPX'`,
     );
     expect(Number(result.getRows()[0][0])).toBe(1);
   });
@@ -77,34 +83,34 @@ describe("Market DB Lifecycle", () => {
 
     // market.spot: PK (ticker, date, time)
     await conn.run(
-      `INSERT INTO market.spot (ticker, date, time) VALUES ('SPX', '2025-01-02', '09:30')`
+      `INSERT INTO market.spot (ticker, date, time) VALUES ('SPX', '2025-01-02', '09:30')`,
     );
     await expect(
       conn.run(
-        `INSERT INTO market.spot (ticker, date, time) VALUES ('SPX', '2025-01-02', '09:30')`
-      )
+        `INSERT INTO market.spot (ticker, date, time) VALUES ('SPX', '2025-01-02', '09:30')`,
+      ),
     ).rejects.toThrow();
 
     // market.enriched: PK (ticker, date)
     await conn.run(`INSERT INTO market.enriched (ticker, date) VALUES ('SPX', '2025-01-02')`);
     await expect(
-      conn.run(`INSERT INTO market.enriched (ticker, date) VALUES ('SPX', '2025-01-02')`)
+      conn.run(`INSERT INTO market.enriched (ticker, date) VALUES ('SPX', '2025-01-02')`),
     ).rejects.toThrow();
 
     // market.enriched_context: PK (date)
     await conn.run(`INSERT INTO market.enriched_context (date) VALUES ('2025-01-02')`);
     await expect(
-      conn.run(`INSERT INTO market.enriched_context (date) VALUES ('2025-01-02')`)
+      conn.run(`INSERT INTO market.enriched_context (date) VALUES ('2025-01-02')`),
     ).rejects.toThrow();
 
     // market._sync_metadata: PK (source, ticker, target_table)
     await conn.run(
-      `INSERT INTO market._sync_metadata (source, ticker, target_table, synced_at) VALUES ('test-source', 'SPX', 'enriched', NOW())`
+      `INSERT INTO market._sync_metadata (source, ticker, target_table, synced_at) VALUES ('test-source', 'SPX', 'enriched', NOW())`,
     );
     await expect(
       conn.run(
-        `INSERT INTO market._sync_metadata (source, ticker, target_table, synced_at) VALUES ('test-source', 'SPX', 'enriched', NOW())`
-      )
+        `INSERT INTO market._sync_metadata (source, ticker, target_table, synced_at) VALUES ('test-source', 'SPX', 'enriched', NOW())`,
+      ),
     ).rejects.toThrow();
   });
 
@@ -113,7 +119,7 @@ describe("Market DB Lifecycle", () => {
     await getConnection(testDir);
     const conn1 = await upgradeToReadWrite(testDir);
     await conn1.run(
-      `INSERT INTO market.spot (ticker, date, time, open) VALUES ('SPX', '2025-01-02', '09:30', 200.0)`
+      `INSERT INTO market.spot (ticker, date, time, open) VALUES ('SPX', '2025-01-02', '09:30', 200.0)`,
     );
 
     // Close triggers DETACH
@@ -124,7 +130,7 @@ describe("Market DB Lifecycle", () => {
 
     // Verify data persisted across close/reopen cycle (readable in RO mode)
     const result = await conn2.runAndReadAll(
-      `SELECT open FROM market.spot WHERE ticker = 'SPX' AND date = '2025-01-02' AND time = '09:30'`
+      `SELECT open FROM market.spot WHERE ticker = 'SPX' AND date = '2025-01-02' AND time = '09:30'`,
     );
     const rows = result.getRows();
     expect(rows.length).toBe(1);
@@ -137,23 +143,19 @@ describe("Market DB Lifecycle", () => {
     const rawInst = await DuckDBInstance.create(analyticsDbPath);
     const rawConn = await rawInst.connect();
     await rawConn.run("CREATE SCHEMA IF NOT EXISTS market");
-    await rawConn.run(
-      "CREATE TABLE market.spx_daily (date VARCHAR PRIMARY KEY, close DOUBLE)"
-    );
+    await rawConn.run("CREATE TABLE market.spx_daily (date VARCHAR PRIMARY KEY, close DOUBLE)");
     rawConn.closeSync();
 
     // Now call getConnection — it should drop the old schema and ATTACH market.duckdb
     const conn = await getConnection(testDir);
 
     // New table from market.duckdb should exist and be queryable
-    await expect(
-      conn.runAndReadAll(`SELECT * FROM market.spot WHERE 1=0`)
-    ).resolves.toBeDefined();
+    await expect(conn.runAndReadAll(`SELECT * FROM market.spot WHERE 1=0`)).resolves.toBeDefined();
 
     // Old inline table should be gone: query duckdb_tables() for market schema
     // tables that are NOT in the market.duckdb catalog — should be zero
     const legacyResult = await conn.runAndReadAll(
-      `SELECT COUNT(*) FROM duckdb_tables() WHERE database_name != 'market' AND schema_name = 'market'`
+      `SELECT COUNT(*) FROM duckdb_tables() WHERE database_name != 'market' AND schema_name = 'market'`,
     );
     expect(Number(legacyResult.getRows()[0][0])).toBe(0);
   });
@@ -196,9 +198,7 @@ describe("Ephemeral Write Lock", () => {
 
     // Verify reads work on the RO connection
     const conn = await getConnection(testDir);
-    const result = await conn.runAndReadAll(
-      `SELECT COUNT(*) FROM market.spot WHERE 1=0`
-    );
+    const result = await conn.runAndReadAll(`SELECT COUNT(*) FROM market.spot WHERE 1=0`);
     expect(result).toBeDefined();
   });
 
@@ -213,7 +213,7 @@ describe("Ephemeral Write Lock", () => {
 
     // Verify writes work in RW mode
     await rwConn.run(
-      `INSERT INTO market.spot (ticker, date, time, open) VALUES ('SPX', '2025-06-01', '09:30', 500.0)`
+      `INSERT INTO market.spot (ticker, date, time, open) VALUES ('SPX', '2025-06-01', '09:30', 500.0)`,
     );
 
     // Downgrade back to RO
@@ -223,7 +223,7 @@ describe("Ephemeral Write Lock", () => {
     // Verify reads still work after downgrade
     const roConn = await getConnection(testDir);
     const result = await roConn.runAndReadAll(
-      `SELECT open FROM market.spot WHERE ticker = 'SPX' AND date = '2025-06-01' AND time = '09:30'`
+      `SELECT open FROM market.spot WHERE ticker = 'SPX' AND date = '2025-06-01' AND time = '09:30'`,
     );
     expect(Number(result.getRows()[0][0])).toBe(500.0);
   });
@@ -244,7 +244,7 @@ describe("Ephemeral Write Lock", () => {
       const secondConn = await secondInstance.connect();
       // Verify the second instance can read (proves lock is released)
       const result = await secondConn.runAndReadAll(
-        `SELECT COUNT(*) FROM trades.trade_data WHERE 1=0`
+        `SELECT COUNT(*) FROM trades.trade_data WHERE 1=0`,
       );
       expect(result).toBeDefined();
       secondConn.closeSync();

@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useState } from "react";
 import {
   endOfMonth,
   endOfYear,
@@ -9,27 +9,27 @@ import {
   subDays,
   subMonths,
   subYears,
-} from "date-fns"
-import { DateRange, DropdownNavProps, DropdownProps } from "react-day-picker"
+} from "date-fns";
+import { DateRange, DropdownNavProps, DropdownProps } from "react-day-picker";
 
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 
 interface DateRangePickerProps {
-  date: DateRange | undefined
-  onDateChange: (date: DateRange | undefined) => void
-  maxDate?: Date
+  date: DateRange | undefined;
+  onDateChange: (date: DateRange | undefined) => void;
+  maxDate?: Date;
 }
 
 export function DateRangePicker({ date, onDateChange, maxDate }: DateRangePickerProps) {
-  const today = maxDate || new Date()
+  const today = maxDate || new Date();
 
   const presets = {
     today: {
@@ -72,28 +72,28 @@ export function DateRangePicker({ date, onDateChange, maxDate }: DateRangePicker
       from: startOfYear(subYears(today, 1)),
       to: endOfYear(subYears(today, 1)),
     },
-  }
+  };
 
-  const [month, setMonth] = useState(date?.to || today)
+  const [month, setMonth] = useState(date?.to || today);
 
   const handlePresetClick = (preset: DateRange) => {
-    onDateChange(preset)
+    onDateChange(preset);
     if (preset.to) {
-      setMonth(preset.to)
+      setMonth(preset.to);
     }
-  }
+  };
 
   const handleCalendarChange = (
     _value: string | number,
-    _e: React.ChangeEventHandler<HTMLSelectElement>
+    _e: React.ChangeEventHandler<HTMLSelectElement>,
   ) => {
     const _event = {
       target: {
         value: String(_value),
       },
-    } as React.ChangeEvent<HTMLSelectElement>
-    _e(_event)
-  }
+    } as React.ChangeEvent<HTMLSelectElement>;
+    _e(_event);
+  };
 
   return (
     <div className="rounded-md border">
@@ -186,8 +186,8 @@ export function DateRangePicker({ date, onDateChange, maxDate }: DateRangePicker
                 size="sm"
                 className="w-full justify-start font-normal"
                 onClick={() => {
-                  onDateChange(undefined)
-                  setMonth(today)
+                  onDateChange(undefined);
+                  setMonth(today);
                 }}
               >
                 All time
@@ -199,7 +199,7 @@ export function DateRangePicker({ date, onDateChange, maxDate }: DateRangePicker
           mode="range"
           selected={date}
           onSelect={(newDate) => {
-            onDateChange(newDate)
+            onDateChange(newDate);
           }}
           month={month}
           onMonthChange={setMonth}
@@ -212,16 +212,10 @@ export function DateRangePicker({ date, onDateChange, maxDate }: DateRangePicker
           startMonth={new Date(2000, 0)}
           endMonth={today}
           hideNavigation
-          disabled={[
-            { after: today },
-          ]}
+          disabled={[{ after: today }]}
           components={{
             DropdownNav: (props: DropdownNavProps) => {
-              return (
-                <div className="flex w-full items-center gap-2">
-                  {props.children}
-                </div>
-              )
+              return <div className="flex w-full items-center gap-2">{props.children}</div>;
             },
             Dropdown: (props: DropdownProps) => {
               return (
@@ -229,7 +223,7 @@ export function DateRangePicker({ date, onDateChange, maxDate }: DateRangePicker
                   value={String(props.value)}
                   onValueChange={(value) => {
                     if (props.onChange) {
-                      handleCalendarChange(value, props.onChange)
+                      handleCalendarChange(value, props.onChange);
                     }
                   }}
                 >
@@ -248,11 +242,11 @@ export function DateRangePicker({ date, onDateChange, maxDate }: DateRangePicker
                     ))}
                   </SelectContent>
                 </Select>
-              )
+              );
             },
           }}
         />
       </div>
     </div>
-  )
+  );
 }

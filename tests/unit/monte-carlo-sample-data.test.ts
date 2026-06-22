@@ -19,8 +19,7 @@ describe("Monte Carlo Simulation (sample data)", () => {
     }
     const { trades } = testData;
 
-    const initialCapital =
-      PortfolioStatsCalculator.calculateInitialCapital(trades);
+    const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(trades);
 
     const params: MonteCarloParams = {
       numSimulations: 200,

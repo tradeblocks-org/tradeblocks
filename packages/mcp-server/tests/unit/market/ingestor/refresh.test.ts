@@ -3,9 +3,7 @@ import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import {
-  MarketIngestor,
-} from "../../../../src/market/ingestor/index.ts";
+import { MarketIngestor } from "../../../../src/market/ingestor/index.ts";
 import { createMarketStores } from "../../../../src/market/stores/index.ts";
 import { ensureMarketDataTables } from "../../../../src/db/market-schemas.ts";
 import { TickerRegistry } from "../../../../src/market/tickers/registry.ts";
@@ -21,7 +19,10 @@ describe("MarketIngestor.refresh — weekend short-circuit", () => {
   let tickers: TickerRegistry;
 
   beforeEach(async () => {
-    dataDir = join(tmpdir(), `ingestor-weekend-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    dataDir = join(
+      tmpdir(),
+      `ingestor-weekend-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     mkdirSync(dataDir, { recursive: true });
     instance = await DuckDBInstance.create(":memory:");
     conn = await instance.connect();
@@ -65,21 +66,40 @@ describe("MarketIngestor.refresh — weekend short-circuit", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
-  function makeSpyProvider(): { provider: MarketDataProvider; fetchBarsCalls: number; fetchSnapshotCalls: number } {
+  function makeSpyProvider(): {
+    provider: MarketDataProvider;
+    fetchBarsCalls: number;
+    fetchSnapshotCalls: number;
+  } {
     const counts = { fetchBarsCalls: 0, fetchSnapshotCalls: 0 };
     const provider: MarketDataProvider = {
       name: "spy",
       capabilities: () => ({
-        tradeBars: true, quotes: true, greeks: false,
-        flatFiles: false, bulkByRoot: false, perTicker: true,
-        minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
       }),
-      fetchBars: async () => { counts.fetchBarsCalls++; return []; },
-      fetchOptionSnapshot: async () => { counts.fetchSnapshotCalls++; return { contracts: [] }; },
+      fetchBars: async () => {
+        counts.fetchBarsCalls++;
+        return [];
+      },
+      fetchOptionSnapshot: async () => {
+        counts.fetchSnapshotCalls++;
+        return { contracts: [] };
+      },
     };
     return { provider, ...counts };
   }
@@ -89,7 +109,10 @@ describe("MarketIngestor.refresh — weekend short-circuit", () => {
     let fetchBarsCalled = false;
     const spyProvider: MarketDataProvider = {
       ...provider,
-      fetchBars: async () => { fetchBarsCalled = true; return []; },
+      fetchBars: async () => {
+        fetchBarsCalled = true;
+        return [];
+      },
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
     const ingestor = new MarketIngestor({
@@ -99,7 +122,7 @@ describe("MarketIngestor.refresh — weekend short-circuit", () => {
     });
 
     const result = await ingestor.refresh({
-      asOf: "2026-04-26",  // Sunday
+      asOf: "2026-04-26", // Sunday
       spotTickers: ["SPX", "VIX"],
       chainUnderlyings: ["SPX"],
       quoteUnderlyings: ["SPX"],
@@ -124,17 +147,25 @@ describe("MarketIngestor.refresh — weekend short-circuit", () => {
       providerFactory: () => ({
         name: "spy",
         capabilities: () => ({
-          tradeBars: true, quotes: false, greeks: false,
-          flatFiles: false, bulkByRoot: false, perTicker: true,
-          minuteBars: true, dailyBars: true,
+          tradeBars: true,
+          quotes: false,
+          greeks: false,
+          flatFiles: false,
+          bulkByRoot: false,
+          perTicker: true,
+          minuteBars: true,
+          dailyBars: true,
         }),
-        fetchBars: async () => { fetchBarsCalled = true; return []; },
+        fetchBars: async () => {
+          fetchBarsCalled = true;
+          return [];
+        },
         fetchOptionSnapshot: async () => ({ contracts: [] }),
       }),
     });
 
     const result = await ingestor.refresh({
-      asOf: "2026-04-25",  // Saturday
+      asOf: "2026-04-25", // Saturday
       spotTickers: ["SPX"],
       computeVixContext: false,
     });
@@ -150,7 +181,15 @@ describe("MarketIngestor.refresh — weekend short-circuit", () => {
 
   it("does NOT short-circuit on Monday (2026-04-27) — inner fan-out executes", async () => {
     const bars: BarRow[] = [
-      { ticker: "SPX", date: "2026-04-27", open: 5000, high: 5020, low: 4990, close: 5010, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-04-27",
+        open: 5000,
+        high: 5020,
+        low: 4990,
+        close: 5010,
+        volume: 0,
+      },
     ];
     let fetchBarsCalled = false;
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
@@ -160,17 +199,25 @@ describe("MarketIngestor.refresh — weekend short-circuit", () => {
       providerFactory: () => ({
         name: "spy",
         capabilities: () => ({
-          tradeBars: true, quotes: false, greeks: false,
-          flatFiles: false, bulkByRoot: false, perTicker: true,
-          minuteBars: true, dailyBars: true,
+          tradeBars: true,
+          quotes: false,
+          greeks: false,
+          flatFiles: false,
+          bulkByRoot: false,
+          perTicker: true,
+          minuteBars: true,
+          dailyBars: true,
         }),
-        fetchBars: async () => { fetchBarsCalled = true; return bars; },
+        fetchBars: async () => {
+          fetchBarsCalled = true;
+          return bars;
+        },
         fetchOptionSnapshot: async () => ({ contracts: [] }),
       }),
     });
 
     const result = await ingestor.refresh({
-      asOf: "2026-04-27",  // Monday — must NOT skip
+      asOf: "2026-04-27", // Monday — must NOT skip
       spotTickers: ["SPX"],
       computeVixContext: false,
     });
@@ -185,9 +232,14 @@ function makeBarsProvider(bars: BarRow[]): MarketDataProvider {
   return {
     name: "test",
     capabilities: () => ({
-      tradeBars: true, quotes: true, greeks: false,
-      flatFiles: false, bulkByRoot: false, perTicker: true,
-      minuteBars: true, dailyBars: true,
+      tradeBars: true,
+      quotes: true,
+      greeks: false,
+      flatFiles: false,
+      bulkByRoot: false,
+      perTicker: true,
+      minuteBars: true,
+      dailyBars: true,
     }),
     fetchBars: async () => bars,
     fetchOptionSnapshot: async () => ({ contracts: [] }),
@@ -201,7 +253,10 @@ describe("MarketIngestor.refresh", () => {
   let tickers: TickerRegistry;
 
   beforeEach(async () => {
-    dataDir = join(tmpdir(), `ingestor-refresh-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    dataDir = join(
+      tmpdir(),
+      `ingestor-refresh-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     mkdirSync(dataDir, { recursive: true });
     instance = await DuckDBInstance.create(":memory:");
     conn = await instance.connect();
@@ -245,7 +300,11 @@ describe("MarketIngestor.refresh", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -259,9 +318,14 @@ describe("MarketIngestor.refresh", () => {
     const provider: MarketDataProvider = {
       name: "spy",
       capabilities: () => ({
-        tradeBars: true, quotes: true, greeks: false,
-        flatFiles: false, bulkByRoot: false, perTicker: true,
-        minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async (opts) => {
         calls.push({ timespan: opts.timespan, multiplier: opts.multiplier, ticker: opts.ticker });
@@ -290,7 +354,15 @@ describe("MarketIngestor.refresh", () => {
 
   it("runs ingestBars per spot ticker and reports per-operation results", async () => {
     const bars: BarRow[] = [
-      { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        open: 4800,
+        high: 4820,
+        low: 4790,
+        close: 4810,
+        volume: 0,
+      },
     ];
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
     const ingestor = new MarketIngestor({
@@ -377,12 +449,38 @@ describe("MarketIngestor.refresh", () => {
       fetchBars: async (options) => {
         if (options.timespan === "minute") {
           return [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-            { ticker: "SPX", date: "2026-01-05", time: "09:31", open: 4801, high: 4803, low: 4800, close: 4802, volume: 0 },
+            {
+              ticker: "SPX",
+              date: "2026-01-05",
+              time: "09:30",
+              open: 4800,
+              high: 4802,
+              low: 4799,
+              close: 4801,
+              volume: 0,
+            },
+            {
+              ticker: "SPX",
+              date: "2026-01-05",
+              time: "09:31",
+              open: 4801,
+              high: 4803,
+              low: 4800,
+              close: 4802,
+              volume: 0,
+            },
           ];
         }
         return [
-          { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+          {
+            ticker: "SPX",
+            date: "2026-01-05",
+            open: 4800,
+            high: 4820,
+            low: 4790,
+            close: 4810,
+            volume: 0,
+          },
         ];
       },
       fetchOptionSnapshot: async () => ({ contracts: [] }),
@@ -414,7 +512,16 @@ describe("MarketIngestor.refresh", () => {
     // unambiguous so the test exercises the inline-greeks logic, not the
     // daily-bar fallback.
     await stores.spot.writeBars("SPX", "2026-01-05", [
-      { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        time: "09:30",
+        open: 4800,
+        high: 4802,
+        low: 4799,
+        close: 4801,
+        volume: 0,
+      },
     ]);
     const ingestor = new MarketIngestor({
       stores,
@@ -431,18 +538,24 @@ describe("MarketIngestor.refresh", () => {
     });
 
     expect(result.status).toBe("ok");
-    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
     const row = quotes.get("SPXW260107C04800000")?.[0];
-    expect(row).toEqual(expect.objectContaining({
-      bid: 10,
-      ask: 10.5,
-      timestamp: "2026-01-05 09:30",
-      greeks_source: "computed",
-      greeks_revision: 3,
-      rate_type: "sofr",
-      rate_value: expect.any(Number),
-      gamma_source: "computed_sofr_q0",
-    }));
+    expect(row).toEqual(
+      expect.objectContaining({
+        bid: 10,
+        ask: 10.5,
+        timestamp: "2026-01-05 09:30",
+        greeks_source: "computed",
+        greeks_revision: 3,
+        rate_type: "sofr",
+        rate_value: expect.any(Number),
+        gamma_source: "computed_sofr_q0",
+      }),
+    );
     expect(row?.rate_value).toBeGreaterThan(0);
     expect(row?.rate_value).toBeLessThan(0.1);
     expect(row?.delta).not.toBeNull();
@@ -465,13 +578,31 @@ describe("MarketIngestor.refresh", () => {
         minuteBars: true,
         dailyBars: true,
       }),
-      fetchBars: async (options) => options.timespan === "minute"
-        ? [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-          ]
-        : [
-            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-          ],
+      fetchBars: async (options) =>
+        options.timespan === "minute"
+          ? [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                time: "09:30",
+                open: 4800,
+                high: 4802,
+                low: 4799,
+                close: 4801,
+                volume: 0,
+              },
+            ]
+          : [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                open: 4800,
+                high: 4820,
+                low: 4790,
+                close: 4810,
+                volume: 0,
+              },
+            ],
       fetchOptionSnapshot: async () => emptySnapshot(),
       fetchContractList: async () => ({
         underlying: "SPX",
@@ -519,29 +650,37 @@ describe("MarketIngestor.refresh", () => {
     expect(result.status).toBe("partial");
     expect(result.skipped).toBeDefined();
     expect(result.skipped).toHaveLength(1);
-    expect(result.skipped![0]).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      rows: 1,
-      error: "simulated transient DuckDB flake",
-    }));
+    expect(result.skipped![0]).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        rows: 1,
+        error: "simulated transient DuckDB flake",
+      }),
+    );
     // Restore the real chain reader so the post-condition read isn't itself broken.
     readChainSpy.mockRestore();
-    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
     const row = quotes.get("SPXW260107C04800000")?.[0];
     // The batch must be skipped — no row with null greeks persisted.
     expect(row).toBeUndefined();
     // The structured warn is still emitted for live tail-following.
-    const warnCall = warnSpy.mock.calls.find((call) =>
-      typeof call[0] === "string" && call[0].includes("enrichQuoteRows failed"),
+    const warnCall = warnSpy.mock.calls.find(
+      (call) => typeof call[0] === "string" && call[0].includes("enrichQuoteRows failed"),
     );
     expect(warnCall).toBeDefined();
     const ctx = warnCall![1] as Record<string, unknown>;
-    expect(ctx).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      error: "simulated transient DuckDB flake",
-    }));
+    expect(ctx).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        error: "simulated transient DuckDB flake",
+      }),
+    );
     warnSpy.mockRestore();
   });
 
@@ -565,13 +704,31 @@ describe("MarketIngestor.refresh", () => {
         minuteBars: true,
         dailyBars: true,
       }),
-      fetchBars: async (options) => options.timespan === "minute"
-        ? [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-          ]
-        : [
-            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-          ],
+      fetchBars: async (options) =>
+        options.timespan === "minute"
+          ? [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                time: "09:30",
+                open: 4800,
+                high: 4802,
+                low: 4799,
+                close: 4801,
+                volume: 0,
+              },
+            ]
+          : [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                open: 4800,
+                high: 4820,
+                low: 4790,
+                close: 4810,
+                volume: 0,
+              },
+            ],
       fetchOptionSnapshot: async () => emptySnapshot(),
       fetchContractList: async () => ({
         underlying: "SPX",
@@ -618,12 +775,14 @@ describe("MarketIngestor.refresh", () => {
     expect(result.skipped).toBeDefined();
     expect(result.skipped).toHaveLength(1);
     const entry = result.skipped![0];
-    expect(entry).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      rows: 1,
-      reason: "coverage_gap",
-    }));
+    expect(entry).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        rows: 1,
+        reason: "coverage_gap",
+      }),
+    );
     expect(typeof entry.resolveRatio).toBe("number");
     expect(entry.resolveRatio).toBeGreaterThan(0.5);
     expect(entry.resolveRatio).toBeLessThanOrEqual(1);
@@ -637,12 +796,16 @@ describe("MarketIngestor.refresh", () => {
     expect(quotePartitionWrites).toHaveLength(0);
 
     readBarsSpy.mockRestore();
-    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
     const row = quotes.get("SPXW260107C04800000")?.[0];
     expect(row).toBeUndefined();
 
-    const warnCall = warnSpy.mock.calls.find((call) =>
-      typeof call[0] === "string" && call[0].includes("coverage gap"),
+    const warnCall = warnSpy.mock.calls.find(
+      (call) => typeof call[0] === "string" && call[0].includes("coverage gap"),
     );
     expect(warnCall).toBeDefined();
     warnSpy.mockRestore();
@@ -671,13 +834,31 @@ describe("MarketIngestor.refresh", () => {
         minuteBars: true,
         dailyBars: true,
       }),
-      fetchBars: async (options) => options.timespan === "minute"
-        ? [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-          ]
-        : [
-            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-          ],
+      fetchBars: async (options) =>
+        options.timespan === "minute"
+          ? [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                time: "09:30",
+                open: 4800,
+                high: 4802,
+                low: 4799,
+                close: 4801,
+                volume: 0,
+              },
+            ]
+          : [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                open: 4800,
+                high: 4820,
+                low: 4790,
+                close: 4810,
+                volume: 0,
+              },
+            ],
       fetchOptionSnapshot: async () => emptySnapshot(),
       fetchContractList: async () => ({
         underlying: "SPX",
@@ -749,12 +930,14 @@ describe("MarketIngestor.refresh", () => {
     expect(result.skipped).toBeDefined();
     expect(result.skipped).toHaveLength(1);
     const entry = result.skipped![0];
-    expect(entry).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      rows: 2,
-      reason: "coverage_gap",
-    }));
+    expect(entry).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        rows: 2,
+        reason: "coverage_gap",
+      }),
+    );
     // New denominator: 1 compute-mode failure / 1 attempted lookup = 1.0.
     // Under the old denominator (1/2 = 0.5) this would not have tripped at all.
     expect(entry.resolveRatio).toBe(1);
@@ -796,13 +979,31 @@ describe("MarketIngestor.refresh", () => {
         minuteBars: true,
         dailyBars: true,
       }),
-      fetchBars: async (options) => options.timespan === "minute"
-        ? [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-          ]
-        : [
-            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-          ],
+      fetchBars: async (options) =>
+        options.timespan === "minute"
+          ? [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                time: "09:30",
+                open: 4800,
+                high: 4802,
+                low: 4799,
+                close: 4801,
+                volume: 0,
+              },
+            ]
+          : [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                open: 4800,
+                high: 4820,
+                low: 4790,
+                close: 4810,
+                volume: 0,
+              },
+            ],
       fetchOptionSnapshot: async () => emptySnapshot(),
       fetchContractList: async () => ({
         underlying: "SPX",
@@ -816,9 +1017,7 @@ describe("MarketIngestor.refresh", () => {
           },
         ],
       }),
-      fetchQuotes: async () => new Map([
-        ["2026-01-05 09:30", { bid: 10.0, ask: 10.5 }],
-      ]),
+      fetchQuotes: async () => new Map([["2026-01-05 09:30", { bid: 10.0, ask: 10.5 }]]),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
     const readBarsSpy = jest.spyOn(stores.spot, "readBars").mockResolvedValue([]);
@@ -843,13 +1042,15 @@ describe("MarketIngestor.refresh", () => {
     expect(result.skipped).toBeDefined();
     expect(result.skipped).toHaveLength(1);
     const entry = result.skipped![0];
-    expect(entry).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      ticker: "SPXW260107C04800000",
-      rows: 1,
-      reason: "coverage_gap",
-    }));
+    expect(entry).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        ticker: "SPXW260107C04800000",
+        rows: 1,
+        reason: "coverage_gap",
+      }),
+    );
     expect(typeof entry.resolveRatio).toBe("number");
     expect(entry.resolveRatio).toBeGreaterThan(0.5);
     expect(entry.resolveRatio).toBeLessThanOrEqual(1);
@@ -861,12 +1062,16 @@ describe("MarketIngestor.refresh", () => {
     expect(quotePartitionWrites).toHaveLength(0);
 
     readBarsSpy.mockRestore();
-    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
     const row = quotes.get("SPXW260107C04800000")?.[0];
     expect(row).toBeUndefined();
 
-    const warnCall = warnSpy.mock.calls.find((call) =>
-      typeof call[0] === "string" && call[0].includes("coverage gap"),
+    const warnCall = warnSpy.mock.calls.find(
+      (call) => typeof call[0] === "string" && call[0].includes("coverage gap"),
     );
     expect(warnCall).toBeDefined();
     warnSpy.mockRestore();
@@ -897,13 +1102,31 @@ describe("MarketIngestor.refresh", () => {
         minuteBars: true,
         dailyBars: true,
       }),
-      fetchBars: async (options) => options.timespan === "minute"
-        ? [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-          ]
-        : [
-            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-          ],
+      fetchBars: async (options) =>
+        options.timespan === "minute"
+          ? [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                time: "09:30",
+                open: 4800,
+                high: 4802,
+                low: 4799,
+                close: 4801,
+                volume: 0,
+              },
+            ]
+          : [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                open: 4800,
+                high: 4820,
+                low: 4790,
+                close: 4810,
+                volume: 0,
+              },
+            ],
       fetchOptionSnapshot: async () => emptySnapshot(),
       fetchContractList: async () => ({
         underlying: "SPX",
@@ -917,19 +1140,23 @@ describe("MarketIngestor.refresh", () => {
           },
         ],
       }),
-      fetchQuotes: async () => new Map([
-        ["2026-01-05 09:30", {
-          bid: 10.0,
-          ask: 10.5,
-          delta: 0.22,
-          gamma: 0.05,
-          theta: -0.12,
-          vega: 0.31,
-          iv: 0.19,
-          greeks_source: "thetadata",
-        }],
-        ["2026-01-05 09:31", { bid: 10.1, ask: 10.6 }],
-      ]),
+      fetchQuotes: async () =>
+        new Map([
+          [
+            "2026-01-05 09:30",
+            {
+              bid: 10.0,
+              ask: 10.5,
+              delta: 0.22,
+              gamma: 0.05,
+              theta: -0.12,
+              vega: 0.31,
+              iv: 0.19,
+              greeks_source: "thetadata",
+            },
+          ],
+          ["2026-01-05 09:31", { bid: 10.1, ask: 10.6 }],
+        ]),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
     const readBarsSpy = jest.spyOn(stores.spot, "readBars").mockResolvedValue([]);
@@ -954,13 +1181,15 @@ describe("MarketIngestor.refresh", () => {
     expect(result.skipped).toBeDefined();
     expect(result.skipped).toHaveLength(1);
     const entry = result.skipped![0];
-    expect(entry).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      ticker: "SPXW260107C04800000",
-      rows: 2,
-      reason: "coverage_gap",
-    }));
+    expect(entry).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        ticker: "SPXW260107C04800000",
+        rows: 2,
+        reason: "coverage_gap",
+      }),
+    );
     // New denominator: 1 compute-mode failure / 1 attempted lookup = 1.0.
     // Under the old denominator (1/2 = 0.5) this would not have tripped at all.
     expect(entry.resolveRatio).toBe(1);
@@ -972,12 +1201,16 @@ describe("MarketIngestor.refresh", () => {
     expect(quotePartitionWrites).toHaveLength(0);
 
     readBarsSpy.mockRestore();
-    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
     const row = quotes.get("SPXW260107C04800000")?.[0];
     expect(row).toBeUndefined();
 
-    const warnCall = warnSpy.mock.calls.find((call) =>
-      typeof call[0] === "string" && call[0].includes("coverage gap"),
+    const warnCall = warnSpy.mock.calls.find(
+      (call) => typeof call[0] === "string" && call[0].includes("coverage gap"),
     );
     expect(warnCall).toBeDefined();
     warnSpy.mockRestore();
@@ -1010,13 +1243,31 @@ describe("MarketIngestor.refresh", () => {
         minuteBars: true,
         dailyBars: true,
       }),
-      fetchBars: async (options) => options.timespan === "minute"
-        ? [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-          ]
-        : [
-            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-          ],
+      fetchBars: async (options) =>
+        options.timespan === "minute"
+          ? [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                time: "09:30",
+                open: 4800,
+                high: 4802,
+                low: 4799,
+                close: 4801,
+                volume: 0,
+              },
+            ]
+          : [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                open: 4800,
+                high: 4820,
+                low: 4790,
+                close: 4810,
+                volume: 0,
+              },
+            ],
       fetchOptionSnapshot: async () => emptySnapshot(),
       fetchContractList: async () => ({
         underlying: "SPX",
@@ -1033,14 +1284,21 @@ describe("MarketIngestor.refresh", () => {
       fetchBulkQuotes: async function* () {
         // bid=ask=0 → mid=0 → optionPrice<=0 guard in computeQuoteGreeks
         // returns null. Underlying lookup succeeds (spot pre-seeded at 09:30).
-        yield [
-          { ticker: "SPXW260107C04800000", timestamp: "2026-01-05 09:30", bid: 0, ask: 0 },
-        ];
+        yield [{ ticker: "SPXW260107C04800000", timestamp: "2026-01-05 09:30", bid: 0, ask: 0 }];
       },
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
     await stores.spot.writeBars("SPX", "2026-01-05", [
-      { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        time: "09:30",
+        open: 4800,
+        high: 4802,
+        low: 4799,
+        close: 4801,
+        volume: 0,
+      },
     ]);
     const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -1063,12 +1321,14 @@ describe("MarketIngestor.refresh", () => {
     expect(result.skipped).toBeDefined();
     expect(result.skipped).toHaveLength(1);
     const entry = result.skipped![0];
-    expect(entry).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      rows: 1,
-      reason: "compute_failure",
-    }));
+    expect(entry).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        rows: 1,
+        reason: "compute_failure",
+      }),
+    );
     expect(entry.resolveRatio).toBe(1);
     expect(entry.error).toMatch(/compute failure.*black-scholes/);
     expect(entry.error).toMatch(/1\/1 rows failed/);
@@ -1078,11 +1338,15 @@ describe("MarketIngestor.refresh", () => {
     );
     expect(quotePartitionWrites).toHaveLength(0);
 
-    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
     expect(quotes.get("SPXW260107C04800000")?.[0]).toBeUndefined();
 
-    const warnCall = warnSpy.mock.calls.find((call) =>
-      typeof call[0] === "string" && call[0].includes("compute failure"),
+    const warnCall = warnSpy.mock.calls.find(
+      (call) => typeof call[0] === "string" && call[0].includes("compute failure"),
     );
     expect(warnCall).toBeDefined();
     warnSpy.mockRestore();
@@ -1112,13 +1376,31 @@ describe("MarketIngestor.refresh", () => {
         minuteBars: true,
         dailyBars: true,
       }),
-      fetchBars: async (options) => options.timespan === "minute"
-        ? [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-          ]
-        : [
-            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-          ],
+      fetchBars: async (options) =>
+        options.timespan === "minute"
+          ? [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                time: "09:30",
+                open: 4800,
+                high: 4802,
+                low: 4799,
+                close: 4801,
+                volume: 0,
+              },
+            ]
+          : [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                open: 4800,
+                high: 4820,
+                low: 4790,
+                close: 4810,
+                volume: 0,
+              },
+            ],
       fetchOptionSnapshot: async () => emptySnapshot(),
       fetchContractList: async () => ({
         underlying: "SPX",
@@ -1151,7 +1433,16 @@ describe("MarketIngestor.refresh", () => {
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
     // Pre-seed ONLY the 09:30 minute. The 09:31 row's lookup will miss.
     await stores.spot.writeBars("SPX", "2026-01-05", [
-      { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        time: "09:30",
+        open: 4800,
+        high: 4802,
+        low: 4799,
+        close: 4801,
+        volume: 0,
+      },
     ]);
     const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -1177,20 +1468,24 @@ describe("MarketIngestor.refresh", () => {
     expect(reasons).toEqual(["compute_failure", "coverage_gap"]);
 
     const gap = result.skipped!.find((s) => s.reason === "coverage_gap")!;
-    expect(gap).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      rows: 2,
-    }));
+    expect(gap).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        rows: 2,
+      }),
+    );
     expect(gap.resolveRatio).toBe(1);
     expect(gap.error).toMatch(/coverage gap/);
 
     const compute = result.skipped!.find((s) => s.reason === "compute_failure")!;
-    expect(compute).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      rows: 2,
-    }));
+    expect(compute).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        rows: 2,
+      }),
+    );
     expect(compute.resolveRatio).toBe(1);
     expect(compute.error).toMatch(/compute failure.*black-scholes/);
 
@@ -1230,13 +1525,31 @@ describe("MarketIngestor.refresh", () => {
         minuteBars: true,
         dailyBars: true,
       }),
-      fetchBars: async (options) => options.timespan === "minute"
-        ? [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-          ]
-        : [
-            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-          ],
+      fetchBars: async (options) =>
+        options.timespan === "minute"
+          ? [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                time: "09:30",
+                open: 4800,
+                high: 4802,
+                low: 4799,
+                close: 4801,
+                volume: 0,
+              },
+            ]
+          : [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                open: 4800,
+                high: 4820,
+                low: 4790,
+                close: 4810,
+                volume: 0,
+              },
+            ],
       fetchOptionSnapshot: async () => emptySnapshot(),
       fetchContractList: async () => ({
         underlying: "SPX",
@@ -1250,14 +1563,24 @@ describe("MarketIngestor.refresh", () => {
           },
         ],
       }),
-      fetchQuotes: async () => new Map([
-        // bid=ask=0 → mid=0 → BS math returns null. Spot is pre-seeded.
-        ["2026-01-05 09:30", { bid: 0, ask: 0 }],
-      ]),
+      fetchQuotes: async () =>
+        new Map([
+          // bid=ask=0 → mid=0 → BS math returns null. Spot is pre-seeded.
+          ["2026-01-05 09:30", { bid: 0, ask: 0 }],
+        ]),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
     await stores.spot.writeBars("SPX", "2026-01-05", [
-      { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        time: "09:30",
+        open: 4800,
+        high: 4802,
+        low: 4799,
+        close: 4801,
+        volume: 0,
+      },
     ]);
     const writeQuotesSpy = jest.spyOn(stores.quote, "writeQuotes");
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -1280,13 +1603,15 @@ describe("MarketIngestor.refresh", () => {
     expect(result.skipped).toBeDefined();
     expect(result.skipped).toHaveLength(1);
     const entry = result.skipped![0];
-    expect(entry).toEqual(expect.objectContaining({
-      underlying: "SPX",
-      date: "2026-01-05",
-      ticker: "SPXW260107C04800000",
-      rows: 1,
-      reason: "compute_failure",
-    }));
+    expect(entry).toEqual(
+      expect.objectContaining({
+        underlying: "SPX",
+        date: "2026-01-05",
+        ticker: "SPXW260107C04800000",
+        rows: 1,
+        reason: "compute_failure",
+      }),
+    );
     expect(entry.resolveRatio).toBe(1);
     expect(entry.error).toMatch(/compute failure.*black-scholes/);
     expect(entry.error).toMatch(/1\/1 rows failed/);
@@ -1296,11 +1621,15 @@ describe("MarketIngestor.refresh", () => {
     );
     expect(quotePartitionWrites).toHaveLength(0);
 
-    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
     expect(quotes.get("SPXW260107C04800000")?.[0]).toBeUndefined();
 
-    const warnCall = warnSpy.mock.calls.find((call) =>
-      typeof call[0] === "string" && call[0].includes("compute failure"),
+    const warnCall = warnSpy.mock.calls.find(
+      (call) => typeof call[0] === "string" && call[0].includes("compute failure"),
     );
     expect(warnCall).toBeDefined();
     warnSpy.mockRestore();
@@ -1320,13 +1649,31 @@ describe("MarketIngestor.refresh", () => {
         minuteBars: true,
         dailyBars: true,
       }),
-      fetchBars: async (options) => options.timespan === "minute"
-        ? [
-            { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
-          ]
-        : [
-            { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-          ],
+      fetchBars: async (options) =>
+        options.timespan === "minute"
+          ? [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                time: "09:30",
+                open: 4800,
+                high: 4802,
+                low: 4799,
+                close: 4801,
+                volume: 0,
+              },
+            ]
+          : [
+              {
+                ticker: "SPX",
+                date: "2026-01-05",
+                open: 4800,
+                high: 4820,
+                low: 4790,
+                close: 4810,
+                volume: 0,
+              },
+            ],
       fetchOptionSnapshot: async () => ({ contracts: [] }),
       fetchContractList: async () => ({
         underlying: "SPX",
@@ -1373,7 +1720,11 @@ describe("MarketIngestor.refresh", () => {
     });
 
     expect(result.status).toBe("ok");
-    const quotes = await stores.quote.readQuotes(["SPXW260107C04800000"], "2026-01-05", "2026-01-05");
+    const quotes = await stores.quote.readQuotes(
+      ["SPXW260107C04800000"],
+      "2026-01-05",
+      "2026-01-05",
+    );
     expect(quotes.get("SPXW260107C04800000")).toEqual([
       expect.objectContaining({
         delta: 0.22,
@@ -1390,7 +1741,16 @@ describe("MarketIngestor.refresh", () => {
   it("degrades Massive 403 spot failures to cached-coverage skips instead of failing refresh", async () => {
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
     await stores.spot.writeBars("SPX", "2026-01-05", [
-      { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        time: "09:30",
+        open: 4800,
+        high: 4820,
+        low: 4790,
+        close: 4810,
+        volume: 0,
+      },
     ]);
     const provider: MarketDataProvider = {
       name: "massive",
@@ -1478,12 +1838,8 @@ describe("MarketIngestor.refresh", () => {
     expect(fetchBars).not.toHaveBeenCalled();
     expect(fetchContractList).not.toHaveBeenCalled();
     expect(result.status).toBe("ok");
-    expect(result.perOperation.spot).toEqual([
-      expect.objectContaining({ status: "unsupported" }),
-    ]);
-    expect(result.perOperation.chain).toEqual([
-      expect.objectContaining({ status: "unsupported" }),
-    ]);
+    expect(result.perOperation.spot).toEqual([expect.objectContaining({ status: "unsupported" })]);
+    expect(result.perOperation.chain).toEqual([expect.objectContaining({ status: "unsupported" })]);
     expect(result.perOperation.quotes).toEqual([
       expect.objectContaining({ status: "unsupported" }),
     ]);
@@ -1492,7 +1848,15 @@ describe("MarketIngestor.refresh", () => {
 
   it("reports unsupported bulk quote refreshes cleanly when the provider lacks bulk mode", async () => {
     const bars: BarRow[] = [
-      { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        open: 4800,
+        high: 4820,
+        low: 4790,
+        close: 4810,
+        volume: 0,
+      },
     ];
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
     const ingestor = new MarketIngestor({

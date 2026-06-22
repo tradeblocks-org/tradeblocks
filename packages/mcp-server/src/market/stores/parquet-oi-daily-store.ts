@@ -16,10 +16,7 @@ import * as path from "path";
 import type { StoreContext } from "./types.ts";
 import type { OiDailyRow } from "./types.ts";
 import { listPartitionValues } from "./coverage.ts";
-import {
-  resolveMarketDir,
-  writeOiDailyPartition,
-} from "../../db/market-datasets.ts";
+import { resolveMarketDir, writeOiDailyPartition } from "../../db/market-datasets.ts";
 import { readParquetFilesSql } from "../../utils/quote-parquet-projection.ts";
 
 // `right` is a reserved keyword in DuckDB (the RIGHT(string, n) function), so
@@ -46,11 +43,7 @@ export class ParquetOiDailyStore {
     this.ctx = ctx;
   }
 
-  async writeOiDaily(
-    underlying: string,
-    date: string,
-    rows: OiDailyRow[],
-  ): Promise<void> {
+  async writeOiDaily(underlying: string, date: string, rows: OiDailyRow[]): Promise<void> {
     if (rows.length === 0) return;
     // Append via DuckDBAppender (typed per-column) rather than a parameterized
     // INSERT with O(N) placeholders — mirrors the quote store's write path.
@@ -96,11 +89,7 @@ export class ParquetOiDailyStore {
     }
   }
 
-  async readOiDaily(
-    underlying: string,
-    from: string,
-    to: string,
-  ): Promise<OiDailyRow[]> {
+  async readOiDaily(underlying: string, from: string, to: string): Promise<OiDailyRow[]> {
     const underlyingDir = path.join(
       resolveMarketDir(this.ctx.dataDir),
       "option_oi_daily",

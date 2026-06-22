@@ -98,8 +98,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const activeBlockId = useBlockStore((state) => state.activeBlockId);
   const isInitialized = useBlockStore((state) => state.isInitialized);
   const loadBlocks = useBlockStore((state) => state.loadBlocks);
-  const activeBlock =
-    blocks.find((block) => block.id === activeBlockId) || null;
+  const activeBlock = blocks.find((block) => block.id === activeBlockId) || null;
   const hasActiveBlock = activeBlock !== null;
 
   // Load blocks from IndexedDB on mount
@@ -114,21 +113,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:!p-2"
-            >
+            <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-2">
               <Link href="/block-stats" className="flex items-center gap-3">
                 <div className="flex-shrink-0">
                   <Blocks className="h-8 w-8 text-primary" />
                 </div>
                 <span className="flex flex-col">
-                  <span className="text-sm font-semibold leading-tight">
-                    TradeBlocks
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    Analytics Platform
-                  </span>
+                  <span className="text-sm font-semibold leading-tight">TradeBlocks</span>
+                  <span className="text-xs text-muted-foreground">Analytics Platform</span>
                 </span>
               </Link>
             </SidebarMenuButton>
@@ -138,9 +130,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <NavMain items={navData.navMain} />
       </SidebarContent>
-      {hasActiveBlock && activeBlock && (
-        <SidebarActiveBlocks activeBlock={activeBlock} />
-      )}
+      {hasActiveBlock && activeBlock && <SidebarActiveBlocks activeBlock={activeBlock} />}
       <SidebarFooter>
         <SidebarFooterLegal />
       </SidebarFooter>

@@ -19,10 +19,7 @@ interface MarginChartProps {
   strategyNames: string[];
 }
 
-export function MarginChart({
-  marginTimeline,
-  strategyNames,
-}: MarginChartProps) {
+export function MarginChart({ marginTimeline, strategyNames }: MarginChartProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
@@ -30,8 +27,7 @@ export function MarginChart({
     const traces: Data[] = [];
 
     const hoverTemplate =
-      "<b>Date:</b> %{x|%b %d, %Y}<br>" +
-      "<b>%{fullData.name}:</b> %{y:.2f}%<extra></extra>";
+      "<b>Date:</b> %{x|%b %d, %Y}<br>" + "<b>%{fullData.name}:</b> %{y:.2f}%<extra></extra>";
 
     // Portfolio line (bold)
     if (marginTimeline.dates.length > 0) {
@@ -56,10 +52,7 @@ export function MarginChart({
           mode: "lines",
           name: truncateStrategyName(strategyName, 40),
           line: { dash: "dot" },
-          hovertemplate: hoverTemplate.replace(
-            "%{fullData.name}",
-            strategyName
-          ),
+          hovertemplate: hoverTemplate.replace("%{fullData.name}", strategyName),
         });
       }
     }
@@ -121,8 +114,8 @@ export function MarginChart({
     return (
       <Card className="p-8 text-center">
         <p className="text-muted-foreground">
-          No margin data available. Upload trades with margin requirements to see
-          utilization over time.
+          No margin data available. Upload trades with margin requirements to see utilization over
+          time.
         </p>
       </Card>
     );

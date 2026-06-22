@@ -209,9 +209,7 @@ export function registerTradeBlocksCoreTools(
 }
 
 // Main entry point - handles both skill CLI commands and MCP server mode
-export async function startTradeBlocksMcp(
-  options: StartTradeBlocksMcpOptions = {}
-): Promise<void> {
+export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = {}): Promise<void> {
   const plugins = options.plugins ?? [];
   const command = process.argv[2];
 
@@ -304,7 +302,9 @@ export async function startTradeBlocksMcp(
   // the module-level handle — a captured reference would go stale the moment a
   // tool upgrades for a write, surfacing as "connection disconnected".
   const storeContext: StoreContext = {
-    get conn() { return getCurrentConnection(); },
+    get conn() {
+      return getCurrentConnection();
+    },
     dataDir: resolvedDir,
     parquetMode,
     tickers: tickerRegistry,
@@ -321,9 +321,7 @@ export async function startTradeBlocksMcp(
   // stdio transport reserves stdout for the MCP JSON protocol — anything else
   // on stdout (even diagnostics) makes the client throw "not valid JSON".
   // Diagnostic output must go to stderr.
-  console.error(
-    `[market-stores] Constructed: ${parquetMode ? "parquet" : "duckdb"} backend`,
-  );
+  console.error(`[market-stores] Constructed: ${parquetMode ? "parquet" : "duckdb"} backend`);
 
   // Factory function to create configured MCP server instances
   // Used by HTTP transport which needs fresh instances per request (stateless mode)
@@ -332,8 +330,9 @@ export async function startTradeBlocksMcp(
       { name: "tradeblocks-mcp", version: "2.0.0" },
       {
         capabilities: { tools: {} },
-        instructions: "Call list_blocks first to discover available block IDs. All other block tools require a blockId returned by list_blocks. For SQL queries, call describe_database first to discover block_ids and column names, then filter trades with WHERE block_id = '...'.",
-      }
+        instructions:
+          "Call list_blocks first to discover available block IDs. All other block tools require a blockId returned by list_blocks. For SQL queries, call describe_database first to discover block_ids and column names, then filter trades with WHERE block_id = '...'.",
+      },
     );
     registerTradeBlocksCoreTools(server, pluginContext);
     for (const plugin of plugins) {

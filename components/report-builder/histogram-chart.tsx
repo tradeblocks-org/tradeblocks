@@ -45,7 +45,7 @@ const MAX_TIME_BIN_SIZE = 120;
  */
 function binTimeData(
   values: number[],
-  binSizeMinutes: number = DEFAULT_TIME_BIN_SIZE
+  binSizeMinutes: number = DEFAULT_TIME_BIN_SIZE,
 ): { x: number[]; y: number[]; labels: string[] } {
   if (values.length === 0) return { x: [], y: [], labels: [] };
 
@@ -58,9 +58,7 @@ function binTimeData(
   // Round min down and max up to bin boundaries
   const binStart = Math.floor(min / safeBinSize) * safeBinSize;
   // Handle edge case where all values are identical (min === max)
-  const binEnd = min === max
-    ? binStart + safeBinSize
-    : Math.ceil(max / safeBinSize) * safeBinSize;
+  const binEnd = min === max ? binStart + safeBinSize : Math.ceil(max / safeBinSize) * safeBinSize;
 
   // Create bins at fixed intervals
   const bins = new Map<number, number>();
@@ -95,7 +93,6 @@ function binTimeData(
 
   return { x, y, labels };
 }
-
 
 export function HistogramChart({
   trades,
@@ -160,8 +157,9 @@ export function HistogramChart({
             type: "bar",
             marker: { color: "rgba(148, 163, 184, 0.5)" },
             name: "Outside Range",
-            hovertemplate: outBinned.labels.map((label, i) =>
-              `${fieldLabel}: ${label}<br>Count: ${outBinned.y[i]}<extra>Outside Range</extra>`
+            hovertemplate: outBinned.labels.map(
+              (label, i) =>
+                `${fieldLabel}: ${label}<br>Count: ${outBinned.y[i]}<extra>Outside Range</extra>`,
             ),
           });
         }
@@ -173,8 +171,9 @@ export function HistogramChart({
             type: "bar",
             marker: { color: "rgb(59, 130, 246)" },
             name: "In Range",
-            hovertemplate: inBinned.labels.map((label, i) =>
-              `${fieldLabel}: ${label}<br>Count: ${inBinned.y[i]}<extra>In Range</extra>`
+            hovertemplate: inBinned.labels.map(
+              (label, i) =>
+                `${fieldLabel}: ${label}<br>Count: ${inBinned.y[i]}<extra>In Range</extra>`,
             ),
           });
         }
@@ -187,8 +186,8 @@ export function HistogramChart({
           type: "bar",
           marker: { color: "rgb(59, 130, 246)" },
           name: fieldLabel,
-          hovertemplate: binned.labels.map((label, i) =>
-            `${fieldLabel}: ${label}<br>Count: ${binned.y[i]}<extra></extra>`
+          hovertemplate: binned.labels.map(
+            (label, i) => `${fieldLabel}: ${label}<br>Count: ${binned.y[i]}<extra></extra>`,
           ),
         });
       }

@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 /**
  * Numeric Tag Input
@@ -7,20 +7,20 @@
  * Each value appears as a badge that can be removed individually.
  */
 
-import { useState, useRef, KeyboardEvent } from 'react'
-import { X, Plus } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { cn } from '@tradeblocks/lib'
+import { useState, useRef, KeyboardEvent } from "react";
+import { X, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { cn } from "@tradeblocks/lib";
 
 interface NumericTagInputProps {
-  value: number[]
-  onChange: (values: number[]) => void
-  placeholder?: string
-  className?: string
-  min?: number
-  max?: number
+  value: number[];
+  onChange: (values: number[]) => void;
+  placeholder?: string;
+  className?: string;
+  min?: number;
+  max?: number;
 }
 
 export function NumericTagInput({
@@ -29,64 +29,64 @@ export function NumericTagInput({
   placeholder = "Add value...",
   className,
   min,
-  max
+  max,
 }: NumericTagInputProps) {
-  const [inputValue, setInputValue] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [inputValue, setInputValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const addValue = () => {
-    const trimmed = inputValue.trim()
-    if (!trimmed) return
+    const trimmed = inputValue.trim();
+    if (!trimmed) return;
 
-    const num = parseFloat(trimmed)
+    const num = parseFloat(trimmed);
     if (isNaN(num)) {
-      setError('Enter a valid number')
-      return
+      setError("Enter a valid number");
+      return;
     }
 
     if (min !== undefined && num < min) {
-      setError(`Value must be at least ${min}`)
-      return
+      setError(`Value must be at least ${min}`);
+      return;
     }
 
     if (max !== undefined && num > max) {
-      setError(`Value must be at most ${max}`)
-      return
+      setError(`Value must be at most ${max}`);
+      return;
     }
 
     // Check for duplicates
     if (value.includes(num)) {
-      setError('Value already exists')
-      return
+      setError("Value already exists");
+      return;
     }
 
     // Add and sort
-    const newValues = [...value, num].sort((a, b) => a - b)
-    onChange(newValues)
-    setInputValue('')
-    setError(null)
-  }
+    const newValues = [...value, num].sort((a, b) => a - b);
+    onChange(newValues);
+    setInputValue("");
+    setError(null);
+  };
 
   const removeValue = (index: number) => {
-    const newValues = value.filter((_, i) => i !== index)
-    onChange(newValues)
-  }
+    const newValues = value.filter((_, i) => i !== index);
+    onChange(newValues);
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addValue()
-    } else if (e.key === 'Backspace' && inputValue === '' && value.length > 0) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addValue();
+    } else if (e.key === "Backspace" && inputValue === "" && value.length > 0) {
       // Remove last tag when backspace on empty input
-      removeValue(value.length - 1)
+      removeValue(value.length - 1);
     }
-  }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value)
-    setError(null)
-  }
+    setInputValue(e.target.value);
+    setError(null);
+  };
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -105,8 +105,8 @@ export function NumericTagInput({
             <button
               type="button"
               onClick={(e) => {
-                e.stopPropagation()
-                removeValue(index)
+                e.stopPropagation();
+                removeValue(index);
               }}
               className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
               aria-label={`Remove ${num}`}
@@ -150,7 +150,7 @@ export function NumericTagInput({
         </p>
       )}
     </div>
-  )
+  );
 }
 
-export default NumericTagInput
+export default NumericTagInput;

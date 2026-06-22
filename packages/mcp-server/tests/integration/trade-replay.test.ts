@@ -18,16 +18,16 @@ import type { MarketStores } from "../../src/market/stores/index.ts";
 // Minute bars for SPY 470C — 3 minutes starting at 09:30 ET on 2025-01-17
 // 2025-01-17 is in EST (UTC-5): 09:30 ET = 14:30 UTC = 1737124200000 ms
 const SPY_470C_BARS = [
-  { t: 1737124200000, o: 5.0, h: 5.2, l: 4.9, c: 5.1 },  // 09:30
-  { t: 1737124260000, o: 5.1, h: 5.5, l: 5.0, c: 5.3 },  // 09:31
-  { t: 1737124320000, o: 5.3, h: 5.4, l: 4.7, c: 4.8 },  // 09:32
+  { t: 1737124200000, o: 5.0, h: 5.2, l: 4.9, c: 5.1 }, // 09:30
+  { t: 1737124260000, o: 5.1, h: 5.5, l: 5.0, c: 5.3 }, // 09:31
+  { t: 1737124320000, o: 5.3, h: 5.4, l: 4.7, c: 4.8 }, // 09:32
 ];
 
 // Minute bars for SPY 475C (short leg of spread)
 const SPY_475C_BARS = [
-  { t: 1737124200000, o: 3.0, h: 3.1, l: 2.9, c: 3.05 },  // 09:30
-  { t: 1737124260000, o: 3.05, h: 3.3, l: 3.0, c: 3.2 },  // 09:31
-  { t: 1737124320000, o: 3.2, h: 3.3, l: 2.6, c: 2.7 },   // 09:32
+  { t: 1737124200000, o: 3.0, h: 3.1, l: 2.9, c: 3.05 }, // 09:30
+  { t: 1737124260000, o: 3.05, h: 3.3, l: 3.0, c: 3.2 }, // 09:31
+  { t: 1737124320000, o: 3.2, h: 3.3, l: 2.6, c: 2.7 }, // 09:32
 ];
 
 const SPY_UNDERLYING_BARS = [
@@ -191,7 +191,7 @@ describe("replay_trade integration", () => {
           multiplier: 100,
         },
         "/tmp/test-replay",
-        stores
+        stores,
       );
 
       expect(result.pnlPath.length).toBe(3);
@@ -243,7 +243,7 @@ describe("replay_trade integration", () => {
           multiplier: 100,
         },
         "/tmp/test-replay",
-        stores
+        stores,
       );
 
       expect(result.pnlPath.length).toBe(3);
@@ -282,8 +282,8 @@ describe("replay_trade integration", () => {
             multiplier: 100,
           },
           "/tmp/test-replay",
-          stores
-        )
+          stores,
+        ),
       ).rejects.toThrow("open_date and close_date are required");
     });
 
@@ -334,7 +334,7 @@ describe("replay_trade integration", () => {
           skip_quotes: true,
         },
         "/tmp/test-replay",
-        stores
+        stores,
       );
 
       expect(result.totalPnlChange).not.toBeNaN();
@@ -370,7 +370,7 @@ describe("replay_trade integration", () => {
         },
         "/tmp/test-replay",
         stores,
-        conn
+        conn,
       );
 
       expect(result.pnlPath.length).toBe(3);
@@ -399,8 +399,8 @@ describe("replay_trade integration", () => {
           },
           "/tmp/test-replay",
           stores,
-          conn
-        )
+          conn,
+        ),
       ).rejects.toThrow("hypothetical mode");
     });
 
@@ -415,8 +415,8 @@ describe("replay_trade integration", () => {
           },
           "/tmp/test-replay",
           stores,
-          conn
-        )
+          conn,
+        ),
       ).rejects.toThrow("No trade found");
     });
   });
@@ -435,8 +435,8 @@ describe("replay_trade integration", () => {
             multiplier: 100,
           },
           "/tmp/test-replay",
-          stores
-        )
+          stores,
+        ),
       ).rejects.toThrow("Provide either legs[]");
     });
   });

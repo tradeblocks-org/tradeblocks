@@ -6,19 +6,9 @@ import { useEffect, useState } from "react";
 
 import { NoActiveBlock } from "@/components/no-active-block";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   PortfolioStatsCalculator,
@@ -36,12 +26,11 @@ import {
 import type { PortfolioStats, StrategyStats, SnapshotChartData, Trade } from "@tradeblocks/lib";
 import { useBlockStore } from "@tradeblocks/lib/stores";
 
-const GPT_URL =
-  "https://chatgpt.com/g/g-6919e4fab91c8191a77967240ab4f3e8-tradeblocks-assistant";
+const GPT_URL = "https://chatgpt.com/g/g-6919e4fab91c8191a77967240ab4f3e8-tradeblocks-assistant";
 export default function AssistantPage() {
   const [includeBlockStats, setIncludeBlockStats] = useState(true);
   const [selectedCharts, setSelectedCharts] = useState<Set<string>>(
-    new Set(CHART_EXPORTS.map((c) => c.id))
+    new Set(CHART_EXPORTS.map((c) => c.id)),
   );
   const [chartsExpanded, setChartsExpanded] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -49,20 +38,14 @@ export default function AssistantPage() {
   // Block store
   const activeBlock = useBlockStore((state) => {
     const activeBlockId = state.activeBlockId;
-    return activeBlockId
-      ? state.blocks.find((block) => block.id === activeBlockId)
-      : null;
+    return activeBlockId ? state.blocks.find((block) => block.id === activeBlockId) : null;
   });
   const isInitialized = useBlockStore((state) => state.isInitialized);
   const loadBlocks = useBlockStore((state) => state.loadBlocks);
 
   // Local data state
-  const [portfolioStats, setPortfolioStats] = useState<PortfolioStats | null>(
-    null
-  );
-  const [strategyStats, setStrategyStats] = useState<
-    Record<string, StrategyStats>
-  >({});
+  const [portfolioStats, setPortfolioStats] = useState<PortfolioStats | null>(null);
+  const [strategyStats, setStrategyStats] = useState<Record<string, StrategyStats>>({});
   const [trades, setTrades] = useState<Trade[]>([]);
   const [chartData, setChartData] = useState<SnapshotChartData | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -92,8 +75,7 @@ export default function AssistantPage() {
       setIsLoadingData(true);
       try {
         const processedBlock = await getBlock(blockId);
-        const combineLegGroups =
-          processedBlock?.analysisConfig?.combineLegGroups ?? false;
+        const combineLegGroups = processedBlock?.analysisConfig?.combineLegGroups ?? false;
 
         const [blockTrades, blockDailyLogs] = await Promise.all([
           getTradesByBlockWithOptions(blockId, { combineLegGroups }),
@@ -112,9 +94,7 @@ export default function AssistantPage() {
           setTrades(snapshot.filteredTrades);
 
           const calculator = new PortfolioStatsCalculator();
-          const strategies = calculator.calculateStrategyStats(
-            snapshot.filteredTrades
-          );
+          const strategies = calculator.calculateStrategyStats(snapshot.filteredTrades);
           setStrategyStats(strategies);
         }
       } catch (error) {
@@ -213,10 +193,7 @@ export default function AssistantPage() {
 
       // Export performance charts
       if (selectedCharts.size > 0 && chartData) {
-        exportData.performanceCharts = getMultipleChartsJson(
-          chartData,
-          Array.from(selectedCharts)
-        );
+        exportData.performanceCharts = getMultipleChartsJson(chartData, Array.from(selectedCharts));
       }
 
       // Download the combined export
@@ -233,10 +210,7 @@ export default function AssistantPage() {
     window.open(GPT_URL, "_blank");
   };
 
-  const canExport =
-    activeBlock &&
-    !isLoadingData &&
-    (includeBlockStats || selectedCharts.size > 0);
+  const canExport = activeBlock && !isLoadingData && (includeBlockStats || selectedCharts.size > 0);
 
   // Show loading state
   if (!isInitialized) {
@@ -276,8 +250,7 @@ export default function AssistantPage() {
           <CardHeader>
             <CardTitle className="text-lg">Export Data for Analysis</CardTitle>
             <CardDescription>
-              Select the data you want to export, then upload the JSON file to
-              the assistant.
+              Select the data you want to export, then upload the JSON file to the assistant.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -286,17 +259,13 @@ export default function AssistantPage() {
             ) : isLoadingData ? (
               <div className="flex items-center justify-center py-8">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                <span className="ml-2 text-muted-foreground">
-                  Loading block data...
-                </span>
+                <span className="ml-2 text-muted-foreground">Loading block data...</span>
               </div>
             ) : (
               <>
                 <div className="text-sm text-muted-foreground mb-4">
                   Exporting data for:{" "}
-                  <span className="font-medium text-foreground">
-                    {activeBlock.name}
-                  </span>
+                  <span className="font-medium text-foreground">{activeBlock.name}</span>
                 </div>
 
                 <ScrollArea className="h-[320px] pr-4">
@@ -306,28 +275,19 @@ export default function AssistantPage() {
                       <Checkbox
                         id="block-stats"
                         checked={includeBlockStats}
-                        onCheckedChange={(checked) =>
-                          setIncludeBlockStats(!!checked)
-                        }
+                        onCheckedChange={(checked) => setIncludeBlockStats(!!checked)}
                         className="mt-0.5"
                       />
-                      <label
-                        htmlFor="block-stats"
-                        className="flex-1 cursor-pointer"
-                      >
+                      <label htmlFor="block-stats" className="flex-1 cursor-pointer">
                         <div className="font-medium text-sm">Block Stats</div>
                         <div className="text-xs text-muted-foreground">
-                          Portfolio metrics, win rate, Sharpe, drawdowns,
-                          strategy breakdown
+                          Portfolio metrics, win rate, Sharpe, drawdowns, strategy breakdown
                         </div>
                       </label>
                     </div>
 
                     {/* Performance Charts - Collapsible */}
-                    <Collapsible
-                      open={chartsExpanded}
-                      onOpenChange={setChartsExpanded}
-                    >
+                    <Collapsible open={chartsExpanded} onOpenChange={setChartsExpanded}>
                       <div className="rounded-lg border">
                         <CollapsibleTrigger asChild>
                           <div className="flex items-start gap-3 p-3 hover:bg-muted/50 cursor-pointer">
@@ -346,8 +306,7 @@ export default function AssistantPage() {
                                 </span>
                               </div>
                               <div className="text-xs text-muted-foreground">
-                                Equity curve, monthly returns, rolling metrics,
-                                MFE/MAE, and more
+                                Equity curve, monthly returns, rolling metrics, MFE/MAE, and more
                               </div>
                             </div>
                           </div>
@@ -390,12 +349,8 @@ export default function AssistantPage() {
                                         >
                                           <Checkbox
                                             id={`chart-${chart.id}`}
-                                            checked={selectedCharts.has(
-                                              chart.id
-                                            )}
-                                            onCheckedChange={() =>
-                                              toggleChart(chart.id)
-                                            }
+                                            checked={selectedCharts.has(chart.id)}
+                                            onCheckedChange={() => toggleChart(chart.id)}
                                           />
                                           <label
                                             htmlFor={`chart-${chart.id}`}
@@ -422,24 +377,15 @@ export default function AssistantPage() {
                   <Info className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>
                     For other analysis, export directly from:{" "}
-                    <Link
-                      href="/risk-simulator"
-                      className="underline hover:text-foreground"
-                    >
+                    <Link href="/risk-simulator" className="underline hover:text-foreground">
                       Risk Simulator
                     </Link>
                     {", "}
-                    <Link
-                      href="/walk-forward"
-                      className="underline hover:text-foreground"
-                    >
+                    <Link href="/walk-forward" className="underline hover:text-foreground">
                       Walk-Forward
                     </Link>
                     {", "}
-                    <Link
-                      href="/correlation-matrix"
-                      className="underline hover:text-foreground"
-                    >
+                    <Link href="/correlation-matrix" className="underline hover:text-foreground">
                       Correlation
                     </Link>
                     .
@@ -457,8 +403,8 @@ export default function AssistantPage() {
                 </Button>
 
                 <p className="text-xs text-muted-foreground text-center">
-                  If ChatGPT has trouble with the file, try selecting fewer
-                  charts to reduce the export size.
+                  If ChatGPT has trouble with the file, try selecting fewer charts to reduce the
+                  export size.
                 </p>
               </>
             )}
@@ -482,8 +428,7 @@ export default function AssistantPage() {
                 <div>
                   <div className="font-medium">Select a block</div>
                   <div className="text-muted-foreground">
-                    Choose the trading block you want to analyze from the
-                    sidebar.
+                    Choose the trading block you want to analyze from the sidebar.
                   </div>
                 </div>
               </li>
@@ -494,8 +439,7 @@ export default function AssistantPage() {
                 <div>
                   <div className="font-medium">Export your data</div>
                   <div className="text-muted-foreground">
-                    Select Block Stats and/or specific charts, then download the
-                    JSON.
+                    Select Block Stats and/or specific charts, then download the JSON.
                   </div>
                 </div>
               </li>
@@ -517,8 +461,8 @@ export default function AssistantPage() {
                 <div>
                   <div className="font-medium">Ask questions</div>
                   <div className="text-muted-foreground">
-                    Get insights like &quot;What does my MFE/MAE tell me?&quot;
-                    or &quot;Summarize my strategy breakdown.&quot;
+                    Get insights like &quot;What does my MFE/MAE tell me?&quot; or &quot;Summarize
+                    my strategy breakdown.&quot;
                   </div>
                 </div>
               </li>

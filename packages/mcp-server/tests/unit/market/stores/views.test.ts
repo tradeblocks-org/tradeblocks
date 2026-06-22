@@ -25,10 +25,7 @@ let db: DuckDBInstance;
 let conn: DuckDBConnection;
 
 beforeEach(async () => {
-  tmpDir = join(
-    tmpdir(),
-    `views-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-  );
+  tmpDir = join(tmpdir(), `views-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   mkdirSync(join(tmpDir, "market"), { recursive: true });
   db = await DuckDBInstance.create(":memory:");
   conn = await db.connect();
@@ -49,17 +46,8 @@ afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-async function writeSpotPartitionFixture(
-  ticker: string,
-  date: string,
-): Promise<void> {
-  const dir = join(
-    tmpDir,
-    "market",
-    "spot",
-    `ticker=${ticker}`,
-    `date=${date}`,
-  );
+async function writeSpotPartitionFixture(ticker: string, date: string): Promise<void> {
+  const dir = join(tmpDir, "market", "spot", `ticker=${ticker}`, `date=${date}`);
   mkdirSync(dir, { recursive: true });
   await conn.run(`
     COPY (
@@ -101,13 +89,7 @@ async function writeEnrichedContextFixture(): Promise<void> {
 }
 
 async function writeLegacyOptionQuoteFixture(): Promise<void> {
-  const dir = join(
-    tmpDir,
-    "market",
-    "option_quote_minutes",
-    "underlying=SPX",
-    "date=2025-01-06",
-  );
+  const dir = join(tmpDir, "market", "option_quote_minutes", "underlying=SPX", "date=2025-01-06");
   mkdirSync(dir, { recursive: true });
   await conn.run(`
     COPY (
@@ -142,13 +124,7 @@ async function writeSpotMinuteBarsFixture(
     ask: number;
   }>,
 ): Promise<void> {
-  const dir = join(
-    tmpDir,
-    "market",
-    "spot",
-    `ticker=${ticker}`,
-    `date=${date}`,
-  );
+  const dir = join(tmpDir, "market", "spot", `ticker=${ticker}`, `date=${date}`);
   mkdirSync(dir, { recursive: true });
   const values = bars
     .map(
@@ -179,9 +155,7 @@ describe("market-views registration", () => {
     await writeSpotPartitionFixture("SPX", "2025-01-06");
     const result = await createMarketParquetViews(conn, tmpDir);
     expect(result.viewsCreated).toContain("spot");
-    const read = await conn.runAndReadAll(
-      `SELECT COUNT(*) FROM market.spot`,
-    );
+    const read = await conn.runAndReadAll(`SELECT COUNT(*) FROM market.spot`);
     expect(Number(read.getRows()[0][0])).toBe(1);
   });
 
@@ -189,9 +163,7 @@ describe("market-views registration", () => {
     await writeEnrichedFixture("SPX");
     const result = await createMarketParquetViews(conn, tmpDir);
     expect(result.viewsCreated).toContain("enriched");
-    const read = await conn.runAndReadAll(
-      `SELECT COUNT(*) FROM market.enriched`,
-    );
+    const read = await conn.runAndReadAll(`SELECT COUNT(*) FROM market.enriched`);
     expect(Number(read.getRows()[0][0])).toBe(1);
   });
 
@@ -199,9 +171,7 @@ describe("market-views registration", () => {
     await writeEnrichedContextFixture();
     const result = await createMarketParquetViews(conn, tmpDir);
     expect(result.viewsCreated).toContain("enriched_context");
-    const read = await conn.runAndReadAll(
-      `SELECT COUNT(*) FROM market.enriched_context`,
-    );
+    const read = await conn.runAndReadAll(`SELECT COUNT(*) FROM market.enriched_context`);
     expect(Number(read.getRows()[0][0])).toBe(1);
   });
 
@@ -221,9 +191,7 @@ describe("market-views registration", () => {
   it("view-vs-table transparency: same SELECT works against view as against physical table", async () => {
     await writeSpotPartitionFixture("SPX", "2025-01-06");
     await createMarketParquetViews(conn, tmpDir);
-    const viaView = await conn.runAndReadAll(
-      `SELECT ticker FROM market.spot WHERE ticker = 'SPX'`,
-    );
+    const viaView = await conn.runAndReadAll(`SELECT ticker FROM market.spot WHERE ticker = 'SPX'`);
     expect(viaView.getRows().length).toBeGreaterThan(0);
   });
 
@@ -241,9 +209,7 @@ describe("market-views registration", () => {
     await writeSpotPartitionFixture("SPX", "2025-01-06");
     await createMarketParquetViews(conn, tmpDir);
     await createMarketParquetViews(conn, tmpDir);
-    const read = await conn.runAndReadAll(
-      `SELECT COUNT(*) FROM market.spot`,
-    );
+    const read = await conn.runAndReadAll(`SELECT COUNT(*) FROM market.spot`);
     expect(Number(read.getRows()[0][0])).toBeGreaterThan(0);
   });
 });
@@ -311,9 +277,7 @@ describe("market.spot_daily view", () => {
     const result = await createMarketParquetViews(conn, tmpDir);
     expect(result.viewsCreated).toContain("spot_daily");
     // The view resolves over the fallback table; selecting works and yields 0 rows.
-    const read = await conn.runAndReadAll(
-      `SELECT COUNT(*) FROM market.spot_daily`,
-    );
+    const read = await conn.runAndReadAll(`SELECT COUNT(*) FROM market.spot_daily`);
     expect(Number(read.getRows()[0][0])).toBe(0);
   });
 

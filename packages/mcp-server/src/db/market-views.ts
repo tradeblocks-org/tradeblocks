@@ -27,10 +27,7 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import { existsSync, readdirSync } from "fs";
 import * as path from "path";
-import {
-  resolveCanonicalMarketPartitionDir,
-  resolveMarketDir,
-} from "./market-datasets.ts";
+import { resolveCanonicalMarketPartitionDir, resolveMarketDir } from "./market-datasets.ts";
 import {
   describeReadParquetColumns,
   quoteParquetCanonicalProjection,
@@ -51,10 +48,7 @@ export interface ViewCreationResult {
  * option_chain, option_quote_minutes — all date-only) continue working unchanged.
  * Pass "ticker" for ticker-first partitioning (the 3.0 spot directory).
  */
-function hasParquetPartitions(
-  dir: string,
-  partitionKey: string = "date",
-): boolean {
+function hasParquetPartitions(dir: string, partitionKey: string = "date"): boolean {
   if (!existsSync(dir)) return false;
   try {
     const prefix = `${partitionKey}=`;
@@ -136,7 +130,11 @@ export async function createMarketParquetViews(
   // (`option_chain/underlying=X/date=Y/...`) — the current store writers
   // produce the underlying-first layout.
   const hiveViews: Array<{ name: string; subdir: string; partitionKey: string }> = [
-    { name: "option_chain", subdir: resolveCanonicalMarketPartitionDir(dataDir, "option_chain"), partitionKey: "underlying" },
+    {
+      name: "option_chain",
+      subdir: resolveCanonicalMarketPartitionDir(dataDir, "option_chain"),
+      partitionKey: "underlying",
+    },
   ];
 
   for (const { name, subdir, partitionKey } of hiveViews) {
@@ -144,10 +142,19 @@ export async function createMarketParquetViews(
     // Accept either the dataset's primary partition key (e.g. `underlying` for
     // Market Data 3.0 option_chain) or the legacy `date` top-level partition.
     const hasNewLayout = existsSync(dirPath) && hasParquetPartitions(dirPath, partitionKey);
-    const hasLegacyLayout = partitionKey !== "date" && existsSync(dirPath) && hasParquetPartitions(dirPath, "date");
+    const hasLegacyLayout =
+      partitionKey !== "date" && existsSync(dirPath) && hasParquetPartitions(dirPath, "date");
     if (hasNewLayout || hasLegacyLayout) {
-      try { await conn.run(`DROP VIEW IF EXISTS market.${name}`); } catch { /* wrong type */ }
-      try { await conn.run(`DROP TABLE IF EXISTS market.${name}`); } catch { /* wrong type */ }
+      try {
+        await conn.run(`DROP VIEW IF EXISTS market.${name}`);
+      } catch {
+        /* wrong type */
+      }
+      try {
+        await conn.run(`DROP TABLE IF EXISTS market.${name}`);
+      } catch {
+        /* wrong type */
+      }
       // Glob on data.parquet (not *.parquet) so DuckDB's in-flight
       // tmp_data.parquet files — created by concurrent COPY ... TO writers
       // during atomic parquet replacement — never match. Matching a mid-write
@@ -158,7 +165,11 @@ export async function createMarketParquetViews(
       );
       viewsCreated.push(name);
     } else {
-      try { await conn.run(`DROP VIEW IF EXISTS market.${name}`); } catch { /* not a view */ }
+      try {
+        await conn.run(`DROP VIEW IF EXISTS market.${name}`);
+      } catch {
+        /* not a view */
+      }
       tablesKept.push(name);
     }
   }
@@ -175,8 +186,16 @@ export async function createMarketParquetViews(
   const optionQuoteHasNewLayout = hasParquetPartitions(optionMinuteQuoteDir, "underlying");
   const optionQuoteHasLegacyLayout = hasParquetPartitions(optionMinuteQuoteDir, "date");
   if (optionQuoteHasNewLayout || optionQuoteHasLegacyLayout) {
-    try { await conn.run("DROP VIEW IF EXISTS market.option_quote_minutes"); } catch { /* wrong type */ }
-    try { await conn.run("DROP TABLE IF EXISTS market.option_quote_minutes"); } catch { /* wrong type */ }
+    try {
+      await conn.run("DROP VIEW IF EXISTS market.option_quote_minutes");
+    } catch {
+      /* wrong type */
+    }
+    try {
+      await conn.run("DROP TABLE IF EXISTS market.option_quote_minutes");
+    } catch {
+      /* wrong type */
+    }
     // See hive-views glob comment: scope to data.parquet so concurrent
     // COPY ... TO writers' tmp_data.parquet never trips DESCRIBE.
     const quoteSource = readParquetGlobSql(`${optionMinuteQuoteDir}/**/data.parquet`);
@@ -189,7 +208,11 @@ export async function createMarketParquetViews(
     );
     viewsCreated.push("option_quote_minutes");
   } else {
-    try { await conn.run("DROP VIEW IF EXISTS market.option_quote_minutes"); } catch { /* not a view */ }
+    try {
+      await conn.run("DROP VIEW IF EXISTS market.option_quote_minutes");
+    } catch {
+      /* not a view */
+    }
     tablesKept.push("option_quote_minutes");
   }
 
@@ -197,14 +220,30 @@ export async function createMarketParquetViews(
   // an older run. This keeps the public SQL surface aligned with the current
   // architecture where quote greeks live inline on option_quote_minutes and
   // missing values are computed in memory at query time.
-  try { await conn.run("DROP VIEW IF EXISTS market.option_greeks_minutes"); } catch { /* wrong type */ }
-  try { await conn.run("DROP TABLE IF EXISTS market.option_greeks_minutes"); } catch { /* wrong type */ }
+  try {
+    await conn.run("DROP VIEW IF EXISTS market.option_greeks_minutes");
+  } catch {
+    /* wrong type */
+  }
+  try {
+    await conn.run("DROP TABLE IF EXISTS market.option_greeks_minutes");
+  } catch {
+    /* wrong type */
+  }
 
   // Remove the retired delta-index surface from the market schema if it exists
   // from an older run. Delta selection now reads directly from
   // market.option_quote_minutes greeks instead of a second persisted dataset.
-  try { await conn.run("DROP VIEW IF EXISTS market.option_delta_index"); } catch { /* wrong type */ }
-  try { await conn.run("DROP TABLE IF EXISTS market.option_delta_index"); } catch { /* wrong type */ }
+  try {
+    await conn.run("DROP VIEW IF EXISTS market.option_delta_index");
+  } catch {
+    /* wrong type */
+  }
+  try {
+    await conn.run("DROP TABLE IF EXISTS market.option_delta_index");
+  } catch {
+    /* wrong type */
+  }
 
   // ============================================================================
   // Canonical store views (spot, enriched, enriched_context, spot_daily).
@@ -215,8 +254,16 @@ export async function createMarketParquetViews(
   // market.spot — ticker-first Hive partitioning: spot/ticker=X/date=Y/data.parquet
   const spotDir = path.join(resolveMarketDir(dataDir), "spot");
   if (hasParquetPartitions(spotDir, "ticker")) {
-    try { await conn.run("DROP VIEW  IF EXISTS market.spot"); } catch { /* wrong type */ }
-    try { await conn.run("DROP TABLE IF EXISTS market.spot"); } catch { /* wrong type */ }
+    try {
+      await conn.run("DROP VIEW  IF EXISTS market.spot");
+    } catch {
+      /* wrong type */
+    }
+    try {
+      await conn.run("DROP TABLE IF EXISTS market.spot");
+    } catch {
+      /* wrong type */
+    }
     // Scope glob to data.parquet (see tmp_data.parquet race note above).
     await conn.run(
       `CREATE OR REPLACE VIEW market.spot AS
@@ -224,36 +271,64 @@ export async function createMarketParquetViews(
     );
     viewsCreated.push("spot");
   } else {
-    try { await conn.run("DROP VIEW IF EXISTS market.spot"); } catch { /* not a view */ }
+    try {
+      await conn.run("DROP VIEW IF EXISTS market.spot");
+    } catch {
+      /* not a view */
+    }
     tablesKept.push("spot");
   }
 
   // market.enriched — per-ticker single file: enriched/ticker=X/data.parquet (no date partition)
   const enrichedDir = path.join(resolveMarketDir(dataDir), "enriched");
   if (hasEnrichedTickerFiles(enrichedDir)) {
-    try { await conn.run("DROP VIEW  IF EXISTS market.enriched"); } catch { /* wrong type */ }
-    try { await conn.run("DROP TABLE IF EXISTS market.enriched"); } catch { /* wrong type */ }
+    try {
+      await conn.run("DROP VIEW  IF EXISTS market.enriched");
+    } catch {
+      /* wrong type */
+    }
+    try {
+      await conn.run("DROP TABLE IF EXISTS market.enriched");
+    } catch {
+      /* wrong type */
+    }
     await conn.run(
       `CREATE OR REPLACE VIEW market.enriched AS
        SELECT * FROM read_parquet('${enrichedDir}/ticker=*/data.parquet', hive_partitioning=true)`,
     );
     viewsCreated.push("enriched");
   } else {
-    try { await conn.run("DROP VIEW IF EXISTS market.enriched"); } catch { /* not a view */ }
+    try {
+      await conn.run("DROP VIEW IF EXISTS market.enriched");
+    } catch {
+      /* not a view */
+    }
     tablesKept.push("enriched");
   }
 
   // market.enriched_context — global single file: enriched/context/data.parquet (no partition)
   if (hasEnrichedContextFile(enrichedDir)) {
-    try { await conn.run("DROP VIEW  IF EXISTS market.enriched_context"); } catch { /* wrong type */ }
-    try { await conn.run("DROP TABLE IF EXISTS market.enriched_context"); } catch { /* wrong type */ }
+    try {
+      await conn.run("DROP VIEW  IF EXISTS market.enriched_context");
+    } catch {
+      /* wrong type */
+    }
+    try {
+      await conn.run("DROP TABLE IF EXISTS market.enriched_context");
+    } catch {
+      /* wrong type */
+    }
     await conn.run(
       `CREATE OR REPLACE VIEW market.enriched_context AS
        SELECT * FROM read_parquet('${path.join(enrichedDir, "context", "data.parquet")}')`,
     );
     viewsCreated.push("enriched_context");
   } else {
-    try { await conn.run("DROP VIEW IF EXISTS market.enriched_context"); } catch { /* not a view */ }
+    try {
+      await conn.run("DROP VIEW IF EXISTS market.enriched_context");
+    } catch {
+      /* not a view */
+    }
     tablesKept.push("enriched_context");
   }
 
@@ -279,8 +354,16 @@ export async function createMarketParquetViews(
     }
   })();
   if (spotExists) {
-    try { await conn.run("DROP VIEW  IF EXISTS market.spot_daily"); } catch { /* wrong type */ }
-    try { await conn.run("DROP TABLE IF EXISTS market.spot_daily"); } catch { /* wrong type */ }
+    try {
+      await conn.run("DROP VIEW  IF EXISTS market.spot_daily");
+    } catch {
+      /* wrong type */
+    }
+    try {
+      await conn.run("DROP TABLE IF EXISTS market.spot_daily");
+    } catch {
+      /* wrong type */
+    }
     await conn.run(`
       CREATE OR REPLACE VIEW market.spot_daily AS
         SELECT ticker, date,
@@ -305,7 +388,11 @@ export async function createMarketParquetViews(
     `);
     viewsCreated.push("spot_daily");
   } else {
-    try { await conn.run("DROP VIEW IF EXISTS market.spot_daily"); } catch { /* not a view */ }
+    try {
+      await conn.run("DROP VIEW IF EXISTS market.spot_daily");
+    } catch {
+      /* not a view */
+    }
     tablesKept.push("spot_daily");
   }
 

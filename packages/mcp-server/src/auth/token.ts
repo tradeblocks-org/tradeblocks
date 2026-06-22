@@ -1,4 +1,4 @@
-import { SignJWT, jwtVerify } from 'jose';
+import { SignJWT, jwtVerify } from "jose";
 
 // AuthInfo matches the MCP SDK's expected shape
 export interface AuthInfo {
@@ -19,10 +19,10 @@ export async function issueAccessToken(params: {
 
   const jwt = await new SignJWT({
     client_id: params.clientId,
-    scope: params.scopes.join(' '),
+    scope: params.scopes.join(" "),
   })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setSubject('tradeblocks-user')
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject("tradeblocks-user")
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + expirySeconds)
     .sign(secretKey);
@@ -30,17 +30,14 @@ export async function issueAccessToken(params: {
   return { access_token: jwt, expires_in: expirySeconds };
 }
 
-export async function verifyAccessToken(
-  token: string,
-  secret: string
-): Promise<AuthInfo> {
+export async function verifyAccessToken(token: string, secret: string): Promise<AuthInfo> {
   const secretKey = new TextEncoder().encode(secret);
   const { payload } = await jwtVerify(token, secretKey);
 
   return {
     token,
-    clientId: (payload.client_id as string) || '',
-    scopes: ((payload.scope as string) || '').split(' ').filter(Boolean),
+    clientId: (payload.client_id as string) || "",
+    scopes: ((payload.scope as string) || "").split(" ").filter(Boolean),
     expiresAt: payload.exp,
   };
 }
@@ -50,10 +47,15 @@ export function parseExpiry(expiry: string): number {
   if (!match) return 86400;
   const n = parseInt(match[1], 10);
   switch (match[2]) {
-    case 's': return n;
-    case 'm': return n * 60;
-    case 'h': return n * 3600;
-    case 'd': return n * 86400;
-    default: return 86400;
+    case "s":
+      return n;
+    case "m":
+      return n * 60;
+    case "h":
+      return n * 3600;
+    case "d":
+      return n * 86400;
+    default:
+      return 86400;
   }
 }

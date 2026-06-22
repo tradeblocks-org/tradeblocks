@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 /**
  * Filter Panel
@@ -7,38 +7,33 @@
  * Wrapped in React.memo for performance - only re-renders when props actually change.
  */
 
-import { memo } from 'react'
-import { Lock, LockOpen, Plus, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
-import { Separator } from '@/components/ui/separator'
+import { memo } from "react";
+import { Lock, LockOpen, Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
 import {
   FilterConfig,
   FilterCondition,
   StaticDatasetFieldInfo,
-  createFilterCondition
-} from '@tradeblocks/lib'
-import { FlexibleFilterResult } from '@tradeblocks/lib'
-import { EnrichedTrade } from '@tradeblocks/lib'
-import { FilterConditionRow } from './filter-condition-row'
+  createFilterCondition,
+} from "@tradeblocks/lib";
+import { FlexibleFilterResult } from "@tradeblocks/lib";
+import { EnrichedTrade } from "@tradeblocks/lib";
+import { FilterConditionRow } from "./filter-condition-row";
 
 interface FilterPanelProps {
-  filterConfig: FilterConfig
-  onFilterChange: (config: FilterConfig) => void
-  filterResult: FlexibleFilterResult | null
+  filterConfig: FilterConfig;
+  onFilterChange: (config: FilterConfig) => void;
+  filterResult: FlexibleFilterResult | null;
   /** Enriched trades to extract custom fields from */
-  trades?: EnrichedTrade[]
+  trades?: EnrichedTrade[];
   /** Static datasets for field discovery */
-  staticDatasets?: StaticDatasetFieldInfo[]
+  staticDatasets?: StaticDatasetFieldInfo[];
   /** Whether to keep filters when loading reports */
-  keepFilters: boolean
-  onKeepFiltersChange: (value: boolean) => void
+  keepFilters: boolean;
+  onKeepFiltersChange: (value: boolean) => void;
 }
 
 export const FilterPanel = memo(function FilterPanel({
@@ -48,45 +43,45 @@ export const FilterPanel = memo(function FilterPanel({
   trades = [],
   staticDatasets,
   keepFilters,
-  onKeepFiltersChange
+  onKeepFiltersChange,
 }: FilterPanelProps) {
   // Add a new filter condition
   const handleAddCondition = () => {
-    const newCondition = createFilterCondition()
+    const newCondition = createFilterCondition();
     onFilterChange({
       ...filterConfig,
-      conditions: [...filterConfig.conditions, newCondition]
-    })
-  }
+      conditions: [...filterConfig.conditions, newCondition],
+    });
+  };
 
   // Update an existing condition
   const handleConditionChange = (updatedCondition: FilterCondition) => {
     onFilterChange({
       ...filterConfig,
-      conditions: filterConfig.conditions.map(c =>
-        c.id === updatedCondition.id ? updatedCondition : c
-      )
-    })
-  }
+      conditions: filterConfig.conditions.map((c) =>
+        c.id === updatedCondition.id ? updatedCondition : c,
+      ),
+    });
+  };
 
   // Remove a condition
   const handleRemoveCondition = (conditionId: string) => {
     onFilterChange({
       ...filterConfig,
-      conditions: filterConfig.conditions.filter(c => c.id !== conditionId)
-    })
-  }
+      conditions: filterConfig.conditions.filter((c) => c.id !== conditionId),
+    });
+  };
 
   // Clear all conditions
   const handleClearAll = () => {
     onFilterChange({
       ...filterConfig,
-      conditions: []
-    })
-  }
+      conditions: [],
+    });
+  };
 
-  const hasConditions = filterConfig.conditions.length > 0
-  const activeConditions = filterConfig.conditions.filter(c => c.enabled)
+  const hasConditions = filterConfig.conditions.length > 0;
+  const activeConditions = filterConfig.conditions.filter((c) => c.enabled);
 
   return (
     <Card>
@@ -113,7 +108,11 @@ export const FilterPanel = memo(function FilterPanel({
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="left">
-                <p>{keepFilters ? "Filters locked - loading reports won't change filters" : "Lock to keep filters when loading reports"}</p>
+                <p>
+                  {keepFilters
+                    ? "Filters locked - loading reports won't change filters"
+                    : "Lock to keep filters when loading reports"}
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -123,7 +122,7 @@ export const FilterPanel = memo(function FilterPanel({
         {/* Filter conditions */}
         {filterConfig.conditions.length > 0 ? (
           <div className="space-y-2">
-            {filterConfig.conditions.map(condition => (
+            {filterConfig.conditions.map((condition) => (
               <FilterConditionRow
                 key={condition.id}
                 condition={condition}
@@ -141,12 +140,7 @@ export const FilterPanel = memo(function FilterPanel({
         )}
 
         {/* Add filter button */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={handleAddCondition}
-        >
+        <Button variant="outline" size="sm" className="w-full" onClick={handleAddCondition}>
           <Plus className="h-4 w-4 mr-2" />
           Add Filter
         </Button>
@@ -160,32 +154,28 @@ export const FilterPanel = memo(function FilterPanel({
             <div className="text-sm">
               <span className="font-medium">{filterResult.matchCount}</span>
               <span className="text-muted-foreground">
-                {' '}of {filterResult.totalCount} trades ({filterResult.matchPercent.toFixed(1)}%)
+                {" "}
+                of {filterResult.totalCount} trades ({filterResult.matchPercent.toFixed(1)}%)
               </span>
             </div>
           )}
           {activeConditions.length > 0 && (
             <div className="text-xs text-muted-foreground">
-              {activeConditions.length} active filter{activeConditions.length !== 1 ? 's' : ''}
+              {activeConditions.length} active filter{activeConditions.length !== 1 ? "s" : ""}
             </div>
           )}
         </div>
 
         {/* Clear button */}
         {hasConditions && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={handleClearAll}
-          >
+          <Button variant="outline" size="sm" className="w-full" onClick={handleClearAll}>
             <Trash2 className="h-4 w-4 mr-2" />
             Clear All Filters
           </Button>
         )}
       </CardContent>
     </Card>
-  )
-})
+  );
+});
 
-export default FilterPanel
+export default FilterPanel;

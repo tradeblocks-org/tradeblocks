@@ -16,3 +16,6 @@ gpt/
 
 # Lockfile
 package-lock.json
+
+# Deliberately malformed fixtures (must stay invalid for the tests that parse them)
+packages/mcp-server/tests/fixtures/*.malformed.json

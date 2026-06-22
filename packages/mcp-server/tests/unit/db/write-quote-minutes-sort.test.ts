@@ -20,8 +20,16 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  try { conn.closeSync(); } catch { /* */ }
-  try { db.closeSync(); } catch { /* */ }
+  try {
+    conn.closeSync();
+  } catch {
+    /* */
+  }
+  try {
+    db.closeSync();
+  } catch {
+    /* */
+  }
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -60,15 +68,17 @@ describe("writeQuoteMinutesPartition", () => {
     });
 
     const target = join(
-      tmpDir, "market", "option_quote_minutes",
-      "underlying=SPX", "date=2025-01-06", "data.parquet",
+      tmpDir,
+      "market",
+      "option_quote_minutes",
+      "underlying=SPX",
+      "date=2025-01-06",
+      "data.parquet",
     );
     expect(existsSync(target)).toBe(true);
 
     // Read back the parquet preserving file row order (no ORDER BY).
-    const reader = await conn.runAndReadAll(
-      `SELECT time, ticker FROM read_parquet('${target}')`,
-    );
+    const reader = await conn.runAndReadAll(`SELECT time, ticker FROM read_parquet('${target}')`);
     const rows = reader.getRows();
     // Expected order: (A_TICKER, 09:30), (B_TICKER, 09:35), (C_TICKER, 09:30).
     expect(rows.length).toBe(3);

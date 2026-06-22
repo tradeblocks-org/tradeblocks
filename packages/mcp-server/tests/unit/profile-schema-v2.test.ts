@@ -37,9 +37,7 @@ const fullV2Profile: Omit<StrategyProfile, "createdAt" | "updatedAt"> = {
       quantity: 1,
     },
   ],
-  entryFilters: [
-    { field: "VIX_Close", operator: "<", value: 20, source: "market" },
-  ],
+  entryFilters: [{ field: "VIX_Close", operator: "<", value: 20, source: "market" }],
   exitRules: [
     {
       type: "stop_loss",

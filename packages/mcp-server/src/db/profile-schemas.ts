@@ -51,13 +51,27 @@ export async function ensureProfilesSchema(conn: DuckDBConnection): Promise<void
     ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS position_sizing JSON
   `);
   // Migration: add schema v2 top-level columns (nullable for backward compat)
-  await conn.run(`ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS underlying VARCHAR`);
-  await conn.run(`ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS re_entry BOOLEAN`);
-  await conn.run(`ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS cap_profits BOOLEAN`);
-  await conn.run(`ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS cap_losses BOOLEAN`);
-  await conn.run(`ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS require_two_prices_pt BOOLEAN`);
-  await conn.run(`ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS close_on_completion BOOLEAN`);
-  await conn.run(`ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS ignore_margin_req BOOLEAN`);
+  await conn.run(
+    `ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS underlying VARCHAR`,
+  );
+  await conn.run(
+    `ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS re_entry BOOLEAN`,
+  );
+  await conn.run(
+    `ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS cap_profits BOOLEAN`,
+  );
+  await conn.run(
+    `ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS cap_losses BOOLEAN`,
+  );
+  await conn.run(
+    `ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS require_two_prices_pt BOOLEAN`,
+  );
+  await conn.run(
+    `ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS close_on_completion BOOLEAN`,
+  );
+  await conn.run(
+    `ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS ignore_margin_req BOOLEAN`,
+  );
 
   // Migration: add strategy execution param columns.
   // block_id stays NOT NULL in the PRIMARY KEY. Template profiles
@@ -76,7 +90,9 @@ export async function ensureProfilesSchema(conn: DuckDBConnection): Promise<void
     { name: "default_to_date", type: "VARCHAR" },
   ];
   for (const col of strategyCols) {
-    await conn.run(`ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`);
+    await conn.run(
+      `ALTER TABLE profiles.strategy_profiles ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`,
+    );
   }
 
   // Migration: normalize expected_regimes to canonical Vol_Regime labels
@@ -111,7 +127,7 @@ async function migrateExpectedRegimes(conn: DuckDBConnection): Promise<void> {
   const result = await conn.runAndReadAll(
     `SELECT block_id, strategy_name, expected_regimes
      FROM profiles.strategy_profiles
-     WHERE expected_regimes IS NOT NULL AND expected_regimes != '[]'`
+     WHERE expected_regimes IS NOT NULL AND expected_regimes != '[]'`,
   );
 
   for (const row of result.getRows()) {
@@ -145,7 +161,7 @@ async function migrateExpectedRegimes(conn: DuckDBConnection): Promise<void> {
     await conn.run(
       `UPDATE profiles.strategy_profiles
        SET expected_regimes = '${escSql(newJson)}', updated_at = current_timestamp
-       WHERE block_id = '${escSql(blockId)}' AND strategy_name = '${escSql(strategyName)}'`
+       WHERE block_id = '${escSql(blockId)}' AND strategy_name = '${escSql(strategyName)}'`,
     );
   }
 }
@@ -220,7 +236,7 @@ function rowToProfile(row: unknown[]): StrategyProfile {
       const ps = parseJsonObj(row[10]);
       return ps && Object.keys(ps).length > 0 ? ps : undefined;
     })(),
-    underlying: row[11] as string | undefined ?? undefined,
+    underlying: (row[11] as string | undefined) ?? undefined,
     reEntry: toBoolOrUndef(row[12]),
     capProfits: toBoolOrUndef(row[13]),
     capLosses: toBoolOrUndef(row[14]),
@@ -252,7 +268,7 @@ const SELECT_COLUMNS = `
 export async function upsertProfile(
   conn: DuckDBConnection,
   profile: Omit<StrategyProfile, "createdAt" | "updatedAt">,
-  baseDir?: string
+  baseDir?: string,
 ): Promise<StrategyProfile> {
   if (isParquetMode() && baseDir) {
     return upsertProfileJson(profile, getBlocksDir(baseDir));
@@ -272,9 +288,12 @@ export async function upsertProfile(
   const reEntrySql = profile.reEntry === undefined ? "NULL" : String(profile.reEntry);
   const capProfitsSql = profile.capProfits === undefined ? "NULL" : String(profile.capProfits);
   const capLossesSql = profile.capLosses === undefined ? "NULL" : String(profile.capLosses);
-  const requireTwoPricesPTSql = profile.requireTwoPricesPT === undefined ? "NULL" : String(profile.requireTwoPricesPT);
-  const closeOnCompletionSql = profile.closeOnCompletion === undefined ? "NULL" : String(profile.closeOnCompletion);
-  const ignoreMarginReqSql = profile.ignoreMarginReq === undefined ? "NULL" : String(profile.ignoreMarginReq);
+  const requireTwoPricesPTSql =
+    profile.requireTwoPricesPT === undefined ? "NULL" : String(profile.requireTwoPricesPT);
+  const closeOnCompletionSql =
+    profile.closeOnCompletion === undefined ? "NULL" : String(profile.closeOnCompletion);
+  const ignoreMarginReqSql =
+    profile.ignoreMarginReq === undefined ? "NULL" : String(profile.ignoreMarginReq);
 
   await conn.run(`
     INSERT INTO profiles.strategy_profiles
@@ -328,7 +347,7 @@ export async function upsertProfile(
   const stored = await getProfile(conn, profile.blockId, profile.strategyName, baseDir);
   if (!stored) {
     throw new Error(
-      `Failed to retrieve profile after upsert: ${profile.blockId}/${profile.strategyName}`
+      `Failed to retrieve profile after upsert: ${profile.blockId}/${profile.strategyName}`,
     );
   }
   return stored;
@@ -346,7 +365,7 @@ export async function getProfile(
   conn: DuckDBConnection,
   blockId: string,
   strategyName: string,
-  baseDir?: string
+  baseDir?: string,
 ): Promise<StrategyProfile | null> {
   if (isParquetMode() && baseDir) {
     return getProfileJson(blockId, strategyName, getBlocksDir(baseDir));
@@ -372,14 +391,12 @@ export async function getProfile(
 export async function listProfiles(
   conn: DuckDBConnection,
   blockId?: string,
-  baseDir?: string
+  baseDir?: string,
 ): Promise<StrategyProfile[]> {
   if (isParquetMode() && baseDir) {
     return listProfilesJson(getBlocksDir(baseDir), blockId);
   }
-  const whereClause = blockId
-    ? `WHERE block_id = '${escSql(blockId)}'`
-    : "";
+  const whereClause = blockId ? `WHERE block_id = '${escSql(blockId)}'` : "";
 
   const result = await conn.runAndReadAll(`
     SELECT ${SELECT_COLUMNS}
@@ -403,7 +420,7 @@ export async function deleteProfile(
   conn: DuckDBConnection,
   blockId: string,
   strategyName: string,
-  baseDir?: string
+  baseDir?: string,
 ): Promise<boolean> {
   if (isParquetMode() && baseDir) {
     return deleteProfileJson(blockId, strategyName, getBlocksDir(baseDir));

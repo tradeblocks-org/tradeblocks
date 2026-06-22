@@ -36,40 +36,28 @@ export function MetricSection({
     <div className={cn("space-y-4", className)}>
       {/* Section Header */}
       <div className="flex items-center gap-3">
-        {icon && (
-          <div className="p-2 rounded-lg bg-primary/10 text-primary">
-            {icon}
-          </div>
-        )}
+        {icon && <div className="p-2 rounded-lg bg-primary/10 text-primary">{icon}</div>}
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
-          {badge && (
-            typeof badge === "string" ? (
+          {badge &&
+            (typeof badge === "string" ? (
               <Badge variant={badgeVariant} className="text-xs px-2 py-0.5">
                 {badge}
               </Badge>
             ) : (
               badge
-            )
-          )}
+            ))}
         </div>
         {actions && (
           <>
             <div className="flex-1" />
-            <div className="flex items-end gap-3">
-              {actions}
-            </div>
+            <div className="flex items-end gap-3">{actions}</div>
           </>
         )}
       </div>
 
       {/* Metrics Grid */}
-      <div className={cn(
-        "grid gap-4",
-        gridClasses[gridCols]
-      )}>
-        {children}
-      </div>
+      <div className={cn("grid gap-4", gridClasses[gridCols])}>{children}</div>
     </div>
   );
 }

@@ -18,36 +18,17 @@ import { getProvider } from "../utils/market-provider.ts";
 // ---------------------------------------------------------------------------
 
 export const getOptionSnapshotSchema = z.object({
-  underlying: z
-    .string()
-    .describe("Underlying ticker symbol (e.g., 'SPX', 'SPY', 'AAPL')"),
-  strike_price_gte: z
-    .number()
-    .optional()
-    .describe("Minimum strike price filter"),
-  strike_price_lte: z
-    .number()
-    .optional()
-    .describe("Maximum strike price filter"),
-  expiration_date_gte: z
-    .string()
-    .optional()
-    .describe("Earliest expiration date (YYYY-MM-DD)"),
-  expiration_date_lte: z
-    .string()
-    .optional()
-    .describe("Latest expiration date (YYYY-MM-DD)"),
-  contract_type: z
-    .enum(["call", "put"])
-    .optional()
-    .describe("Filter by call or put"),
+  underlying: z.string().describe("Underlying ticker symbol (e.g., 'SPX', 'SPY', 'AAPL')"),
+  strike_price_gte: z.number().optional().describe("Minimum strike price filter"),
+  strike_price_lte: z.number().optional().describe("Maximum strike price filter"),
+  expiration_date_gte: z.string().optional().describe("Earliest expiration date (YYYY-MM-DD)"),
+  expiration_date_lte: z.string().optional().describe("Latest expiration date (YYYY-MM-DD)"),
+  contract_type: z.enum(["call", "put"]).optional().describe("Filter by call or put"),
   limit: z
     .number()
     .optional()
     .default(50)
-    .describe(
-      "Max contracts to return (default 50, use higher for full chain)"
-    ),
+    .describe("Max contracts to return (default 50, use higher for full chain)"),
 });
 
 // ---------------------------------------------------------------------------
@@ -81,9 +62,7 @@ export async function handleGetOptionSnapshot(
     // (ensuring BS fallback runs on all), then we truncate for presentation
     const contractsTotal = result.contracts.length;
     const contracts =
-      limit != null && contractsTotal > limit
-        ? result.contracts.slice(0, limit)
-        : result.contracts;
+      limit != null && contractsTotal > limit ? result.contracts.slice(0, limit) : result.contracts;
 
     return JSON.stringify({
       underlying_ticker: result.underlying_ticker,
@@ -119,6 +98,6 @@ export function registerSnapshotTools(server: McpServer): void {
       return {
         content: [{ type: "text" as const, text }],
       };
-    }
+    },
   );
 }

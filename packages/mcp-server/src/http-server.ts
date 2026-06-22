@@ -34,7 +34,7 @@ export type ServerFactory = () => McpServer;
  */
 export async function startHttpServer(
   serverFactory: ServerFactory,
-  options: HttpServerOptions
+  options: HttpServerOptions,
 ): Promise<Server> {
   const { port, host = "0.0.0.0", auth } = options;
 
@@ -47,18 +47,15 @@ export async function startHttpServer(
 
   if (auth && !auth.noAuth) {
     // SDK auth modules stay dynamic (externalized by esbuild, resolved from node_modules)
-    const { mcpAuthRouter } = await import(
-      "@modelcontextprotocol/sdk/server/auth/router.js"
-    );
-    const { requireBearerAuth } = await import(
-      "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js"
-    );
+    const { mcpAuthRouter } = await import("@modelcontextprotocol/sdk/server/auth/router.js");
+    const { requireBearerAuth } =
+      await import("@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js");
 
     const provider = new TradeBlocksAuthProvider(auth);
 
     // Determine issuer URL (public URL for OAuth discovery metadata)
     const issuerUrl = new URL(
-      auth.issuerUrl || `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`
+      auth.issuerUrl || `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`,
     );
 
     // Mount OAuth routes: /.well-known, /authorize, /token, /register
@@ -103,7 +100,7 @@ export async function startHttpServer(
     console.error(`Authentication enabled. Login at ${issuerUrl}/authorize`);
   } else if (auth?.noAuth) {
     console.error(
-      "WARNING: Authentication disabled (--no-auth). Only use behind an authenticating reverse proxy."
+      "WARNING: Authentication disabled (--no-auth). Only use behind an authenticating reverse proxy.",
     );
   }
 
@@ -140,9 +137,7 @@ export async function startHttpServer(
   return new Promise((resolve, reject) => {
     httpServer.on("error", reject);
     httpServer.listen(port, host, () => {
-      console.error(
-        `TradeBlocks MCP HTTP server listening on http://${host}:${port}/mcp`
-      );
+      console.error(`TradeBlocks MCP HTTP server listening on http://${host}:${port}/mcp`);
       console.error(`Health check available at http://${host}:${port}/`);
       resolve(httpServer);
     });

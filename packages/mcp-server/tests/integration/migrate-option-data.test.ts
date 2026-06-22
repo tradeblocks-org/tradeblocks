@@ -43,10 +43,7 @@ let db: DuckDBInstance;
 let conn: DuckDBConnection;
 
 beforeEach(async () => {
-  tmpDir = join(
-    tmpdir(),
-    `migrate-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
+  tmpDir = join(tmpdir(), `migrate-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(tmpDir, { recursive: true });
   db = await DuckDBInstance.create(":memory:");
   conn = await db.connect();
@@ -151,9 +148,7 @@ async function migrateChainDate(
     totalWritten += rowCount;
   }
   if (totalWritten !== srcCount) {
-    throw new Error(
-      `option_chain ${date}: wrote ${totalWritten} but source had ${srcCount}`,
-    );
+    throw new Error(`option_chain ${date}: wrote ${totalWritten} but source had ${srcCount}`);
   }
   rmSync(oldDir, { recursive: true, force: true });
   return { totalWritten, srcCount, underlyings };
@@ -182,9 +177,7 @@ async function migrateQuoteDate(
   const { byUnderlying, skipped } = groupTickersByUnderlying(roots, registry);
   const srcCount = Number(
     (
-      await conn.runAndReadAll(
-        `SELECT COUNT(*) FROM read_parquet('${sourceGlob}')`,
-      )
+      await conn.runAndReadAll(`SELECT COUNT(*) FROM read_parquet('${sourceGlob}')`)
     ).getRows()[0][0],
   );
   let skippedRowCount = 0;
@@ -250,9 +243,7 @@ describe("option_chain migration", () => {
       "data.parquet",
     );
     expect(existsSync(target)).toBe(true);
-    const cnt = await conn.runAndReadAll(
-      `SELECT COUNT(*) FROM read_parquet('${target}')`,
-    );
+    const cnt = await conn.runAndReadAll(`SELECT COUNT(*) FROM read_parquet('${target}')`);
     expect(Number(cnt.getRows()[0][0])).toBe(1);
   });
 
@@ -260,11 +251,7 @@ describe("option_chain migration", () => {
     await buildChainFixture();
     for (const date of ["2025-01-02", "2025-01-03", "2025-01-06"]) {
       await migrateChainDate(date);
-      expect(
-        existsSync(
-          join(tmpDir, "market", "option_chain", `date=${date}`),
-        ),
-      ).toBe(false);
+      expect(existsSync(join(tmpDir, "market", "option_chain", `date=${date}`))).toBe(false);
     }
   });
 });
@@ -369,9 +356,7 @@ describe("cross-cutting invariants", () => {
       "date=2025-01-03",
       "data.parquet",
     );
-    const cnt = await conn.runAndReadAll(
-      `SELECT COUNT(*) FROM read_parquet('${target}')`,
-    );
+    const cnt = await conn.runAndReadAll(`SELECT COUNT(*) FROM read_parquet('${target}')`);
     expect(Number(cnt.getRows()[0][0])).toBe(3);
   });
 
@@ -387,11 +372,7 @@ describe("cross-cutting invariants", () => {
       parquetMode: true,
       tickers: registry,
     });
-    const coverage = await stores.chain.getCoverage(
-      "SPX",
-      "2025-01-01",
-      "2025-01-31",
-    );
+    const coverage = await stores.chain.getCoverage("SPX", "2025-01-01", "2025-01-31");
     // All 3 fixture dates fall within window — none should be missing
     const expectedDates = ["2025-01-02", "2025-01-03", "2025-01-06"];
     for (const d of expectedDates) {

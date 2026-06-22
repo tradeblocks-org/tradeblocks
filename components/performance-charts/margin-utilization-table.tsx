@@ -20,7 +20,6 @@ import { ChartWrapper } from "./chart-wrapper";
 
 type CapitalMode = "fixed" | "compounding";
 
-
 interface MarginUtilizationTableProps {
   className?: string;
 }
@@ -39,18 +38,11 @@ function getBucketColor(index: number, total: number): string {
     "#dc2626", // red-600
     "#b91c1c", // red-700
   ];
-  const colorIndex = Math.min(
-    Math.floor((index / total) * colors.length),
-    colors.length - 1
-  );
+  const colorIndex = Math.min(Math.floor((index / total) * colors.length), colors.length - 1);
   return colors[colorIndex];
 }
 
-function getBucketLabel(
-  utilizationPct: number,
-  bucketSize: number,
-  maxThreshold: number
-): string {
+function getBucketLabel(utilizationPct: number, bucketSize: number, maxThreshold: number): string {
   if (utilizationPct >= maxThreshold) {
     return `${maxThreshold}%+`;
   }
@@ -89,14 +81,16 @@ function transformToChartData(
   initialCapital: number,
   bucketSize: number,
   maxThreshold: number,
-  capitalMode: CapitalMode
+  capitalMode: CapitalMode,
 ): ChartData {
-  if (
-    !marginUtilization ||
-    marginUtilization.length === 0 ||
-    initialCapital <= 0
-  ) {
-    return { months: [], monthLabels: [], bucketLabels: [], bucketCounts: [], effectiveBucketSize: bucketSize };
+  if (!marginUtilization || marginUtilization.length === 0 || initialCapital <= 0) {
+    return {
+      months: [],
+      monthLabels: [],
+      bucketLabels: [],
+      bucketCounts: [],
+      effectiveBucketSize: bucketSize,
+    };
   }
 
   // Group trades by month and bucket
@@ -115,22 +109,14 @@ function transformToChartData(
 
     // Use fundsAtClose for compounding mode, initialCapital for fixed mode
     const denominator =
-      capitalMode === "compounding" && entry.fundsAtClose > 0
-        ? entry.fundsAtClose
-        : initialCapital;
+      capitalMode === "compounding" && entry.fundsAtClose > 0 ? entry.fundsAtClose : initialCapital;
 
     const utilizationPct = (entry.marginReq / denominator) * 100;
-    const bucketLabel = getBucketLabel(
-      utilizationPct,
-      bucketSize,
-      maxThreshold
-    );
+    const bucketLabel = getBucketLabel(utilizationPct, bucketSize, maxThreshold);
 
     const date = new Date(entry.date);
     // Use sortable key for ordering
-    const monthKey = `${date.getUTCFullYear()}-${String(
-      date.getUTCMonth() + 1
-    ).padStart(2, "0")}`;
+    const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 
     allMonths.add(monthKey);
 
@@ -155,7 +141,7 @@ function transformToChartData(
     sortedMonths.map((monthKey) => {
       const bucketMap = monthBucketCounts.get(monthKey);
       return bucketMap?.get(label) || 0;
-    })
+    }),
   );
 
   // Filter to only include buckets that have at least one trade
@@ -187,13 +173,9 @@ function calculateBucketStats(
   initialCapital: number,
   bucketSize: number,
   maxThreshold: number,
-  capitalMode: CapitalMode
+  capitalMode: CapitalMode,
 ): BucketStats[] {
-  if (
-    !marginUtilization ||
-    marginUtilization.length === 0 ||
-    initialCapital <= 0
-  ) {
+  if (!marginUtilization || marginUtilization.length === 0 || initialCapital <= 0) {
     return [];
   }
 
@@ -217,16 +199,10 @@ function calculateBucketStats(
 
     // Use fundsAtClose for compounding mode, initialCapital for fixed mode
     const denominator =
-      capitalMode === "compounding" && entry.fundsAtClose > 0
-        ? entry.fundsAtClose
-        : initialCapital;
+      capitalMode === "compounding" && entry.fundsAtClose > 0 ? entry.fundsAtClose : initialCapital;
 
     const utilizationPct = (entry.marginReq / denominator) * 100;
-    const bucketLabel = getBucketLabel(
-      utilizationPct,
-      bucketSize,
-      maxThreshold
-    );
+    const bucketLabel = getBucketLabel(utilizationPct, bucketSize, maxThreshold);
 
     const data = bucketData.get(bucketLabel);
     if (data) {
@@ -250,9 +226,7 @@ function calculateBucketStats(
   });
 }
 
-export function MarginUtilizationTable({
-  className,
-}: MarginUtilizationTableProps) {
+export function MarginUtilizationTable({ className }: MarginUtilizationTableProps) {
   const { data } = usePerformanceStore();
 
   const [bucketSize, setBucketSize] = useState<number>(1);
@@ -264,11 +238,7 @@ export function MarginUtilizationTable({
   const initialCapital = data?.portfolioStats?.initialCapital ?? 0;
 
   const { plotData, layout } = useMemo(() => {
-    if (
-      !data?.marginUtilization ||
-      data.marginUtilization.length === 0 ||
-      initialCapital <= 0
-    ) {
+    if (!data?.marginUtilization || data.marginUtilization.length === 0 || initialCapital <= 0) {
       return { plotData: [], layout: {} };
     }
 
@@ -277,7 +247,7 @@ export function MarginUtilizationTable({
       initialCapital,
       bucketSize,
       maxThreshold,
-      capitalMode
+      capitalMode,
     );
 
     if (chartData.months.length === 0) {
@@ -285,23 +255,21 @@ export function MarginUtilizationTable({
     }
 
     // Create stacked area traces - one per bucket
-    const traces: Partial<PlotData>[] = chartData.bucketLabels.map(
-      (label, index) => ({
-        x: chartData.monthLabels,
-        y: chartData.bucketCounts[index],
-        type: "scatter" as const,
-        mode: "lines" as const,
-        name: label,
-        stackgroup: "one",
-        groupnorm: "percent" as const,
-        fillcolor: getBucketColor(index, chartData.bucketLabels.length),
-        line: {
-          width: 0.5,
-          color: getBucketColor(index, chartData.bucketLabels.length),
-        },
-        hovertemplate: `<b>${label}</b><br>%{y:.1f}% of trades<extra></extra>`,
-      })
-    );
+    const traces: Partial<PlotData>[] = chartData.bucketLabels.map((label, index) => ({
+      x: chartData.monthLabels,
+      y: chartData.bucketCounts[index],
+      type: "scatter" as const,
+      mode: "lines" as const,
+      name: label,
+      stackgroup: "one",
+      groupnorm: "percent" as const,
+      fillcolor: getBucketColor(index, chartData.bucketLabels.length),
+      line: {
+        width: 0.5,
+        color: getBucketColor(index, chartData.bucketLabels.length),
+      },
+      hovertemplate: `<b>${label}</b><br>%{y:.1f}% of trades<extra></extra>`,
+    }));
 
     const chartLayout: Partial<Layout> = {
       xaxis: {
@@ -334,21 +302,11 @@ export function MarginUtilizationTable({
     };
 
     return { plotData: traces, layout: chartLayout };
-  }, [
-    data?.marginUtilization,
-    initialCapital,
-    bucketSize,
-    maxThreshold,
-    capitalMode,
-  ]);
+  }, [data?.marginUtilization, initialCapital, bucketSize, maxThreshold, capitalMode]);
 
   // Calculate bucket statistics for the summary table
   const bucketStats = useMemo(() => {
-    if (
-      !data?.marginUtilization ||
-      data.marginUtilization.length === 0 ||
-      initialCapital <= 0
-    ) {
+    if (!data?.marginUtilization || data.marginUtilization.length === 0 || initialCapital <= 0) {
       return [];
     }
     return calculateBucketStats(
@@ -356,15 +314,9 @@ export function MarginUtilizationTable({
       initialCapital,
       bucketSize,
       maxThreshold,
-      capitalMode
+      capitalMode,
     );
-  }, [
-    data?.marginUtilization,
-    initialCapital,
-    bucketSize,
-    maxThreshold,
-    capitalMode,
-  ]);
+  }, [data?.marginUtilization, initialCapital, bucketSize, maxThreshold, capitalMode]);
 
   // Calculate totals for the summary table
   const totals = useMemo(() => {
@@ -449,19 +401,13 @@ export function MarginUtilizationTable({
       >
         <div className="flex items-center space-x-1.5">
           <RadioGroupItem value="fixed" id="margin-cap-fixed" />
-          <Label
-            htmlFor="margin-cap-fixed"
-            className="text-sm font-normal cursor-pointer"
-          >
+          <Label htmlFor="margin-cap-fixed" className="text-sm font-normal cursor-pointer">
             Fixed
           </Label>
         </div>
         <div className="flex items-center space-x-1.5">
           <RadioGroupItem value="compounding" id="margin-cap-compounding" />
-          <Label
-            htmlFor="margin-cap-compounding"
-            className="text-sm font-normal cursor-pointer"
-          >
+          <Label htmlFor="margin-cap-compounding" className="text-sm font-normal cursor-pointer">
             Compounding
           </Label>
         </div>
@@ -530,9 +476,7 @@ export function MarginUtilizationTable({
                       <span className="font-medium">{bucket.label}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {bucket.tradeCount}
-                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{bucket.tradeCount}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatPercent(bucket.percentOfTrades)}
                   </TableCell>
@@ -541,7 +485,7 @@ export function MarginUtilizationTable({
                       className={cn(
                         bucket.avgPl >= 0
                           ? "text-green-600 dark:text-green-500"
-                          : "text-red-600 dark:text-red-500"
+                          : "text-red-600 dark:text-red-500",
                       )}
                     >
                       {formatCurrency(bucket.avgPl)}
@@ -552,7 +496,7 @@ export function MarginUtilizationTable({
                       className={cn(
                         bucket.totalPl >= 0
                           ? "text-green-600 dark:text-green-500"
-                          : "text-red-600 dark:text-red-500"
+                          : "text-red-600 dark:text-red-500",
                       )}
                     >
                       {formatCurrency(bucket.totalPl)}
@@ -564,16 +508,14 @@ export function MarginUtilizationTable({
             {/* Total row */}
             <TableRow className="font-medium bg-muted/50">
               <TableCell>Total</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {totals.tradeCount}
-              </TableCell>
+              <TableCell className="text-right tabular-nums">{totals.tradeCount}</TableCell>
               <TableCell className="text-right">100%</TableCell>
               <TableCell className="text-right tabular-nums">
                 <span
                   className={cn(
                     totals.avgPl >= 0
                       ? "text-green-600 dark:text-green-500"
-                      : "text-red-600 dark:text-red-500"
+                      : "text-red-600 dark:text-red-500",
                   )}
                 >
                   {formatCurrency(totals.avgPl)}
@@ -584,7 +526,7 @@ export function MarginUtilizationTable({
                   className={cn(
                     totals.totalPl >= 0
                       ? "text-green-600 dark:text-green-500"
-                      : "text-red-600 dark:text-red-500"
+                      : "text-red-600 dark:text-red-500",
                   )}
                 >
                   {formatCurrency(totals.totalPl)}

@@ -16,17 +16,10 @@ import { SpotStore } from "./spot-store.ts";
 import type { BarRow, CoverageReport } from "./types.ts";
 import { buildReadBarsSQL, buildReadDailyBarsSQL } from "./spot-sql.ts";
 import { listPartitionValues } from "./coverage.ts";
-import {
-  resolveMarketDir,
-  writeSpotPartition,
-} from "../../db/market-datasets.ts";
+import { resolveMarketDir, writeSpotPartition } from "../../db/market-datasets.ts";
 
 export class ParquetSpotStore extends SpotStore {
-  async writeBars(
-    ticker: string,
-    date: string,
-    bars: BarRow[],
-  ): Promise<void> {
+  async writeBars(ticker: string, date: string, bars: BarRow[]): Promise<void> {
     if (bars.length === 0) return;
 
     // Defense-in-depth write-side filter (per-bar).
@@ -55,10 +48,14 @@ export class ParquetSpotStore extends SpotStore {
 
     const cleanBars = bars.filter(
       (b) =>
-        Number.isFinite(b.open) && b.open > 0 &&
-        Number.isFinite(b.high) && b.high > 0 &&
-        Number.isFinite(b.low)  && b.low  > 0 &&
-        Number.isFinite(b.close)&& b.close> 0,
+        Number.isFinite(b.open) &&
+        b.open > 0 &&
+        Number.isFinite(b.high) &&
+        b.high > 0 &&
+        Number.isFinite(b.low) &&
+        b.low > 0 &&
+        Number.isFinite(b.close) &&
+        b.close > 0,
     );
     const dropped = bars.length - cleanBars.length;
     if (dropped > 0) {
@@ -132,11 +129,7 @@ export class ParquetSpotStore extends SpotStore {
     });
   }
 
-  async readBars(
-    ticker: string,
-    from: string,
-    to: string,
-  ): Promise<BarRow[]> {
+  async readBars(ticker: string, from: string, to: string): Promise<BarRow[]> {
     const direct = this.buildDirectParquetReadBarsSQL(ticker, from, to);
     // Both paths inline values — bound-param runAndReadAll(sql, values) leaks
     // extract_statements handles (parquet-quote-store.ts:327, spot-sql.ts).
@@ -156,11 +149,7 @@ export class ParquetSpotStore extends SpotStore {
     }));
   }
 
-  async readDailyBars(
-    ticker: string,
-    from: string,
-    to: string,
-  ): Promise<BarRow[]> {
+  async readDailyBars(ticker: string, from: string, to: string): Promise<BarRow[]> {
     const direct = this.buildDirectParquetReadBarsSQL(ticker, from, to, { dailyAgg: true });
     // Same leak rationale as readBars — both paths run via unbound query().
     const { sql } = direct ?? buildReadDailyBarsSQL(ticker, from, to);
@@ -179,16 +168,8 @@ export class ParquetSpotStore extends SpotStore {
     }));
   }
 
-  async getCoverage(
-    ticker: string,
-    from: string,
-    to: string,
-  ): Promise<CoverageReport> {
-    const tickerDir = path.join(
-      resolveMarketDir(this.ctx.dataDir),
-      "spot",
-      `ticker=${ticker}`,
-    );
+  async getCoverage(ticker: string, from: string, to: string): Promise<CoverageReport> {
+    const tickerDir = path.join(resolveMarketDir(this.ctx.dataDir), "spot", `ticker=${ticker}`);
     if (!existsSync(tickerDir)) {
       return { earliest: null, latest: null, missingDates: [], totalDates: 0 };
     }

@@ -13,9 +13,7 @@ function encodeSampleTable(): Buffer {
   const DataTable = root.lookupType("BetaEndpoints.DataTable");
   const payload = DataTable.encode({
     headers: ["symbol", "strike"],
-    dataTable: [
-      { values: [{ text: "SPXW" }, { number: 5725 }] },
-    ],
+    dataTable: [{ values: [{ text: "SPXW" }, { number: 5725 }] }],
   }).finish();
   return Buffer.from(payload);
 }
@@ -72,10 +70,12 @@ describe("ThetaData MDDS decoder", () => {
     ["NONE string", "NONE"],
     ["NONE enum", 0],
   ])("decodes %s ResponseData as an uncompressed table", (_label, algo) => {
-    expect(decodeThetaResponseData({
-      compressedData: encodeSampleTable(),
-      compressionDescription: algo === undefined ? undefined : { algo },
-    })).toEqual({
+    expect(
+      decodeThetaResponseData({
+        compressedData: encodeSampleTable(),
+        compressionDescription: algo === undefined ? undefined : { algo },
+      }),
+    ).toEqual({
       headers: ["symbol", "strike"],
       rows: [{ symbol: "SPXW", strike: 5725 }],
     });
@@ -89,26 +89,32 @@ describe("ThetaData MDDS decoder", () => {
       "base64",
     );
 
-    expect(decodeThetaResponseData({
-      compressedData,
-      compressionDescription: { algo: "ZSTD" },
-    })).toEqual({
+    expect(
+      decodeThetaResponseData({
+        compressedData,
+        compressionDescription: { algo: "ZSTD" },
+      }),
+    ).toEqual({
       headers: ["symbol", "strike"],
       rows: [{ symbol: "SPXW", strike: 5725 }],
     });
   });
 
   it("wraps invalid ZSTD bytes with ThetaData context", () => {
-    expect(() => decodeThetaResponseData({
-      compressedData: Buffer.from("not zstd"),
-      compressionDescription: { algo: "ZSTD" },
-    })).toThrow("ThetaData ResponseData decompression failed");
+    expect(() =>
+      decodeThetaResponseData({
+        compressedData: Buffer.from("not zstd"),
+        compressionDescription: { algo: "ZSTD" },
+      }),
+    ).toThrow("ThetaData ResponseData decompression failed");
   });
 
   it("throws for unsupported ResponseData compression algos", () => {
-    expect(() => decodeThetaResponseData({
-      compressedData: encodeSampleTable(),
-      compressionDescription: { algo: "BROTLI" },
-    })).toThrow("ThetaData ResponseData compression unsupported");
+    expect(() =>
+      decodeThetaResponseData({
+        compressedData: encodeSampleTable(),
+        compressionDescription: { algo: "BROTLI" },
+      }),
+    ).toThrow("ThetaData ResponseData compression unsupported");
   });
 });

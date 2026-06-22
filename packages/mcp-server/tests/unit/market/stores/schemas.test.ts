@@ -55,9 +55,7 @@ afterEach(() => {
 describe("market-schemas: Phase 2 changes", () => {
   it("ensureMutableMarketTables no longer creates market.data_coverage (D-11)", async () => {
     await ensureMutableMarketTables(conn);
-    await expect(
-      conn.runAndReadAll(`SELECT * FROM market.data_coverage`),
-    ).rejects.toThrow();
+    await expect(conn.runAndReadAll(`SELECT * FROM market.data_coverage`)).rejects.toThrow();
   });
 
   it("ensureMutableMarketTables still creates market._sync_metadata", async () => {
@@ -72,17 +70,7 @@ describe("market-schemas: Phase 2 changes", () => {
   it("ensureMarketDataTables creates market.spot with exact spec columns", async () => {
     await ensureMarketDataTables(conn);
     const cols = await columnNames("market.spot");
-    expect(cols).toEqual([
-      "ticker",
-      "date",
-      "time",
-      "open",
-      "high",
-      "low",
-      "close",
-      "bid",
-      "ask",
-    ]);
+    expect(cols).toEqual(["ticker", "date", "time", "open", "high", "low", "close", "bid", "ask"]);
   });
 
   it("ensureMarketDataTables creates market.enriched with computed fields only (no OHLCV, D-25)", async () => {

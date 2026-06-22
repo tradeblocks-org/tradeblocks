@@ -16,10 +16,7 @@ import { mkdirSync, rmSync, writeFileSync, copyFileSync } from "fs";
 import { tmpdir } from "os";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import {
-  loadRegistry,
-  saveUserOverride,
-} from "../../../../src/test-exports.ts";
+import { loadRegistry, saveUserOverride } from "../../../../src/test-exports.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "../../../fixtures");
@@ -98,10 +95,7 @@ describe("loadRegistry — schema-invalid JSON (Zod rejection)", () => {
     );
   });
   it("throws when entries array is missing", async () => {
-    writeFileSync(
-      join(tmpDataDir, "market", "underlyings.json"),
-      JSON.stringify({ version: 1 }),
-    );
+    writeFileSync(join(tmpDataDir, "market", "underlyings.json"), JSON.stringify({ version: 1 }));
     await expect(loadRegistry({ dataDir: tmpDataDir })).rejects.toThrow(
       /Malformed .*underlyings\.json/,
     );

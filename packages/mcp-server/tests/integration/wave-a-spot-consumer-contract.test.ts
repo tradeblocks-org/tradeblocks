@@ -8,10 +8,7 @@
  * `stores.quote.getCoverage`; every write flows through `stores.spot.writeBars`.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import {
-  buildStoreFixture,
-  type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.ts";
+import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import { makeBars } from "../fixtures/market-stores/bars-fixture.ts";
 import { makeQuotes } from "../fixtures/market-stores/quotes-fixture.ts";
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
@@ -27,11 +24,7 @@ import { checkDataAvailability } from "../../src/utils/data-availability.ts";
 import { queryCoverage } from "../../src/utils/data-quality.ts";
 
 // Helper — seed an enriched row for a ticker so checkDataAvailability sees it
-async function seedEnriched(
-  fixture: FixtureHandle,
-  ticker: string,
-  date: string,
-): Promise<void> {
+async function seedEnriched(fixture: FixtureHandle, ticker: string, date: string): Promise<void> {
   await fixture.ctx.conn.run(
     `INSERT OR REPLACE INTO market.enriched (ticker, date, Prior_Close, Gap_Pct, RSI_14)
      VALUES ($1, $2, $3, $4, $5)`,

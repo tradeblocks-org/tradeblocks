@@ -39,7 +39,7 @@ export interface EnrichmentPlanItem {
  */
 export interface QuoteEnrichmentResult {
   tickersProcessed: number;
-  tickersSkipped: number;  // already dense
+  tickersSkipped: number; // already dense
   rowsWritten: number;
   errors: Array<{ ticker: string; date: string; error: string }>;
   unsupportedReason?: string;
@@ -47,7 +47,7 @@ export interface QuoteEnrichmentResult {
 
 export interface EnrichmentPlanInput {
   tickers: Array<{ ticker: string; fromDate: string; toDate: string }>;
-  existingCoverage: Map<string, number>;  // "ticker:date" → barCount
+  existingCoverage: Map<string, number>; // "ticker:date" → barCount
   providerSupportsQuotes: boolean;
 }
 
@@ -108,8 +108,8 @@ export function buildEnrichmentPlan(input: EnrichmentPlanInput): EnrichmentPlanI
  */
 function expandDateRange(fromDate: string, toDate: string): string[] {
   const dates: string[] = [];
-  const from = new Date(fromDate + 'T00:00:00Z');
-  const to = new Date(toDate + 'T00:00:00Z');
+  const from = new Date(fromDate + "T00:00:00Z");
+  const to = new Date(toDate + "T00:00:00Z");
   const current = new Date(from);
   while (current <= to) {
     dates.push(current.toISOString().slice(0, 10));

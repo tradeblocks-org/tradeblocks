@@ -19,8 +19,13 @@ describe("collapseFactors", () => {
 
   it("folds charm into delta and vanna into vega when detailed=false", () => {
     const factors = makeFactors([
-      ["delta", 100], ["charm", 20], ["vega", 50], ["vanna", 10],
-      ["theta", 200], ["gamma", -30], ["residual", 5],
+      ["delta", 100],
+      ["charm", 20],
+      ["vega", 50],
+      ["vanna", 10],
+      ["theta", 200],
+      ["gamma", -30],
+      ["residual", 5],
     ]);
     const result = collapseFactors(factors, false);
     expect(result.get("delta")).toBe(120);
@@ -34,8 +39,13 @@ describe("collapseFactors", () => {
 
   it("preserves all seven factors when detailed=true", () => {
     const factors = makeFactors([
-      ["delta", 100], ["charm", 20], ["vega", 50], ["vanna", 10],
-      ["theta", 200], ["gamma", -30], ["residual", 5],
+      ["delta", 100],
+      ["charm", 20],
+      ["vega", 50],
+      ["vanna", 10],
+      ["theta", 200],
+      ["gamma", -30],
+      ["residual", 5],
     ]);
     const result = collapseFactors(factors, true);
     expect(result.get("delta")).toBe(100);
@@ -54,38 +64,51 @@ describe("collapseFactors", () => {
 describe("computeAttribution", () => {
   it("computes percentages relative to total P&L", () => {
     const totals = new Map<string, number>([
-      ["theta", 600], ["delta", -100], ["vega", 200], ["gamma", -50], ["residual", 350],
+      ["theta", 600],
+      ["delta", -100],
+      ["vega", 200],
+      ["gamma", -50],
+      ["residual", 350],
     ]);
     const entries = computeAttribution(totals, 1000);
-    const theta = entries.find(e => e.factor === "theta")!;
+    const theta = entries.find((e) => e.factor === "theta")!;
     expect(theta.pct).toBe(60.0);
     expect(theta.pnl).toBe(600);
-    const delta = entries.find(e => e.factor === "delta")!;
+    const delta = entries.find((e) => e.factor === "delta")!;
     expect(delta.pct).toBe(-10.0);
   });
 
   it("returns entries in canonical factor order", () => {
     const totals = new Map<string, number>([
-      ["residual", 10], ["delta", 20], ["theta", 30], ["gamma", 40], ["vega", 50],
+      ["residual", 10],
+      ["delta", 20],
+      ["theta", 30],
+      ["gamma", 40],
+      ["vega", 50],
     ]);
     const entries = computeAttribution(totals, 150);
-    const order = entries.map(e => e.factor);
+    const order = entries.map((e) => e.factor);
     expect(order).toEqual(["theta", "vega", "delta", "gamma", "residual"]);
   });
 
   it("handles zero total P&L without division error", () => {
-    const totals = new Map<string, number>([["theta", 0], ["delta", 0]]);
+    const totals = new Map<string, number>([
+      ["theta", 0],
+      ["delta", 0],
+    ]);
     const entries = computeAttribution(totals, 0);
     expect(entries[0].pct).toBe(0);
   });
 
   it("adds signed gross-flow percentages when gross attribution flow is provided", () => {
     const totals = new Map<string, number>([
-      ["theta", 600], ["delta", -100], ["vega", 200],
+      ["theta", 600],
+      ["delta", -100],
+      ["vega", 200],
     ]);
     const entries = computeAttribution(totals, 100, 900);
-    const theta = entries.find(e => e.factor === "theta")!;
-    const delta = entries.find(e => e.factor === "delta")!;
+    const theta = entries.find((e) => e.factor === "theta")!;
+    const delta = entries.find((e) => e.factor === "delta")!;
     expect(theta.pct_of_gross).toBe(66.7);
     expect(delta.pct_of_gross).toBe(-11.1);
   });
@@ -94,7 +117,10 @@ describe("computeAttribution", () => {
 describe("computeGrossAttributionFlow", () => {
   it("sums absolute factor contributions", () => {
     const totals = new Map<string, number>([
-      ["theta", 600], ["delta", -100], ["vega", 200], ["residual", -50],
+      ["theta", 600],
+      ["delta", -100],
+      ["vega", 200],
+      ["residual", -50],
     ]);
     expect(computeGrossAttributionFlow(totals)).toBe(950);
   });
@@ -128,10 +154,12 @@ describe("assessPrecision", () => {
 describe("FACTOR_ORDER includes time_and_vol", () => {
   it("sorts time_and_vol after residual in computeAttribution", () => {
     const totals = new Map<string, number>([
-      ["time_and_vol", -500], ["delta", 200], ["gamma", 100],
+      ["time_and_vol", -500],
+      ["delta", 200],
+      ["gamma", 100],
     ]);
     const entries = computeAttribution(totals, 1000);
-    const order = entries.map(e => e.factor);
+    const order = entries.map((e) => e.factor);
     expect(order.indexOf("time_and_vol")).toBeGreaterThan(order.indexOf("gamma"));
     expect(order.indexOf("time_and_vol")).toBeLessThan(99);
   });

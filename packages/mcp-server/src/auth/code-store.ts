@@ -7,7 +7,7 @@ export interface CodeEntry {
   expiresAt: number;
 }
 
-type StoreInput = Omit<CodeEntry, 'expiresAt'>;
+type StoreInput = Omit<CodeEntry, "expiresAt">;
 
 export class AuthCodeStore {
   private codes = new Map<string, CodeEntry>();

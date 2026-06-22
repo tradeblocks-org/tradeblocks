@@ -28,13 +28,8 @@ const DATE_RANGE_OPTIONS = [
 ];
 
 export function PerformanceFilters({ className }: PerformanceFiltersProps) {
-  const {
-    data,
-    dateRange,
-    selectedStrategies,
-    setDateRange,
-    setSelectedStrategies,
-  } = usePerformanceStore();
+  const { data, dateRange, selectedStrategies, setDateRange, setSelectedStrategies } =
+    usePerformanceStore();
 
   // Generate strategy options from trade data
   const strategyOptions = useMemo(() => {
@@ -59,32 +54,16 @@ export function PerformanceFilters({ className }: PerformanceFiltersProps) {
         from = new Date(today.getFullYear(), 0, 1);
         break;
       case "1y":
-        from = new Date(
-          today.getFullYear() - 1,
-          today.getMonth(),
-          today.getDate()
-        );
+        from = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
         break;
       case "6m":
-        from = new Date(
-          today.getFullYear(),
-          today.getMonth() - 6,
-          today.getDate()
-        );
+        from = new Date(today.getFullYear(), today.getMonth() - 6, today.getDate());
         break;
       case "3m":
-        from = new Date(
-          today.getFullYear(),
-          today.getMonth() - 3,
-          today.getDate()
-        );
+        from = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate());
         break;
       case "1m":
-        from = new Date(
-          today.getFullYear(),
-          today.getMonth() - 1,
-          today.getDate()
-        );
+        from = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
         break;
       case "all":
       default:
@@ -123,17 +102,11 @@ export function PerformanceFilters({ className }: PerformanceFiltersProps) {
         <div className="flex flex-wrap items-end gap-4">
           {/* Date Range Selector */}
           <div className="space-y-2">
-            <Label
-              htmlFor="date-range"
-              className="flex items-center gap-1 text-sm font-medium"
-            >
+            <Label htmlFor="date-range" className="flex items-center gap-1 text-sm font-medium">
               <Calendar className="h-4 w-4" />
               Date Range
             </Label>
-            <Select
-              value="all"
-              onValueChange={handleDateRangeChange}
-            >
+            <Select value="all" onValueChange={handleDateRangeChange}>
               <SelectTrigger className="w-[150px]" id="date-range">
                 <SelectValue />
               </SelectTrigger>
@@ -165,23 +138,15 @@ export function PerformanceFilters({ className }: PerformanceFiltersProps) {
 
           {/* Filter Summary */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">
-              Active Filters
-            </Label>
-            <div className="text-sm bg-muted px-3 py-2 rounded-md">
-              {getFilterSummary()}
-            </div>
+            <Label className="text-sm font-medium text-muted-foreground">Active Filters</Label>
+            <div className="text-sm bg-muted px-3 py-2 rounded-md">{getFilterSummary()}</div>
           </div>
 
           {/* Trade Count */}
           {data && (
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">
-                Trades
-              </Label>
-              <div className="text-sm font-semibold px-3 py-2">
-                {data.trades.length}
-              </div>
+              <Label className="text-sm font-medium text-muted-foreground">Trades</Label>
+              <div className="text-sm font-semibold px-3 py-2">{data.trades.length}</div>
             </div>
           )}
         </div>

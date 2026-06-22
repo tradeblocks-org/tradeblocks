@@ -25,10 +25,7 @@ import {
 let dataDir: string;
 
 beforeEach(() => {
-  dataDir = join(
-    tmpdir(),
-    `wm-adapter-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
+  dataDir = join(tmpdir(), `wm-adapter-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   // Don't pre-create the watermarks file — several tests want it absent.
   mkdirSync(dataDir, { recursive: true });
 });

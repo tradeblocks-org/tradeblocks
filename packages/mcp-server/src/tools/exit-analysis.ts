@@ -20,10 +20,7 @@ import {
   type ExitTriggerConfig,
   type LegGroupConfig,
 } from "../utils/exit-triggers.ts";
-import {
-  decomposeGreeks,
-  type LegGroupDef,
-} from "../utils/greeks-decomposition.ts";
+import { decomposeGreeks, type LegGroupDef } from "../utils/greeks-decomposition.ts";
 import { markPrice } from "../utils/trade-replay.ts";
 
 // ---------------------------------------------------------------------------
@@ -31,34 +28,55 @@ import { markPrice } from "../utils/trade-replay.ts";
 // ---------------------------------------------------------------------------
 
 const triggerTypeEnum = z.enum([
-  'profitTarget', 'stopLoss', 'trailingStop', 'profitAction',
-  'dteExit', 'ditExit', 'clockTimeExit',
-  'underlyingPriceMove', 'positionDelta', 'perLegDelta',
-  'vixMove', 'vix9dMove', 'vix9dVixRatio',
-  'slRatioThreshold', 'slRatioMove',
+  "profitTarget",
+  "stopLoss",
+  "trailingStop",
+  "profitAction",
+  "dteExit",
+  "ditExit",
+  "clockTimeExit",
+  "underlyingPriceMove",
+  "positionDelta",
+  "perLegDelta",
+  "vixMove",
+  "vix9dMove",
+  "vix9dVixRatio",
+  "slRatioThreshold",
+  "slRatioMove",
 ]);
 
 const triggerConfigSchema = z.object({
   type: triggerTypeEnum,
   threshold: z.number(),
-  unit: z.enum(['percent', 'dollar']).default('dollar').optional(),
+  unit: z.enum(["percent", "dollar"]).default("dollar").optional(),
   expiry: z.string().optional(),
   openDate: z.string().optional(),
   clockTime: z.string().optional(),
   trailAmount: z.number().optional(),
-  steps: z.array(z.object({
-    armAt: z.number(),
-    stopAt: z.number(),
-    closeAllocationPct: z.number().min(0).max(1).optional()
-      .describe("Fraction of REMAINING position to close at this milestone (0-1)"),
-  })).optional(),
+  steps: z
+    .array(
+      z.object({
+        armAt: z.number(),
+        stopAt: z.number(),
+        closeAllocationPct: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("Fraction of REMAINING position to close at this milestone (0-1)"),
+      }),
+    )
+    .optional(),
   spreadWidth: z.number().optional(),
   contracts: z.number().optional(),
-  legIndex: z.number().optional()
+  legIndex: z
+    .number()
+    .optional()
     .describe("0-based leg index for perLegDelta — targets specific leg"),
-  exitAbove: z.number().optional()
-    .describe("Fire when value exceeds this (directional, no abs)"),
-  exitBelow: z.number().optional()
+  exitAbove: z.number().optional().describe("Fire when value exceeds this (directional, no abs)"),
+  exitBelow: z
+    .number()
+    .optional()
     .describe("Fire when value drops below this (directional, no abs)"),
 });
 
@@ -88,19 +106,27 @@ export const analyzeExitTriggersSchema = z.object({
   close_date: z.string().optional(),
   multiplier: z.number().default(100),
 
-  triggers: z.array(triggerConfigSchema)
-    .describe("Exit triggers to evaluate against the P&L path"),
+  triggers: z.array(triggerConfigSchema).describe("Exit triggers to evaluate against the P&L path"),
 
-  actual_exit_timestamp: z.string().optional()
+  actual_exit_timestamp: z
+    .string()
+    .optional()
     .describe("Actual exit time for comparison (format: YYYY-MM-DD HH:MM)"),
 
-  leg_groups: z.array(z.object({
-    label: z.string(),
-    leg_indices: z.array(z.number()),
-    triggers: z.array(triggerConfigSchema),
-  })).optional().describe("Per-leg-group exit triggers for multi-structure strategies"),
+  leg_groups: z
+    .array(
+      z.object({
+        label: z.string(),
+        leg_indices: z.array(z.number()),
+        triggers: z.array(triggerConfigSchema),
+      }),
+    )
+    .optional()
+    .describe("Per-leg-group exit triggers for multi-structure strategies"),
 
-  format: z.enum(["summary", "full"]).default("summary")
+  format: z
+    .enum(["summary", "full"])
+    .default("summary")
     .describe("'summary' omits per-step trigger states, 'full' includes all fire events"),
 });
 
@@ -117,12 +143,19 @@ export const decomposeGreeksSchema = z.object({
   close_date: z.string().optional(),
   multiplier: z.number().default(100),
 
-  leg_groups: z.array(z.object({
-    label: z.string(),
-    leg_indices: z.array(z.number()),
-  })).optional().describe("Leg grouping for per-group vega attribution (e.g., front_month vs back_month)"),
+  leg_groups: z
+    .array(
+      z.object({
+        label: z.string(),
+        leg_indices: z.array(z.number()),
+      }),
+    )
+    .optional()
+    .describe("Leg grouping for per-group vega attribution (e.g., front_month vs back_month)"),
 
-  format: z.enum(["summary", "full"]).default("summary")
+  format: z
+    .enum(["summary", "full"])
+    .default("summary")
     .describe("'summary' shows ranked factors, 'full' includes per-step contributions"),
   skip_quotes: z
     .boolean()
@@ -136,7 +169,9 @@ export const decomposeGreeksSchema = z.object({
 
 // Reverse-map weekly roots to standard root for underlying/VIX fetching
 const REVERSE_ROOT_MAP: Record<string, string> = {
-  SPXW: 'SPX', NDXP: 'NDX', RUTW: 'RUT',
+  SPXW: "SPX",
+  NDXP: "NDX",
+  RUTW: "RUT",
 };
 
 /**
@@ -145,7 +180,7 @@ const REVERSE_ROOT_MAP: Record<string, string> = {
  */
 function extractUnderlyingTicker(occTicker: string): string {
   const rootMatch = occTicker.match(/^([A-Z]+)/);
-  const rawRoot = rootMatch ? rootMatch[1] : '';
+  const rawRoot = rootMatch ? rootMatch[1] : "";
   return REVERSE_ROOT_MAP[rawRoot] ?? rawRoot;
 }
 
@@ -182,12 +217,17 @@ async function fetchPriceMap(
     // applied at the underlying-consumer site.
     for (const b of bars) {
       if (
-        !Number.isFinite(b.open)  || b.open  <= 0 ||
-        !Number.isFinite(b.high)  || b.high  <= 0 ||
-        !Number.isFinite(b.low)   || b.low   <= 0 ||
-        !Number.isFinite(b.close) || b.close <= 0
-      ) continue;
-      const ts = `${b.date} ${b.time ?? ''}`.trim();
+        !Number.isFinite(b.open) ||
+        b.open <= 0 ||
+        !Number.isFinite(b.high) ||
+        b.high <= 0 ||
+        !Number.isFinite(b.low) ||
+        b.low <= 0 ||
+        !Number.isFinite(b.close) ||
+        b.close <= 0
+      )
+        continue;
+      const ts = `${b.date} ${b.time ?? ""}`.trim();
       map.set(ts, markPrice(b));
     }
   } catch {
@@ -207,9 +247,15 @@ export async function handleAnalyzeExitTriggers(
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<ReturnType<typeof analyzeExitTriggers>> {
   const {
-    legs: inputLegs, block_id, trade_index,
-    open_date, close_date, multiplier,
-    triggers, actual_exit_timestamp, leg_groups,
+    legs: inputLegs,
+    block_id,
+    trade_index,
+    open_date,
+    close_date,
+    multiplier,
+    triggers,
+    actual_exit_timestamp,
+    leg_groups,
   } = params;
 
   // 1. Run replay to get full P&L path with greeks
@@ -221,8 +267,8 @@ export async function handleAnalyzeExitTriggers(
       open_date,
       close_date,
       multiplier,
-      format: 'full',
-      close_at: 'trade',
+      format: "full",
+      close_at: "trade",
       skip_quotes: false,
     },
     baseDir,
@@ -243,7 +289,7 @@ export async function handleAnalyzeExitTriggers(
       overall: {
         triggers: [],
         firstToFire: null,
-        summary: 'No P&L data available from replay.',
+        summary: "No P&L data available from replay.",
       },
     };
   }
@@ -253,9 +299,9 @@ export async function handleAnalyzeExitTriggers(
   const lastDate = pnlPath[pnlPath.length - 1].timestamp.slice(0, 10);
 
   // 3. Check which external data maps are needed
-  const allTriggerTypes = new Set(triggers.map(t => t.type));
+  const allTriggerTypes = new Set(triggers.map((t) => t.type));
   const groupTriggerTypes = new Set(
-    (leg_groups ?? []).flatMap(g => g.triggers.map(t => t.type))
+    (leg_groups ?? []).flatMap((g) => g.triggers.map((t) => t.type)),
   );
   for (const t of groupTriggerTypes) allTriggerTypes.add(t);
 
@@ -267,24 +313,22 @@ export async function handleAnalyzeExitTriggers(
   let vix9dPrices: Map<string, number> | undefined;
   let underlyingPrices: Map<string, number> | undefined;
 
-  const needsVix = allTriggerTypes.has('vixMove') || allTriggerTypes.has('vix9dVixRatio');
-  const needsVix9d = allTriggerTypes.has('vix9dMove') || allTriggerTypes.has('vix9dVixRatio');
-  const needsUnderlying = allTriggerTypes.has('underlyingPriceMove');
+  const needsVix = allTriggerTypes.has("vixMove") || allTriggerTypes.has("vix9dVixRatio");
+  const needsVix9d = allTriggerTypes.has("vix9dMove") || allTriggerTypes.has("vix9dVixRatio");
+  const needsUnderlying = allTriggerTypes.has("underlyingPriceMove");
 
   if (needsVix) {
-    vixPrices = await fetchPriceMap(stores, 'VIX', firstDate, lastDate);
+    vixPrices = await fetchPriceMap(stores, "VIX", firstDate, lastDate);
   }
   if (needsVix9d) {
-    vix9dPrices = await fetchPriceMap(stores, 'VIX9D', firstDate, lastDate);
+    vix9dPrices = await fetchPriceMap(stores, "VIX9D", firstDate, lastDate);
   }
   if (needsUnderlying) {
-    underlyingPrices = await fetchPriceMap(
-      stores, underlyingTicker, firstDate, lastDate,
-    );
+    underlyingPrices = await fetchPriceMap(stores, underlyingTicker, firstDate, lastDate);
   }
 
   // 4. Map tool trigger params to ExitTriggerConfig[] with data maps
-  const exitTriggers: ExitTriggerConfig[] = triggers.map(t => ({
+  const exitTriggers: ExitTriggerConfig[] = triggers.map((t) => ({
     type: t.type,
     threshold: t.threshold,
     unit: t.unit,
@@ -303,10 +347,10 @@ export async function handleAnalyzeExitTriggers(
   }));
 
   // 5. Map leg groups with their triggers
-  const legGroupConfigs: LegGroupConfig[] | undefined = leg_groups?.map(g => ({
+  const legGroupConfigs: LegGroupConfig[] | undefined = leg_groups?.map((g) => ({
     label: g.label,
     legIndices: g.leg_indices,
-    triggers: g.triggers.map(t => ({
+    triggers: g.triggers.map((t) => ({
       type: t.type,
       threshold: t.threshold,
       unit: t.unit,
@@ -346,9 +390,15 @@ export async function handleDecomposeGreeks(
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<import("../utils/greeks-decomposition.ts").GreeksDecompositionResult> {
   const {
-    legs: inputLegs, block_id, trade_index,
-    open_date, close_date, multiplier,
-    leg_groups, format, skip_quotes,
+    legs: inputLegs,
+    block_id,
+    trade_index,
+    open_date,
+    close_date,
+    multiplier,
+    leg_groups,
+    format,
+    skip_quotes,
   } = params;
 
   // 1. Run replay to get full P&L path with greeks
@@ -360,8 +410,8 @@ export async function handleDecomposeGreeks(
       open_date,
       close_date,
       multiplier,
-      format: 'full',
-      close_at: 'trade',
+      format: "full",
+      close_at: "trade",
       skip_quotes,
     },
     baseDir,
@@ -375,7 +425,7 @@ export async function handleDecomposeGreeks(
   // 2. Check greeks data availability
   if (pnlPath.length > 0 && !pnlPath[0].legGreeks) {
     throw new Error(
-      "No greeks data available. Use the data-pipeline tools to backfill the option-leg quotes and underlying price data into the local cache."
+      "No greeks data available. Use the data-pipeline tools to backfill the option-leg quotes and underlying price data into the local cache.",
     );
   }
 
@@ -388,25 +438,28 @@ export async function handleDecomposeGreeks(
   }
 
   // 4. Map leg groups
-  const legGroupDefs: LegGroupDef[] | undefined = leg_groups?.map(g => ({
+  const legGroupDefs: LegGroupDef[] | undefined = leg_groups?.map((g) => ({
     label: g.label,
     legIndices: g.leg_indices,
   }));
 
   // 5. Build leg pricing inputs from OCC tickers for full revaluation
   const DIVIDEND_YIELDS: Record<string, number> = {
-    SPX: 0.015, SPXW: 0.015, NDX: 0.015, NDXP: 0.015,
+    SPX: 0.015,
+    SPXW: 0.015,
+    NDX: 0.015,
+    NDXP: 0.015,
   };
   const rootMatch = replayLegs[0]?.occTicker.match(/^([A-Z]+)/);
-  const rawRoot = rootMatch ? rootMatch[1] : '';
+  const rawRoot = rootMatch ? rootMatch[1] : "";
   const divYield = DIVIDEND_YIELDS[rawRoot] ?? 0;
 
-  const legPricingInputs = replayLegs.map(leg => {
+  const legPricingInputs = replayLegs.map((leg) => {
     const m = leg.occTicker.match(/^[A-Z]+(\d{6})([CP])(\d{8})$/);
-    if (!m) return { strike: 0, type: 'C' as const, expiryDate: '' };
+    if (!m) return { strike: 0, type: "C" as const, expiryDate: "" };
     return {
       strike: parseInt(m[3], 10) / 1000,
-      type: m[2] as 'C' | 'P',
+      type: m[2] as "C" | "P",
       expiryDate: `20${m[1].slice(0, 2)}-${m[1].slice(2, 4)}-${m[1].slice(4, 6)}`,
     };
   });
@@ -475,7 +528,7 @@ export function registerExitAnalysisTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -507,6 +560,6 @@ export function registerExitAnalysisTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

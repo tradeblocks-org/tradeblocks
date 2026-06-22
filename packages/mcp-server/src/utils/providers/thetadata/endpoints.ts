@@ -94,9 +94,10 @@ export function normalizeThetaFirstOrderGreekRow(
     theta: asNumber(row.theta),
     vega: asNumber(row.vega),
     iv: asNumber(row.implied_vol ?? row.implied_volatility),
-    underlyingTimestamp: row.underlying_timestamp == null
-      ? null
-      : thetaTimestampToEtMinute(asText(row.underlying_timestamp)),
+    underlyingTimestamp:
+      row.underlying_timestamp == null
+        ? null
+        : thetaTimestampToEtMinute(asText(row.underlying_timestamp)),
     underlyingPrice: asNumber(row.underlying_price),
   };
 }
@@ -110,9 +111,10 @@ export function normalizeThetaImpliedVolatilityRow(
     midIv: asNumber(row.implied_vol ?? row.midpoint_implied_vol),
     askIv: asNumber(row.ask_implied_vol),
     ivError: asNumber(row.iv_error),
-    underlyingTimestamp: row.underlying_timestamp == null
-      ? null
-      : thetaTimestampToEtMinute(asText(row.underlying_timestamp)),
+    underlyingTimestamp:
+      row.underlying_timestamp == null
+        ? null
+        : thetaTimestampToEtMinute(asText(row.underlying_timestamp)),
     underlyingPrice: asNumber(row.underlying_price),
   };
 }
@@ -176,9 +178,7 @@ function parseThetaOhlcDateAndMsOfDay(
 
 // ThetaData stock OHLC rows: wire format returns a single `timestamp` string
 // ("YYYY-MM-DD HH:MM" ET) alongside open/high/low/close/volume.
-export function normalizeThetaStockOhlcRow(
-  row: Record<string, ThetaCellValue>,
-): ThetaStockOhlcRow {
+export function normalizeThetaStockOhlcRow(row: Record<string, ThetaCellValue>): ThetaStockOhlcRow {
   const { date, msOfDay } = parseThetaOhlcDateAndMsOfDay(row, "stock OHLC row");
   return {
     date,
@@ -193,9 +193,7 @@ export function normalizeThetaStockOhlcRow(
 
 // ThetaData EOD wire format uses `last_trade` for the trading-day date
 // (mirrors the index variant). Accept `date` too for any provider variant.
-export function normalizeThetaStockEodRow(
-  row: Record<string, ThetaCellValue>,
-): ThetaStockEodRow {
+export function normalizeThetaStockEodRow(row: Record<string, ThetaCellValue>): ThetaStockEodRow {
   return {
     date: normalizeThetaDate(row.last_trade ?? row.date, "stock EOD row"),
     open: requiredNumber(row.open, "stock EOD row", "open"),
@@ -206,9 +204,7 @@ export function normalizeThetaStockEodRow(
   };
 }
 
-export function normalizeThetaIndexOhlcRow(
-  row: Record<string, ThetaCellValue>,
-): ThetaIndexOhlcRow {
+export function normalizeThetaIndexOhlcRow(row: Record<string, ThetaCellValue>): ThetaIndexOhlcRow {
   const { date, msOfDay } = parseThetaOhlcDateAndMsOfDay(row, "index OHLC row");
   return {
     date,
@@ -221,9 +217,7 @@ export function normalizeThetaIndexOhlcRow(
   };
 }
 
-export function normalizeThetaIndexEodRow(
-  row: Record<string, ThetaCellValue>,
-): ThetaIndexEodRow {
+export function normalizeThetaIndexEodRow(row: Record<string, ThetaCellValue>): ThetaIndexEodRow {
   return {
     date: normalizeThetaDate(row.last_trade ?? row.date, "index EOD row"),
     open: requiredNumber(row.open, "index EOD row", "open"),
@@ -352,11 +346,12 @@ export async function stockHistoryOhlc(
   // ThetaData stock OHLC streams can include null-OHLC rows on auction/pre-open
   // ticks. Drop those before normalizing so downstream BarRow stays numeric.
   return decodeThetaRows(chunks)
-    .filter((row) =>
-      Number.isFinite(row.open as number) &&
-      Number.isFinite(row.high as number) &&
-      Number.isFinite(row.low as number) &&
-      Number.isFinite(row.close as number),
+    .filter(
+      (row) =>
+        Number.isFinite(row.open as number) &&
+        Number.isFinite(row.high as number) &&
+        Number.isFinite(row.low as number) &&
+        Number.isFinite(row.close as number),
     )
     .map(normalizeThetaStockOhlcRow);
 }
@@ -414,11 +409,12 @@ export async function indexHistoryOhlc(
   // 09:30 print). Drop those before normalizing so the strict number contract
   // on downstream BarRow still holds.
   return decodeThetaRows(chunks)
-    .filter((row) =>
-      Number.isFinite(row.open as number) &&
-      Number.isFinite(row.high as number) &&
-      Number.isFinite(row.low as number) &&
-      Number.isFinite(row.close as number),
+    .filter(
+      (row) =>
+        Number.isFinite(row.open as number) &&
+        Number.isFinite(row.high as number) &&
+        Number.isFinite(row.low as number) &&
+        Number.isFinite(row.close as number),
     )
     .map(normalizeThetaIndexOhlcRow);
 }
@@ -538,9 +534,8 @@ export async function optionHistoryGreeksFirstOrderBand(
 ): Promise<ThetaFirstOrderGreekRow[]> {
   const symbol = validateSymbol(params.symbol);
   // Accept "*" wildcard to fetch all expirations in one call.
-  const expiration = params.expiration === "*"
-    ? "*"
-    : validateHyphenDate(params.expiration, "expiration");
+  const expiration =
+    params.expiration === "*" ? "*" : validateHyphenDate(params.expiration, "expiration");
   const date = validateHyphenDate(params.date, "date");
   const strikeRange = optionalPositiveInteger(params.strikeRange, "strike_range");
   const chunks = await client.callStream<ThetaResponseData>(
@@ -593,9 +588,8 @@ export async function optionHistoryImpliedVolatilityBand(
   // Allow "*" wildcard like optionHistoryQuoteBand — server returns all active
   // expirations in one call. Each row carries its own expiration. Subject to
   // the same 1-concurrent-stream-per-session cap as wildcard quote calls.
-  const expiration = params.expiration === "*"
-    ? "*"
-    : validateHyphenDate(params.expiration, "expiration");
+  const expiration =
+    params.expiration === "*" ? "*" : validateHyphenDate(params.expiration, "expiration");
   const date = validateHyphenDate(params.date, "date");
   const strikeRange = optionalPositiveInteger(params.strikeRange, "strike_range");
   const chunks = await client.callStream<ThetaResponseData>(
@@ -637,9 +631,8 @@ export async function optionHistoryQuoteBand(
   // Allow "*" wildcard — MDDS server returns all active expirations in one call
   // (each row carries its own expiration). Empirically ~1.6x faster than
   // iterating per-expiration; only one wildcard stream allowed per session.
-  const expiration = params.expiration === "*"
-    ? "*"
-    : validateHyphenDate(params.expiration, "expiration");
+  const expiration =
+    params.expiration === "*" ? "*" : validateHyphenDate(params.expiration, "expiration");
   const date = validateHyphenDate(params.date, "date");
   const strikeRange = optionalPositiveInteger(params.strikeRange, "strike_range");
   const chunks = await client.callStream<ThetaResponseData>(
@@ -686,9 +679,8 @@ export async function optionHistoryOpenInterest(
   },
 ): Promise<ThetaOpenInterestRow[]> {
   const symbol = validateSymbol(params.symbol);
-  const expiration = params.expiration === "*"
-    ? "*"
-    : validateHyphenDate(params.expiration, "expiration");
+  const expiration =
+    params.expiration === "*" ? "*" : validateHyphenDate(params.expiration, "expiration");
   const startDate = validateHyphenDate(params.startDate, "date");
   const endDate = validateHyphenDate(params.endDate, "date");
   const strikeRange = optionalPositiveInteger(params.strikeRange, "strike_range");

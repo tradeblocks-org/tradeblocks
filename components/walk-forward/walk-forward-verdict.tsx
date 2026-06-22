@@ -1,28 +1,35 @@
-"use client"
+"use client";
 
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { cn } from "@tradeblocks/lib";
+import type { WalkForwardResults } from "@tradeblocks/lib";
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card"
-import { cn } from "@tradeblocks/lib"
-import type { WalkForwardResults } from "@tradeblocks/lib"
-import { CheckCircle2, AlertTriangle, XCircle, HelpCircle, TrendingUp, Shield, Settings2 } from "lucide-react"
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  HelpCircle,
+  TrendingUp,
+  Shield,
+  Settings2,
+} from "lucide-react";
 import {
   assessResults,
   getRecommendedParameters,
   formatParameterName,
   type Assessment,
-} from "@tradeblocks/lib"
+} from "@tradeblocks/lib";
 
 interface WalkForwardVerdictProps {
-  results: WalkForwardResults
-  targetMetricLabel: string
+  results: WalkForwardResults;
+  targetMetricLabel: string;
 }
 
-const assessmentStyles: Record<Assessment, { bg: string; text: string; icon: typeof CheckCircle2 }> = {
+const assessmentStyles: Record<
+  Assessment,
+  { bg: string; text: string; icon: typeof CheckCircle2 }
+> = {
   good: {
     bg: "bg-emerald-500/10",
     text: "text-emerald-700 dark:text-emerald-400",
@@ -38,34 +45,37 @@ const assessmentStyles: Record<Assessment, { bg: string; text: string; icon: typ
     text: "text-rose-700 dark:text-rose-400",
     icon: XCircle,
   },
-}
+};
 
 export function WalkForwardVerdict({ results, targetMetricLabel }: WalkForwardVerdictProps) {
-  const assessment = assessResults(results)
-  const { params, hasSuggestions } = getRecommendedParameters(results.periods)
-  const style = assessmentStyles[assessment.overall]
-  const Icon = style.icon
+  const assessment = assessResults(results);
+  const { params, hasSuggestions } = getRecommendedParameters(results.periods);
+  const style = assessmentStyles[assessment.overall];
+  const Icon = style.icon;
 
   return (
     <div className="space-y-4">
       {/* Main Verdict Card */}
-      <Card className={cn("border-l-4", {
-        "border-l-emerald-500": assessment.overall === "good",
-        "border-l-amber-500": assessment.overall === "moderate",
-        "border-l-rose-500": assessment.overall === "concerning",
-      })}>
+      <Card
+        className={cn("border-l-4", {
+          "border-l-emerald-500": assessment.overall === "good",
+          "border-l-amber-500": assessment.overall === "moderate",
+          "border-l-rose-500": assessment.overall === "concerning",
+        })}
+      >
         <CardContent className="pt-6">
           <div className="flex items-start gap-4">
-            <div className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-              style.bg, style.text
-            )}>
+            <div
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+                style.bg,
+                style.text,
+              )}
+            >
               <Icon className="h-5 w-5" />
             </div>
             <div className="space-y-2 flex-1">
-              <h3 className={cn("text-base font-semibold", style.text)}>
-                {assessment.title}
-              </h3>
+              <h3 className={cn("text-base font-semibold", style.text)}>{assessment.title}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 {assessment.description}
               </p>
@@ -106,9 +116,11 @@ export function WalkForwardVerdict({ results, targetMetricLabel }: WalkForwardVe
                 </HoverCardTrigger>
                 <HoverCardContent className="w-80">
                   <p className="text-sm">
-                    These values represent the average optimal parameters found across all walk-forward windows.
-                    <strong className="block mt-2">Note:</strong> These are observations, not recommendations.
-                    Market conditions change, and past optimal parameters may not be ideal going forward.
+                    These values represent the average optimal parameters found across all
+                    walk-forward windows.
+                    <strong className="block mt-2">Note:</strong> These are observations, not
+                    recommendations. Market conditions change, and past optimal parameters may not
+                    be ideal going forward.
                   </p>
                 </HoverCardContent>
               </HoverCard>
@@ -131,8 +143,8 @@ export function WalkForwardVerdict({ results, targetMetricLabel }: WalkForwardVe
             </div>
             <p className="text-xs text-muted-foreground mt-4 pt-3 border-t">
               Parameters marked as &quot;stable&quot; showed less than 30% variation across windows.
-              Higher stability suggests the parameter value may be more reliable, but always validate
-              against current market conditions.
+              Higher stability suggests the parameter value may be more reliable, but always
+              validate against current market conditions.
             </p>
           </CardContent>
         </Card>
@@ -154,8 +166,9 @@ export function WalkForwardVerdict({ results, targetMetricLabel }: WalkForwardVe
                 <span>Efficiency Ratio</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Measures how much of your in-sample performance carried over to out-of-sample testing.
-                80%+ suggests a real edge; below 60% may indicate the optimization fit to noise.
+                Measures how much of your in-sample performance carried over to out-of-sample
+                testing. 80%+ suggests a real edge; below 60% may indicate the optimization fit to
+                noise.
               </p>
             </div>
             <div className="space-y-1">
@@ -164,8 +177,8 @@ export function WalkForwardVerdict({ results, targetMetricLabel }: WalkForwardVe
                 <span>Parameter Stability</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Shows how much optimal parameters jumped around between windows.
-                Stable parameters (70%+) suggest more reliable results.
+                Shows how much optimal parameters jumped around between windows. Stable parameters
+                (70%+) suggest more reliable results.
               </p>
             </div>
             <div className="space-y-1">
@@ -174,40 +187,36 @@ export function WalkForwardVerdict({ results, targetMetricLabel }: WalkForwardVe
                 <span>Consistency Score</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Percentage of windows where out-of-sample performance was positive.
-                High consistency (70%+) means the optimized parameters adapt well to new data.
+                Percentage of windows where out-of-sample performance was positive. High consistency
+                (70%+) means the optimized parameters adapt well to new data.
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 function AssessmentBadge({
   label,
   assessment,
-  tooltip
+  tooltip,
 }: {
-  label: string
-  assessment: Assessment
-  tooltip: string
+  label: string;
+  assessment: Assessment;
+  tooltip: string;
 }) {
-  const style = assessmentStyles[assessment]
-  const assessmentLabel = assessment === "good" ? "Good" : assessment === "moderate" ? "Mixed" : "Low"
+  const style = assessmentStyles[assessment];
+  const assessmentLabel =
+    assessment === "good" ? "Good" : assessment === "moderate" ? "Mixed" : "Low";
 
   return (
     <HoverCard>
       <HoverCardTrigger asChild>
         <Badge
           variant="outline"
-          className={cn(
-            "cursor-help text-xs gap-1.5",
-            style.bg,
-            style.text,
-            "border-transparent"
-          )}
+          className={cn("cursor-help text-xs gap-1.5", style.bg, style.text, "border-transparent")}
         >
           {label}: {assessmentLabel}
         </Badge>
@@ -216,7 +225,7 @@ function AssessmentBadge({
         <p className="text-sm">{tooltip}</p>
       </HoverCardContent>
     </HoverCard>
-  )
+  );
 }
 
 function ParameterSuggestion({
@@ -225,17 +234,20 @@ function ParameterSuggestion({
   range,
   stable,
 }: {
-  name: string
-  value: number
-  range: [number, number]
-  stable: boolean
+  name: string;
+  value: number;
+  range: [number, number];
+  stable: boolean;
 }) {
   return (
     <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">{name}</span>
         {stable && (
-          <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+          <Badge
+            variant="secondary"
+            className="text-[10px] h-4 px-1.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+          >
             Stable
           </Badge>
         )}
@@ -245,5 +257,5 @@ function ParameterSuggestion({
         Range: {range[0]} – {range[1]}
       </div>
     </div>
-  )
+  );
 }

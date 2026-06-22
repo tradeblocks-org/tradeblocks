@@ -7,10 +7,7 @@ import { MarketIngestor } from "../../src/market/ingestor/index.ts";
 import { createMarketStores } from "../../src/market/stores/index.ts";
 import { ensureMarketDataTables } from "../../src/db/market-schemas.ts";
 import { TickerRegistry } from "../../src/market/tickers/registry.ts";
-import type {
-  BulkProgressEvent,
-  BulkProgressReporter,
-} from "../../src/market/ingestor/types.ts";
+import type { BulkProgressEvent, BulkProgressReporter } from "../../src/market/ingestor/types.ts";
 import type {
   BulkQuoteRow,
   BulkQuotesOptions,
@@ -83,7 +80,11 @@ describe("MarketIngestor bulk progress reporter", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -123,14 +124,16 @@ describe("MarketIngestor bulk progress reporter", () => {
           try {
             // nothing to do — no rows per group in this fake
           } finally {
-            (options as BulkQuotesOptions & {
-              onGroupComplete?: (info: {
-                root: string;
-                right: "call" | "put";
-                date: string;
-                status: "ok" | "error";
-              }) => void;
-            }).onGroupComplete?.({
+            (
+              options as BulkQuotesOptions & {
+                onGroupComplete?: (info: {
+                  root: string;
+                  right: "call" | "put";
+                  date: string;
+                  status: "ok" | "error";
+                }) => void;
+              }
+            ).onGroupComplete?.({
               root: g.root,
               right: g.right,
               date: options.date,
@@ -168,7 +171,9 @@ describe("MarketIngestor bulk progress reporter", () => {
     });
 
     const events: BulkProgressEvent[] = [];
-    const onProgress: BulkProgressReporter = (ev) => { events.push(ev); };
+    const onProgress: BulkProgressReporter = (ev) => {
+      events.push(ev);
+    };
 
     const result = await ingestor.ingestQuotes({
       underlyings: ["SPX"],
@@ -186,10 +191,12 @@ describe("MarketIngestor bulk progress reporter", () => {
     expect(flushEvents.length).toBe(1); // 1 underlying × 1 date
 
     // Each group event carries the underlying, root, right, date, status
-    const tuples = new Set(groupEvents.map((e) => {
-      if (e.kind !== "group") throw new Error("unreachable");
-      return `${e.underlying}/${e.root}/${e.right}/${e.date}/${e.status}`;
-    }));
+    const tuples = new Set(
+      groupEvents.map((e) => {
+        if (e.kind !== "group") throw new Error("unreachable");
+        return `${e.underlying}/${e.root}/${e.right}/${e.date}/${e.status}`;
+      }),
+    );
     expect(tuples).toContain("SPX/SPX/call/2026-04-15/ok");
     expect(tuples).toContain("SPX/SPX/put/2026-04-15/ok");
     expect(tuples).toContain("SPX/SPXW/call/2026-04-15/ok");
@@ -219,7 +226,9 @@ describe("MarketIngestor bulk progress reporter", () => {
     });
 
     const events: BulkProgressEvent[] = [];
-    const onProgress: BulkProgressReporter = (ev) => { events.push(ev); };
+    const onProgress: BulkProgressReporter = (ev) => {
+      events.push(ev);
+    };
 
     await ingestor.ingestQuotes({
       underlyings: ["QQQ"],
@@ -272,7 +281,9 @@ describe("MarketIngestor bulk progress reporter", () => {
     });
 
     const events: BulkProgressEvent[] = [];
-    const onProgress: BulkProgressReporter = (ev) => { events.push(ev); };
+    const onProgress: BulkProgressReporter = (ev) => {
+      events.push(ev);
+    };
 
     const result = await ingestor.ingestQuotes({
       tickers: ["SPXW260417C04800000"],

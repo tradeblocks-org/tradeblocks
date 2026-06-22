@@ -12,10 +12,7 @@ interface TailDependenceHeatmapProps {
   actions?: React.ReactNode;
 }
 
-export function TailDependenceHeatmap({
-  result,
-  actions,
-}: TailDependenceHeatmapProps) {
+export function TailDependenceHeatmap({ result, actions }: TailDependenceHeatmapProps) {
   const { theme } = useTheme();
 
   const { plotData, layout } = useMemo(() => {
@@ -23,9 +20,7 @@ export function TailDependenceHeatmap({
     const isDark = theme === "dark";
 
     // Truncate strategy names for axis labels
-    const truncatedStrategies = strategies.map((s) =>
-      truncateStrategyName(s, 40)
-    );
+    const truncatedStrategies = strategies.map((s) => truncateStrategyName(s, 40));
 
     // Symmetrize the matrix for display (average of both directions)
     // NaN values indicate insufficient data for that pair
@@ -37,7 +32,7 @@ export function TailDependenceHeatmap({
         // If either direction has insufficient data, mark the pair as NaN
         if (Number.isNaN(valIJ) || Number.isNaN(valJI)) return NaN;
         return (valIJ + valJI) / 2;
-      })
+      }),
     );
 
     // Color scale: 0 (low joint tail risk) to 1 (high joint tail risk)
@@ -61,13 +56,11 @@ export function TailDependenceHeatmap({
     // For display, replace NaN with null so Plotly shows empty cells
     // and prepare text labels
     const displayMatrix = symmetricMatrix.map((row) =>
-      row.map((val) => (Number.isNaN(val) ? null : val))
+      row.map((val) => (Number.isNaN(val) ? null : val)),
     );
 
     const textLabels = symmetricMatrix.map((row) =>
-      row.map((val) =>
-        Number.isNaN(val) ? "N/A" : `${Math.round(val * 100)}%`
-      )
+      row.map((val) => (Number.isNaN(val) ? "N/A" : `${Math.round(val * 100)}%`)),
     );
 
     const textColors = symmetricMatrix.map((row) =>
@@ -82,7 +75,7 @@ export function TailDependenceHeatmap({
         } else {
           return val > 0.6 ? "#ffffff" : "#000000";
         }
-      })
+      }),
     );
 
     const heatmapData = {
@@ -108,7 +101,7 @@ export function TailDependenceHeatmap({
           strategies[yIndex],
           strategies[xIndex],
           Number.isNaN(val) ? "N/A" : `${(val * 100).toFixed(1)}%`,
-        ])
+        ]),
       ),
       colorbar: {
         title: { text: "Joint Risk", side: "right" as const },

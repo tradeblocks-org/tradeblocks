@@ -7,21 +7,14 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
-import {
-  createToolOutput,
-  formatPercent,
-  formatRatio,
-} from "../../utils/output-formatter.ts";
+import { createToolOutput, formatPercent, formatRatio } from "../../utils/output-formatter.ts";
 import {
   PortfolioStatsCalculator,
   calculateCorrelationMatrix,
   performTailRiskAnalysis,
 } from "@tradeblocks/lib";
 import type { Trade } from "@tradeblocks/lib";
-import {
-  filterByDateRange,
-  filterDailyLogsByDateRange,
-} from "../shared/filters.ts";
+import { filterByDateRange, filterDailyLogsByDateRange } from "../shared/filters.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
@@ -38,10 +31,7 @@ const SIMILARITY_DEFAULTS = {
 /**
  * Register similarity block tools
  */
-export function registerSimilarityBlockTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerSimilarityBlockTools(server: McpServer, baseDir: string): void {
   const calculator = new PortfolioStatsCalculator();
 
   // Tool 10: strategy_similarity
@@ -58,7 +48,7 @@ export function registerSimilarityBlockTools(
           .max(1)
           .default(SIMILARITY_DEFAULTS.correlationThreshold)
           .describe(
-            `Minimum correlation to flag as similar (default: ${SIMILARITY_DEFAULTS.correlationThreshold})`
+            `Minimum correlation to flag as similar (default: ${SIMILARITY_DEFAULTS.correlationThreshold})`,
           ),
         tailDependenceThreshold: z
           .number()
@@ -66,7 +56,7 @@ export function registerSimilarityBlockTools(
           .max(1)
           .default(SIMILARITY_DEFAULTS.tailDependenceThreshold)
           .describe(
-            `Minimum tail dependence to flag as high joint risk (default: ${SIMILARITY_DEFAULTS.tailDependenceThreshold})`
+            `Minimum tail dependence to flag as high joint risk (default: ${SIMILARITY_DEFAULTS.tailDependenceThreshold})`,
           ),
         method: z
           .enum(["kendall", "spearman", "pearson"])
@@ -78,7 +68,7 @@ export function registerSimilarityBlockTools(
           .min(1)
           .default(SIMILARITY_DEFAULTS.minSharedDays)
           .describe(
-            `Minimum shared trading days for valid comparison (default: ${SIMILARITY_DEFAULTS.minSharedDays})`
+            `Minimum shared trading days for valid comparison (default: ${SIMILARITY_DEFAULTS.minSharedDays})`,
           ),
         topN: z
           .number()
@@ -87,7 +77,7 @@ export function registerSimilarityBlockTools(
           .max(50)
           .default(SIMILARITY_DEFAULTS.topN)
           .describe(
-            `Number of most similar pairs to return (default: ${SIMILARITY_DEFAULTS.topN})`
+            `Number of most similar pairs to return (default: ${SIMILARITY_DEFAULTS.topN})`,
           ),
       }),
     },
@@ -102,11 +92,9 @@ export function registerSimilarityBlockTools(
         topN,
       }) => {
         // Apply defaults for optional parameters (zod defaults may not apply through MCP CLI)
-        const corrThreshold =
-          correlationThreshold ?? SIMILARITY_DEFAULTS.correlationThreshold;
+        const corrThreshold = correlationThreshold ?? SIMILARITY_DEFAULTS.correlationThreshold;
         const tailThreshold =
-          tailDependenceThreshold ??
-          SIMILARITY_DEFAULTS.tailDependenceThreshold;
+          tailDependenceThreshold ?? SIMILARITY_DEFAULTS.tailDependenceThreshold;
         const corrMethod = method ?? SIMILARITY_DEFAULTS.method;
         const minDays = minSharedDays ?? SIMILARITY_DEFAULTS.minSharedDays;
         const limit = topN ?? SIMILARITY_DEFAULTS.topN;
@@ -126,12 +114,10 @@ export function registerSimilarityBlockTools(
             };
           }
 
-        // Get unique strategies
-        const strategies = Array.from(
-          new Set(trades.map((t) => t.strategy))
-        ).sort();
+          // Get unique strategies
+          const strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
 
-        // Need at least 2 strategies for similarity analysis
+          // Need at least 2 strategies for similarity analysis
           if (strategies.length < 2) {
             return {
               content: [
@@ -144,187 +130,180 @@ export function registerSimilarityBlockTools(
             };
           }
 
-        // Calculate correlation matrix using existing utility
-        const correlationMatrix = calculateCorrelationMatrix(trades, {
-          method: corrMethod,
-          normalization: "raw",
-          dateBasis: "opened",
-          alignment: "shared",
-        });
+          // Calculate correlation matrix using existing utility
+          const correlationMatrix = calculateCorrelationMatrix(trades, {
+            method: corrMethod,
+            normalization: "raw",
+            dateBasis: "opened",
+            alignment: "shared",
+          });
 
-        // Calculate tail risk using existing utility
-        const tailRisk = performTailRiskAnalysis(trades, {
-          normalization: "raw",
-          dateBasis: "opened",
-          minTradingDays: minDays,
-        });
+          // Calculate tail risk using existing utility
+          const tailRisk = performTailRiskAnalysis(trades, {
+            normalization: "raw",
+            dateBasis: "opened",
+            minTradingDays: minDays,
+          });
 
-        // Calculate overlap scores: count shared trading days / total unique days
-        // Group trades by strategy and date
-        const strategyDates: Record<string, Set<string>> = {};
-        for (const trade of trades) {
-          if (!trade.strategy || !trade.dateOpened) continue;
-          if (!strategyDates[trade.strategy]) {
-            strategyDates[trade.strategy] = new Set();
+          // Calculate overlap scores: count shared trading days / total unique days
+          // Group trades by strategy and date
+          const strategyDates: Record<string, Set<string>> = {};
+          for (const trade of trades) {
+            if (!trade.strategy || !trade.dateOpened) continue;
+            if (!strategyDates[trade.strategy]) {
+              strategyDates[trade.strategy] = new Set();
+            }
+            // Extract date key from dateOpened
+            const dateKey = trade.dateOpened.toISOString().split("T")[0];
+            strategyDates[trade.strategy].add(dateKey);
           }
-          // Extract date key from dateOpened
-          const dateKey = trade.dateOpened.toISOString().split("T")[0];
-          strategyDates[trade.strategy].add(dateKey);
-        }
 
-        // Build similarity pairs
-        interface SimilarPair {
-          strategyA: string;
-          strategyB: string;
-          correlation: number | null;
-          tailDependence: number | null;
-          overlapScore: number;
-          compositeSimilarity: number | null;
-          sharedTradingDays: number;
-          flags: {
-            isHighCorrelation: boolean;
-            isHighTailDependence: boolean;
-            isRedundant: boolean;
-          };
-        }
+          // Build similarity pairs
+          interface SimilarPair {
+            strategyA: string;
+            strategyB: string;
+            correlation: number | null;
+            tailDependence: number | null;
+            overlapScore: number;
+            compositeSimilarity: number | null;
+            sharedTradingDays: number;
+            flags: {
+              isHighCorrelation: boolean;
+              isHighTailDependence: boolean;
+              isRedundant: boolean;
+            };
+          }
 
-        const pairs: SimilarPair[] = [];
-        let redundantPairs = 0;
-        let highCorrelationPairs = 0;
-        let highTailDependencePairs = 0;
+          const pairs: SimilarPair[] = [];
+          let redundantPairs = 0;
+          let highCorrelationPairs = 0;
+          let highTailDependencePairs = 0;
 
-        // Iterate over unique strategy pairs (i < j)
-        for (let i = 0; i < strategies.length; i++) {
-          for (let j = i + 1; j < strategies.length; j++) {
-            const strategyA = strategies[i];
-            const strategyB = strategies[j];
+          // Iterate over unique strategy pairs (i < j)
+          for (let i = 0; i < strategies.length; i++) {
+            for (let j = i + 1; j < strategies.length; j++) {
+              const strategyA = strategies[i];
+              const strategyB = strategies[j];
 
-            // Get correlation from matrix
-            const idxA = correlationMatrix.strategies.indexOf(strategyA);
-            const idxB = correlationMatrix.strategies.indexOf(strategyB);
-            const correlation =
-              idxA >= 0 && idxB >= 0 && correlationMatrix.correlationData[idxA]
-                ? correlationMatrix.correlationData[idxA][idxB]
-                : null;
-            const sharedDaysFromCorr =
-              idxA >= 0 && idxB >= 0 && correlationMatrix.sampleSizes[idxA]
-                ? correlationMatrix.sampleSizes[idxA][idxB]
-                : 0;
+              // Get correlation from matrix
+              const idxA = correlationMatrix.strategies.indexOf(strategyA);
+              const idxB = correlationMatrix.strategies.indexOf(strategyB);
+              const correlation =
+                idxA >= 0 && idxB >= 0 && correlationMatrix.correlationData[idxA]
+                  ? correlationMatrix.correlationData[idxA][idxB]
+                  : null;
+              const sharedDaysFromCorr =
+                idxA >= 0 && idxB >= 0 && correlationMatrix.sampleSizes[idxA]
+                  ? correlationMatrix.sampleSizes[idxA][idxB]
+                  : 0;
 
-            // Get tail dependence from jointTailRiskMatrix
-            const tailIdxA = tailRisk.strategies.indexOf(strategyA);
-            const tailIdxB = tailRisk.strategies.indexOf(strategyB);
-            let tailDependence: number | null = null;
-            if (
-              tailIdxA >= 0 &&
-              tailIdxB >= 0 &&
-              tailRisk.jointTailRiskMatrix[tailIdxA] &&
-              tailRisk.jointTailRiskMatrix[tailIdxB]
-            ) {
-              // Average both directions since matrix can be asymmetric
-              const valAB = tailRisk.jointTailRiskMatrix[tailIdxA][tailIdxB];
-              const valBA = tailRisk.jointTailRiskMatrix[tailIdxB][tailIdxA];
-              if (!Number.isNaN(valAB) && !Number.isNaN(valBA)) {
-                tailDependence = (valAB + valBA) / 2;
+              // Get tail dependence from jointTailRiskMatrix
+              const tailIdxA = tailRisk.strategies.indexOf(strategyA);
+              const tailIdxB = tailRisk.strategies.indexOf(strategyB);
+              let tailDependence: number | null = null;
+              if (
+                tailIdxA >= 0 &&
+                tailIdxB >= 0 &&
+                tailRisk.jointTailRiskMatrix[tailIdxA] &&
+                tailRisk.jointTailRiskMatrix[tailIdxB]
+              ) {
+                // Average both directions since matrix can be asymmetric
+                const valAB = tailRisk.jointTailRiskMatrix[tailIdxA][tailIdxB];
+                const valBA = tailRisk.jointTailRiskMatrix[tailIdxB][tailIdxA];
+                if (!Number.isNaN(valAB) && !Number.isNaN(valBA)) {
+                  tailDependence = (valAB + valBA) / 2;
+                }
+              }
+
+              // Calculate overlap score
+              const datesA = strategyDates[strategyA] || new Set();
+              const datesB = strategyDates[strategyB] || new Set();
+              const allDates = new Set([...datesA, ...datesB]);
+              const sharedDates = [...datesA].filter((d) => datesB.has(d)).length;
+              const overlapScore = allDates.size > 0 ? sharedDates / allDates.size : 0;
+
+              // Use sharedDaysFromCorr or calculate from overlap
+              const sharedTradingDays = sharedDaysFromCorr > 0 ? sharedDaysFromCorr : sharedDates;
+
+              // Calculate composite similarity score (weighted average)
+              // 50% correlation (absolute value), 30% tail dependence, 20% overlap score
+              let compositeSimilarity: number | null = null;
+              if (correlation !== null && !Number.isNaN(correlation)) {
+                const corrComponent = Math.abs(correlation) * 0.5;
+                const tailComponent = (tailDependence !== null ? tailDependence : 0) * 0.3;
+                const overlapComponent = overlapScore * 0.2;
+                compositeSimilarity = corrComponent + tailComponent + overlapComponent;
+              }
+
+              // Determine flags
+              const isHighCorrelation =
+                correlation !== null &&
+                !Number.isNaN(correlation) &&
+                Math.abs(correlation) >= corrThreshold;
+              const isHighTailDependence =
+                tailDependence !== null && tailDependence >= tailThreshold;
+              const isRedundant = isHighCorrelation && isHighTailDependence;
+
+              // Only include pairs that meet minDays requirement
+              if (sharedTradingDays >= minDays) {
+                // Update counters (only for included pairs)
+                if (isHighCorrelation) highCorrelationPairs++;
+                if (isHighTailDependence) highTailDependencePairs++;
+                if (isRedundant) redundantPairs++;
+
+                pairs.push({
+                  strategyA,
+                  strategyB,
+                  correlation:
+                    correlation !== null && !Number.isNaN(correlation) ? correlation : null,
+                  tailDependence,
+                  overlapScore,
+                  compositeSimilarity,
+                  sharedTradingDays,
+                  flags: {
+                    isHighCorrelation,
+                    isHighTailDependence,
+                    isRedundant,
+                  },
+                });
               }
             }
-
-            // Calculate overlap score
-            const datesA = strategyDates[strategyA] || new Set();
-            const datesB = strategyDates[strategyB] || new Set();
-            const allDates = new Set([...datesA, ...datesB]);
-            const sharedDates = [...datesA].filter((d) => datesB.has(d)).length;
-            const overlapScore =
-              allDates.size > 0 ? sharedDates / allDates.size : 0;
-
-            // Use sharedDaysFromCorr or calculate from overlap
-            const sharedTradingDays =
-              sharedDaysFromCorr > 0 ? sharedDaysFromCorr : sharedDates;
-
-            // Calculate composite similarity score (weighted average)
-            // 50% correlation (absolute value), 30% tail dependence, 20% overlap score
-            let compositeSimilarity: number | null = null;
-            if (correlation !== null && !Number.isNaN(correlation)) {
-              const corrComponent = Math.abs(correlation) * 0.5;
-              const tailComponent =
-                (tailDependence !== null ? tailDependence : 0) * 0.3;
-              const overlapComponent = overlapScore * 0.2;
-              compositeSimilarity =
-                corrComponent + tailComponent + overlapComponent;
-            }
-
-            // Determine flags
-            const isHighCorrelation =
-              correlation !== null &&
-              !Number.isNaN(correlation) &&
-              Math.abs(correlation) >= corrThreshold;
-            const isHighTailDependence =
-              tailDependence !== null && tailDependence >= tailThreshold;
-            const isRedundant = isHighCorrelation && isHighTailDependence;
-
-            // Only include pairs that meet minDays requirement
-            if (sharedTradingDays >= minDays) {
-              // Update counters (only for included pairs)
-              if (isHighCorrelation) highCorrelationPairs++;
-              if (isHighTailDependence) highTailDependencePairs++;
-              if (isRedundant) redundantPairs++;
-
-              pairs.push({
-                strategyA,
-                strategyB,
-                correlation:
-                  correlation !== null && !Number.isNaN(correlation)
-                    ? correlation
-                    : null,
-                tailDependence,
-                overlapScore,
-                compositeSimilarity,
-                sharedTradingDays,
-                flags: {
-                  isHighCorrelation,
-                  isHighTailDependence,
-                  isRedundant,
-                },
-              });
-            }
           }
-        }
 
-        // Sort by composite similarity (highest first), handling nulls
-        pairs.sort((a, b) => {
-          if (a.compositeSimilarity === null && b.compositeSimilarity === null)
-            return 0;
-          if (a.compositeSimilarity === null) return 1;
-          if (b.compositeSimilarity === null) return -1;
-          return b.compositeSimilarity - a.compositeSimilarity;
-        });
+          // Sort by composite similarity (highest first), handling nulls
+          pairs.sort((a, b) => {
+            if (a.compositeSimilarity === null && b.compositeSimilarity === null) return 0;
+            if (a.compositeSimilarity === null) return 1;
+            if (b.compositeSimilarity === null) return -1;
+            return b.compositeSimilarity - a.compositeSimilarity;
+          });
 
-        // Apply limit
-        const topPairs = pairs.slice(0, limit);
+          // Apply limit
+          const topPairs = pairs.slice(0, limit);
 
-        // Build summary line
-        const mostSimilar = topPairs[0];
-        const summary = `Strategy Similarity: ${blockId} | ${strategies.length} strategies | ${redundantPairs} redundant pairs | Most similar: ${mostSimilar ? `${mostSimilar.strategyA}-${mostSimilar.strategyB} (${mostSimilar.compositeSimilarity?.toFixed(2) ?? "N/A"})` : "N/A"}`;
+          // Build summary line
+          const mostSimilar = topPairs[0];
+          const summary = `Strategy Similarity: ${blockId} | ${strategies.length} strategies | ${redundantPairs} redundant pairs | Most similar: ${mostSimilar ? `${mostSimilar.strategyA}-${mostSimilar.strategyB} (${mostSimilar.compositeSimilarity?.toFixed(2) ?? "N/A"})` : "N/A"}`;
 
-        // Build structured data
-        const structuredData = {
-          blockId,
-          options: {
-            correlationThreshold: corrThreshold,
-            tailDependenceThreshold: tailThreshold,
-            method: corrMethod,
-            minSharedDays: minDays,
-            topN: limit,
-          },
-          strategySummary: {
-            totalStrategies: strategies.length,
-            totalPairs: (strategies.length * (strategies.length - 1)) / 2,
-            redundantPairs,
-            highCorrelationPairs,
-            highTailDependencePairs,
-          },
-          similarPairs: topPairs,
-        };
+          // Build structured data
+          const structuredData = {
+            blockId,
+            options: {
+              correlationThreshold: corrThreshold,
+              tailDependenceThreshold: tailThreshold,
+              method: corrMethod,
+              minSharedDays: minDays,
+              topN: limit,
+            },
+            strategySummary: {
+              totalStrategies: strategies.length,
+              totalPairs: (strategies.length * (strategies.length - 1)) / 2,
+              redundantPairs,
+              highCorrelationPairs,
+              highTailDependencePairs,
+            },
+            similarPairs: topPairs,
+          };
 
           return createToolOutput(summary, structuredData);
         } catch (error) {
@@ -338,8 +317,8 @@ export function registerSimilarityBlockTools(
             isError: true as const,
           };
         }
-      }
-    )
+      },
+    ),
   );
 
   // Tool 11: what_if_scaling
@@ -349,29 +328,58 @@ export function registerSimilarityBlockTools(
       description:
         "Explore strategy weight combinations within a portfolio. Answer 'what if I scaled strategy X to 0.5x?' questions. Shows before/after comparison with per-strategy breakdown. Profile-aware: uses backtest block data, enforces maxContractsPerTrade ceilings, flags ignoreMarginReq. Multi-strategy mode combines trades from multiple blocks.",
       inputSchema: z.object({
-        blockId: z.string().describe("Block folder name (required for single-strategy mode, optional default for multi-strategy mode)"),
+        blockId: z
+          .string()
+          .describe(
+            "Block folder name (required for single-strategy mode, optional default for multi-strategy mode)",
+          ),
         strategyWeights: z
           .record(z.string(), z.number().min(0).max(2))
           .optional()
           .describe(
-            'Weight per strategy, e.g., {"5/7 17Δ": 0.5}. Unspecified strategies default to 1.0. Weight 0 = exclude strategy entirely. Max weight: 2.0. Ignored when strategies array is provided.'
+            'Weight per strategy, e.g., {"5/7 17Δ": 0.5}. Unspecified strategies default to 1.0. Weight 0 = exclude strategy entirely. Max weight: 2.0. Ignored when strategies array is provided.',
           ),
-        strategies: z.array(z.object({
-          strategyName: z.string().describe("Strategy name matching a stored profile"),
-          blockId: z.string().describe("Block ID to source trades from (overrides top-level blockId for this strategy)"),
-          scaleFactor: z.number().min(0).max(5).describe("Scale factor for this strategy (1.0 = current allocation)"),
-        })).optional().describe("Multi-strategy mode: array of strategies with per-strategy block source and scale. When provided, ignores strategyWeights."),
-        showUncapped: z.boolean().optional().default(false).describe("When true, also run without maxContractsPerTrade ceiling for side-by-side comparison"),
-        startDate: z
-          .string()
+        strategies: z
+          .array(
+            z.object({
+              strategyName: z.string().describe("Strategy name matching a stored profile"),
+              blockId: z
+                .string()
+                .describe(
+                  "Block ID to source trades from (overrides top-level blockId for this strategy)",
+                ),
+              scaleFactor: z
+                .number()
+                .min(0)
+                .max(5)
+                .describe("Scale factor for this strategy (1.0 = current allocation)"),
+            }),
+          )
           .optional()
-          .describe("Start date filter (YYYY-MM-DD)"),
+          .describe(
+            "Multi-strategy mode: array of strategies with per-strategy block source and scale. When provided, ignores strategyWeights.",
+          ),
+        showUncapped: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe(
+            "When true, also run without maxContractsPerTrade ceiling for side-by-side comparison",
+          ),
+        startDate: z.string().optional().describe("Start date filter (YYYY-MM-DD)"),
         endDate: z.string().optional().describe("End date filter (YYYY-MM-DD)"),
       }),
     },
     withSyncedBlock(
       baseDir,
-      async ({ blockId, strategyWeights, strategies: strategiesInput, showUncapped, startDate, endDate }) => {
+      async ({
+        blockId,
+        strategyWeights,
+        strategies: strategiesInput,
+        showUncapped,
+        startDate,
+        endDate,
+      }) => {
         try {
           const useMultiStrategy = strategiesInput && strategiesInput.length > 0;
           const doShowUncapped = showUncapped ?? false;
@@ -379,7 +387,7 @@ export function registerSimilarityBlockTools(
           // Helper: try to get a profile for a strategy (best-effort)
           async function tryGetProfile(
             strategyBlockId: string,
-            strategyName: string
+            strategyName: string,
           ): Promise<{ profile: StrategyProfile | null; status: "found" | "not_found" | "error" }> {
             try {
               const conn = await getConnection(baseDir);
@@ -395,7 +403,7 @@ export function registerSimilarityBlockTools(
           // Helper: filter trades by strategy with single-strategy fallback
           function filterTradesByStrategy(allTrades: Trade[], strategyName: string): Trade[] {
             const matched = allTrades.filter(
-              (t) => t.strategy.toLowerCase() === strategyName.toLowerCase()
+              (t) => t.strategy.toLowerCase() === strategyName.toLowerCase(),
             );
             if (matched.length > 0) return matched;
             // Single-strategy block fallback
@@ -416,7 +424,7 @@ export function registerSimilarityBlockTools(
           function buildScaledTrades(
             tradesToScale: Trade[],
             weights: Record<string, number>,
-            maxContractsCeilings?: Record<string, number>
+            maxContractsCeilings?: Record<string, number>,
           ): { scaledTrades: ScaledTrade[]; cappedStrategies: Set<string> } {
             const scaled: ScaledTrade[] = [];
             const cappedStrategies = new Set<string>();
@@ -452,7 +460,7 @@ export function registerSimilarityBlockTools(
           // Helper: build modified Trade[] with recalculated fundsAtClose for portfolio stats
           function buildModifiedTrades(
             scaledTrades: ScaledTrade[],
-            originalTrades: Trade[]
+            originalTrades: Trade[],
           ): Trade[] {
             const sortedOriginal = [...originalTrades]
               .filter((t) => t.dateClosed && t.fundsAtClose !== undefined)
@@ -498,7 +506,7 @@ export function registerSimilarityBlockTools(
           // Helper: calculate comparison deltas
           function calcDelta(
             original: number | null,
-            scaled: number | null
+            scaled: number | null,
           ): {
             original: number | null;
             scaled: number | null;
@@ -509,8 +517,7 @@ export function registerSimilarityBlockTools(
               return { original, scaled, delta: null, deltaPct: null };
             }
             const delta = scaled - original;
-            const deltaPct =
-              original !== 0 ? (delta / Math.abs(original)) * 100 : null;
+            const deltaPct = original !== 0 ? (delta / Math.abs(original)) * 100 : null;
             return { original, scaled, delta, deltaPct };
           }
 
@@ -538,11 +545,19 @@ export function registerSimilarityBlockTools(
             const allScaledTrades: ScaledTrade[] = [];
             const allOriginalTrades: Trade[] = [];
             const perStrategyBreakdown: MultiStrategyBreakdown[] = [];
-            const dataAvailability: { strategy: string; blockId: string; profileStatus: string; profileBlockId?: string }[] = [];
+            const dataAvailability: {
+              strategy: string;
+              blockId: string;
+              profileStatus: string;
+              profileBlockId?: string;
+            }[] = [];
 
             for (const entry of strategiesInput!) {
               const sourceBlockId = entry.blockId || blockId;
-              const { profile, status: profileStatus } = await tryGetProfile(sourceBlockId, entry.strategyName);
+              const { profile, status: profileStatus } = await tryGetProfile(
+                sourceBlockId,
+                entry.strategyName,
+              );
 
               // Determine which block to load trades from
               let tradeSourceBlockId = sourceBlockId;
@@ -600,7 +615,7 @@ export function registerSimilarityBlockTools(
               // Build weights and ceilings for this strategy's trades
               const weightsMap: Record<string, number> = {};
               const ceilings: Record<string, number> = {};
-              const uniqueNames = Array.from(new Set(entryTrades.map(t => t.strategy)));
+              const uniqueNames = Array.from(new Set(entryTrades.map((t) => t.strategy)));
               for (const name of uniqueNames) {
                 weightsMap[name] = entry.scaleFactor;
                 if (profile?.positionSizing?.maxContractsPerTrade !== undefined) {
@@ -609,7 +624,9 @@ export function registerSimilarityBlockTools(
               }
 
               const { scaledTrades: entryScaled, cappedStrategies } = buildScaledTrades(
-                entryTrades, weightsMap, Object.keys(ceilings).length > 0 ? ceilings : undefined
+                entryTrades,
+                weightsMap,
+                Object.keys(ceilings).length > 0 ? ceilings : undefined,
               );
 
               allOriginalTrades.push(...entryTrades);
@@ -644,7 +661,8 @@ export function registerSimilarityBlockTools(
 
               if (profile?.ignoreMarginReq) {
                 breakdown.ignoreMarginReq = true;
-                breakdown.marginNote = "Strategy ignores margin requirements. Scaled notional exposure shown but buying power impact not estimated.";
+                breakdown.marginNote =
+                  "Strategy ignores margin requirements. Scaled notional exposure shown but buying power impact not estimated.";
                 breakdown.scaledNotionalExposure = Math.abs(scaledNetPl);
               }
 
@@ -654,20 +672,21 @@ export function registerSimilarityBlockTools(
             // Calculate contribution percentages
             const totalCombinedPl = perStrategyBreakdown.reduce((sum, b) => sum + b.scaledNetPl, 0);
             for (const b of perStrategyBreakdown) {
-              b.plContributionPct = totalCombinedPl !== 0
-                ? (b.scaledNetPl / Math.abs(totalCombinedPl)) * 100
-                : 0;
+              b.plContributionPct =
+                totalCombinedPl !== 0 ? (b.scaledNetPl / Math.abs(totalCombinedPl)) * 100 : 0;
             }
 
             // Calculate combined portfolio stats
             const modifiedTrades = buildModifiedTrades(allScaledTrades, allOriginalTrades);
             const combinedStats = calculator.calculatePortfolioStats(
-              modifiedTrades, undefined, true
+              modifiedTrades,
+              undefined,
+              true,
             );
 
             // Build uncapped comparison if requested and any strategy was capped
             let uncappedComparison: Record<string, unknown> | undefined;
-            const anyCapped = perStrategyBreakdown.some(b => b.capped);
+            const anyCapped = perStrategyBreakdown.some((b) => b.capped);
             if (doShowUncapped && anyCapped) {
               const uncappedScaled: ScaledTrade[] = [];
               for (const entry of strategiesInput!) {
@@ -682,16 +701,22 @@ export function registerSimilarityBlockTools(
                   let entryTrades = filterTradesByStrategy(entryBlock.trades, entry.strategyName);
                   entryTrades = filterByDateRange(entryTrades, startDate, endDate);
                   const wm: Record<string, number> = {};
-                  for (const name of new Set(entryTrades.map(t => t.strategy))) {
+                  for (const name of new Set(entryTrades.map((t) => t.strategy))) {
                     wm[name] = entry.scaleFactor;
                   }
                   const { scaledTrades: ust } = buildScaledTrades(entryTrades, wm);
                   uncappedScaled.push(...ust);
-                } catch { /* skip */ }
+                } catch {
+                  /* skip */
+                }
               }
               if (uncappedScaled.length > 0) {
                 const uncappedModified = buildModifiedTrades(uncappedScaled, allOriginalTrades);
-                const uncappedStats = calculator.calculatePortfolioStats(uncappedModified, undefined, true);
+                const uncappedStats = calculator.calculatePortfolioStats(
+                  uncappedModified,
+                  undefined,
+                  true,
+                );
                 uncappedComparison = {
                   sharpeRatio: uncappedStats.sharpeRatio,
                   sortinoRatio: uncappedStats.sortinoRatio,
@@ -748,9 +773,7 @@ export function registerSimilarityBlockTools(
           }
 
           // Get all unique strategies
-          const allStrategies = Array.from(
-            new Set(trades.map((t) => t.strategy))
-          ).sort();
+          const allStrategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
 
           // Build applied weights (default 1.0 for unspecified)
           const appliedWeights: Record<string, number> = {};
@@ -763,7 +786,7 @@ export function registerSimilarityBlockTools(
           if (strategyWeights) {
             for (const [strategy, weight] of Object.entries(strategyWeights)) {
               const matchedStrategy = allStrategies.find(
-                (s) => s.toLowerCase() === strategy.toLowerCase()
+                (s) => s.toLowerCase() === strategy.toLowerCase(),
               );
               if (matchedStrategy) {
                 appliedWeights[matchedStrategy] = weight;
@@ -773,9 +796,7 @@ export function registerSimilarityBlockTools(
             }
           }
 
-          const allZeroWeight = Object.values(appliedWeights).every(
-            (w) => w === 0
-          );
+          const allZeroWeight = Object.values(appliedWeights).every((w) => w === 0);
           if (allZeroWeight) {
             return {
               content: [
@@ -789,11 +810,18 @@ export function registerSimilarityBlockTools(
           }
 
           // Profile-aware enhancements: look up profiles for each strategy (best-effort)
-          const profileLookups: Record<string, { profile: StrategyProfile | null; status: "found" | "not_found" | "error" }> = {};
+          const profileLookups: Record<
+            string,
+            { profile: StrategyProfile | null; status: "found" | "not_found" | "error" }
+          > = {};
           const maxContractsCeilings: Record<string, number> = {};
           const dataSourceMap: Record<string, string> = {};
           let tradesToUse = trades;
-          const backtestSubstitutions: { strategy: string; originalBlockId: string; backtestBlockId: string }[] = [];
+          const backtestSubstitutions: {
+            strategy: string;
+            originalBlockId: string;
+            backtestBlockId: string;
+          }[] = [];
 
           for (const strategy of allStrategies) {
             const lookup = await tryGetProfile(blockId, strategy);
@@ -810,7 +838,7 @@ export function registerSimilarityBlockTools(
 
                   if (backtestTrades.length > 0) {
                     tradesToUse = tradesToUse.filter(
-                      (t) => t.strategy.toLowerCase() !== strategy.toLowerCase()
+                      (t) => t.strategy.toLowerCase() !== strategy.toLowerCase(),
                     );
                     tradesToUse = [...tradesToUse, ...backtestTrades];
                     dataSourceMap[strategy] = "standalone_backtest";
@@ -833,9 +861,10 @@ export function registerSimilarityBlockTools(
           }
 
           // Calculate baseline portfolio metrics (from original trades, before substitution)
-          const dailyLogs = block.dailyLogs && block.dailyLogs.length > 0
-            ? filterDailyLogsByDateRange(block.dailyLogs, startDate, endDate)
-            : undefined;
+          const dailyLogs =
+            block.dailyLogs && block.dailyLogs.length > 0
+              ? filterDailyLogsByDateRange(block.dailyLogs, startDate, endDate)
+              : undefined;
           const baselineStats = calculator.calculatePortfolioStats(
             trades,
             dailyLogs && dailyLogs.length > 0 ? dailyLogs : undefined,
@@ -846,26 +875,37 @@ export function registerSimilarityBlockTools(
           const { scaledTrades, cappedStrategies } = buildScaledTrades(
             tradesToUse,
             appliedWeights,
-            hasCeilings ? maxContractsCeilings : undefined
+            hasCeilings ? maxContractsCeilings : undefined,
           );
 
           const modifiedTrades = buildModifiedTrades(scaledTrades, trades);
-          const scaledStats = calculator.calculatePortfolioStats(
-            modifiedTrades, undefined, true
-          );
+          const scaledStats = calculator.calculatePortfolioStats(modifiedTrades, undefined, true);
 
           // Uncapped comparison if requested and any strategy was capped
           let uncappedComparison: Record<string, unknown> | undefined;
           if (doShowUncapped && cappedStrategies.size > 0) {
             const { scaledTrades: uncappedScaled } = buildScaledTrades(tradesToUse, appliedWeights);
             const uncappedModified = buildModifiedTrades(uncappedScaled, trades);
-            const uncappedStats = calculator.calculatePortfolioStats(uncappedModified, undefined, true);
+            const uncappedStats = calculator.calculatePortfolioStats(
+              uncappedModified,
+              undefined,
+              true,
+            );
             uncappedComparison = {
-              sharpeRatio: calcDelta(baselineStats.sharpeRatio ?? null, uncappedStats.sharpeRatio ?? null),
-              sortinoRatio: calcDelta(baselineStats.sortinoRatio ?? null, uncappedStats.sortinoRatio ?? null),
+              sharpeRatio: calcDelta(
+                baselineStats.sharpeRatio ?? null,
+                uncappedStats.sharpeRatio ?? null,
+              ),
+              sortinoRatio: calcDelta(
+                baselineStats.sortinoRatio ?? null,
+                uncappedStats.sortinoRatio ?? null,
+              ),
               maxDrawdown: calcDelta(baselineStats.maxDrawdown, uncappedStats.maxDrawdown),
               netPl: calcDelta(baselineStats.netPl, uncappedStats.netPl),
-              totalTrades: { original: baselineStats.totalTrades, scaled: uncappedStats.totalTrades },
+              totalTrades: {
+                original: baselineStats.totalTrades,
+                scaled: uncappedStats.totalTrades,
+              },
             };
           }
 
@@ -873,16 +913,13 @@ export function registerSimilarityBlockTools(
           const comparison = {
             sharpeRatio: calcDelta(
               baselineStats.sharpeRatio ?? null,
-              scaledStats.sharpeRatio ?? null
+              scaledStats.sharpeRatio ?? null,
             ),
             sortinoRatio: calcDelta(
               baselineStats.sortinoRatio ?? null,
-              scaledStats.sortinoRatio ?? null
+              scaledStats.sortinoRatio ?? null,
             ),
-            maxDrawdown: calcDelta(
-              baselineStats.maxDrawdown,
-              scaledStats.maxDrawdown
-            ),
+            maxDrawdown: calcDelta(baselineStats.maxDrawdown, scaledStats.maxDrawdown),
             netPl: calcDelta(baselineStats.netPl, scaledStats.netPl),
             totalTrades: {
               original: baselineStats.totalTrades,
@@ -944,10 +981,9 @@ export function registerSimilarityBlockTools(
           }
 
           // Merge all strategy names (original + any from backtest substitution)
-          const allStrategyNames = Array.from(new Set([
-            ...allStrategies,
-            ...Object.keys(originalByStrategy),
-          ])).sort();
+          const allStrategyNames = Array.from(
+            new Set([...allStrategies, ...Object.keys(originalByStrategy)]),
+          ).sort();
 
           for (const strategy of allStrategyNames) {
             const weight = appliedWeights[strategy] ?? 1.0;
@@ -955,17 +991,12 @@ export function registerSimilarityBlockTools(
             const scaled = scaledByStrategy[strategy] ?? { trades: 0, netPl: 0 };
 
             const origContributionPct =
-              totalOriginalPl !== 0
-                ? (orig.netPl / Math.abs(totalOriginalPl)) * 100
-                : 0;
+              totalOriginalPl !== 0 ? (orig.netPl / Math.abs(totalOriginalPl)) * 100 : 0;
             const scaledContributionPct =
-              totalScaledPl !== 0
-                ? (scaled.netPl / Math.abs(totalScaledPl)) * 100
-                : 0;
+              totalScaledPl !== 0 ? (scaled.netPl / Math.abs(totalScaledPl)) * 100 : 0;
 
             const deltaNetPl = scaled.netPl - orig.netPl;
-            const deltaNetPlPct =
-              orig.netPl !== 0 ? (deltaNetPl / Math.abs(orig.netPl)) * 100 : 0;
+            const deltaNetPlPct = orig.netPl !== 0 ? (deltaNetPl / Math.abs(orig.netPl)) * 100 : 0;
 
             const lookup = profileLookups[strategy];
             const breakdown: StrategyBreakdown = {
@@ -998,7 +1029,8 @@ export function registerSimilarityBlockTools(
             // ANLYS-07: ignoreMarginReq flag
             if (lookup?.profile?.ignoreMarginReq) {
               breakdown.ignoreMarginReq = true;
-              breakdown.marginNote = "Strategy ignores margin requirements. Scaled notional exposure shown but buying power impact not estimated.";
+              breakdown.marginNote =
+                "Strategy ignores margin requirements. Scaled notional exposure shown but buying power impact not estimated.";
               breakdown.scaledNotionalExposure = Math.abs(scaled.netPl);
             }
 
@@ -1021,21 +1053,22 @@ export function registerSimilarityBlockTools(
               start: startDate ?? null,
               end: endDate ?? null,
             },
-            unknownStrategies:
-              unknownStrategies.length > 0 ? unknownStrategies : undefined,
+            unknownStrategies: unknownStrategies.length > 0 ? unknownStrategies : undefined,
             comparison,
             perStrategy,
           };
 
           // Add profile-aware metadata only when profiles were found
-          const anyProfileFound = Object.values(profileLookups).some(l => l.status === "found");
+          const anyProfileFound = Object.values(profileLookups).some((l) => l.status === "found");
           if (anyProfileFound) {
-            structuredData.dataAvailability = Object.entries(profileLookups).map(([strategy, lookup]) => ({
-              strategy,
-              profileStatus: lookup.status,
-              profileBlockId: lookup.profile?.blockId,
-              dataSource: dataSourceMap[strategy],
-            }));
+            structuredData.dataAvailability = Object.entries(profileLookups).map(
+              ([strategy, lookup]) => ({
+                strategy,
+                profileStatus: lookup.status,
+                profileBlockId: lookup.profile?.blockId,
+                dataSource: dataSourceMap[strategy],
+              }),
+            );
           }
 
           if (backtestSubstitutions.length > 0) {
@@ -1058,7 +1091,7 @@ export function registerSimilarityBlockTools(
             isError: true,
           };
         }
-      }
-    )
+      },
+    ),
   );
 }

@@ -119,13 +119,7 @@ describe("tradingDays", () => {
   it("generates only weekdays (Monday-Friday) in a date range", () => {
     // 2025-01-13 is Monday, 2025-01-17 is Friday
     const days = tradingDays("2025-01-13", "2025-01-17");
-    expect(days).toEqual([
-      "2025-01-13",
-      "2025-01-14",
-      "2025-01-15",
-      "2025-01-16",
-      "2025-01-17",
-    ]);
+    expect(days).toEqual(["2025-01-13", "2025-01-14", "2025-01-15", "2025-01-16", "2025-01-17"]);
   });
 
   it("excludes Saturday and Sunday from a range spanning a weekend", () => {

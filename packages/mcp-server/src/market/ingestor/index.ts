@@ -1,7 +1,4 @@
-export {
-  MarketIngestor,
-  type MarketIngestorDeps,
-} from "./market-ingestor.ts";
+export { MarketIngestor, type MarketIngestorDeps } from "./market-ingestor.ts";
 export type {
   IngestStatus,
   IngestResult,

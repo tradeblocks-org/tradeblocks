@@ -23,7 +23,13 @@ import { getSyncMetadataJson } from "../db/json-adapters.ts";
 import { getBlocksDir } from "../sync/index.ts";
 
 // Re-export CSV discovery types and functions from shared module
-export { type CsvMappings, type CsvType, detectCsvType, discoverCsvFiles, logCsvDiscoveryWarning } from "./csv-discovery.ts";
+export {
+  type CsvMappings,
+  type CsvType,
+  detectCsvType,
+  discoverCsvFiles,
+  logCsvDiscoveryWarning,
+} from "./csv-discovery.ts";
 import { type CsvType, discoverCsvFiles } from "./csv-discovery.ts";
 
 function resolveBlocksBaseDir(baseDir: string): string {
@@ -81,17 +87,14 @@ function parseDatePreservingCalendarDay(dateStr: string): Date {
 /**
  * Parse numeric value from CSV string
  */
-function parseNumber(
-  value: string | undefined,
-  defaultValue?: number
-): number {
+function parseNumber(value: string | undefined, defaultValue?: number): number {
   if (!value || value.trim() === "" || value.toLowerCase() === "nan") {
     if (defaultValue !== undefined) return defaultValue;
     return 0;
   }
   const cleaned = value.replace(/[$,%]/g, "").trim();
   const parsed = parseFloat(cleaned);
-  return isNaN(parsed) ? defaultValue ?? 0 : parsed;
+  return isNaN(parsed) ? (defaultValue ?? 0) : parsed;
 }
 
 const KNOWN_TRADE_COLUMNS = new Set([
@@ -129,7 +132,10 @@ const KNOWN_TRADE_COLUMNS = new Set([
  */
 function parseCSV(content: string): Record<string, string>[] {
   // Strip UTF-8 BOM if present (common in Windows/Excel CSV exports)
-  const lines = content.replace(/^\uFEFF/, "").trim().split("\n");
+  const lines = content
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .split("\n");
   if (lines.length < 2) return [];
 
   const headers = parseCSVLine(lines[0]);
@@ -205,14 +211,10 @@ function convertToTrade(raw: Record<string, string>, blockId?: string): Trade | 
       legs,
       premium: parseNumber(raw["Premium"]),
       premiumPrecision,
-      closingPrice: raw["Closing Price"]
-        ? parseNumber(raw["Closing Price"])
-        : undefined,
+      closingPrice: raw["Closing Price"] ? parseNumber(raw["Closing Price"]) : undefined,
       dateClosed,
       timeClosed: raw["Time Closed"] || undefined,
-      avgClosingCost: raw["Avg. Closing Cost"]
-        ? parseNumber(raw["Avg. Closing Cost"])
-        : undefined,
+      avgClosingCost: raw["Avg. Closing Cost"] ? parseNumber(raw["Avg. Closing Cost"]) : undefined,
       reasonForClose: raw["Reason For Close"] || undefined,
       pl: parseNumber(raw["P/L"]),
       numContracts: Math.round(parseNumber(raw["No. of Contracts"], 1)),
@@ -221,27 +223,21 @@ function convertToTrade(raw: Record<string, string>, blockId?: string): Trade | 
       strategy,
       openingCommissionsFees: parseNumber(
         raw["Opening Commissions + Fees"] || raw["Opening comms & fees"],
-        0
+        0,
       ),
       closingCommissionsFees: parseNumber(
         raw["Closing Commissions + Fees"] || raw["Closing comms & fees"],
-        0
+        0,
       ),
       openingShortLongRatio: parseNumber(raw["Opening Short/Long Ratio"], 0),
       closingShortLongRatio: raw["Closing Short/Long Ratio"]
         ? parseNumber(raw["Closing Short/Long Ratio"])
         : undefined,
-      openingVix: raw["Opening VIX"]
-        ? parseNumber(raw["Opening VIX"])
-        : undefined,
-      closingVix: raw["Closing VIX"]
-        ? parseNumber(raw["Closing VIX"])
-        : undefined,
+      openingVix: raw["Opening VIX"] ? parseNumber(raw["Opening VIX"]) : undefined,
+      closingVix: raw["Closing VIX"] ? parseNumber(raw["Closing VIX"]) : undefined,
       gap: raw["Gap"] ? parseNumber(raw["Gap"]) : undefined,
       movement: raw["Movement"] ? parseNumber(raw["Movement"]) : undefined,
-      maxProfit: raw["Max Profit"]
-        ? parseNumber(raw["Max Profit"])
-        : undefined,
+      maxProfit: raw["Max Profit"] ? parseNumber(raw["Max Profit"]) : undefined,
       maxLoss: raw["Max Loss"] ? parseNumber(raw["Max Loss"]) : undefined,
     };
 
@@ -268,7 +264,7 @@ function convertToTrade(raw: Record<string, string>, blockId?: string): Trade | 
  */
 function convertToDailyLogEntry(
   raw: Record<string, string>,
-  blockId?: string
+  blockId?: string,
 ): DailyLogEntry | null {
   try {
     const date = parseDatePreservingCalendarDay(raw["Date"]);
@@ -298,7 +294,7 @@ function convertToDailyLogEntry(
 async function loadTrades(
   blockPath: string,
   filename: string = "tradelog.csv",
-  blockId?: string
+  blockId?: string,
 ): Promise<Trade[]> {
   const tradelogPath = path.join(blockPath, filename);
   const content = await fs.readFile(tradelogPath, "utf-8");
@@ -314,8 +310,7 @@ async function loadTrades(
 
   // Sort by date and time
   trades.sort((a, b) => {
-    const dateCompare =
-      new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime();
+    const dateCompare = new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime();
     if (dateCompare !== 0) return dateCompare;
     return a.timeOpened.localeCompare(b.timeOpened);
   });
@@ -332,7 +327,7 @@ async function loadTrades(
 async function loadDailyLogs(
   blockPath: string,
   blockId: string,
-  filename: string = "dailylog.csv"
+  filename: string = "dailylog.csv",
 ): Promise<DailyLogEntry[] | undefined> {
   const dailylogPath = path.join(blockPath, filename);
 
@@ -350,9 +345,7 @@ async function loadDailyLogs(
     }
 
     // Sort by date
-    entries.sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
+    entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return entries.length > 0 ? entries : undefined;
   } catch {
@@ -365,10 +358,7 @@ async function loadDailyLogs(
  * Load a complete block (trades + optional daily logs).
  * Uses csv-discovery header sniffing for file resolution.
  */
-export async function loadBlock(
-  baseDir: string,
-  blockId: string
-): Promise<LoadedBlock> {
+export async function loadBlock(baseDir: string, blockId: string): Promise<LoadedBlock> {
   const blocksDir = resolveBlocksBaseDir(baseDir);
   const blockPath = path.join(blocksDir, blockId);
 
@@ -469,14 +459,17 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
     }
 
     // Build a map of block_id -> trade stats
-    const tradeStats = new Map<string, {
-      tradeCount: number;
-      strategies: string[];
-      minDate: Date | null;
-      maxDate: Date | null;
-      totalPl: number;
-      netPl: number;
-    }>();
+    const tradeStats = new Map<
+      string,
+      {
+        tradeCount: number;
+        strategies: string[];
+        minDate: Date | null;
+        maxDate: Date | null;
+        totalPl: number;
+        netPl: number;
+      }
+    >();
 
     for (const row of tradeStatsReader.getRows()) {
       const blockId = row[0] as string;
@@ -510,13 +503,16 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
       GROUP BY r.block_id
     `);
 
-    const reportingStats = new Map<string, {
-      tradeCount: number;
-      strategyCount: number;
-      totalPL: number;
-      minDate: string | null;
-      maxDate: string | null;
-    }>();
+    const reportingStats = new Map<
+      string,
+      {
+        tradeCount: number;
+        strategyCount: number;
+        totalPL: number;
+        minDate: string | null;
+        maxDate: string | null;
+      }
+    >();
 
     for (const row of reportingReader.getRows()) {
       const blockId = row[0] as string;
@@ -530,10 +526,13 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
     }
 
     // Query 3: Sync metadata to determine hasDailyLog/hasReportingLog
-    const syncMeta = new Map<string, {
-      hasDailyLog: boolean;
-      hasReportingLog: boolean;
-    }>();
+    const syncMeta = new Map<
+      string,
+      {
+        hasDailyLog: boolean;
+        hasReportingLog: boolean;
+      }
+    >();
 
     if (isParquetMode()) {
       // In Parquet mode, read .sync-meta.json files from blocksDir
@@ -654,27 +653,21 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
 /**
  * Normalize header names using column aliases
  */
-function normalizeRecordHeaders(
-  raw: Record<string, string>
-): Record<string, string> {
+function normalizeRecordHeaders(raw: Record<string, string>): Record<string, string> {
   const normalized: Record<string, string> = { ...raw };
-  Object.entries(REPORTING_TRADE_COLUMN_ALIASES).forEach(
-    ([alias, canonical]) => {
-      if (normalized[alias] !== undefined) {
-        normalized[canonical] = normalized[alias];
-        delete normalized[alias];
-      }
+  Object.entries(REPORTING_TRADE_COLUMN_ALIASES).forEach(([alias, canonical]) => {
+    if (normalized[alias] !== undefined) {
+      normalized[canonical] = normalized[alias];
+      delete normalized[alias];
     }
-  );
+  });
   return normalized;
 }
 
 /**
  * Convert raw CSV record to ReportingTrade object
  */
-export function convertToReportingTrade(
-  raw: Record<string, string>
-): ReportingTrade | null {
+export function convertToReportingTrade(raw: Record<string, string>): ReportingTrade | null {
   // Check if this is a TAT format row
   const keys = Object.keys(raw);
   if (isTatFormat(keys)) {
@@ -725,7 +718,7 @@ export function convertToReportingTrade(
  */
 export async function loadReportingLog(
   baseDir: string,
-  blockId: string
+  blockId: string,
 ): Promise<ReportingTrade[]> {
   const blocksDir = resolveBlocksBaseDir(baseDir);
   const blockPath = path.join(blocksDir, blockId);
@@ -754,10 +747,7 @@ export async function loadReportingLog(
   }
 
   // Sort by date
-  trades.sort(
-    (a, b) =>
-      new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime()
-  );
+  trades.sort((a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime());
 
   return trades;
 }
@@ -808,7 +798,7 @@ function toKebabCase(str: string): string {
  */
 function validateCsvColumns(
   records: Record<string, string>[],
-  csvType: "tradelog" | "dailylog" | "reportinglog"
+  csvType: "tradelog" | "dailylog" | "reportinglog",
 ): { valid: boolean; error?: string } {
   if (records.length === 0) {
     return { valid: false, error: "CSV file is empty or has no data rows" };
@@ -849,9 +839,7 @@ function validateCsvColumns(
       // Required columns for OO reporting log (with aliases)
       const dateOpenedAliases = ["Date Opened", "date_opened"];
       const plAliases = ["P/L", "pl"];
-      const hasDateOpened = dateOpenedAliases.some((col) =>
-        headers.includes(col)
-      );
+      const hasDateOpened = dateOpenedAliases.some((col) => headers.includes(col));
       const hasPl = plAliases.some((col) => headers.includes(col));
       const missing: string[] = [];
       if (!hasDateOpened) missing.push("Date Opened");
@@ -881,7 +869,7 @@ function validateCsvColumns(
  */
 export async function importCsv(
   baseDir: string,
-  options: ImportCsvOptions
+  options: ImportCsvOptions,
 ): Promise<ImportCsvResult> {
   const { csvPath, blockName } = options;
   let { csvType = "tradelog" } = options;
@@ -918,9 +906,7 @@ export async function importCsv(
   const blockId = toKebabCase(name);
 
   if (!blockId) {
-    throw new Error(
-      "Could not derive a valid block ID from the filename or provided name"
-    );
+    throw new Error("Could not derive a valid block ID from the filename or provided name");
   }
 
   // Check if block already exists
@@ -928,7 +914,7 @@ export async function importCsv(
   try {
     await fs.access(blockPath);
     throw new Error(
-      `Block "${blockId}" already exists. Use a different blockName or delete the existing block first.`
+      `Block "${blockId}" already exists. Use a different blockName or delete the existing block first.`,
     );
   } catch (error) {
     // Directory doesn't exist - good, we can create it

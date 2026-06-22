@@ -5,10 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = resolve(root, "src/utils/providers/thetadata/mdds.proto");
-const targets = [
-  resolve(root, "server/mdds.proto"),
-  resolve(root, "dist/mdds.proto"),
-];
+const targets = [resolve(root, "server/mdds.proto"), resolve(root, "dist/mdds.proto")];
 
 for (const target of targets) {
   mkdirSync(dirname(target), { recursive: true });

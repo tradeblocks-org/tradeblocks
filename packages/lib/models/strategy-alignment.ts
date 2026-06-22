@@ -3,23 +3,23 @@
  * used for comparison workflows.
  */
 export interface StrategyAlignment {
-  id: string
-  reportingStrategies: string[]
-  liveStrategies: string[]
-  note?: string
-  createdAt: Date
-  updatedAt: Date
-  matchOverrides?: MatchOverrides
+  id: string;
+  reportingStrategies: string[];
+  liveStrategies: string[];
+  note?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  matchOverrides?: MatchOverrides;
 }
 
 export interface MatchOverrides {
-  selectedBacktestedIds: string[]
-  selectedReportedIds: string[]
-  tradePairs?: TradePair[]
+  selectedBacktestedIds: string[];
+  selectedReportedIds: string[];
+  tradePairs?: TradePair[];
 }
 
 export interface TradePair {
-  backtestedId: string
-  reportedId: string
-  manual: boolean  // true if user created, false if auto-matched
+  backtestedId: string;
+  reportedId: string;
+  manual: boolean; // true if user created, false if auto-matched
 }

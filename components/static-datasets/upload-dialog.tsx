@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { useState, useCallback } from "react"
+import { useState, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,124 +8,127 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Upload, FileText, AlertCircle, Loader2 } from "lucide-react"
-import { CSVParser } from "@tradeblocks/lib"
-import { suggestDatasetName } from "@tradeblocks/lib"
-import { useStaticDatasetsStore } from "@tradeblocks/lib/stores"
-import type { ParseProgress } from "@tradeblocks/lib"
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Upload, FileText, AlertCircle, Loader2 } from "lucide-react";
+import { CSVParser } from "@tradeblocks/lib";
+import { suggestDatasetName } from "@tradeblocks/lib";
+import { useStaticDatasetsStore } from "@tradeblocks/lib/stores";
+import type { ParseProgress } from "@tradeblocks/lib";
 
 interface UploadDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
-  const [file, setFile] = useState<File | null>(null)
-  const [name, setName] = useState("")
-  const [nameError, setNameError] = useState<string | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadStep, setUploadStep] = useState("")
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [file, setFile] = useState<File | null>(null);
+  const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStep, setUploadStep] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const uploadDataset = useStaticDatasetsStore((state) => state.uploadDataset)
-  const validateName = useStaticDatasetsStore((state) => state.validateName)
+  const uploadDataset = useStaticDatasetsStore((state) => state.uploadDataset);
+  const validateName = useStaticDatasetsStore((state) => state.validateName);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (!selectedFile) return
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
 
     // Validate file
-    const validation = CSVParser.validateCSVFile(selectedFile)
+    const validation = CSVParser.validateCSVFile(selectedFile);
     if (!validation.valid) {
-      setUploadError(validation.error || "Invalid file")
-      return
+      setUploadError(validation.error || "Invalid file");
+      return;
     }
 
-    setFile(selectedFile)
-    setUploadError(null)
+    setFile(selectedFile);
+    setUploadError(null);
 
     // Suggest name from filename
-    const suggestedName = suggestDatasetName(selectedFile.name)
-    setName(suggestedName)
-    setNameError(null)
-  }, [])
+    const suggestedName = suggestDatasetName(selectedFile.name);
+    setName(suggestedName);
+    setNameError(null);
+  }, []);
 
-  const handleNameChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newName = e.target.value
-    setName(newName)
+  const handleNameChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newName = e.target.value;
+      setName(newName);
 
-    if (newName.trim()) {
-      const validation = await validateName(newName)
-      setNameError(validation.valid ? null : validation.error || null)
-    } else {
-      setNameError("Name is required")
-    }
-  }, [validateName])
+      if (newName.trim()) {
+        const validation = await validateName(newName);
+        setNameError(validation.valid ? null : validation.error || null);
+      } else {
+        setNameError("Name is required");
+      }
+    },
+    [validateName],
+  );
 
   const handleUpload = useCallback(async () => {
-    if (!file || !name.trim() || nameError) return
+    if (!file || !name.trim() || nameError) return;
 
-    setIsUploading(true)
-    setUploadError(null)
-    setUploadProgress(0)
-    setUploadStep("Reading file...")
+    setIsUploading(true);
+    setUploadError(null);
+    setUploadProgress(0);
+    setUploadStep("Reading file...");
 
     const handleProgress = (progress: ParseProgress) => {
-      setUploadProgress(progress.progress)
+      setUploadProgress(progress.progress);
       switch (progress.stage) {
         case "reading":
-          setUploadStep("Reading file...")
-          break
+          setUploadStep("Reading file...");
+          break;
         case "parsing":
-          setUploadStep(`Parsing rows... (${progress.rowsProcessed} processed)`)
-          break
+          setUploadStep(`Parsing rows... (${progress.rowsProcessed} processed)`);
+          break;
         case "validating":
-          setUploadStep("Validating data...")
-          break
+          setUploadStep("Validating data...");
+          break;
         case "converting":
-          setUploadStep("Processing timestamps...")
-          break
+          setUploadStep("Processing timestamps...");
+          break;
         case "completed":
-          setUploadStep("Saving to database...")
-          break
+          setUploadStep("Saving to database...");
+          break;
       }
-    }
+    };
 
-    const result = await uploadDataset(file, name.trim(), handleProgress)
+    const result = await uploadDataset(file, name.trim(), handleProgress);
 
     if (result.success) {
       // Reset and close
-      setFile(null)
-      setName("")
-      setNameError(null)
-      setUploadProgress(0)
-      setUploadStep("")
-      onOpenChange(false)
+      setFile(null);
+      setName("");
+      setNameError(null);
+      setUploadProgress(0);
+      setUploadStep("");
+      onOpenChange(false);
     } else {
-      setUploadError(result.error || "Upload failed")
+      setUploadError(result.error || "Upload failed");
     }
 
-    setIsUploading(false)
-  }, [file, name, nameError, uploadDataset, onOpenChange])
+    setIsUploading(false);
+  }, [file, name, nameError, uploadDataset, onOpenChange]);
 
   const handleClose = useCallback(() => {
-    if (isUploading) return
+    if (isUploading) return;
 
-    setFile(null)
-    setName("")
-    setNameError(null)
-    setUploadError(null)
-    setUploadProgress(0)
-    setUploadStep("")
-    onOpenChange(false)
-  }, [isUploading, onOpenChange])
+    setFile(null);
+    setName("");
+    setNameError(null);
+    setUploadError(null);
+    setUploadProgress(0);
+    setUploadStep("");
+    onOpenChange(false);
+  }, [isUploading, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -133,7 +136,9 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
         <DialogHeader>
           <DialogTitle>Upload Static Dataset</DialogTitle>
           <DialogDescription>
-            Upload a CSV file with time-series data. The first column must be the timestamp. Dataset columns will be available as fields in the Report Builder, matched to trades by timestamp.
+            Upload a CSV file with time-series data. The first column must be the timestamp. Dataset
+            columns will be available as fields in the Report Builder, matched to trades by
+            timestamp.
           </DialogDescription>
         </DialogHeader>
 
@@ -151,14 +156,9 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
                   className="hidden"
                   disabled={isUploading}
                 />
-                <label
-                  htmlFor="file"
-                  className="cursor-pointer flex flex-col items-center gap-2"
-                >
+                <label htmlFor="file" className="cursor-pointer flex flex-col items-center gap-2">
                   <Upload className="w-8 h-8 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    Click to select a CSV file
-                  </span>
+                  <span className="text-sm text-muted-foreground">Click to select a CSV file</span>
                 </label>
               </div>
             ) : (
@@ -174,8 +174,8 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setFile(null)
-                    setName("")
+                    setFile(null);
+                    setName("");
                   }}
                   disabled={isUploading}
                 >
@@ -196,9 +196,7 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
                 placeholder="e.g., VIX, SPX Daily"
                 disabled={isUploading}
               />
-              {nameError && (
-                <p className="text-xs text-destructive">{nameError}</p>
-              )}
+              {nameError && <p className="text-xs text-destructive">{nameError}</p>}
               <p className="text-xs text-muted-foreground">
                 This name will be used as a prefix for columns in Report Builder.
               </p>
@@ -245,5 +243,5 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

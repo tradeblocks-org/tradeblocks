@@ -16,11 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PerformanceData } from "@tradeblocks/lib/stores";
-import {
-  downloadCsv,
-  downloadJson,
-  generateExportFilename,
-} from "@tradeblocks/lib";
+import { downloadCsv, downloadJson, generateExportFilename } from "@tradeblocks/lib";
 import {
   CHART_EXPORTS,
   exportMultipleCharts,
@@ -41,10 +37,7 @@ const TAB_ORDER = [
   "Excursion Analysis",
 ] as const;
 
-export function PerformanceExportDialog({
-  data,
-  blockName,
-}: PerformanceExportDialogProps) {
+export function PerformanceExportDialog({ data, blockName }: PerformanceExportDialogProps) {
   const [selectedCharts, setSelectedCharts] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState(false);
 
@@ -98,8 +91,7 @@ export function PerformanceExportDialog({
         <DialogHeader>
           <DialogTitle>Export Chart Data</DialogTitle>
           <DialogDescription>
-            Select charts to export raw data for analysis in external tools or
-            GPT.
+            Select charts to export raw data for analysis in external tools or GPT.
           </DialogDescription>
         </DialogHeader>
 
@@ -125,10 +117,7 @@ export function PerformanceExportDialog({
                   </h4>
                   <div className="space-y-1">
                     {charts.map((chart) => (
-                      <div
-                        key={chart.id}
-                        className="flex items-start gap-2 py-2"
-                      >
+                      <div key={chart.id} className="flex items-start gap-2 py-2">
                         <Checkbox
                           id={chart.id}
                           checked={selectedCharts.has(chart.id)}
@@ -166,11 +155,7 @@ export function PerformanceExportDialog({
             <FileSpreadsheet className="mr-2 h-4 w-4" />
             Export CSV
           </Button>
-          <Button
-            size="sm"
-            onClick={handleExportSelectedJson}
-            disabled={selectedCharts.size === 0}
-          >
+          <Button size="sm" onClick={handleExportSelectedJson} disabled={selectedCharts.size === 0}>
             <FileJson className="mr-2 h-4 w-4" />
             Export JSON
           </Button>

@@ -147,9 +147,7 @@ export type BulkProgressEvent =
       rowsWritten: number;
     };
 
-export type BulkProgressReporter = (
-  event: BulkProgressEvent,
-) => void | Promise<void>;
+export type BulkProgressReporter = (event: BulkProgressEvent) => void | Promise<void>;
 
 export interface IngestChainOptions {
   underlyings: string[];

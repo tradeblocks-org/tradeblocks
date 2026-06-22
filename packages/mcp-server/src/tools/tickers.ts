@@ -28,10 +28,7 @@
  */
 import type { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {
-  TickerRegistry,
-  TickerEntry,
-} from "../market/tickers/registry.ts";
+import type { TickerRegistry, TickerEntry } from "../market/tickers/registry.ts";
 import {
   registerUnderlyingSchema,
   unregisterUnderlyingSchema,

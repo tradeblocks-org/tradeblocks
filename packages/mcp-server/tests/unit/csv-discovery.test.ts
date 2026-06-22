@@ -30,53 +30,38 @@ describe("detectCsvType", () => {
   it("identifies a tradelog CSV (has Strategy, Date Opened, P/L columns)", async () => {
     const filePath = await createCsv(
       "trades.csv",
-      "Strategy,Date Opened,Time Opened,P/L,Date Closed,Legs,Premium"
+      "Strategy,Date Opened,Time Opened,P/L,Date Closed,Legs,Premium",
     );
     const result = await detectCsvType(filePath);
     expect(result).toBe("tradelog");
   });
 
   it("identifies a tradelog with P&L alias", async () => {
-    const filePath = await createCsv(
-      "trades2.csv",
-      "Strategy,Date Opened,P&L,Symbol,Legs"
-    );
+    const filePath = await createCsv("trades2.csv", "Strategy,Date Opened,P&L,Symbol,Legs");
     const result = await detectCsvType(filePath);
     expect(result).toBe("tradelog");
   });
 
   it("identifies a dailylog CSV (has Date, Portfolio Value columns)", async () => {
-    const filePath = await createCsv(
-      "daily.csv",
-      "Date,Portfolio Value,Daily P&L"
-    );
+    const filePath = await createCsv("daily.csv", "Date,Portfolio Value,Daily P&L");
     const result = await detectCsvType(filePath);
     expect(result).toBe("dailylog");
   });
 
   it("identifies a dailylog CSV with equity column", async () => {
-    const filePath = await createCsv(
-      "daily2.csv",
-      "Date,Equity,Notes"
-    );
+    const filePath = await createCsv("daily2.csv", "Date,Equity,Notes");
     const result = await detectCsvType(filePath);
     expect(result).toBe("dailylog");
   });
 
   it("identifies a reportinglog CSV (TAT format)", async () => {
-    const filePath = await createCsv(
-      "tat.csv",
-      "TradeID,ProfitLoss,BuyingPower,EntryDate"
-    );
+    const filePath = await createCsv("tat.csv", "TradeID,ProfitLoss,BuyingPower,EntryDate");
     const result = await detectCsvType(filePath);
     expect(result).toBe("reportinglog");
   });
 
   it("identifies a reportinglog CSV (OO format with Actual P/L)", async () => {
-    const filePath = await createCsv(
-      "reporting.csv",
-      "Date Opened,Actual P/L,Legs"
-    );
+    const filePath = await createCsv("reporting.csv", "Date Opened,Actual P/L,Legs");
     const result = await detectCsvType(filePath);
     expect(result).toBe("reportinglog");
   });
@@ -84,7 +69,7 @@ describe("detectCsvType", () => {
   it("identifies a reportinglog CSV (OO format with Initial Premium, no Actual P/L)", async () => {
     const filePath = await createCsv(
       "oo-reporting.csv",
-      "Date Opened,Strategy,Legs,No. of Contracts,Initial Premium,P/L"
+      "Date Opened,Strategy,Legs,No. of Contracts,Initial Premium,P/L",
     );
     const result = await detectCsvType(filePath);
     expect(result).toBe("reportinglog");
@@ -93,17 +78,14 @@ describe("detectCsvType", () => {
   it("does not misclassify tradelog with Opening Price as reportinglog", async () => {
     const filePath = await createCsv(
       "tradelog-with-opening-price.csv",
-      "Date Opened,Time Opened,Date Closed,Time Closed,Opening Price,Closing Price,Legs,Premium,No. of Contracts,P/L,Strategy"
+      "Date Opened,Time Opened,Date Closed,Time Closed,Opening Price,Closing Price,Legs,Premium,No. of Contracts,P/L,Strategy",
     );
     const result = await detectCsvType(filePath);
     expect(result).toBe("tradelog");
   });
 
   it("returns null for unrecognized CSV", async () => {
-    const filePath = await createCsv(
-      "unknown.csv",
-      "Name,Age,City"
-    );
+    const filePath = await createCsv("unknown.csv", "Name,Age,City");
     const result = await detectCsvType(filePath);
     expect(result).toBeNull();
   });

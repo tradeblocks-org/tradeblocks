@@ -1,27 +1,27 @@
-import { describe, expect, it } from '@jest/globals'
+import { describe, expect, it } from "@jest/globals";
 
-import { createExcursionDistribution, MFEMAEDataPoint, NormalizationBasis } from '@tradeblocks/lib'
+import { createExcursionDistribution, MFEMAEDataPoint, NormalizationBasis } from "@tradeblocks/lib";
 
 const buildPoint = (overrides: Partial<MFEMAEDataPoint>): MFEMAEDataPoint => {
-  const basis: NormalizationBasis = 'premium'
-  const denominator = overrides.denominator ?? 100
-  const mfePercent = overrides.mfePercent ?? 0
-  const maePercent = overrides.maePercent ?? 0
-  const plPercent = overrides.plPercent ?? 0
+  const basis: NormalizationBasis = "premium";
+  const denominator = overrides.denominator ?? 100;
+  const mfePercent = overrides.mfePercent ?? 0;
+  const maePercent = overrides.maePercent ?? 0;
+  const plPercent = overrides.plPercent ?? 0;
 
-  const normalizedBy: MFEMAEDataPoint['normalizedBy'] = {
+  const normalizedBy: MFEMAEDataPoint["normalizedBy"] = {
     [basis]: {
       denominator,
       mfePercent,
       maePercent,
-      plPercent
-    }
-  }
+      plPercent,
+    },
+  };
 
   return {
     tradeNumber: 1,
-    date: new Date('2024-01-01'),
-    strategy: 'Test',
+    date: new Date("2024-01-01"),
+    strategy: "Test",
     mfe: 0,
     mae: 0,
     pl: 0,
@@ -40,38 +40,38 @@ const buildPoint = (overrides: Partial<MFEMAEDataPoint>): MFEMAEDataPoint => {
     ...overrides,
     normalizedBy: {
       ...normalizedBy,
-      ...overrides.normalizedBy
-    }
-  }
-}
+      ...overrides.normalizedBy,
+    },
+  };
+};
 
-describe('createExcursionDistribution', () => {
-  it('returns at least one bucket when excursions are zero', () => {
+describe("createExcursionDistribution", () => {
+  it("returns at least one bucket when excursions are zero", () => {
     const data = [
       buildPoint({ mfePercent: 0, maePercent: 0 }),
-      buildPoint({ mfePercent: 0, maePercent: 0 })
-    ]
+      buildPoint({ mfePercent: 0, maePercent: 0 }),
+    ];
 
-    const buckets = createExcursionDistribution(data, 10)
+    const buckets = createExcursionDistribution(data, 10);
 
-    expect(buckets).toHaveLength(1)
-    expect(buckets[0]).toMatchObject({ bucket: '0-10%', mfeCount: 2, maeCount: 2 })
-  })
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0]).toMatchObject({ bucket: "0-10%", mfeCount: 2, maeCount: 2 });
+  });
 
-  it('includes values that fall exactly on a bucket boundary', () => {
+  it("includes values that fall exactly on a bucket boundary", () => {
     const data = [
       buildPoint({ mfePercent: 20, maePercent: 10 }),
-      buildPoint({ mfePercent: 30, maePercent: 20 })
-    ]
+      buildPoint({ mfePercent: 30, maePercent: 20 }),
+    ];
 
-    const buckets = createExcursionDistribution(data, 10)
+    const buckets = createExcursionDistribution(data, 10);
 
-    const labels = buckets.map(b => b.bucket)
-    expect(labels).toEqual(['0-10%', '10-20%', '20-30%'])
+    const labels = buckets.map((b) => b.bucket);
+    expect(labels).toEqual(["0-10%", "10-20%", "20-30%"]);
 
-    const totalMfe = buckets.reduce((sum, bucket) => sum + bucket.mfeCount, 0)
-    expect(totalMfe).toBe(2)
+    const totalMfe = buckets.reduce((sum, bucket) => sum + bucket.mfeCount, 0);
+    expect(totalMfe).toBe(2);
 
-    expect(buckets[buckets.length - 1].mfeCount).toBe(2)
-  })
-})
+    expect(buckets[buckets.length - 1].mfeCount).toBe(2);
+  });
+});

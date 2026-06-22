@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 /**
  * Saved Reports Dropdown
@@ -7,7 +7,7 @@
  * Uses nested submenus to organize preset reports by category.
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo } from "react";
 import {
   BarChart3,
   ChevronDown,
@@ -17,10 +17,10 @@ import {
   Star,
   Table2,
   Trash2,
-  TrendingUp
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+  TrendingUp,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,15 +29,10 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu'
-import { useSettingsStore } from '@tradeblocks/lib/stores'
-import {
-  ReportConfig,
-  ReportCategory,
-  ChartType,
-  REPORT_CATEGORY_LABELS
-} from '@tradeblocks/lib'
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useSettingsStore } from "@tradeblocks/lib/stores";
+import { ReportConfig, ReportCategory, ChartType, REPORT_CATEGORY_LABELS } from "@tradeblocks/lib";
 
 // Map chart types to icons
 const CHART_TYPE_ICONS: Record<ChartType, LucideIcon> = {
@@ -47,55 +42,55 @@ const CHART_TYPE_ICONS: Record<ChartType, LucideIcon> = {
   bar: BarChart3,
   box: SlidersHorizontal,
   threshold: TrendingUp,
-  table: Table2
-}
+  table: Table2,
+};
 
 interface SavedReportsDropdownProps {
-  onSelect: (report: ReportConfig) => void
+  onSelect: (report: ReportConfig) => void;
 }
 
 // Order for categories in the menu
 const CATEGORY_ORDER: ReportCategory[] = [
-  'market',
-  'mfe-mae',
-  'returns',
-  'timing',
-  'risk',
-  'threshold'
-]
+  "market",
+  "mfe-mae",
+  "returns",
+  "timing",
+  "risk",
+  "threshold",
+];
 
 export function SavedReportsDropdown({ onSelect }: SavedReportsDropdownProps) {
-  const savedReports = useSettingsStore((state) => state.savedReports)
-  const deleteReport = useSettingsStore((state) => state.deleteReport)
-  const initialize = useSettingsStore((state) => state.initialize)
+  const savedReports = useSettingsStore((state) => state.savedReports);
+  const deleteReport = useSettingsStore((state) => state.deleteReport);
+  const initialize = useSettingsStore((state) => state.initialize);
 
   // Initialize store to load built-in reports
   useEffect(() => {
-    initialize()
-  }, [initialize])
+    initialize();
+  }, [initialize]);
 
-  const builtInReports = savedReports.filter(r => r.isBuiltIn)
-  const userReports = savedReports.filter(r => !r.isBuiltIn)
+  const builtInReports = savedReports.filter((r) => r.isBuiltIn);
+  const userReports = savedReports.filter((r) => !r.isBuiltIn);
 
   // Group built-in reports by category
   const reportsByCategory = useMemo(() => {
-    const grouped = new Map<ReportCategory, ReportConfig[]>()
+    const grouped = new Map<ReportCategory, ReportConfig[]>();
 
     for (const report of builtInReports) {
-      const category = report.category ?? 'market'
+      const category = report.category ?? "market";
       if (!grouped.has(category)) {
-        grouped.set(category, [])
+        grouped.set(category, []);
       }
-      grouped.get(category)!.push(report)
+      grouped.get(category)!.push(report);
     }
 
-    return grouped
-  }, [builtInReports])
+    return grouped;
+  }, [builtInReports]);
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation()
-    deleteReport(id)
-  }
+    e.stopPropagation();
+    deleteReport(id);
+  };
 
   return (
     <DropdownMenu>
@@ -108,8 +103,8 @@ export function SavedReportsDropdown({ onSelect }: SavedReportsDropdownProps) {
       <DropdownMenuContent align="start" className="w-56">
         {/* Preset categories as submenus */}
         {CATEGORY_ORDER.map((category) => {
-          const reports = reportsByCategory.get(category)
-          if (!reports || reports.length === 0) return null
+          const reports = reportsByCategory.get(category);
+          if (!reports || reports.length === 0) return null;
 
           return (
             <DropdownMenuSub key={category}>
@@ -119,7 +114,7 @@ export function SavedReportsDropdown({ onSelect }: SavedReportsDropdownProps) {
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-52">
                 {reports.map((report) => {
-                  const Icon = CHART_TYPE_ICONS[report.chartType]
+                  const Icon = CHART_TYPE_ICONS[report.chartType];
                   return (
                     <DropdownMenuItem
                       key={report.id}
@@ -129,11 +124,11 @@ export function SavedReportsDropdown({ onSelect }: SavedReportsDropdownProps) {
                       <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                       {report.name}
                     </DropdownMenuItem>
-                  )
+                  );
                 })}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
-          )
+          );
         })}
 
         {/* User's custom reports */}
@@ -144,7 +139,7 @@ export function SavedReportsDropdown({ onSelect }: SavedReportsDropdownProps) {
               My Reports
             </div>
             {userReports.map((report) => {
-              const Icon = CHART_TYPE_ICONS[report.chartType]
+              const Icon = CHART_TYPE_ICONS[report.chartType];
               return (
                 <DropdownMenuItem
                   key={report.id}
@@ -164,7 +159,7 @@ export function SavedReportsDropdown({ onSelect }: SavedReportsDropdownProps) {
                     <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
                   </Button>
                 </DropdownMenuItem>
-              )
+              );
             })}
           </>
         )}
@@ -176,7 +171,7 @@ export function SavedReportsDropdown({ onSelect }: SavedReportsDropdownProps) {
         )}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }
 
-export default SavedReportsDropdown
+export default SavedReportsDropdown;

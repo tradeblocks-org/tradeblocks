@@ -2,11 +2,7 @@
  * Comprehensive tests for worst-case scenario across all mode combinations
  */
 
-import {
-  runMonteCarloSimulation,
-  MonteCarloParams,
-  Trade,
-} from "@tradeblocks/lib";
+import { runMonteCarloSimulation, MonteCarloParams, Trade } from "@tradeblocks/lib";
 
 function createTrade(overrides: Partial<Trade> = {}): Trade {
   const baseDate = new Date("2024-01-01");
@@ -50,7 +46,7 @@ describe("Worst-case modes comprehensive testing", () => {
         numContracts: 5,
         strategy: "Small Strategy",
         fundsAtClose: 100000 + i * 500,
-      })
+      }),
     ),
     ...Array.from({ length: 20 }, (_, i) =>
       createTrade({
@@ -59,7 +55,7 @@ describe("Worst-case modes comprehensive testing", () => {
         numContracts: 20,
         strategy: "Medium Strategy",
         fundsAtClose: 110000 + i * 2000,
-      })
+      }),
     ),
     ...Array.from({ length: 20 }, (_, i) =>
       createTrade({
@@ -68,7 +64,7 @@ describe("Worst-case modes comprehensive testing", () => {
         numContracts: 100,
         strategy: "Large Strategy",
         fundsAtClose: 150000 + i * 10000,
-      })
+      }),
     ),
   ];
 
@@ -100,10 +96,10 @@ describe("Worst-case modes comprehensive testing", () => {
 
       // With large $100k losers injected, results should be significantly worse
       expect(result.statistics.meanTotalReturn).toBeLessThan(
-        resultNormal.statistics.meanTotalReturn
+        resultNormal.statistics.meanTotalReturn,
       );
       expect(Math.abs(result.statistics.meanMaxDrawdown)).toBeGreaterThan(
-        Math.abs(resultNormal.statistics.meanMaxDrawdown)
+        Math.abs(resultNormal.statistics.meanMaxDrawdown),
       );
     });
 
@@ -126,21 +122,18 @@ describe("Worst-case modes comprehensive testing", () => {
       // Normalized worst-case = $100k / 100 contracts = $1k per contract
       // This should still produce worse results
       expect(result.statistics.meanTotalReturn).toBeLessThan(
-        resultNormal.statistics.meanTotalReturn
+        resultNormal.statistics.meanTotalReturn,
       );
     });
 
     it("guarantee mode should ensure losers appear in every simulation", () => {
-      const resultGuarantee = runMonteCarloSimulation(
-        tradesWithVaryingContracts,
-        {
-          ...baseParams,
-          resampleMethod: "trades",
-          worstCaseEnabled: true,
-          worstCasePercentage: 5,
-          worstCaseMode: "guarantee",
-        }
-      );
+      const resultGuarantee = runMonteCarloSimulation(tradesWithVaryingContracts, {
+        ...baseParams,
+        resampleMethod: "trades",
+        worstCaseEnabled: true,
+        worstCasePercentage: 5,
+        worstCaseMode: "guarantee",
+      });
 
       const resultPool = runMonteCarloSimulation(tradesWithVaryingContracts, {
         ...baseParams,
@@ -152,7 +145,7 @@ describe("Worst-case modes comprehensive testing", () => {
 
       // Guarantee mode should generally be worse since losers are forced
       expect(resultGuarantee.statistics.meanTotalReturn).toBeLessThanOrEqual(
-        resultPool.statistics.meanTotalReturn
+        resultPool.statistics.meanTotalReturn,
       );
     });
   });
@@ -186,7 +179,7 @@ describe("Worst-case modes comprehensive testing", () => {
       });
 
       expect(result.statistics.meanTotalReturn).toBeLessThan(
-        resultNormal.statistics.meanTotalReturn
+        resultNormal.statistics.meanTotalReturn,
       );
     });
   });
@@ -212,7 +205,7 @@ describe("Worst-case modes comprehensive testing", () => {
       // So worst case should be ~-100% of capital (account blowup possible)
       // But not EVERY simulation should blow up
       expect(result.statistics.meanTotalReturn).toBeLessThan(
-        resultNormal.statistics.meanTotalReturn
+        resultNormal.statistics.meanTotalReturn,
       );
 
       // Some simulations might blow up, but not all
@@ -255,7 +248,7 @@ describe("Worst-case modes comprehensive testing", () => {
       // With normalization: $100k margin / 100 contracts = $1k per contract
       // As percentage: $1k / $100k capital = 1% loss per worst-case
       expect(result.statistics.meanTotalReturn).toBeLessThan(
-        resultNormal.statistics.meanTotalReturn
+        resultNormal.statistics.meanTotalReturn,
       );
     });
   });
@@ -270,7 +263,7 @@ describe("Worst-case modes comprehensive testing", () => {
           worstCaseEnabled: true,
           worstCasePercentage: 20, // Max allowed
           worstCaseMode: "guarantee",
-        })
+        }),
       ).not.toThrow();
     });
 
@@ -293,9 +286,7 @@ describe("Worst-case modes comprehensive testing", () => {
         randomSeed: 123,
       });
 
-      expect(result1.statistics.meanTotalReturn).toBe(
-        result2.statistics.meanTotalReturn
-      );
+      expect(result1.statistics.meanTotalReturn).toBe(result2.statistics.meanTotalReturn);
     });
 
     it("should produce realistic results when margin equals capital", () => {
@@ -307,7 +298,7 @@ describe("Worst-case modes comprehensive testing", () => {
           numContracts: 10,
           strategy: "Edge Strategy",
           fundsAtClose: 100000 + i * 500,
-        })
+        }),
       );
 
       const result = runMonteCarloSimulation(edgeTrades, {
@@ -352,7 +343,7 @@ describe("Worst-case modes comprehensive testing", () => {
           strategy: "Test",
           numContracts: 1,
           fundsAtClose: 100000,
-        })
+        }),
       );
 
       // 5% of 20 trades = 1 synthetic trade per strategy

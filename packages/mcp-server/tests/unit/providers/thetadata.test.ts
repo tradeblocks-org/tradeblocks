@@ -26,7 +26,7 @@ interface ThetaProviderTestDeps {
 
 function createProvider(deps: ThetaProviderTestDeps): ThetaDataProvider {
   return new (ThetaDataProvider as unknown as {
-    new(deps: ThetaProviderTestDeps): ThetaDataProvider;
+    new (deps: ThetaProviderTestDeps): ThetaDataProvider;
   })(deps);
 }
 
@@ -47,9 +47,7 @@ function quoteRow(overrides: Partial<ThetaQuoteRow> = {}): ThetaQuoteRow {
   };
 }
 
-function firstOrderRow(
-  overrides: Partial<ThetaFirstOrderGreekRow> = {},
-): ThetaFirstOrderGreekRow {
+function firstOrderRow(overrides: Partial<ThetaFirstOrderGreekRow> = {}): ThetaFirstOrderGreekRow {
   return {
     ...quoteRow(overrides),
     delta: 0.42,
@@ -69,11 +67,7 @@ describe("ThetaDataProvider.fetchQuotes", () => {
     const firstOrderEndpoint = jest.fn<FirstOrderEndpoint>().mockResolvedValue([firstOrderRow()]);
     const provider = createProvider({ client, quoteEndpoint, firstOrderEndpoint });
 
-    const quotes = await provider.fetchQuotes(
-      "SPXW240816C05725000",
-      "2024-08-05",
-      "2024-08-05",
-    );
+    const quotes = await provider.fetchQuotes("SPXW240816C05725000", "2024-08-05", "2024-08-05");
 
     expect(quoteEndpoint).toHaveBeenCalledWith(client, {
       symbol: "SPXW",
@@ -153,12 +147,28 @@ describe("ThetaDataProvider.fetchBulkQuotes", () => {
     );
     const quoteEndpoint = jest.fn<QuoteEndpoint>(
       async (_client, params): Promise<ThetaQuoteRow[]> => {
-        if (params.symbol !== "SPX" || params.expiration !== "2024-08-16" || params.right !== "call") {
+        if (
+          params.symbol !== "SPX" ||
+          params.expiration !== "2024-08-16" ||
+          params.right !== "call"
+        ) {
           return [];
         }
         return [
-          quoteRow({ symbol: "SPX", expiration: "2024-08-16", strike: 5725, right: "call", timestamp: "2024-08-05 09:30" }),
-          quoteRow({ symbol: "SPX", expiration: "2024-08-16", strike: 5730, right: "call", timestamp: "2024-08-05 09:30" }),
+          quoteRow({
+            symbol: "SPX",
+            expiration: "2024-08-16",
+            strike: 5725,
+            right: "call",
+            timestamp: "2024-08-05 09:30",
+          }),
+          quoteRow({
+            symbol: "SPX",
+            expiration: "2024-08-16",
+            strike: 5730,
+            right: "call",
+            timestamp: "2024-08-05 09:30",
+          }),
         ];
       },
     );
@@ -176,19 +186,24 @@ describe("ThetaDataProvider.fetchBulkQuotes", () => {
     });
 
     const rows: unknown[] = [];
-    await expect((async () => {
-      for await (const chunk of provider.fetchBulkQuotes({
-        underlying: "SPX",
-        date: "2024-08-05",
-        onGroupComplete,
-      })) {
-        rows.push(...chunk);
-      }
-    })()).resolves.toBeUndefined();
+    await expect(
+      (async () => {
+        for await (const chunk of provider.fetchBulkQuotes({
+          underlying: "SPX",
+          date: "2024-08-05",
+          onGroupComplete,
+        })) {
+          rows.push(...chunk);
+        }
+      })(),
+    ).resolves.toBeUndefined();
 
     // One contract-list call per wire root; SPX expands to ["SPX", "SPXW"].
     expect(contractListEndpoint).toHaveBeenCalledTimes(2);
-    expect(contractListEndpoint.mock.calls.map(([, params]) => params.symbol)).toEqual(["SPX", "SPXW"]);
+    expect(contractListEndpoint.mock.calls.map(([, params]) => params.symbol)).toEqual([
+      "SPX",
+      "SPXW",
+    ]);
     // Quote calls use strike="*" — one per (root, expiration, right).
     expect(quoteEndpoint.mock.calls.every(([, params]) => params.strike === "*")).toBe(true);
     // ThetaData greeks endpoints are not used; greeks compute downstream via SOFR+q=0.
@@ -206,17 +221,21 @@ describe("ThetaDataProvider.fetchBulkQuotes", () => {
     // One terminal completion per (root, right) group — 2 roots × 2 rights = 4 calls,
     // and reporter throws must not propagate out of the stream.
     expect(onGroupComplete).toHaveBeenCalledTimes(4);
-    expect(onGroupComplete.mock.calls.map(([info]) => ({
-      root: info.root,
-      right: info.right,
-      status: info.status,
-      phase: info.phase,
-    }))).toEqual(expect.arrayContaining([
-      expect.objectContaining({ root: "SPX", right: "call", status: "ok", phase: "complete" }),
-      expect.objectContaining({ root: "SPX", right: "put", status: "ok", phase: "complete" }),
-      expect.objectContaining({ root: "SPXW", right: "call", status: "ok", phase: "complete" }),
-      expect.objectContaining({ root: "SPXW", right: "put", status: "ok", phase: "complete" }),
-    ]));
+    expect(
+      onGroupComplete.mock.calls.map(([info]) => ({
+        root: info.root,
+        right: info.right,
+        status: info.status,
+        phase: info.phase,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ root: "SPX", right: "call", status: "ok", phase: "complete" }),
+        expect.objectContaining({ root: "SPX", right: "put", status: "ok", phase: "complete" }),
+        expect.objectContaining({ root: "SPXW", right: "call", status: "ok", phase: "complete" }),
+        expect.objectContaining({ root: "SPXW", right: "put", status: "ok", phase: "complete" }),
+      ]),
+    );
   });
 
   it("emits checkpoint progress events for each completed expiration within a (root, right) group", async () => {
@@ -262,13 +281,12 @@ describe("ThetaDataProvider.fetchBulkQuotes", () => {
 
     expect(rows).toHaveLength(4);
     // Calls dispatched in order: 3 NDX/call expirations, then 1 NDX/put expiration.
-    const callEvents = onGroupComplete.mock.calls
-      .map(([info]) => ({
-        right: info.right,
-        phase: info.phase,
-        completedContracts: info.completedContracts,
-        totalContracts: info.totalContracts,
-      }));
+    const callEvents = onGroupComplete.mock.calls.map(([info]) => ({
+      right: info.right,
+      phase: info.phase,
+      completedContracts: info.completedContracts,
+      totalContracts: info.totalContracts,
+    }));
     expect(callEvents).toEqual([
       { right: "call", phase: "checkpoint", completedContracts: 1, totalContracts: 3 },
       { right: "call", phase: "checkpoint", completedContracts: 2, totalContracts: 3 },
@@ -391,15 +409,31 @@ describe("ThetaDataProvider.fetchBulkQuotes", () => {
       .map(([info]) => info)
       .filter((info) => info.root === "NDX" && info.right === "call");
     expect(callEvents).toHaveLength(3);
-    expect(callEvents[0]).toMatchObject({ phase: "checkpoint", completedContracts: 1, totalContracts: 3 });
-    expect(callEvents[1]).toMatchObject({ phase: "checkpoint", completedContracts: 2, totalContracts: 3 });
-    expect(callEvents[2]).toMatchObject({ phase: "complete", completedContracts: 3, totalContracts: 3 });
+    expect(callEvents[0]).toMatchObject({
+      phase: "checkpoint",
+      completedContracts: 1,
+      totalContracts: 3,
+    });
+    expect(callEvents[1]).toMatchObject({
+      phase: "checkpoint",
+      completedContracts: 2,
+      totalContracts: 3,
+    });
+    expect(callEvents[2]).toMatchObject({
+      phase: "complete",
+      completedContracts: 3,
+      totalContracts: 3,
+    });
 
     const putEvents = onGroupComplete.mock.calls
       .map(([info]) => info)
       .filter((info) => info.root === "NDX" && info.right === "put");
     expect(putEvents).toHaveLength(1);
-    expect(putEvents[0]).toMatchObject({ phase: "complete", completedContracts: 1, totalContracts: 1 });
+    expect(putEvents[0]).toMatchObject({
+      phase: "complete",
+      completedContracts: 1,
+      totalContracts: 1,
+    });
   });
 });
 
@@ -464,8 +498,10 @@ describe("ThetaDataProvider unsupported legacy surfaces", () => {
   it("fails clearly for fetchOptionSnapshot until MDDS snapshot endpoints are implemented", async () => {
     const provider = createProvider({});
 
-    await expect(provider.fetchOptionSnapshot({
-      underlying: "SPX",
-    })).rejects.toThrow("ThetaData MDDS provider does not implement fetchOptionSnapshot yet");
+    await expect(
+      provider.fetchOptionSnapshot({
+        underlying: "SPX",
+      }),
+    ).rejects.toThrow("ThetaData MDDS provider does not implement fetchOptionSnapshot yet");
   });
 });

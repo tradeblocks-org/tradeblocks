@@ -11,9 +11,9 @@
  * Consumed by the MCP tool in Plan 03 and by downstream phases (47-50).
  */
 
-import type { Trade } from '../models/trade.ts'
-import { PortfolioStatsCalculator } from './portfolio-stats.ts'
-import { calculateKellyMetrics } from './kelly.ts'
+import type { Trade } from "../models/trade.ts";
+import { PortfolioStatsCalculator } from "./portfolio-stats.ts";
+import { calculateKellyMetrics } from "./kelly.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,95 +21,95 @@ import { calculateKellyMetrics } from './kelly.ts'
 
 export interface RollingDataPoint {
   /** Index of the last trade in this window (0-based within sorted trades) */
-  tradeIndex: number
+  tradeIndex: number;
   /** dateOpened of the last trade in the window (local YYYY-MM-DD) */
-  date: string
+  date: string;
   /** Actual number of trades in this window */
-  windowSize: number
+  windowSize: number;
   /** Win rate as decimal 0-1 */
-  winRate: number
+  winRate: number;
   /** Gross profit / |gross loss|, Infinity if no losses, 0 if no wins */
-  profitFactor: number
+  profitFactor: number;
   /** Kelly criterion percentage (from calculateKellyMetrics) */
-  kellyPercent: number
+  kellyPercent: number;
   /** Annualized Sharpe ratio, null if insufficient data */
-  sharpeRatio: number | null
+  sharpeRatio: number | null;
   /** Mean trade P&L in the window */
-  avgReturn: number
+  avgReturn: number;
   /** Sum of P&L in the window */
-  netPl: number
+  netPl: number;
 }
 
 export interface SeasonalAverages {
   /** Keyed by metric name, each contains Q1-Q4 averages */
   [metricName: string]: {
-    Q1: number | null
-    Q2: number | null
-    Q3: number | null
-    Q4: number | null
-  }
+    Q1: number | null;
+    Q2: number | null;
+    Q3: number | null;
+    Q4: number | null;
+  };
 }
 
 export interface StructuralFlag {
   /** The metric that triggered the flag, e.g. "profitFactor" */
-  metric: string
+  metric: string;
   /** The metric value in the recent window */
-  recentValue: number
+  recentValue: number;
   /** The metric value in the historical window */
-  historicalValue: number
+  historicalValue: number;
   /** The critical threshold that was crossed */
-  threshold: number
+  threshold: number;
   /** Factual description of the threshold, e.g. "below 1.0" */
-  thresholdDescription: string
+  thresholdDescription: string;
 }
 
 export interface RecentVsHistoricalComparison {
   recentWindow: {
-    type: 'trade-count' | 'time-based'
-    tradeCount: number
-    dateRange: { start: string; end: string }
-  }
+    type: "trade-count" | "time-based";
+    tradeCount: number;
+    dateRange: { start: string; end: string };
+  };
   metrics: Array<{
-    metric: string
-    recentValue: number
-    historicalValue: number
+    metric: string;
+    recentValue: number;
+    historicalValue: number;
     /** recent - historical */
-    delta: number
+    delta: number;
     /** (recent - historical) / |historical| * 100, null if historical is 0 */
-    percentChange: number | null
-  }>
-  structuralFlags: StructuralFlag[]
+    percentChange: number | null;
+  }>;
+  structuralFlags: StructuralFlag[];
 }
 
 export interface RollingMetricsResult {
   /** Actual window size used (may differ from requested if auto-calculated) */
-  windowSize: number
+  windowSize: number;
   /** One entry per step across the rolling window */
-  series: RollingDataPoint[]
+  series: RollingDataPoint[];
   /** Quarterly seasonal averages of rolling metrics */
-  seasonalAverages: SeasonalAverages
+  seasonalAverages: SeasonalAverages;
   /** Comparison of recent window vs full history */
-  recentVsHistorical: RecentVsHistoricalComparison
+  recentVsHistorical: RecentVsHistoricalComparison;
 
   dataQuality: {
-    totalTrades: number
+    totalTrades: number;
     /** True if trades.length >= windowSize */
-    sufficientForRolling: boolean
+    sufficientForRolling: boolean;
     /** True if trades.length > recentWindowSize (some historical data exists) */
-    sufficientForRecentComparison: boolean
-    warnings: string[]
-  }
+    sufficientForRecentComparison: boolean;
+    warnings: string[];
+  };
 }
 
 export interface RollingMetricsOptions {
   /** Rolling window size in trades. Default: auto-calculated from trade count. */
-  windowSize?: number
+  windowSize?: number;
   /** Recent window size in trades (for recent-vs-historical). Default: auto-calculated. */
-  recentWindowSize?: number
+  recentWindowSize?: number;
   /** Override: use time-based recent window (last N calendar days). */
-  recentWindowDays?: number
+  recentWindowDays?: number;
   /** Step size for rolling computation. Default: 1 (compute at every trade). */
-  step?: number
+  step?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,8 +121,8 @@ export interface RollingMetricsOptions {
  * 20% of trade count, clamped to [20, 200].
  */
 function calculateDefaultWindowSize(tradeCount: number): number {
-  const twentyPercent = Math.round(tradeCount * 0.2)
-  return Math.max(20, Math.min(200, twentyPercent))
+  const twentyPercent = Math.round(tradeCount * 0.2);
+  return Math.max(20, Math.min(200, twentyPercent));
 }
 
 /**
@@ -130,9 +130,9 @@ function calculateDefaultWindowSize(tradeCount: number): number {
  * max(20% of trades, 200), capped at tradeCount.
  */
 export function calculateDefaultRecentWindow(tradeCount: number): number {
-  const twentyPercent = Math.round(tradeCount * 0.2)
-  const defaultN = Math.max(twentyPercent, 200)
-  return Math.min(defaultN, tradeCount)
+  const twentyPercent = Math.round(tradeCount * 0.2);
+  const defaultN = Math.max(twentyPercent, 200);
+  return Math.min(defaultN, tradeCount);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,23 +144,23 @@ export function calculateDefaultRecentWindow(tradeCount: number): number {
  */
 function sortTradesChronologically(trades: Trade[]): Trade[] {
   return [...trades].sort((a, b) => {
-    const dateA = new Date(a.dateOpened)
-    const dateB = new Date(b.dateOpened)
-    const yearA = dateA.getFullYear() * 10000 + dateA.getMonth() * 100 + dateA.getDate()
-    const yearB = dateB.getFullYear() * 10000 + dateB.getMonth() * 100 + dateB.getDate()
-    if (yearA !== yearB) return yearA - yearB
-    return (a.timeOpened || '').localeCompare(b.timeOpened || '')
-  })
+    const dateA = new Date(a.dateOpened);
+    const dateB = new Date(b.dateOpened);
+    const yearA = dateA.getFullYear() * 10000 + dateA.getMonth() * 100 + dateA.getDate();
+    const yearB = dateB.getFullYear() * 10000 + dateB.getMonth() * 100 + dateB.getDate();
+    if (yearA !== yearB) return yearA - yearB;
+    return (a.timeOpened || "").localeCompare(b.timeOpened || "");
+  });
 }
 
 /**
  * Format a Date as local YYYY-MM-DD using local time methods.
  */
 function formatLocalDate(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /**
@@ -168,36 +168,34 @@ function formatLocalDate(date: Date): string {
  * This avoids the overhead of the full calculator for simple metrics.
  */
 function computeWindowMetrics(windowTrades: Trade[]): {
-  winRate: number
-  profitFactor: number
-  avgReturn: number
-  netPl: number
+  winRate: number;
+  profitFactor: number;
+  avgReturn: number;
+  netPl: number;
 } {
-  const n = windowTrades.length
-  if (n === 0) return { winRate: 0, profitFactor: 0, avgReturn: 0, netPl: 0 }
+  const n = windowTrades.length;
+  if (n === 0) return { winRate: 0, profitFactor: 0, avgReturn: 0, netPl: 0 };
 
-  let winCount = 0
-  let grossProfit = 0
-  let grossLoss = 0
-  let totalPl = 0
+  let winCount = 0;
+  let grossProfit = 0;
+  let grossLoss = 0;
+  let totalPl = 0;
 
   for (const t of windowTrades) {
-    totalPl += t.pl
+    totalPl += t.pl;
     if (t.pl > 0) {
-      winCount++
-      grossProfit += t.pl
+      winCount++;
+      grossProfit += t.pl;
     } else if (t.pl < 0) {
-      grossLoss += Math.abs(t.pl)
+      grossLoss += Math.abs(t.pl);
     }
   }
 
-  const winRate = winCount / n
-  const profitFactor = grossLoss > 0
-    ? grossProfit / grossLoss
-    : grossProfit > 0 ? Infinity : 0
-  const avgReturn = totalPl / n
+  const winRate = winCount / n;
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+  const avgReturn = totalPl / n;
 
-  return { winRate, profitFactor, avgReturn, netPl: totalPl }
+  return { winRate, profitFactor, avgReturn, netPl: totalPl };
 }
 
 /**
@@ -215,14 +213,14 @@ function computeComparisonMetrics(trades: Trade[]): Record<string, number> {
       netPl: 0,
       avgWin: 0,
       avgLoss: 0,
-    }
+    };
   }
 
-  const calculator = new PortfolioStatsCalculator()
-  const stats = calculator.calculatePortfolioStats(trades)
-  const kelly = calculateKellyMetrics(trades)
+  const calculator = new PortfolioStatsCalculator();
+  const stats = calculator.calculatePortfolioStats(trades);
+  const kelly = calculateKellyMetrics(trades);
 
-  const basicMetrics = computeWindowMetrics(trades)
+  const basicMetrics = computeWindowMetrics(trades);
 
   return {
     winRate: stats.winRate,
@@ -233,7 +231,7 @@ function computeComparisonMetrics(trades: Trade[]): Record<string, number> {
     netPl: basicMetrics.netPl,
     avgWin: kelly.avgWin,
     avgLoss: kelly.avgLoss,
-  }
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -252,77 +250,77 @@ function computeComparisonMetrics(trades: Trade[]): Record<string, number> {
  */
 export function computeRollingMetrics(
   trades: Trade[],
-  options?: RollingMetricsOptions
+  options?: RollingMetricsOptions,
 ): RollingMetricsResult {
-  const sorted = sortTradesChronologically(trades)
-  const totalTrades = sorted.length
+  const sorted = sortTradesChronologically(trades);
+  const totalTrades = sorted.length;
 
   // Resolve options with smart defaults
-  const windowSize = options?.windowSize ?? calculateDefaultWindowSize(totalTrades)
-  const step = options?.step ?? 1
+  const windowSize = options?.windowSize ?? calculateDefaultWindowSize(totalTrades);
+  const step = options?.step ?? 1;
 
   // Resolve recent window
-  let recentWindowSize: number
-  let recentWindowType: 'trade-count' | 'time-based' = 'trade-count'
+  let recentWindowSize: number;
+  let recentWindowType: "trade-count" | "time-based" = "trade-count";
 
   if (options?.recentWindowDays !== undefined) {
-    recentWindowType = 'time-based'
+    recentWindowType = "time-based";
     // Calculate how many trades fall within the last N days
     if (sorted.length > 0) {
-      const lastTradeDate = new Date(sorted[sorted.length - 1].dateOpened)
-      const cutoffDate = new Date(lastTradeDate)
-      cutoffDate.setDate(cutoffDate.getDate() - options.recentWindowDays)
+      const lastTradeDate = new Date(sorted[sorted.length - 1].dateOpened);
+      const cutoffDate = new Date(lastTradeDate);
+      cutoffDate.setDate(cutoffDate.getDate() - options.recentWindowDays);
 
-      let count = 0
+      let count = 0;
       for (let i = sorted.length - 1; i >= 0; i--) {
         if (new Date(sorted[i].dateOpened) >= cutoffDate) {
-          count++
+          count++;
         } else {
-          break
+          break;
         }
       }
-      recentWindowSize = count
+      recentWindowSize = count;
     } else {
-      recentWindowSize = 0
+      recentWindowSize = 0;
     }
   } else {
-    recentWindowSize = options?.recentWindowSize ?? calculateDefaultRecentWindow(totalTrades)
+    recentWindowSize = options?.recentWindowSize ?? calculateDefaultRecentWindow(totalTrades);
   }
 
   // Data quality checks
-  const sufficientForRolling = totalTrades >= windowSize
-  const sufficientForRecentComparison = totalTrades > recentWindowSize
-  const warnings: string[] = []
+  const sufficientForRolling = totalTrades >= windowSize;
+  const sufficientForRecentComparison = totalTrades > recentWindowSize;
+  const warnings: string[] = [];
 
   if (!sufficientForRolling) {
-    warnings.push(`Only ${totalTrades} trades available, window size is ${windowSize}`)
+    warnings.push(`Only ${totalTrades} trades available, window size is ${windowSize}`);
   }
   if (!sufficientForRecentComparison && totalTrades > 0) {
     warnings.push(
-      `Only ${totalTrades} trades available, recent window is ${recentWindowSize} -- no historical data for comparison`
-    )
+      `Only ${totalTrades} trades available, recent window is ${recentWindowSize} -- no historical data for comparison`,
+    );
   }
 
   // Compute rolling series
-  const series: RollingDataPoint[] = []
+  const series: RollingDataPoint[] = [];
 
   if (sufficientForRolling) {
-    const calculator = new PortfolioStatsCalculator()
+    const calculator = new PortfolioStatsCalculator();
 
     for (let i = windowSize - 1; i < totalTrades; i += step) {
-      const windowTrades = sorted.slice(i - windowSize + 1, i + 1)
-      const lastTrade = sorted[i]
-      const lastTradeDate = new Date(lastTrade.dateOpened)
+      const windowTrades = sorted.slice(i - windowSize + 1, i + 1);
+      const lastTrade = sorted[i];
+      const lastTradeDate = new Date(lastTrade.dateOpened);
 
       // Basic metrics computed inline for performance
-      const basic = computeWindowMetrics(windowTrades)
+      const basic = computeWindowMetrics(windowTrades);
 
       // Kelly % via dedicated function
-      const kelly = calculateKellyMetrics(windowTrades)
+      const kelly = calculateKellyMetrics(windowTrades);
 
       // Sharpe via PortfolioStatsCalculator (handles risk-free rates correctly)
-      const stats = calculator.calculatePortfolioStats(windowTrades)
-      const sharpeRatio = stats.sharpeRatio !== undefined ? stats.sharpeRatio : null
+      const stats = calculator.calculatePortfolioStats(windowTrades);
+      const sharpeRatio = stats.sharpeRatio !== undefined ? stats.sharpeRatio : null;
 
       series.push({
         tradeIndex: i,
@@ -334,20 +332,20 @@ export function computeRollingMetrics(
         sharpeRatio,
         avgReturn: basic.avgReturn,
         netPl: basic.netPl,
-      })
+      });
     }
   }
 
   // Compute seasonal averages from the rolling series
-  const seasonalAverages = computeSeasonalAverages(series)
+  const seasonalAverages = computeSeasonalAverages(series);
 
   // Compute recent vs historical comparison
   const recentVsHistorical = buildRecentVsHistorical(
     sorted,
     recentWindowSize,
     recentWindowType,
-    sufficientForRecentComparison
-  )
+    sufficientForRecentComparison,
+  );
 
   return {
     windowSize,
@@ -360,7 +358,7 @@ export function computeRollingMetrics(
       sufficientForRecentComparison,
       warnings,
     },
-  }
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -374,32 +372,39 @@ export function computeRollingMetrics(
  * then averages each metric within each quarter.
  */
 function computeSeasonalAverages(series: RollingDataPoint[]): SeasonalAverages {
-  const metricNames = ['winRate', 'profitFactor', 'kellyPercent', 'sharpeRatio', 'avgReturn', 'netPl'] as const
+  const metricNames = [
+    "winRate",
+    "profitFactor",
+    "kellyPercent",
+    "sharpeRatio",
+    "avgReturn",
+    "netPl",
+  ] as const;
 
   // Collect values per metric per quarter
-  const buckets: Record<string, { Q1: number[]; Q2: number[]; Q3: number[]; Q4: number[] }> = {}
+  const buckets: Record<string, { Q1: number[]; Q2: number[]; Q3: number[]; Q4: number[] }> = {};
 
   for (const metric of metricNames) {
-    buckets[metric] = { Q1: [], Q2: [], Q3: [], Q4: [] }
+    buckets[metric] = { Q1: [], Q2: [], Q3: [], Q4: [] };
   }
 
   for (const point of series) {
     // Parse the date string to get the quarter
-    const parts = point.date.split('-')
-    const month = parseInt(parts[1], 10)
-    const quarter = Math.floor((month - 1) / 3) + 1
-    const qKey = `Q${quarter}` as 'Q1' | 'Q2' | 'Q3' | 'Q4'
+    const parts = point.date.split("-");
+    const month = parseInt(parts[1], 10);
+    const quarter = Math.floor((month - 1) / 3) + 1;
+    const qKey = `Q${quarter}` as "Q1" | "Q2" | "Q3" | "Q4";
 
     for (const metric of metricNames) {
-      const value = point[metric]
+      const value = point[metric];
       if (value !== null && isFinite(value as number)) {
-        buckets[metric][qKey].push(value as number)
+        buckets[metric][qKey].push(value as number);
       }
     }
   }
 
   // Compute averages
-  const result: SeasonalAverages = {}
+  const result: SeasonalAverages = {};
 
   for (const metric of metricNames) {
     result[metric] = {
@@ -407,15 +412,15 @@ function computeSeasonalAverages(series: RollingDataPoint[]): SeasonalAverages {
       Q2: averageOrNull(buckets[metric].Q2),
       Q3: averageOrNull(buckets[metric].Q3),
       Q4: averageOrNull(buckets[metric].Q4),
-    }
+    };
   }
 
-  return result
+  return result;
 }
 
 function averageOrNull(values: number[]): number | null {
-  if (values.length === 0) return null
-  return values.reduce((sum, v) => sum + v, 0) / values.length
+  if (values.length === 0) return null;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -425,8 +430,8 @@ function averageOrNull(values: number[]): number | null {
 function buildRecentVsHistorical(
   sortedTrades: Trade[],
   recentWindowSize: number,
-  windowType: 'trade-count' | 'time-based',
-  sufficient: boolean
+  windowType: "trade-count" | "time-based",
+  sufficient: boolean,
 ): RecentVsHistoricalComparison {
   // Empty/insufficient case
   if (sortedTrades.length === 0 || !sufficient || recentWindowSize <= 0) {
@@ -434,15 +439,15 @@ function buildRecentVsHistorical(
       recentWindow: {
         type: windowType,
         tradeCount: 0,
-        dateRange: { start: '', end: '' },
+        dateRange: { start: "", end: "" },
       },
       metrics: [],
       structuralFlags: [],
-    }
+    };
   }
 
-  const recentTrades = sortedTrades.slice(sortedTrades.length - recentWindowSize)
-  const historicalTrades = sortedTrades.slice(0, sortedTrades.length - recentWindowSize)
+  const recentTrades = sortedTrades.slice(sortedTrades.length - recentWindowSize);
+  const historicalTrades = sortedTrades.slice(0, sortedTrades.length - recentWindowSize);
 
   // If no historical trades, we can't compare
   if (historicalTrades.length === 0) {
@@ -457,30 +462,35 @@ function buildRecentVsHistorical(
       },
       metrics: [],
       structuralFlags: [],
-    }
+    };
   }
 
-  const recentMetrics = computeComparisonMetrics(recentTrades)
-  const historicalMetrics = computeComparisonMetrics(historicalTrades)
+  const recentMetrics = computeComparisonMetrics(recentTrades);
+  const historicalMetrics = computeComparisonMetrics(historicalTrades);
 
   // Build metric comparisons
   const comparisonMetricNames = [
-    'winRate', 'profitFactor', 'kellyPercent', 'sharpeRatio', 'avgReturn', 'netPl', 'avgWin', 'avgLoss',
-  ]
+    "winRate",
+    "profitFactor",
+    "kellyPercent",
+    "sharpeRatio",
+    "avgReturn",
+    "netPl",
+    "avgWin",
+    "avgLoss",
+  ];
 
-  const metrics = comparisonMetricNames.map(metric => {
-    const recent = recentMetrics[metric]
-    const historical = historicalMetrics[metric]
-    const delta = recent - historical
-    const percentChange = historical !== 0
-      ? (delta / Math.abs(historical)) * 100
-      : null
+  const metrics = comparisonMetricNames.map((metric) => {
+    const recent = recentMetrics[metric];
+    const historical = historicalMetrics[metric];
+    const delta = recent - historical;
+    const percentChange = historical !== 0 ? (delta / Math.abs(historical)) * 100 : null;
 
-    return { metric, recentValue: recent, historicalValue: historical, delta, percentChange }
-  })
+    return { metric, recentValue: recent, historicalValue: historical, delta, percentChange };
+  });
 
   // Check structural flags
-  const structuralFlags = checkStructuralFlags(recentMetrics, historicalMetrics)
+  const structuralFlags = checkStructuralFlags(recentMetrics, historicalMetrics);
 
   return {
     recentWindow: {
@@ -493,7 +503,7 @@ function buildRecentVsHistorical(
     },
     metrics,
     structuralFlags,
-  }
+  };
 }
 
 /**
@@ -505,9 +515,9 @@ function buildRecentVsHistorical(
  */
 function checkStructuralFlags(
   recent: Record<string, number>,
-  historical: Record<string, number>
+  historical: Record<string, number>,
 ): StructuralFlag[] {
-  const flags: StructuralFlag[] = []
+  const flags: StructuralFlag[] = [];
 
   // Payoff inversion: recent avg loss > recent avg win (as absolute values)
   // Both avgWin and avgLoss from calculateKellyMetrics are already absolute values.
@@ -518,48 +528,48 @@ function checkStructuralFlags(
     historical.avgLoss <= historical.avgWin
   ) {
     flags.push({
-      metric: 'payoffInversion',
+      metric: "payoffInversion",
       recentValue: recent.avgLoss,
       historicalValue: historical.avgLoss,
       threshold: recent.avgWin,
-      thresholdDescription: 'avg loss exceeds avg win',
-    })
+      thresholdDescription: "avg loss exceeds avg win",
+    });
   }
 
   // Win rate below 50%: recent < 0.5 AND historical >= 0.5
   if (recent.winRate < 0.5 && historical.winRate >= 0.5) {
     flags.push({
-      metric: 'winRate',
+      metric: "winRate",
       recentValue: recent.winRate,
       historicalValue: historical.winRate,
       threshold: 0.5,
-      thresholdDescription: 'below 50%',
-    })
+      thresholdDescription: "below 50%",
+    });
   }
 
   // Profit factor below 1.0: recent < 1.0 AND historical >= 1.0
   if (recent.profitFactor < 1.0 && historical.profitFactor >= 1.0) {
     flags.push({
-      metric: 'profitFactor',
+      metric: "profitFactor",
       recentValue: recent.profitFactor,
       historicalValue: historical.profitFactor,
       threshold: 1.0,
-      thresholdDescription: 'below 1.0',
-    })
+      thresholdDescription: "below 1.0",
+    });
   }
 
   // Kelly negative: recent < 0 AND historical >= 0
   if (recent.kellyPercent < 0 && historical.kellyPercent >= 0) {
     flags.push({
-      metric: 'kellyPercent',
+      metric: "kellyPercent",
       recentValue: recent.kellyPercent,
       historicalValue: historical.kellyPercent,
       threshold: 0,
-      thresholdDescription: 'below 0',
-    })
+      thresholdDescription: "below 0",
+    });
   }
 
-  return flags
+  return flags;
 }
 
 // ---------------------------------------------------------------------------
@@ -579,38 +589,38 @@ function checkStructuralFlags(
 export function compareRecentVsHistorical(
   trades: Trade[],
   recentCount?: number,
-  recentDays?: number
+  recentDays?: number,
 ): RecentVsHistoricalComparison {
-  const sorted = sortTradesChronologically(trades)
-  const totalTrades = sorted.length
+  const sorted = sortTradesChronologically(trades);
+  const totalTrades = sorted.length;
 
-  let recentWindowSize: number
-  let windowType: 'trade-count' | 'time-based' = 'trade-count'
+  let recentWindowSize: number;
+  let windowType: "trade-count" | "time-based" = "trade-count";
 
   if (recentDays !== undefined) {
-    windowType = 'time-based'
+    windowType = "time-based";
     if (sorted.length > 0) {
-      const lastTradeDate = new Date(sorted[sorted.length - 1].dateOpened)
-      const cutoffDate = new Date(lastTradeDate)
-      cutoffDate.setDate(cutoffDate.getDate() - recentDays)
+      const lastTradeDate = new Date(sorted[sorted.length - 1].dateOpened);
+      const cutoffDate = new Date(lastTradeDate);
+      cutoffDate.setDate(cutoffDate.getDate() - recentDays);
 
-      let count = 0
+      let count = 0;
       for (let i = sorted.length - 1; i >= 0; i--) {
         if (new Date(sorted[i].dateOpened) >= cutoffDate) {
-          count++
+          count++;
         } else {
-          break
+          break;
         }
       }
-      recentWindowSize = count
+      recentWindowSize = count;
     } else {
-      recentWindowSize = 0
+      recentWindowSize = 0;
     }
   } else {
-    recentWindowSize = recentCount ?? calculateDefaultRecentWindow(totalTrades)
+    recentWindowSize = recentCount ?? calculateDefaultRecentWindow(totalTrades);
   }
 
-  const sufficient = totalTrades > recentWindowSize
+  const sufficient = totalTrades > recentWindowSize;
 
-  return buildRecentVsHistorical(sorted, recentWindowSize, windowType, sufficient)
+  return buildRecentVsHistorical(sorted, recentWindowSize, windowType, sufficient);
 }

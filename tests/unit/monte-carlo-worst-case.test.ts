@@ -76,7 +76,7 @@ describe("createSyntheticMaxLossTrades", () => {
 
   it("should calculate correct number of losers based on percentage", () => {
     const trades: Trade[] = Array.from({ length: 100 }, (_, i) =>
-      createTrade({ pl: i * 10, marginReq: 1000, strategy: "Test", numContracts: 1 })
+      createTrade({ pl: i * 10, marginReq: 1000, strategy: "Test", numContracts: 1 }),
     );
 
     // 5% of 100 = 5 losers
@@ -95,14 +95,12 @@ describe("createSyntheticMaxLossTrades", () => {
   it("should cap historical allocations to the simulation budget while weighting by trade counts", () => {
     const trades: Trade[] = [
       ...Array.from({ length: 600 }, () =>
-        createTrade({ strategy: "Strategy A", marginReq: 2000 })
+        createTrade({ strategy: "Strategy A", marginReq: 2000 }),
       ),
       ...Array.from({ length: 200 }, () =>
-        createTrade({ strategy: "Strategy B", marginReq: 1500 })
+        createTrade({ strategy: "Strategy B", marginReq: 1500 }),
       ),
-      ...Array.from({ length: 50 }, () =>
-        createTrade({ strategy: "Strategy C", marginReq: 1000 })
-      ),
+      ...Array.from({ length: 50 }, () => createTrade({ strategy: "Strategy C", marginReq: 1000 })),
     ];
 
     const syntheticTrades = createSyntheticMaxLossTrades(trades, 10, 100, "historical");
@@ -113,8 +111,8 @@ describe("createSyntheticMaxLossTrades", () => {
       return acc;
     }, new Map<string, number>());
 
-    expect((countsByStrategy.get("Strategy A") ?? 0)).toBeGreaterThan(
-      countsByStrategy.get("Strategy C") ?? 0
+    expect(countsByStrategy.get("Strategy A") ?? 0).toBeGreaterThan(
+      countsByStrategy.get("Strategy C") ?? 0,
     );
   });
 
@@ -201,22 +199,19 @@ describe("createSyntheticMaxLossTrades", () => {
     ];
 
     const syntheticTrades = createSyntheticMaxLossTrades(trades, 10, 100, "simulation");
-    expect(syntheticTrades[0].syntheticCapitalRatio).toBeCloseTo(
-      10000 / (110000 + 1000),
-      4
-    );
+    expect(syntheticTrades[0].syntheticCapitalRatio).toBeCloseTo(10000 / (110000 + 1000), 4);
   });
 });
 
 describe("runMonteCarloSimulation with worst-case injection", () => {
   const baseTrades: Trade[] = Array.from({ length: 50 }, (_, i) =>
     createTrade({
-      pl: (i % 2 === 0 ? 100 : -50),
+      pl: i % 2 === 0 ? 100 : -50,
       marginReq: 1000,
       strategy: "Test Strategy",
       numContracts: 1,
       fundsAtClose: 100000 + i * 100,
-    })
+    }),
   );
 
   const baseParams: MonteCarloParams = {
@@ -243,12 +238,12 @@ describe("runMonteCarloSimulation with worst-case injection", () => {
 
     // Mean return should be lower with worst-case
     expect(result.statistics.meanTotalReturn).toBeLessThan(
-      resultWithoutWorstCase.statistics.meanTotalReturn
+      resultWithoutWorstCase.statistics.meanTotalReturn,
     );
 
     // Max drawdown should be worse (higher absolute value)
     expect(Math.abs(result.statistics.meanMaxDrawdown)).toBeGreaterThan(
-      Math.abs(resultWithoutWorstCase.statistics.meanMaxDrawdown)
+      Math.abs(resultWithoutWorstCase.statistics.meanMaxDrawdown),
     );
   });
 
@@ -268,7 +263,7 @@ describe("runMonteCarloSimulation with worst-case injection", () => {
 
     // Results should be significantly worse
     expect(result.statistics.meanTotalReturn).toBeLessThan(
-      resultWithoutWorstCase.statistics.meanTotalReturn
+      resultWithoutWorstCase.statistics.meanTotalReturn,
     );
   });
 
@@ -301,12 +296,12 @@ describe("runMonteCarloSimulation with worst-case injection", () => {
   it("should respect normalizeTo1Lot setting", () => {
     const tradesWithVaryingContracts: Trade[] = Array.from({ length: 50 }, (_, i) =>
       createTrade({
-        pl: (i % 2 === 0 ? 100 : -50) * (i % 5 + 1), // Varying P&L
+        pl: (i % 2 === 0 ? 100 : -50) * ((i % 5) + 1), // Varying P&L
         marginReq: 1000,
         strategy: "Test Strategy",
-        numContracts: i % 5 + 1, // Varying contracts (1-5)
+        numContracts: (i % 5) + 1, // Varying contracts (1-5)
         fundsAtClose: 100000 + i * 100,
-      })
+      }),
     );
 
     const params: MonteCarloParams = {
@@ -329,7 +324,7 @@ describe("runMonteCarloSimulation with worst-case injection", () => {
           strategy: "Strategy A",
           numContracts: 1,
           fundsAtClose: 100000 + i * 100,
-        })
+        }),
       ),
       ...Array.from({ length: 30 }, (_, i) =>
         createTrade({
@@ -338,7 +333,7 @@ describe("runMonteCarloSimulation with worst-case injection", () => {
           strategy: "Strategy B",
           numContracts: 1,
           fundsAtClose: 100000 + i * 100,
-        })
+        }),
       ),
     ];
 
@@ -372,7 +367,7 @@ describe("runMonteCarloSimulation with worst-case injection", () => {
         marginReq: 500000,
         fundsAtClose: 1000000 + i * 1000,
         strategy: "Heavy",
-      })
+      }),
     );
 
     const paramsAbsolute: MonteCarloParams = {
@@ -389,18 +384,12 @@ describe("runMonteCarloSimulation with worst-case injection", () => {
       worstCaseSizing: "relative",
     };
 
-    const absoluteResult = runMonteCarloSimulation(
-      heavyMarginTrades,
-      paramsAbsolute
-    );
-    const relativeResult = runMonteCarloSimulation(
-      heavyMarginTrades,
-      paramsRelative
-    );
+    const absoluteResult = runMonteCarloSimulation(heavyMarginTrades, paramsAbsolute);
+    const relativeResult = runMonteCarloSimulation(heavyMarginTrades, paramsRelative);
 
     expect(absoluteResult.statistics.meanFinalValue).toBeLessThanOrEqual(0);
     expect(relativeResult.statistics.meanFinalValue).toBeGreaterThan(
-      absoluteResult.statistics.meanFinalValue
+      absoluteResult.statistics.meanFinalValue,
     );
   });
 
@@ -424,7 +413,7 @@ describe("runMonteCarloSimulation with worst-case injection", () => {
 
     // Guarantee mode should generally have worse results since losers are forced
     expect(guaranteeResult.statistics.meanTotalReturn).toBeLessThanOrEqual(
-      poolResult.statistics.meanTotalReturn
+      poolResult.statistics.meanTotalReturn,
     );
   });
 
@@ -440,9 +429,7 @@ describe("runMonteCarloSimulation with worst-case injection", () => {
     const resultNormal = runMonteCarloSimulation(baseTrades, baseParams);
 
     // Should produce identical results
-    expect(resultDisabled.statistics.meanTotalReturn).toBe(
-      resultNormal.statistics.meanTotalReturn
-    );
+    expect(resultDisabled.statistics.meanTotalReturn).toBe(resultNormal.statistics.meanTotalReturn);
   });
 });
 
@@ -490,9 +477,7 @@ describe("Simulation-based vs Historical-based percentage calculation", () => {
     const trades: Trade[] = [];
     for (let i = 0; i < 900; i++) {
       const strategy = i % 3 === 0 ? "A" : i % 3 === 1 ? "B" : "C";
-      trades.push(
-        createTrade({ strategy, marginReq: 5000 + i })
-      );
+      trades.push(createTrade({ strategy, marginReq: 5000 + i }));
     }
 
     const percentage = 5;
@@ -503,13 +488,13 @@ describe("Simulation-based vs Historical-based percentage calculation", () => {
       trades,
       percentage,
       simulationLength,
-      "historical"
+      "historical",
     );
     const simulationSynthetic = createSyntheticMaxLossTrades(
       trades,
       percentage,
       simulationLength,
-      "simulation"
+      "simulation",
     );
 
     expect(historicalSynthetic.length).toBe(expectedBudget);
@@ -518,15 +503,9 @@ describe("Simulation-based vs Historical-based percentage calculation", () => {
 
   it("should distribute simulation-based percentage as evenly as possible", () => {
     const trades: Trade[] = [
-      ...Array.from({ length: 40 }, () =>
-        createTrade({ pl: 100, marginReq: 1000, strategy: "A" })
-      ),
-      ...Array.from({ length: 40 }, () =>
-        createTrade({ pl: 200, marginReq: 2000, strategy: "B" })
-      ),
-      ...Array.from({ length: 40 }, () =>
-        createTrade({ pl: 300, marginReq: 3000, strategy: "C" })
-      ),
+      ...Array.from({ length: 40 }, () => createTrade({ pl: 100, marginReq: 1000, strategy: "A" })),
+      ...Array.from({ length: 40 }, () => createTrade({ pl: 200, marginReq: 2000, strategy: "B" })),
+      ...Array.from({ length: 40 }, () => createTrade({ pl: 300, marginReq: 3000, strategy: "C" })),
     ];
 
     const simulationLength = 30;
@@ -536,7 +515,7 @@ describe("Simulation-based vs Historical-based percentage calculation", () => {
       trades,
       percentage,
       simulationLength,
-      "simulation"
+      "simulation",
     );
 
     const counts = new Map<string, number>();
@@ -554,11 +533,9 @@ describe("Simulation-based vs Historical-based percentage calculation", () => {
   it("should weight historical allocations by trade counts but cap totals", () => {
     const trades: Trade[] = [
       ...Array.from({ length: 300 }, () =>
-        createTrade({ pl: 100, marginReq: 1000, strategy: "A" })
+        createTrade({ pl: 100, marginReq: 1000, strategy: "A" }),
       ),
-      ...Array.from({ length: 50 }, () =>
-        createTrade({ pl: 200, marginReq: 2000, strategy: "B" })
-      ),
+      ...Array.from({ length: 50 }, () => createTrade({ pl: 200, marginReq: 2000, strategy: "B" })),
     ];
 
     const syntheticTrades = createSyntheticMaxLossTrades(trades, 10, 100, "historical");
@@ -571,7 +548,7 @@ describe("Simulation-based vs Historical-based percentage calculation", () => {
 
   it("should default to simulation mode when basedOn is not specified", () => {
     const trades: Trade[] = Array.from({ length: 100 }, () =>
-      createTrade({ pl: 100, marginReq: 1000, strategy: "Test", numContracts: 5 })
+      createTrade({ pl: 100, marginReq: 1000, strategy: "Test", numContracts: 5 }),
     );
 
     // Default behavior (should be simulation)

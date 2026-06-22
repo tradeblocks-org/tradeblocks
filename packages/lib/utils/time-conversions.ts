@@ -7,11 +7,7 @@ export type TimeUnit = "years" | "months" | "days";
 /**
  * Convert a time period to number of trades based on trading frequency
  */
-export function timeToTrades(
-  value: number,
-  unit: TimeUnit,
-  tradesPerYear: number
-): number {
+export function timeToTrades(value: number, unit: TimeUnit, tradesPerYear: number): number {
   const tradesPerDay = tradesPerYear / 365.25;
   const tradesPerMonth = tradesPerYear / 12;
 
@@ -33,7 +29,7 @@ export function timeToTrades(
 export function tradesToTime(
   trades: number,
   tradesPerYear: number,
-  targetUnit?: TimeUnit
+  targetUnit?: TimeUnit,
 ): { value: number; unit: TimeUnit; displayText: string } {
   const years = trades / tradesPerYear;
   const months = (trades / tradesPerYear) * 12;
@@ -88,20 +84,14 @@ export function tradesToTime(
 /**
  * Convert a percentage of total trades to a trade count
  */
-export function percentageToTrades(
-  percentage: number,
-  totalTrades: number
-): number {
+export function percentageToTrades(percentage: number, totalTrades: number): number {
   return Math.max(1, Math.round((percentage / 100) * totalTrades));
 }
 
 /**
  * Convert a trade count to percentage of total
  */
-export function tradesToPercentage(
-  trades: number,
-  totalTrades: number
-): number {
+export function tradesToPercentage(trades: number, totalTrades: number): number {
   if (totalTrades === 0) return 0;
   return Math.min(100, Math.max(0, (trades / totalTrades) * 100));
 }
@@ -109,10 +99,7 @@ export function tradesToPercentage(
 /**
  * Format a trade count with time context
  */
-export function formatTradesWithTime(
-  trades: number,
-  tradesPerYear: number
-): string {
+export function formatTradesWithTime(trades: number, tradesPerYear: number): string {
   const time = tradesToTime(trades, tradesPerYear);
   return `${trades.toLocaleString()} trades (≈ ${time.displayText})`;
 }

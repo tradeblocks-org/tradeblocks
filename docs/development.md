@@ -3,6 +3,7 @@
 This document explains how TradeBlocks is structured and how to work effectively inside the codebase. Pair it with the top-level `README.md` for quick-start instructions.
 
 ## Environment & Tooling
+
 - **Runtime:** Node.js 20 LTS (Next.js 15 requires >=18.18, but we develop against 20 for parity with Vercel).
 - **Package manager:** npm (lockfile committed). Husky installs git hooks via `npm install`.
 - **Type system:** TypeScript with `strict` mode.
@@ -11,6 +12,7 @@ This document explains how TradeBlocks is structured and how to work effectively
 - **Testing:** Jest 30 with `ts-jest` and `fake-indexeddb` to emulate browser storage.
 
 ### First-Time Setup
+
 1. `npm install`
 2. `npm run dev`
 3. Visit `http://localhost:3000` → you will be redirected to `/blocks`.
@@ -21,6 +23,7 @@ This document explains how TradeBlocks is structured and how to work effectively
 ## Application Architecture
 
 ### High-Level Flow
+
 1. **Block creation** – Users import CSV files through `/blocks` using `BlockDialog`.
 2. **Parsing** – Files are parsed via `packages/lib/processing/csv-parser.ts`, converted into domain models in `packages/lib/models/*`.
 3. **Storage** – Raw rows live in IndexedDB (`packages/lib/db/`). Metadata (names, timestamps, counts) persists alongside references to stored records.
@@ -29,6 +32,7 @@ This document explains how TradeBlocks is structured and how to work effectively
 6. **Presentation** – App Router routes under `app/(platform)/` render dashboard experiences powered by the stores and calculations.
 
 ### Routing & Layout
+
 - `app/page.tsx` redirects to `/blocks`.
 - `app/(platform)/layout.tsx` wires the persistent sidebar (`components/app-sidebar.tsx`) and header.
 - Primary screens:
@@ -40,6 +44,7 @@ This document explains how TradeBlocks is structured and how to work effectively
   - `/correlation-matrix` – cross-strategy correlation heatmap with configurable method, alignment (shared days vs zero-fill), return normalization (raw, margin, notional), and date basis (opened vs closed trades).
 
 ### State & Persistence
+
 - **Zustand stores**
   - `packages/lib/stores/block-store.ts` – block metadata, activation, CRUD, recalculation.
   - `packages/lib/stores/performance-store.ts` – derived performance datasets and caching.
@@ -50,12 +55,14 @@ This document explains how TradeBlocks is structured and how to work effectively
 - **Data references** – `ProcessedBlock` keeps keys to related data for lazy retrieval (`packages/lib/models/block.ts`). When you fetch a block, load trades/daily logs explicitly via the store helpers.
 
 ### Calculations & Utilities
+
 - `packages/lib/calculations/portfolio-stats.ts` – Computes win rates, drawdowns, expectancy, and normalized metrics. Uses Math.js to mirror the legacy Python implementation (sample standard deviation on Sharpe, population on Sortino).
 - `packages/lib/calculations/risk/` – Monte Carlo simulation helpers powering the risk simulator.
 - `packages/lib/processing/trade-processor.ts` & `daily-log-processor.ts` – Convert raw CSV strings into typed models, handling alias headers and data validation (`packages/lib/models/validators.ts`).
 - `packages/lib/utils/date.ts`, `packages/lib/utils/number.ts` – Reusable formatting helpers.
 
 ### UI Components
+
 - `components/ui/` – shadcn/ui primitives configured with Tailwind CSS.
 - `components/performance-charts/` – Plotly components (via react-plotly.js) for equity curves and strategy comparisons.
 - `components/block-dialog.tsx`, `components/sidebar-active-blocks.tsx`, etc. orchestrate import flows and navigation.
@@ -63,6 +70,7 @@ This document explains how TradeBlocks is structured and how to work effectively
 ## CSV Schema Reference
 
 ### Trade Logs (required)
+
 - Expected headers match OptionOmega exports (`packages/lib/models/trade.ts`). Key columns:
   - `Date Opened`, `Time Opened`, `Legs`, `P/L`, `Strategy`
   - `Opening Commissions + Fees`, `Closing Commissions + Fees`
@@ -70,10 +78,12 @@ This document explains how TradeBlocks is structured and how to work effectively
 - Aliases in `TRADE_COLUMN_ALIASES` normalize variants (e.g., `Opening comms & fees`).
 
 ### Daily Logs (optional)
+
 - `Date`, `Net Liquidity`, `P/L`, `P/L %`, `Drawdown %` are required (`packages/lib/models/daily-log.ts`).
 - When absent, drawdown calculations fall back to trade-based equity curves.
 
 ## Testing
+
 - Global Jest setup lives in `tests/setup.ts` (auto-configured via `jest.config.js`).
 - `fake-indexeddb` simulates browser storage for stores/calculations.
 - Focused suites:
@@ -85,8 +95,8 @@ This document explains how TradeBlocks is structured and how to work effectively
   - `npm test -- path/to/file.test.ts -t "test case name"`
 - Coverage reports output to `coverage/` via `npm run test:coverage`.
 
-
 ## Development Tips
+
 - Use the `.planning/` directory for task breakdowns if you want structured TODOs (optional).
 - Tailwind CSS configuration lives in `tailwind.config.ts` produced via `@tailwindcss/postcss` (Tailwind v4). Check `app/globals.css` for design tokens.
 - Components expect the `@/*` alias (configured in `tsconfig.json`)—prefer it over relative paths.
@@ -94,6 +104,7 @@ This document explains how TradeBlocks is structured and how to work effectively
 - `npm run build` uses Turbopack; large third-party imports (Plotly) can impact bundle size, so keep an eye on analytics when adding dependencies.
 
 ## Useful Links
+
 - [Next.js App Router Docs](https://nextjs.org/docs) – base framework.
 - [Zustand](https://docs.pmnd.rs/zustand/getting-started/introduction) – state management used across stores.
 - [Math.js](https://mathjs.org/docs/reference/functions.html) – statistics helpers used for parity with the Python implementation.
@@ -107,6 +118,7 @@ This project uses Claude Code for AI-assisted development. Key files and workflo
 ### CLAUDE.md
 
 The `.claude/CLAUDE.md` file provides project context to Claude Code, including:
+
 - Architecture overview and data flow
 - Key implementation details (timezone handling, P&L calculations, etc.)
 - Testing patterns and conventions
@@ -129,12 +141,14 @@ The project uses the "Get Shit Done" (GSD) workflow for structured development:
 ```
 
 **Common GSD commands:**
+
 - `/gsd:progress` - Check current progress and next actions
 - `/gsd:plan-phase <N>` - Create detailed plan for a phase
 - `/gsd:execute-phase <N>` - Execute all plans in a phase
 - `/gsd:verify-work` - Manual acceptance testing
 
 The GSD workflow provides:
+
 - Structured planning with explicit success criteria
 - Atomic commits per task
 - Accumulated context across sessions (decisions, issues, blockers)
@@ -171,11 +185,11 @@ tradeblocks/
 
 ```typescript
 // Library imports use the workspace package
-import { Trade, PortfolioStatsCalculator } from '@tradeblocks/lib'
-import { useBlockStore } from '@tradeblocks/lib/stores'
+import { Trade, PortfolioStatsCalculator } from "@tradeblocks/lib";
+import { useBlockStore } from "@tradeblocks/lib/stores";
 
 // Component imports use root-relative paths
-import { Button } from '@/components/ui/button'
+import { Button } from "@/components/ui/button";
 ```
 
 ### Running Workspace Commands

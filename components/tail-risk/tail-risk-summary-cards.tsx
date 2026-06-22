@@ -19,8 +19,7 @@ export function TailRiskSummaryCards({ result }: TailRiskSummaryCardsProps) {
 
   const avgJointRisk = analytics.averageJointTailRisk;
   const highPairsPct = analytics.highRiskPairsPct * 100;
-  const factorRatio =
-    strategies.length > 0 ? effectiveFactors / strategies.length : 1;
+  const factorRatio = strategies.length > 0 ? effectiveFactors / strategies.length : 1;
 
   // Determine if values indicate good (positive) or bad (negative) risk
   const isFactorGood = factorRatio >= 0.3; // More factors = better diversification
@@ -59,8 +58,8 @@ export function TailRiskSummaryCards({ result }: TailRiskSummaryCardsProps) {
           avgJointRisk < 0.3
             ? "Good diversification"
             : avgJointRisk < 0.5
-            ? "Moderate tail risk"
-            : "High tail concentration"
+              ? "Moderate tail risk"
+              : "High tail concentration"
         }
         isPositive={isJointRiskGood}
         tooltip={{
@@ -76,13 +75,12 @@ export function TailRiskSummaryCards({ result }: TailRiskSummaryCardsProps) {
           highPairsPct < 20
             ? "Few concentrated pairs"
             : highPairsPct < 40
-            ? "Some concentrated pairs"
-            : "Many concentrated pairs"
+              ? "Some concentrated pairs"
+              : "Many concentrated pairs"
         }
         isPositive={isHighPairsGood}
         tooltip={{
-          flavor:
-            "Percentage of strategy pairs with joint tail risk greater than 0.5.",
+          flavor: "Percentage of strategy pairs with joint tail risk greater than 0.5.",
           detailed:
             "These pairs have more than 50% chance of losing together on extreme days. A high percentage here means much of your portfolio is exposed to correlated tail risk. Look at the heatmap to identify which specific pairs have the highest joint tail risk.",
         }}

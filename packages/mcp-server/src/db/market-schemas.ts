@@ -37,9 +37,7 @@ import type { DuckDBConnection } from "@duckdb/node-api";
  *
  * @param conn - Active DuckDB connection with market catalog attached
  */
-export async function ensureMutableMarketTables(
-  conn: DuckDBConnection,
-): Promise<void> {
+export async function ensureMutableMarketTables(conn: DuckDBConnection): Promise<void> {
   // Legacy coverage-tracking table CREATE removed — grep-verified zero readers/writers today.
   // Coverage is now derived from store.getCoverage() (Parquet: readdirSync; DuckDB: SELECT DISTINCT).
 
@@ -97,8 +95,16 @@ export async function ensureMarketDataTables(conn: DuckDBConnection): Promise<vo
   // createMarketParquetViews earlier in the connection sequence). Dropping them
   // here would destroy legitimate v3.0 views.
   for (const name of ["daily", "date_context", "intraday", "data_coverage"]) {
-    try { await conn.run(`DROP VIEW  IF EXISTS market.${name}`); } catch { /* wrong type */ }
-    try { await conn.run(`DROP TABLE IF EXISTS market.${name}`); } catch { /* wrong type */ }
+    try {
+      await conn.run(`DROP VIEW  IF EXISTS market.${name}`);
+    } catch {
+      /* wrong type */
+    }
+    try {
+      await conn.run(`DROP TABLE IF EXISTS market.${name}`);
+    } catch {
+      /* wrong type */
+    }
   }
 
   // ============================================================================

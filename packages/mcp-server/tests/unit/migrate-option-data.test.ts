@@ -21,14 +21,14 @@ import {
 
 // Fixture mirrors the production defaults so tests align with real ticker semantics.
 const defaults = [
-  { underlying: "SPX",   roots: ["SPX", "SPXW", "SPXQ"] },
-  { underlying: "QQQ",   roots: ["QQQ", "QQQX"] },
-  { underlying: "VIX",   roots: ["VIX"] },
+  { underlying: "SPX", roots: ["SPX", "SPXW", "SPXQ"] },
+  { underlying: "QQQ", roots: ["QQQ", "QQQX"] },
+  { underlying: "VIX", roots: ["VIX"] },
   { underlying: "VIX9D", roots: ["VIX9D"] },
   { underlying: "VIX3M", roots: ["VIX3M"] },
-  { underlying: "ES",    roots: ["ES"] },
-  { underlying: "NDX",   roots: ["NDX", "NDXP"] },
-  { underlying: "RUT",   roots: ["RUT", "RUTW"] },
+  { underlying: "ES", roots: ["ES"] },
+  { underlying: "NDX", roots: ["NDX", "NDXP"] },
+  { underlying: "RUT", roots: ["RUT", "RUTW"] },
 ];
 
 describe("groupTickersByUnderlying — SPX family", () => {
@@ -80,11 +80,7 @@ describe("groupTickersByUnderlying — edge cases", () => {
   });
   it("custom skipSet overrides the default leveraged-ETF list", () => {
     const registry = new TickerRegistry(defaults);
-    const result = groupTickersByUnderlying(
-      ["FOO", "BAR"],
-      registry,
-      new Set(["FOO"]),
-    );
+    const result = groupTickersByUnderlying(["FOO", "BAR"], registry, new Set(["FOO"]));
     expect(result.byUnderlying.get("BAR")).toEqual(["BAR"]);
     expect(result.byUnderlying.has("FOO")).toBe(false);
     expect(result.skipped).toEqual(["FOO"]);

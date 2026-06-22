@@ -3,8 +3,13 @@ import { quoteParquetGreekProjection } from "../../../src/utils/quote-parquet-pr
 
 describe("quoteParquetGreekProjection", () => {
   const allColumns = new Set([
-    "delta", "gamma", "theta", "vega", "iv",
-    "greeks_source", "greeks_revision",
+    "delta",
+    "gamma",
+    "theta",
+    "vega",
+    "iv",
+    "greeks_source",
+    "greeks_revision",
   ]);
 
   it("defaults to projecting all five greeks when `needed` is omitted (back-compat)", () => {

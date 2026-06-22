@@ -37,7 +37,7 @@ export default function RootLayout({
         className={cn(
           geistSans.variable,
           geistMono.variable,
-          "antialiased min-h-screen bg-background text-foreground"
+          "antialiased min-h-screen bg-background text-foreground",
         )}
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>

@@ -27,7 +27,7 @@ export interface GreeksResult {
   theta: number | null; // per day
   vega: number | null; // per 1% IV move
   iv: number | null; // annualized implied volatility (0-N, not percentage)
-  model?: 'bs' | 'bachelier'; // which pricing model was used; undefined if IV solve failed
+  model?: "bs" | "bachelier"; // which pricing model was used; undefined if IV solve failed
 }
 
 // --- Internal helpers (exported for Bachelier model and testing) ---
@@ -50,7 +50,7 @@ export function cdf(x: number): number {
   const absX = Math.abs(x);
 
   const p = 0.2316419;
-  const b1 = 0.319381530;
+  const b1 = 0.31938153;
   const b2 = -0.356563782;
   const b3 = 1.781477937;
   const b4 = -1.821255978;
@@ -98,7 +98,7 @@ function d1d2(
  * @returns Option price
  */
 export function bsPrice(
-  type: 'call' | 'put',
+  type: "call" | "put",
   S: number,
   K: number,
   T: number,
@@ -108,13 +108,13 @@ export function bsPrice(
 ): number {
   // Edge case: at or past expiry
   if (T <= 0) {
-    return type === 'call' ? Math.max(S - K, 0) : Math.max(K - S, 0);
+    return type === "call" ? Math.max(S - K, 0) : Math.max(K - S, 0);
   }
 
   // Edge case: zero volatility — return discounted intrinsic
   if (sigma <= 0) {
     const forward = S * Math.exp((r - q) * T);
-    if (type === 'call') {
+    if (type === "call") {
       return Math.max(forward - K, 0) * Math.exp(-r * T);
     } else {
       return Math.max(K - forward, 0) * Math.exp(-r * T);
@@ -123,7 +123,7 @@ export function bsPrice(
 
   const { d1, d2 } = d1d2(S, K, T, r, q, sigma);
 
-  if (type === 'call') {
+  if (type === "call") {
     return S * Math.exp(-q * T) * cdf(d1) - K * Math.exp(-r * T) * cdf(d2);
   } else {
     return K * Math.exp(-r * T) * cdf(-d2) - S * Math.exp(-q * T) * cdf(-d1);
@@ -136,7 +136,7 @@ export function bsPrice(
  * Put: (N(d1) - 1) * e^(-qT)
  */
 export function bsDelta(
-  type: 'call' | 'put',
+  type: "call" | "put",
   S: number,
   K: number,
   T: number,
@@ -145,14 +145,14 @@ export function bsDelta(
   sigma: number,
 ): number {
   if (T <= 0 || sigma <= 0) {
-    if (type === 'call') return S > K ? 1 : 0;
+    if (type === "call") return S > K ? 1 : 0;
     return S < K ? -1 : 0;
   }
 
   const { d1 } = d1d2(S, K, T, r, q, sigma);
   const eqT = Math.exp(-q * T);
 
-  if (type === 'call') {
+  if (type === "call") {
     return cdf(d1) * eqT;
   } else {
     return (cdf(d1) - 1) * eqT;
@@ -182,7 +182,7 @@ export function bsGamma(
  * Returns the daily time decay (negative for long options).
  */
 export function bsTheta(
-  type: 'call' | 'put',
+  type: "call" | "put",
   S: number,
   K: number,
   T: number,
@@ -200,7 +200,7 @@ export function bsTheta(
   // First term: -(S * e^(-qT) * N'(d1) * sigma) / (2 * sqrt(T))
   const term1 = -(S * eqT * pdf(d1) * sigma) / (2 * sqrtT);
 
-  if (type === 'call') {
+  if (type === "call") {
     const term2 = q * S * eqT * cdf(d1);
     const term3 = -r * K * erT * cdf(d2);
     return (term1 - term2 - term3) / 365;
@@ -244,7 +244,7 @@ export function bsVega(
  * @returns Implied volatility or null if convergence fails
  */
 export function solveIV(
-  type: 'call' | 'put',
+  type: "call" | "put",
   marketPrice: number,
   S: number,
   K: number,
@@ -323,7 +323,7 @@ export function solveIV(
  * @returns Option price
  */
 export function bachelierPrice(
-  type: 'call' | 'put',
+  type: "call" | "put",
   S: number,
   K: number,
   T: number,
@@ -331,16 +331,18 @@ export function bachelierPrice(
   q: number,
   sigma_n: number,
 ): number {
-  if (T <= 0) return type === 'call' ? Math.max(S - K, 0) : Math.max(K - S, 0);
+  if (T <= 0) return type === "call" ? Math.max(S - K, 0) : Math.max(K - S, 0);
   if (sigma_n <= 0) {
     const forward = S * Math.exp((r - q) * T);
-    return Math.exp(-r * T) * (type === 'call' ? Math.max(forward - K, 0) : Math.max(K - forward, 0));
+    return (
+      Math.exp(-r * T) * (type === "call" ? Math.max(forward - K, 0) : Math.max(K - forward, 0))
+    );
   }
   const forward = S * Math.exp((r - q) * T);
   const sqrtT = Math.sqrt(T);
   const d = (forward - K) / (sigma_n * sqrtT);
   const discount = Math.exp(-r * T);
-  if (type === 'call') {
+  if (type === "call") {
     return discount * ((forward - K) * cdf(d) + sigma_n * sqrtT * pdf(d));
   } else {
     return discount * ((K - forward) * cdf(-d) + sigma_n * sqrtT * pdf(d));
@@ -353,7 +355,7 @@ export function bachelierPrice(
  * Put: -e^(-rT) * N(-d)
  */
 export function bachelierDelta(
-  type: 'call' | 'put',
+  type: "call" | "put",
   S: number,
   K: number,
   T: number,
@@ -362,13 +364,13 @@ export function bachelierDelta(
   sigma_n: number,
 ): number {
   if (T <= 0 || sigma_n <= 0) {
-    if (type === 'call') return S > K ? 1 : 0;
+    if (type === "call") return S > K ? 1 : 0;
     return S < K ? -1 : 0;
   }
   const forward = S * Math.exp((r - q) * T);
   const d = (forward - K) / (sigma_n * Math.sqrt(T));
   const discount = Math.exp(-r * T);
-  return type === 'call' ? discount * cdf(d) : -discount * cdf(-d);
+  return type === "call" ? discount * cdf(d) : -discount * cdf(-d);
 }
 
 /**
@@ -387,7 +389,7 @@ export function bachelierGamma(
   const forward = S * Math.exp((r - q) * T);
   const sqrtT = Math.sqrt(T);
   const d = (forward - K) / (sigma_n * sqrtT);
-  return Math.exp(-r * T) * pdf(d) / (sigma_n * sqrtT);
+  return (Math.exp(-r * T) * pdf(d)) / (sigma_n * sqrtT);
 }
 
 /**
@@ -396,7 +398,7 @@ export function bachelierGamma(
  * Formula: -(e^(-rT) * sigma_n * n(d) / (2 * sqrt(T)) - r * price) / 365
  */
 export function bachelierTheta(
-  type: 'call' | 'put',
+  type: "call" | "put",
   S: number,
   K: number,
   T: number,
@@ -413,7 +415,7 @@ export function bachelierTheta(
   // dV/dT = -e^(-rT) * sigma_n * n(d) / (2*sqrt(T)) + r * price  (positive = more time = more value)
   // theta = -dV/dT per year, then / 365 for per-calendar-day
   // annualTheta is negative for long options (time decay)
-  const annualTheta = -discount * sigma_n * pdf(d) / (2 * sqrtT) + r * price;
+  const annualTheta = (-discount * sigma_n * pdf(d)) / (2 * sqrtT) + r * price;
   return annualTheta / 365;
 }
 
@@ -432,7 +434,7 @@ export function bachelierVega(
   if (T <= 0 || sigma_n <= 0) return 0;
   const forward = S * Math.exp((r - q) * T);
   const d = (forward - K) / (sigma_n * Math.sqrt(T));
-  return Math.exp(-r * T) * Math.sqrt(T) * pdf(d) / 100;
+  return (Math.exp(-r * T) * Math.sqrt(T) * pdf(d)) / 100;
 }
 
 /**
@@ -450,7 +452,7 @@ export function bachelierVega(
  * @returns Normal implied volatility (dollar vol, e.g., ~800 for SPX) or null
  */
 export function solveNormalIV(
-  type: 'call' | 'put',
+  type: "call" | "put",
   marketPrice: number,
   S: number,
   K: number,
@@ -527,18 +529,26 @@ export function computeLegGreeks(
   underlyingPrice: number,
   strike: number,
   dte: number,
-  type: 'C' | 'P',
+  type: "C" | "P",
   riskFreeRate: number,
   dividendYield: number,
 ): GreeksResult {
   const T = dte / 365;
-  const bsType = type === 'C' ? 'call' : 'put';
+  const bsType = type === "C" ? "call" : "put";
   const nullResult: GreeksResult = { delta: null, gamma: null, theta: null, vega: null, iv: null };
 
   if (dte < BACHELIER_DTE_THRESHOLD) {
     // Bachelier normal model for short-dated options (dte < 0.1 days / ~2.4 hours).
     // iv field stores normal (dollar) volatility, not log-normal vol.
-    const iv = solveNormalIV(bsType, optionPrice, underlyingPrice, strike, T, riskFreeRate, dividendYield);
+    const iv = solveNormalIV(
+      bsType,
+      optionPrice,
+      underlyingPrice,
+      strike,
+      T,
+      riskFreeRate,
+      dividendYield,
+    );
     if (iv === null) return nullResult;
     return {
       delta: bachelierDelta(bsType, underlyingPrice, strike, T, riskFreeRate, dividendYield, iv),
@@ -546,7 +556,7 @@ export function computeLegGreeks(
       theta: bachelierTheta(bsType, underlyingPrice, strike, T, riskFreeRate, dividendYield, iv),
       vega: bachelierVega(underlyingPrice, strike, T, riskFreeRate, dividendYield, iv),
       iv,
-      model: 'bachelier',
+      model: "bachelier",
     };
   }
 
@@ -560,6 +570,6 @@ export function computeLegGreeks(
     theta: bsTheta(bsType, underlyingPrice, strike, T, riskFreeRate, dividendYield, iv),
     vega: bsVega(underlyingPrice, strike, T, riskFreeRate, dividendYield, iv),
     iv,
-    model: 'bs',
+    model: "bs",
   };
 }

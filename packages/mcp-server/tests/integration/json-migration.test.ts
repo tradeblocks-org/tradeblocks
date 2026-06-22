@@ -33,7 +33,7 @@ describe("json-migration", () => {
   beforeEach(async () => {
     tmpDir = join(
       tmpdir(),
-      `json-migration-test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      `json-migration-test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     );
     blocksDir = join(tmpDir, "blocks");
     mkdirSync(blocksDir, { recursive: true });
@@ -204,7 +204,12 @@ describe("json-migration", () => {
     expect(meta2).not.toBeNull();
     expect(meta2!.ticker).toBe("SPX");
 
-    const meta3 = await getMarketImportMetadataJson("csv:/data/vix.csv", "VIX", "date_context", tmpDir);
+    const meta3 = await getMarketImportMetadataJson(
+      "csv:/data/vix.csv",
+      "VIX",
+      "date_context",
+      tmpDir,
+    );
     expect(meta3).not.toBeNull();
     expect(meta3!.target_table).toBe("date_context");
   });
@@ -231,13 +236,25 @@ describe("json-migration", () => {
     expect(result.flatLog).toBe(5);
 
     // Verify flat import log JSON
-    const importedDates = await getFlatImportLogJson("options", "SPY", "2025-01-06", "2025-01-08", tmpDir);
+    const importedDates = await getFlatImportLogJson(
+      "options",
+      "SPY",
+      "2025-01-06",
+      "2025-01-08",
+      tmpDir,
+    );
     expect(importedDates.size).toBe(3);
     expect(importedDates.has("2025-01-06")).toBe(true);
     expect(importedDates.has("2025-01-07")).toBe(true);
     expect(importedDates.has("2025-01-08")).toBe(true);
 
-    const qqqDates = await getFlatImportLogJson("options", "QQQ", "2025-01-06", "2025-01-07", tmpDir);
+    const qqqDates = await getFlatImportLogJson(
+      "options",
+      "QQQ",
+      "2025-01-06",
+      "2025-01-07",
+      tmpDir,
+    );
     expect(qqqDates.size).toBe(2);
   });
 

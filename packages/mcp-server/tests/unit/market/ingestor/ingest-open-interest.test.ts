@@ -7,10 +7,7 @@ import { MarketIngestor } from "../../../../src/market/ingestor/index.ts";
 import { createMarketStores } from "../../../../src/market/stores/index.ts";
 import { ensureMarketDataTables } from "../../../../src/db/market-schemas.ts";
 import { TickerRegistry } from "../../../../src/market/tickers/registry.ts";
-import type {
-  MarketDataProvider,
-  OpenInterestRow,
-} from "../../../../src/utils/market-provider.ts";
+import type { MarketDataProvider, OpenInterestRow } from "../../../../src/utils/market-provider.ts";
 
 const CAPS_BULK = {
   tradeBars: true,
@@ -40,7 +37,11 @@ describe("MarketIngestor.ingestOpenInterest", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -49,10 +50,18 @@ describe("MarketIngestor.ingestOpenInterest", () => {
       name: "no-oi",
       capabilities: () => CAPS_BULK,
       fetchBars: async () => [],
-      fetchOptionSnapshot: async () => ({ contracts: [], underlying_price: 0, underlying_ticker: "SPX" }),
+      fetchOptionSnapshot: async () => ({
+        contracts: [],
+        underlying_price: 0,
+        underlying_ticker: "SPX",
+      }),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: true, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestOpenInterest({
       underlyings: ["SPX"],
@@ -89,11 +98,19 @@ describe("MarketIngestor.ingestOpenInterest", () => {
       name: "has-oi",
       capabilities: () => CAPS_BULK,
       fetchBars: async () => [],
-      fetchOptionSnapshot: async () => ({ contracts: [], underlying_price: 0, underlying_ticker: "SPX" }),
+      fetchOptionSnapshot: async () => ({
+        contracts: [],
+        underlying_price: 0,
+        underlying_ticker: "SPX",
+      }),
       fetchOpenInterest: async () => rows,
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: true, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestOpenInterest({
       underlyings: ["SPX"],
@@ -120,14 +137,22 @@ describe("MarketIngestor.ingestOpenInterest", () => {
       name: "has-oi",
       capabilities: () => CAPS_BULK,
       fetchBars: async () => [],
-      fetchOptionSnapshot: async () => ({ contracts: [], underlying_price: 0, underlying_ticker: "SPX" }),
+      fetchOptionSnapshot: async () => ({
+        contracts: [],
+        underlying_price: 0,
+        underlying_ticker: "SPX",
+      }),
       fetchOpenInterest: async () => {
         called = true;
         return [];
       },
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: true, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestOpenInterest({
       underlyings: ["SPX"],
@@ -158,7 +183,11 @@ describe("MarketIngestor.refresh open-interest gating", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -167,7 +196,11 @@ describe("MarketIngestor.refresh open-interest gating", () => {
       name: "has-oi",
       capabilities: () => CAPS_BULK,
       fetchBars: async () => [],
-      fetchOptionSnapshot: async () => ({ contracts: [], underlying_price: 0, underlying_ticker: "SPX" }),
+      fetchOptionSnapshot: async () => ({
+        contracts: [],
+        underlying_price: 0,
+        underlying_ticker: "SPX",
+      }),
       fetchOpenInterest: async () => {
         onFetch();
         return [];
@@ -181,7 +214,10 @@ describe("MarketIngestor.refresh open-interest gating", () => {
     const ingestor = new MarketIngestor({
       stores,
       dataRoot: dataDir,
-      providerFactory: () => provider(() => { called = true; }),
+      providerFactory: () =>
+        provider(() => {
+          called = true;
+        }),
     });
 
     const result = await ingestor.refresh({
@@ -199,7 +235,10 @@ describe("MarketIngestor.refresh open-interest gating", () => {
     const ingestor = new MarketIngestor({
       stores,
       dataRoot: dataDir,
-      providerFactory: () => provider(() => { called = true; }),
+      providerFactory: () =>
+        provider(() => {
+          called = true;
+        }),
     });
 
     const result = await ingestor.refresh({

@@ -14,14 +14,14 @@ import {
   type TriggerType,
   type LegGroupConfig,
   type PartialClose,
-} from './exit-triggers.ts';
-import type { PnlPoint, ReplayLeg } from './trade-replay.ts';
+} from "./exit-triggers.ts";
+import type { PnlPoint, ReplayLeg } from "./trade-replay.ts";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type BaselineMode = 'actual' | 'holdToEnd';
+export type BaselineMode = "actual" | "holdToEnd";
 
 export interface BatchExitConfig {
   /** Triggers to evaluate as candidate exit policy. */
@@ -31,7 +31,7 @@ export interface BatchExitConfig {
   /** Baseline mode: 'actual' uses tradelog P&L, 'holdToEnd' uses last path point. */
   baselineMode: BaselineMode;
   /** Output density: 'summary' omits per-trade breakdown; 'full' includes it. */
-  format: 'summary' | 'full';
+  format: "summary" | "full";
 }
 
 export interface TradeInput {
@@ -60,7 +60,7 @@ export interface TradeExitResult {
   /** candidatePnl - baselinePnl */
   pnlDelta: number;
   /** Which trigger fired first, or 'noTrigger'. */
-  triggerFired: TriggerType | 'noTrigger';
+  triggerFired: TriggerType | "noTrigger";
   /** Timestamp when trigger fired, or null. */
   fireTimestamp: string | null;
   /** Partial position closes from profitAction steps (if any). */
@@ -68,7 +68,7 @@ export interface TradeExitResult {
 }
 
 export interface TriggerAttribution {
-  trigger: TriggerType | 'noTrigger';
+  trigger: TriggerType | "noTrigger";
   /** How many trades this trigger fired first on. */
   count: number;
   /** Average candidate P&L when this trigger fired. */
@@ -158,19 +158,19 @@ export function computeAggregateStats(tradeResults: TradeExitResult[]): Aggregat
     };
   }
 
-  const candidatePnls = tradeResults.map(r => r.candidatePnl);
-  const baselinePnls = tradeResults.map(r => r.baselinePnl);
+  const candidatePnls = tradeResults.map((r) => r.candidatePnl);
+  const baselinePnls = tradeResults.map((r) => r.baselinePnl);
 
-  const winningTrades = candidatePnls.filter(p => p > 0).length;
-  const losingTrades = candidatePnls.filter(p => p < 0).length;
+  const winningTrades = candidatePnls.filter((p) => p > 0).length;
+  const losingTrades = candidatePnls.filter((p) => p < 0).length;
   const totalTrades = tradeResults.length;
   const winRate = winningTrades / totalTrades;
 
   const totalPnl = candidatePnls.reduce((sum, p) => sum + p, 0);
   const avgPnl = totalPnl / totalTrades;
 
-  const wins = candidatePnls.filter(p => p > 0);
-  const losses = candidatePnls.filter(p => p < 0);
+  const wins = candidatePnls.filter((p) => p > 0);
+  const losses = candidatePnls.filter((p) => p < 0);
 
   const avgWin = wins.length > 0 ? wins.reduce((s, p) => s + p, 0) / wins.length : 0;
   const avgLoss = losses.length > 0 ? losses.reduce((s, p) => s + p, 0) / losses.length : 0;
@@ -180,9 +180,7 @@ export function computeAggregateStats(tradeResults: TradeExitResult[]): Aggregat
   // Profit factor: sum(wins) / abs(sum(losses)), Infinity if no losses
   const sumWins = wins.reduce((s, p) => s + p, 0);
   const sumLosses = losses.reduce((s, p) => s + p, 0);
-  const profitFactor = losses.length === 0
-    ? Infinity
-    : sumWins / Math.abs(sumLosses);
+  const profitFactor = losses.length === 0 ? Infinity : sumWins / Math.abs(sumLosses);
 
   // Max drawdown from equity curve (cumsum of candidatePnls)
   let runningPeak = 0;
@@ -199,8 +197,7 @@ export function computeAggregateStats(tradeResults: TradeExitResult[]): Aggregat
   let sharpeRatio: number | null = null;
   if (totalTrades >= 2) {
     const mean = avgPnl;
-    const variance =
-      candidatePnls.reduce((sum, p) => sum + (p - mean) ** 2, 0) / (totalTrades - 1);
+    const variance = candidatePnls.reduce((sum, p) => sum + (p - mean) ** 2, 0) / (totalTrades - 1);
     const stddev = Math.sqrt(variance);
     sharpeRatio = stddev === 0 ? null : mean / stddev;
   }
@@ -228,7 +225,7 @@ export function computeAggregateStats(tradeResults: TradeExitResult[]): Aggregat
 
   // Baseline aggregates
   const baselineTotalPnl = baselinePnls.reduce((sum, p) => sum + p, 0);
-  const baselineWins = baselinePnls.filter(p => p > 0).length;
+  const baselineWins = baselinePnls.filter((p) => p > 0).length;
   const baselineWinRate = baselineWins / totalTrades;
 
   return {
@@ -261,11 +258,9 @@ export function computeAggregateStats(tradeResults: TradeExitResult[]): Aggregat
  * Group trade results by which trigger fired first.
  * Returns attribution sorted by count descending.
  */
-export function computeTriggerAttribution(
-  tradeResults: TradeExitResult[],
-): TriggerAttribution[] {
+export function computeTriggerAttribution(tradeResults: TradeExitResult[]): TriggerAttribution[] {
   const groups = new Map<
-    TriggerType | 'noTrigger',
+    TriggerType | "noTrigger",
     { count: number; totalPnl: number; totalDelta: number }
   >();
 
@@ -311,10 +306,7 @@ export function computeTriggerAttribution(
  *
  * Then compute aggregate stats and trigger attribution.
  */
-export function analyzeBatch(
-  trades: TradeInput[],
-  config: BatchExitConfig,
-): BatchExitResult {
+export function analyzeBatch(trades: TradeInput[], config: BatchExitConfig): BatchExitResult {
   if (trades.length === 0) {
     const emptyAggregate = computeAggregateStats([]);
     return {
@@ -322,29 +314,27 @@ export function analyzeBatch(
       triggerAttribution: [],
       perTrade: [],
       baselineMode: config.baselineMode,
-      summary: 'Analyzed 0 trades: no data.',
+      summary: "Analyzed 0 trades: no data.",
     };
   }
 
   const { candidatePolicy, legGroups, baselineMode, format } = config;
 
-  const perTradeResults: TradeExitResult[] = trades.map(trade => {
+  const perTradeResults: TradeExitResult[] = trades.map((trade) => {
     const { pnlPath, legs, actualPnl, tradeIndex, dateOpened, entryCost } = trade;
 
     // Last path point P&L — used as holdToEnd value
-    const lastPnl = pnlPath.length > 0
-      ? pnlPath[pnlPath.length - 1].strategyPnl
-      : 0;
+    const lastPnl = pnlPath.length > 0 ? pnlPath[pnlPath.length - 1].strategyPnl : 0;
 
     // Copy entryCost onto each trigger config for percentage-based triggers (D-11)
-    const triggersWithCost = candidatePolicy.map(t => ({
+    const triggersWithCost = candidatePolicy.map((t) => ({
       ...t,
       entryCost,
     }));
 
-    const legGroupsWithCost = legGroups?.map(group => ({
+    const legGroupsWithCost = legGroups?.map((group) => ({
       ...group,
-      triggers: group.triggers.map(trigger => ({
+      triggers: group.triggers.map((trigger) => ({
         ...trigger,
         entryCost,
       })),
@@ -369,9 +359,8 @@ export function analyzeBatch(
       const remainingAllocation = 1 - closedAllocation;
       // Remaining position: firstToFire.pnlAtFire already reflects remaining allocation,
       // or if no trigger fired, scale last P&L by remaining allocation
-      const remainingPnl = firstToFire !== null
-        ? firstToFire.pnlAtFire
-        : lastPnl * remainingAllocation;
+      const remainingPnl =
+        firstToFire !== null ? firstToFire.pnlAtFire : lastPnl * remainingAllocation;
       candidatePnl = partialPnl + remainingPnl;
     } else {
       // No partial closes: original behavior
@@ -379,12 +368,12 @@ export function analyzeBatch(
     }
 
     // Baseline P&L depends on mode
-    const baselinePnl = baselineMode === 'actual' ? actualPnl : lastPnl;
+    const baselinePnl = baselineMode === "actual" ? actualPnl : lastPnl;
 
     const pnlDelta = candidatePnl - baselinePnl;
 
-    const triggerFired: TriggerType | 'noTrigger' =
-      firstToFire !== null ? firstToFire.type : 'noTrigger';
+    const triggerFired: TriggerType | "noTrigger" =
+      firstToFire !== null ? firstToFire.type : "noTrigger";
     const fireTimestamp = firstToFire !== null ? firstToFire.firedAt : null;
 
     return {
@@ -407,7 +396,7 @@ export function analyzeBatch(
   const topTrigger = triggerAttribution.length > 0 ? triggerAttribution[0] : null;
   const topTriggerStr = topTrigger
     ? `Top trigger: ${topTrigger.trigger} fired on ${topTrigger.count} trades.`
-    : 'No triggers fired.';
+    : "No triggers fired.";
 
   const summary =
     `Analyzed ${trades.length} trades: candidate win rate ${(aggregate.winRate * 100).toFixed(1)}%, ` +
@@ -417,7 +406,7 @@ export function analyzeBatch(
   return {
     aggregate,
     triggerAttribution,
-    perTrade: format === 'summary' ? [] : perTradeResults,
+    perTrade: format === "summary" ? [] : perTradeResults,
     baselineMode,
     summary,
   };

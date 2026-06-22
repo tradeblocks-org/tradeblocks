@@ -14,11 +14,7 @@ import type { BarRow } from "../../../src/market/stores/types.ts";
  * (price 100), the max high is 106 (at the 10:30 bar), and the close is
  * 99.5 (at the 15:45 bar).
  */
-export function makeBars(
-  ticker: string,
-  date: string,
-  rowsPerDay = 3,
-): BarRow[] {
+export function makeBars(ticker: string, date: string, rowsPerDay = 3): BarRow[] {
   const times = ["09:30", "10:30", "15:45"];
   const basePrices = [100, 105, 99];
   return times.slice(0, rowsPerDay).map((time, i) => ({

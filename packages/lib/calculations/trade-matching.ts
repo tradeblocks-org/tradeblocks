@@ -6,8 +6,8 @@
  * slippage analysis, and discrepancy analysis.
  */
 
-import type { Trade } from '../models/trade.ts'
-import type { ReportingTrade } from '../models/reporting-trade.ts'
+import type { Trade } from "../models/trade.ts";
+import type { ReportingTrade } from "../models/reporting-trade.ts";
 
 /**
  * Helper to format date key for trade matching
@@ -34,9 +34,7 @@ export function truncateTimeToMinute(time: string | undefined): string {
 /**
  * Helper to parse hour from time string
  */
-export function parseHourFromTime(
-  timeOpened: string | undefined
-): number | null {
+export function parseHourFromTime(timeOpened: string | undefined): number | null {
   if (!timeOpened || typeof timeOpened !== "string") return null;
   const parts = timeOpened.split(":");
   if (parts.length < 1) return null;
@@ -58,9 +56,7 @@ export function getIsoWeekKey(dateStr: string): string {
   const dayOfWeek = thursday.getUTCDay() || 7;
   thursday.setUTCDate(thursday.getUTCDate() + (4 - dayOfWeek));
   const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(
-    ((thursday.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
-  );
+  const weekNum = Math.ceil(((thursday.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
 }
 
@@ -92,7 +88,7 @@ export interface MatchedTradeData {
  */
 export function applyDateRangeFilter<T extends { dateOpened: Date }>(
   trades: T[],
-  dateRange?: { from?: string; to?: string }
+  dateRange?: { from?: string; to?: string },
 ): T[] {
   if (!dateRange || (!dateRange.from && !dateRange.to)) {
     return trades;
@@ -111,12 +107,10 @@ export function applyDateRangeFilter<T extends { dateOpened: Date }>(
  */
 export function applyStrategyFilter<T extends { strategy: string }>(
   trades: T[],
-  strategy?: string
+  strategy?: string,
 ): T[] {
   if (!strategy) return trades;
-  return trades.filter(
-    (t) => t.strategy.toLowerCase() === strategy.toLowerCase()
-  );
+  return trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
 }
 
 /**
@@ -127,7 +121,7 @@ export function calculateScaledPl(
   actualPl: number,
   btContracts: number,
   actualContracts: number,
-  scaling: "raw" | "perContract" | "toReported"
+  scaling: "raw" | "perContract" | "toReported",
 ): { scaledBtPl: number; scaledActualPl: number } {
   let scaledBtPl = btPl;
   let scaledActualPl = actualPl;
@@ -153,7 +147,7 @@ export function calculateScaledPl(
 export function matchTrades(
   backtestTrades: Trade[],
   actualTrades: ReportingTrade[],
-  scaling: "raw" | "perContract" | "toReported"
+  scaling: "raw" | "perContract" | "toReported",
 ): {
   matchedTrades: MatchedTradeData[];
   unmatchedBacktestCount: number;
@@ -198,7 +192,7 @@ export function matchTrades(
         actualTrade.pl,
         btTrade.numContracts,
         actualTrade.numContracts,
-        scaling
+        scaling,
       );
 
       // Total slippage = actual P/L - backtest P/L (after scaling)

@@ -20,10 +20,7 @@ import { existsSync, readdirSync } from "fs";
 import * as path from "path";
 import { isParquetMode, writeParquetAtomic } from "../db/parquet-writer.ts";
 import { resolveCanonicalMarketFile, resolveMarketDir } from "../db/market-datasets.ts";
-import {
-  getEnrichedThrough,
-  upsertEnrichedThrough,
-} from "../db/json-adapters.ts";
+import { getEnrichedThrough, upsertEnrichedThrough } from "../db/json-adapters.ts";
 import { DEFAULT_MARKET_TICKER } from "./ticker.ts";
 import type { SpotStore } from "../market/stores/spot-store.ts";
 
@@ -121,7 +118,7 @@ export function computeATR(
   highs: number[],
   lows: number[],
   closes: number[],
-  period = 14
+  period = 14,
 ): number[] {
   const n = closes.length;
   const result = new Array<number>(n).fill(NaN);
@@ -134,7 +131,7 @@ export function computeATR(
     tr[i] = Math.max(
       highs[i] - lows[i],
       Math.abs(highs[i] - prevClose),
-      Math.abs(lows[i] - prevClose)
+      Math.abs(lows[i] - prevClose),
     );
   }
 
@@ -281,12 +278,7 @@ export function computeConsecutiveDays(closes: number[]): number[] {
  * Gap down (open < priorClose): filled if high >= priorClose
  * No gap (open = priorClose): returns 0
  */
-export function isGapFilled(
-  open: number,
-  high: number,
-  low: number,
-  priorClose: number
-): number {
+export function isGapFilled(open: number, high: number, low: number, priorClose: number): number {
   if (open > priorClose && low <= priorClose) return 1;
   if (open < priorClose && high >= priorClose) return 1;
   return 0;
@@ -451,7 +443,7 @@ export function classifyVolRegime(vixClose: number): number {
 export function classifyTermStructure(
   vix9dClose: number,
   vixClose: number,
-  vix3mClose: number
+  vix3mClose: number,
 ): number {
   // Match PineScript: vix9dClose > vixClose ? -1 : vixClose > vix3mClose ? 0 : 1
   if (vix9dClose > vixClose) return -1;
@@ -470,7 +462,8 @@ export function computeIVR(values: number[], period = 252): number[] {
   const n = values.length;
   const result = new Array<number>(n).fill(NaN);
   for (let i = period - 1; i < n; i++) {
-    let min = Infinity, max = -Infinity;
+    let min = Infinity,
+      max = -Infinity;
     for (let j = i - period + 1; j <= i; j++) {
       if (values[j] < min) min = values[j];
       if (values[j] > max) max = values[j];
@@ -508,7 +501,7 @@ export function computeIVP(values: number[], period = 252): number[] {
 
 export interface EnrichmentOptions {
   forceFull?: boolean;
-  dataDir?: string;  // Required in Parquet mode for file paths
+  dataDir?: string; // Required in Parquet mode for file paths
   parquetMode?: boolean;
 }
 
@@ -667,7 +660,9 @@ async function setupParquetWorkingTables(
   // ---- Daily working table seed ---------------------------------------------
   if (existsSync(dailyPath)) {
     // Legacy single-file seed
-    await conn.run(`CREATE TEMP TABLE "${dailyTable}" AS SELECT * FROM read_parquet('${dailyPath}')`);
+    await conn.run(
+      `CREATE TEMP TABLE "${dailyTable}" AS SELECT * FROM read_parquet('${dailyPath}')`,
+    );
     // Parquet files from fresh imports may lack enrichment columns — add them
     await alignDailyWorkingTableColumns(conn, dailyTable);
   } else if (hasEnrichedTickerFiles(enrichedDir)) {
@@ -702,9 +697,7 @@ async function setupParquetWorkingTables(
     // per-ticker computed-fields view) and ALTER-ADD the OHLCV columns the
     // Tier 1 math expects. Matches the shape used by the
     // enriched-ticker-files branch above.
-    await conn.run(
-      `CREATE TEMP TABLE "${dailyTable}" AS SELECT * FROM market.enriched WHERE 1=0`,
-    );
+    await conn.run(`CREATE TEMP TABLE "${dailyTable}" AS SELECT * FROM market.enriched WHERE 1=0`);
     for (const ohlcv of ["open", "high", "low", "close"]) {
       try {
         await conn.run(`ALTER TABLE "${dailyTable}" ADD COLUMN "${ohlcv}" DOUBLE`);
@@ -758,7 +751,9 @@ async function setupParquetWorkingTables(
   // ---- Date-context working table seed -------------------------------------
   if (existsSync(dateContextPath)) {
     // Legacy single-file seed
-    await conn.run(`CREATE TEMP TABLE "${dateContextTable}" AS SELECT * FROM read_parquet('${dateContextPath}')`);
+    await conn.run(
+      `CREATE TEMP TABLE "${dateContextTable}" AS SELECT * FROM read_parquet('${dateContextPath}')`,
+    );
   } else if (existsSync(enrichedContextPath)) {
     // Seed from the per-ticker enriched/context/data.parquet file
     await conn.run(
@@ -773,7 +768,9 @@ async function setupParquetWorkingTables(
   // INSERT OR REPLACE in runTier2 needs a UNIQUE/PRIMARY KEY on `date`. CREATE
   // TABLE AS SELECT does not carry over PK constraints from Parquet (Parquet has
   // no constraints), so attach one explicitly here.
-  await conn.run(`CREATE UNIQUE INDEX "idx_${dateContextTable}_date" ON "${dateContextTable}"(date)`);
+  await conn.run(
+    `CREATE UNIQUE INDEX "idx_${dateContextTable}_date" ON "${dateContextTable}"(date)`,
+  );
 
   // Same rationale for the daily working table: batchUpdateDaily uses
   // INSERT OR REPLACE so first-time enrichment of a ticker (whose seed
@@ -842,12 +839,7 @@ async function flushEnrichedToParquet(
     selectQuery: `SELECT ticker, date, ${enrichedColList} FROM "${tables.dailyTable}" WHERE ticker = '${ticker}' ORDER BY date`,
   });
 
-  const contextFile = path.join(
-    resolveMarketDir(dataDir),
-    "enriched",
-    "context",
-    "data.parquet",
-  );
+  const contextFile = path.join(resolveMarketDir(dataDir), "enriched", "context", "data.parquet");
   await writeParquetAtomic(conn, {
     targetPath: contextFile,
     selectQuery: `SELECT * FROM "${tables.dateContextTable}" ORDER BY date`,
@@ -924,7 +916,10 @@ async function runTier2(
       for (let start = 0; start < bars.length; start += BATCH_SIZE) {
         const batch = bars.slice(start, start + BATCH_SIZE);
         const placeholders = batch
-          .map((_, i) => `($${i * 6 + 1},$${i * 6 + 2},$${i * 6 + 3},$${i * 6 + 4},$${i * 6 + 5},$${i * 6 + 6})`)
+          .map(
+            (_, i) =>
+              `($${i * 6 + 1},$${i * 6 + 2},$${i * 6 + 3},$${i * 6 + 4},$${i * 6 + 5},$${i * 6 + 6})`,
+          )
           .join(",");
         const params = batch.flatMap((b) => [b.ticker, b.date, b.open, b.high, b.low, b.close]);
         await conn.run(
@@ -937,73 +932,75 @@ async function runTier2(
   }
 
   try {
-  // Step 1: Discover VIX-family tickers dynamically
-  const tickerResult = await conn.runAndReadAll(
-    `SELECT DISTINCT ticker FROM ${effectiveDailyTarget} WHERE ticker LIKE 'VIX%' ORDER BY ticker`
-  );
-  const vixTickers = tickerResult.getRows().map(r => r[0] as string);
-  if (vixTickers.length === 0 || !vixTickers.includes('VIX')) {
-    return { status: "skipped", reason: "no VIX data — import VIX ticker first" };
-  }
-
-  // Step 2: Compute IVR/IVP for each VIX-family ticker and write to daily table.
-  // `market.enriched` no longer carries OHLCV columns (raw bars live in spot/);
-  // read close from the OHLCV source: the spotStore-seeded TEMP table when
-  // io.spotStore is present, else `market.spot_daily` (RTH-aggregated view).
-  const closeSource = spotStore ? effectiveDailyTarget : "market.spot_daily";
-  for (const ticker of vixTickers) {
-    const closeResult = await conn.runAndReadAll(
-      `SELECT date, close FROM ${closeSource} WHERE ticker = $1 AND close IS NOT NULL ORDER BY date ASC`,
-      [ticker]
+    // Step 1: Discover VIX-family tickers dynamically
+    const tickerResult = await conn.runAndReadAll(
+      `SELECT DISTINCT ticker FROM ${effectiveDailyTarget} WHERE ticker LIKE 'VIX%' ORDER BY ticker`,
     );
-    const rows = closeResult.getRows();
-    if (rows.length === 0) continue;
+    const vixTickers = tickerResult.getRows().map((r) => r[0] as string);
+    if (vixTickers.length === 0 || !vixTickers.includes("VIX")) {
+      return { status: "skipped", reason: "no VIX data — import VIX ticker first" };
+    }
 
-    const dates = rows.map(r => r[0] as string);
-    const closes = rows.map(r => r[1] as number);
-    const ivrValues = computeIVR(closes, 252);
-    const ivpValues = computeIVP(closes, 252);
+    // Step 2: Compute IVR/IVP for each VIX-family ticker and write to daily table.
+    // `market.enriched` no longer carries OHLCV columns (raw bars live in spot/);
+    // read close from the OHLCV source: the spotStore-seeded TEMP table when
+    // io.spotStore is present, else `market.spot_daily` (RTH-aggregated view).
+    const closeSource = spotStore ? effectiveDailyTarget : "market.spot_daily";
+    for (const ticker of vixTickers) {
+      const closeResult = await conn.runAndReadAll(
+        `SELECT date, close FROM ${closeSource} WHERE ticker = $1 AND close IS NOT NULL ORDER BY date ASC`,
+        [ticker],
+      );
+      const rows = closeResult.getRows();
+      if (rows.length === 0) continue;
 
-    // Batch UPDATE daily table SET ivr, ivp WHERE ticker = ? AND date = ?
-    const BATCH_SIZE = 500;
-    for (let start = 0; start < dates.length; start += BATCH_SIZE) {
-      const batchDates = dates.slice(start, start + BATCH_SIZE);
-      const batchIvr = ivrValues.slice(start, start + BATCH_SIZE);
-      const batchIvp = ivpValues.slice(start, start + BATCH_SIZE);
+      const dates = rows.map((r) => r[0] as string);
+      const closes = rows.map((r) => r[1] as number);
+      const ivrValues = computeIVR(closes, 252);
+      const ivpValues = computeIVP(closes, 252);
 
-      const placeholders = batchDates.map((_, rowIdx) => {
-        const base = rowIdx * 3;
-        return `($${base + 1}, $${base + 2}, $${base + 3})`;
-      }).join(", ");
+      // Batch UPDATE daily table SET ivr, ivp WHERE ticker = ? AND date = ?
+      const BATCH_SIZE = 500;
+      for (let start = 0; start < dates.length; start += BATCH_SIZE) {
+        const batchDates = dates.slice(start, start + BATCH_SIZE);
+        const batchIvr = ivrValues.slice(start, start + BATCH_SIZE);
+        const batchIvp = ivpValues.slice(start, start + BATCH_SIZE);
 
-      const sql = `
+        const placeholders = batchDates
+          .map((_, rowIdx) => {
+            const base = rowIdx * 3;
+            return `($${base + 1}, $${base + 2}, $${base + 3})`;
+          })
+          .join(", ");
+
+        const sql = `
         UPDATE ${dailyTarget} AS t
         SET ivr = v.ivr, ivp = v.ivp
         FROM (VALUES ${placeholders}) AS v(date, ivr, ivp)
         WHERE t.ticker = $${batchDates.length * 3 + 1} AND t.date = v.date
       `;
-      const params: (string | number | null)[] = [];
-      for (let i = 0; i < batchDates.length; i++) {
-        params.push(batchDates[i]);
-        params.push(isNaN(batchIvr[i]) ? null : batchIvr[i]);
-        params.push(isNaN(batchIvp[i]) ? null : batchIvp[i]);
+        const params: (string | number | null)[] = [];
+        for (let i = 0; i < batchDates.length; i++) {
+          params.push(batchDates[i]);
+          params.push(isNaN(batchIvr[i]) ? null : batchIvr[i]);
+          params.push(isNaN(batchIvp[i]) ? null : batchIvp[i]);
+        }
+        params.push(ticker);
+        await conn.run(sql, params as (string | number | boolean | null | bigint)[]);
       }
-      params.push(ticker);
-      await conn.run(sql, params as (string | number | boolean | null | bigint)[]);
     }
-  }
 
-  // Step 3: Build ContextRow objects from daily VIX tickers for derived fields
-  // Query VIX close/open/high, VIX9D close/open, VIX3M close/open, plus Return_20D for Trend_Direction.
-  //
-  // The VIX-family OHLCV source is `effectiveDailyTarget` (the
-  // spotStore-seeded TEMP when io.spotStore is present) or
-  // `market.spot_daily` when io.spotStore is absent — `market.enriched` no
-  // longer carries OHLCV columns. The SPX JOIN keeps `dailyTarget` because
-  // Return_20D is a Tier 1 enriched column written to the working table
-  // earlier in the runEnrichment pipeline; spot/ never holds enriched fields.
-  const vixOhlcvSource = spotStore ? effectiveDailyTarget : "market.spot_daily";
-  const contextQuery = `
+    // Step 3: Build ContextRow objects from daily VIX tickers for derived fields
+    // Query VIX close/open/high, VIX9D close/open, VIX3M close/open, plus Return_20D for Trend_Direction.
+    //
+    // The VIX-family OHLCV source is `effectiveDailyTarget` (the
+    // spotStore-seeded TEMP when io.spotStore is present) or
+    // `market.spot_daily` when io.spotStore is absent — `market.enriched` no
+    // longer carries OHLCV columns. The SPX JOIN keeps `dailyTarget` because
+    // Return_20D is a Tier 1 enriched column written to the working table
+    // earlier in the runEnrichment pipeline; spot/ never holds enriched fields.
+    const vixOhlcvSource = spotStore ? effectiveDailyTarget : "market.spot_daily";
+    const contextQuery = `
     SELECT
       vix.date,
       vix.open AS VIX_Open,
@@ -1022,118 +1019,133 @@ async function runTier2(
     ORDER BY vix.date ASC
   `;
 
-  const rawResult = await conn.runAndReadAll(contextQuery, [DEFAULT_MARKET_TICKER]);
-  const rawRows = rawResult.getRows();
-  if (rawRows.length === 0) return { status: "complete", fieldsWritten: 0 };
+    const rawResult = await conn.runAndReadAll(contextQuery, [DEFAULT_MARKET_TICKER]);
+    const rawRows = rawResult.getRows();
+    if (rawRows.length === 0) return { status: "complete", fieldsWritten: 0 };
 
-  // Query VIX RTH open from intraday bars.
-  // When spotStore is provided, route through SpotStore.readBars('VIX', ...)
-  // and filter to the 09:30–09:32 RTH window in TypeScript. Result is
-  // bit-exact: same ticker filter, same time window, same "first seen per
-  // date" selection (readBars sorts by (date, time)).
-  const rthOpenByDate = new Map<string, number>();
-  if (spotStore) {
-    try {
-      const vixBars = await spotStore.readBars(
-        "VIX",
-        rawRows[0][0] as string,
-        rawRows[rawRows.length - 1][0] as string,
-      );
-      for (const bar of vixBars) {
-        const timeStr = bar.time;
-        if (timeStr == null || timeStr < "09:30" || timeStr > "09:32") continue;
-        // Defense-in-depth: skip 09:30-09:32 bars with zero/null open. A
-        // 09:30 provider gap would otherwise cache as the day's VIX_RTH_Open.
-        // The first non-zero bar in the window wins.
-        if (!Number.isFinite(bar.open) || bar.open <= 0) continue;
-        const dateStr = bar.date;
-        if (!rthOpenByDate.has(dateStr)) {
-          const openVal = bar.open;
-          if (openVal != null) rthOpenByDate.set(dateStr, openVal);
+    // Query VIX RTH open from intraday bars.
+    // When spotStore is provided, route through SpotStore.readBars('VIX', ...)
+    // and filter to the 09:30–09:32 RTH window in TypeScript. Result is
+    // bit-exact: same ticker filter, same time window, same "first seen per
+    // date" selection (readBars sorts by (date, time)).
+    const rthOpenByDate = new Map<string, number>();
+    if (spotStore) {
+      try {
+        const vixBars = await spotStore.readBars(
+          "VIX",
+          rawRows[0][0] as string,
+          rawRows[rawRows.length - 1][0] as string,
+        );
+        for (const bar of vixBars) {
+          const timeStr = bar.time;
+          if (timeStr == null || timeStr < "09:30" || timeStr > "09:32") continue;
+          // Defense-in-depth: skip 09:30-09:32 bars with zero/null open. A
+          // 09:30 provider gap would otherwise cache as the day's VIX_RTH_Open.
+          // The first non-zero bar in the window wins.
+          if (!Number.isFinite(bar.open) || bar.open <= 0) continue;
+          const dateStr = bar.date;
+          if (!rthOpenByDate.has(dateStr)) {
+            const openVal = bar.open;
+            if (openVal != null) rthOpenByDate.set(dateStr, openVal);
+          }
         }
+      } catch {
+        // No intraday VIX data — continue
       }
-    } catch {
-      // No intraday VIX data — continue
-    }
-  } else {
-    try {
-      // Canonical minute-bar view is `market.spot` — same ticker/time/open
-      // schema as the earlier intraday view it replaced.
-      // Defense-in-depth: skip zero/null open bars so a 09:30 provider gap
-      // doesn't get cached as the day's VIX_RTH_Open. The first non-zero
-      // bar in 09:30-09:32 wins.
-      const rthReader = await conn.runAndReadAll(
-        `SELECT date, open FROM market.spot
+    } else {
+      try {
+        // Canonical minute-bar view is `market.spot` — same ticker/time/open
+        // schema as the earlier intraday view it replaced.
+        // Defense-in-depth: skip zero/null open bars so a 09:30 provider gap
+        // doesn't get cached as the day's VIX_RTH_Open. The first non-zero
+        // bar in 09:30-09:32 wins.
+        const rthReader = await conn.runAndReadAll(
+          `SELECT date, open FROM market.spot
          WHERE ticker = 'VIX' AND time >= '09:30' AND time <= '09:32'
            AND open IS NOT NULL AND open > 0
-         ORDER BY date, time ASC`
-      );
-      for (const r of rthReader.getRows()) {
-        const dateStr = r[0] as string;
-        if (!rthOpenByDate.has(dateStr)) {
-          const openVal = r[1] as number | null;
-          if (openVal != null && openVal > 0) rthOpenByDate.set(dateStr, openVal);
+         ORDER BY date, time ASC`,
+        );
+        for (const r of rthReader.getRows()) {
+          const dateStr = r[0] as string;
+          if (!rthOpenByDate.has(dateStr)) {
+            const openVal = r[1] as number | null;
+            if (openVal != null && openVal > 0) rthOpenByDate.set(dateStr, openVal);
+          }
         }
+      } catch {
+        // No intraday VIX data — continue
       }
-    } catch {
-      // No intraday VIX data — continue
     }
-  }
 
-  const return20dByDate = new Map<string, number | null>();
-  const contextRows: ContextRow[] = rawRows.map((r) => {
-    const dateStr = r[0] as string;
-    return20dByDate.set(dateStr, r[8] as number | null);
-    return {
-      date: dateStr,
-      VIX_Open: r[1] as number | null,
-      VIX_Close: r[2] as number | null,
-      VIX_High: r[3] as number | null,
-      VIX_RTH_Open: rthOpenByDate.get(dateStr) ?? null,
-      VIX9D_Open: r[4] as number | null,
-      VIX9D_Close: r[5] as number | null,
-      VIX3M_Open: r[6] as number | null,
-      VIX3M_Close: r[7] as number | null,
-    };
-  });
-
-  // Step 4: Compute derived fields (reuse existing pure functions unchanged)
-  const enrichedContext = computeVIXDerivedFields(contextRows);
-
-  // Step 5: Write derived fields to market.enriched_context (INSERT OR REPLACE)
-  const derivedCols = ["date", "Vol_Regime", "Term_Structure_State", "Trend_Direction", "VIX_Spike_Pct", "VIX_Gap_Pct"];
-  const BATCH_SIZE = 500;
-  for (let start = 0; start < enrichedContext.length; start += BATCH_SIZE) {
-    const batch = enrichedContext.slice(start, start + BATCH_SIZE);
-    const placeholders = batch.map((_, rowIdx) => {
-      const params = derivedCols.map((__, colIdx) => `$${rowIdx * derivedCols.length + colIdx + 1}`);
-      return `(${params.join(", ")})`;
-    }).join(", ");
-
-    const sql = `INSERT OR REPLACE INTO ${dateContextTarget} (${derivedCols.join(", ")}) VALUES ${placeholders}`;
-    const params = batch.flatMap((r) => {
-      const vc = r.VIX_Close ?? null;
-      const v9 = r.VIX9D_Close ?? null;
-      const v3m = r.VIX3M_Close ?? null;
-      return [
-        r.date,
-        vc !== null ? classifyVolRegime(vc) : null,
-        v9 !== null && vc !== null && v3m !== null ? classifyTermStructure(v9, vc, v3m) : null,
-        classifyTrendDirection(return20dByDate.get(r.date) ?? null),
-        r.VIX_Spike_Pct ?? null,
-        r.VIX_Gap_Pct ?? null,
-      ];
+    const return20dByDate = new Map<string, number | null>();
+    const contextRows: ContextRow[] = rawRows.map((r) => {
+      const dateStr = r[0] as string;
+      return20dByDate.set(dateStr, r[8] as number | null);
+      return {
+        date: dateStr,
+        VIX_Open: r[1] as number | null,
+        VIX_Close: r[2] as number | null,
+        VIX_High: r[3] as number | null,
+        VIX_RTH_Open: rthOpenByDate.get(dateStr) ?? null,
+        VIX9D_Open: r[4] as number | null,
+        VIX9D_Close: r[5] as number | null,
+        VIX3M_Open: r[6] as number | null,
+        VIX3M_Close: r[7] as number | null,
+      };
     });
-    await conn.run(sql, params as (string | number | boolean | null | bigint)[]);
-  }
 
-  return { status: "complete", fieldsWritten: derivedCols.length - 1 }; // -1 for date
+    // Step 4: Compute derived fields (reuse existing pure functions unchanged)
+    const enrichedContext = computeVIXDerivedFields(contextRows);
+
+    // Step 5: Write derived fields to market.enriched_context (INSERT OR REPLACE)
+    const derivedCols = [
+      "date",
+      "Vol_Regime",
+      "Term_Structure_State",
+      "Trend_Direction",
+      "VIX_Spike_Pct",
+      "VIX_Gap_Pct",
+    ];
+    const BATCH_SIZE = 500;
+    for (let start = 0; start < enrichedContext.length; start += BATCH_SIZE) {
+      const batch = enrichedContext.slice(start, start + BATCH_SIZE);
+      const placeholders = batch
+        .map((_, rowIdx) => {
+          const params = derivedCols.map(
+            (__, colIdx) => `$${rowIdx * derivedCols.length + colIdx + 1}`,
+          );
+          return `(${params.join(", ")})`;
+        })
+        .join(", ");
+
+      const sql = `INSERT OR REPLACE INTO ${dateContextTarget} (${derivedCols.join(", ")}) VALUES ${placeholders}`;
+      const params = batch.flatMap((r) => {
+        const vc = r.VIX_Close ?? null;
+        const v9 = r.VIX9D_Close ?? null;
+        const v3m = r.VIX3M_Close ?? null;
+        return [
+          r.date,
+          vc !== null ? classifyVolRegime(vc) : null,
+          v9 !== null && vc !== null && v3m !== null ? classifyTermStructure(v9, vc, v3m) : null,
+          classifyTrendDirection(return20dByDate.get(r.date) ?? null),
+          r.VIX_Spike_Pct ?? null,
+          r.VIX_Gap_Pct ?? null,
+        ];
+      });
+      await conn.run(sql, params as (string | number | boolean | null | bigint)[]);
+    }
+
+    return { status: "complete", fieldsWritten: derivedCols.length - 1 }; // -1 for date
   } finally {
     // Drop the spotStore-seeded TEMP unconditionally so it cannot leak across
     // runEnrichment calls (each call gets a fresh ts-suffixed table name, but
     // DROP-on-finally keeps DuckDB's TEMP catalog clean).
     if (vixTempTable) {
-      try { await conn.run(`DROP TABLE IF EXISTS "${vixTempTable}"`); } catch { /* */ }
+      try {
+        await conn.run(`DROP TABLE IF EXISTS "${vixTempTable}"`);
+      } catch {
+        /* */
+      }
     }
   }
 }
@@ -1155,10 +1167,9 @@ async function hasTier3Data(
   }
   // Canonical minute-bar view is `market.spot` — same ticker-filter schema
   // as the earlier intraday view it replaced.
-  const r = await conn.runAndReadAll(
-    `SELECT COUNT(*) FROM market.spot WHERE ticker = $1 LIMIT 1`,
-    [ticker]
-  );
+  const r = await conn.runAndReadAll(`SELECT COUNT(*) FROM market.spot WHERE ticker = $1 LIMIT 1`, [
+    ticker,
+  ]);
   return Number(r.getRows()[0]?.[0] ?? 0) > 0;
 }
 
@@ -1230,329 +1241,327 @@ export async function runEnrichment(
   // ctxDerivedTarget and ctxTarget are passed via tier2Targets object to runTier2()
 
   try {
-  // 1. Get the persisted enrichment watermark.
-  // Every watermark read goes through the JSON adapter. The legacy SQL
-  // SELECT against the metadata sync table has been removed — when callers
-  // don't supply `io.watermarkStore` we fall back to the same JSON adapter
-  // the store wrappers wire (`getEnrichedThrough(ticker, dataDir)`).
-  let watermark: string | null = null;
-  if (!forceFull) {
-    if (io?.watermarkStore) {
-      watermark = await io.watermarkStore.get(ticker);
-    } else if (opts.dataDir) {
-      watermark = await getEnrichedThrough(ticker, opts.dataDir);
+    // 1. Get the persisted enrichment watermark.
+    // Every watermark read goes through the JSON adapter. The legacy SQL
+    // SELECT against the metadata sync table has been removed — when callers
+    // don't supply `io.watermarkStore` we fall back to the same JSON adapter
+    // the store wrappers wire (`getEnrichedThrough(ticker, dataDir)`).
+    let watermark: string | null = null;
+    if (!forceFull) {
+      if (io?.watermarkStore) {
+        watermark = await io.watermarkStore.get(ticker);
+      } else if (opts.dataDir) {
+        watermark = await getEnrichedThrough(ticker, opts.dataDir);
+      } else {
+        // No JSON adapter path available without dataDir, and the SQL fallback
+        // is gone. Treat as "no prior watermark" (fresh enrichment); callers that
+        // need watermark continuity must supply io or dataDir.
+        watermark = null;
+      }
+    }
+
+    // 2. Compute lookback start: watermark - 200 calendar days (as string comparison)
+    const lookbackStart = watermark ? subtractDays(watermark, 200) : null;
+
+    // 3. Fetch OHLCV rows.
+    //
+    // When `io.spotStore` is provided, read daily OHLCV via
+    // `SpotStore.readDailyBars` (aggregated from spot/ minute bars). This path
+    // remains functional after the legacy `daily.parquet` retirement because
+    // readDailyBars aggregates from spot/ticker=X/date=Y/data.parquet.
+    //
+    // Fallback: when `io.spotStore` is absent (legacy callers), retain a SQL
+    // path against `market.spot_daily`. The fallback may be removed once all
+    // callers pass io.
+    let rawRows: Array<Array<unknown>>;
+    if (io?.spotStore) {
+      const startDate = lookbackStart ?? "1970-01-01";
+      const endDate = "9999-12-31"; // readDailyBars caps internally via partition discovery
+      const dailyBars = await io.spotStore.readDailyBars(ticker, startDate, endDate);
+      rawRows = dailyBars.map((b) => [b.ticker, b.date, b.open, b.high, b.low, b.close]);
     } else {
-      // No JSON adapter path available without dataDir, and the SQL fallback
-      // is gone. Treat as "no prior watermark" (fresh enrichment); callers that
-      // need watermark continuity must supply io or dataDir.
-      watermark = null;
+      // The legacy daily-view SQL fallback path is gone — the view no longer
+      // exists in the catalog. Route OHLCV reads through the canonical
+      // `market.spot_daily` view (RTH-aggregated from `market.spot`). This
+      // bridges callers that have not yet migrated to io.spotStore; new
+      // callers SHOULD pass io.spotStore for parity with the Parquet-direct path.
+      let fetchSql = `SELECT ticker, date, open, high, low, close FROM market.spot_daily WHERE ticker = $1`;
+      const fetchParams: unknown[] = [ticker];
+      if (lookbackStart) {
+        fetchSql += ` AND date >= $2`;
+        fetchParams.push(lookbackStart);
+      }
+      fetchSql += ` ORDER BY date ASC`;
+      const rawReader = await conn.runAndReadAll(
+        fetchSql,
+        fetchParams as (string | number | boolean | null | bigint)[],
+      );
+      rawRows = rawReader.getRows();
     }
-  }
 
-  // 2. Compute lookback start: watermark - 200 calendar days (as string comparison)
-  const lookbackStart = watermark ? subtractDays(watermark, 200) : null;
-
-  // 3. Fetch OHLCV rows.
-  //
-  // When `io.spotStore` is provided, read daily OHLCV via
-  // `SpotStore.readDailyBars` (aggregated from spot/ minute bars). This path
-  // remains functional after the legacy `daily.parquet` retirement because
-  // readDailyBars aggregates from spot/ticker=X/date=Y/data.parquet.
-  //
-  // Fallback: when `io.spotStore` is absent (legacy callers), retain a SQL
-  // path against `market.spot_daily`. The fallback may be removed once all
-  // callers pass io.
-  let rawRows: Array<Array<unknown>>;
-  if (io?.spotStore) {
-    const startDate = lookbackStart ?? "1970-01-01";
-    const endDate = "9999-12-31"; // readDailyBars caps internally via partition discovery
-    const dailyBars = await io.spotStore.readDailyBars(ticker, startDate, endDate);
-    rawRows = dailyBars.map((b) => [b.ticker, b.date, b.open, b.high, b.low, b.close]);
-  } else {
-    // The legacy daily-view SQL fallback path is gone — the view no longer
-    // exists in the catalog. Route OHLCV reads through the canonical
-    // `market.spot_daily` view (RTH-aggregated from `market.spot`). This
-    // bridges callers that have not yet migrated to io.spotStore; new
-    // callers SHOULD pass io.spotStore for parity with the Parquet-direct path.
-    let fetchSql = `SELECT ticker, date, open, high, low, close FROM market.spot_daily WHERE ticker = $1`;
-    const fetchParams: unknown[] = [ticker];
-    if (lookbackStart) {
-      fetchSql += ` AND date >= $2`;
-      fetchParams.push(lookbackStart);
+    if (rawRows.length === 0) {
+      return {
+        ticker,
+        tier1: {
+          status: "skipped",
+          reason: io?.spotStore ? "no data from spotStore" : "no data in market.spot_daily",
+        },
+        tier2: { status: "skipped", reason: "no daily data" },
+        tier3: { status: "skipped", reason: "no daily data" },
+        rowsEnriched: 0,
+        enrichedThrough: null,
+      };
     }
-    fetchSql += ` ORDER BY date ASC`;
-    const rawReader = await conn.runAndReadAll(fetchSql, fetchParams as (string | number | boolean | null | bigint)[]);
-    rawRows = rawReader.getRows();
-  }
 
-  if (rawRows.length === 0) {
-    return {
-      ticker,
-      tier1: {
-        status: "skipped",
-        reason: io?.spotStore ? "no data from spotStore" : "no data in market.spot_daily",
-      },
-      tier2: { status: "skipped", reason: "no daily data" },
-      tier3: { status: "skipped", reason: "no daily data" },
-      rowsEnriched: 0,
-      enrichedThrough: null,
-    };
-  }
+    // 3b. Defensive zero-OHLC filter. Partitions should already be clean after
+    // the ParquetSpotStore.writeBars guard, but this second line of defense
+    // catches any future provider-outage bleed and prevents
+    // RSI/ATR/EMA/SMA/RealizedVol from being poisoned by zero closes. Filter
+    // at the rawRows level so date/OHLC alignment is preserved across all
+    // five arrays (dates/opens/highs/lows/closes) constructed below.
+    const filteredRawRows = rawRows.filter((r) => {
+      const o = Number(r[2]);
+      const h = Number(r[3]);
+      const l = Number(r[4]);
+      const c = Number(r[5]);
+      return !(o === 0 && h === 0 && l === 0 && c === 0);
+    });
+    const zeroRowsDropped = rawRows.length - filteredRawRows.length;
+    if (zeroRowsDropped > 0) {
+      console.warn(
+        `[market-enricher] ticker=${ticker} dropped ${zeroRowsDropped} all-zero-OHLC rows before indicator math`,
+      );
+    }
+    rawRows = filteredRawRows;
 
-  // 3b. Defensive zero-OHLC filter. Partitions should already be clean after
-  // the ParquetSpotStore.writeBars guard, but this second line of defense
-  // catches any future provider-outage bleed and prevents
-  // RSI/ATR/EMA/SMA/RealizedVol from being poisoned by zero closes. Filter
-  // at the rawRows level so date/OHLC alignment is preserved across all
-  // five arrays (dates/opens/highs/lows/closes) constructed below.
-  const filteredRawRows = rawRows.filter((r) => {
-    const o = Number(r[2]);
-    const h = Number(r[3]);
-    const l = Number(r[4]);
-    const c = Number(r[5]);
-    return !(o === 0 && h === 0 && l === 0 && c === 0);
-  });
-  const zeroRowsDropped = rawRows.length - filteredRawRows.length;
-  if (zeroRowsDropped > 0) {
-    console.warn(
-      `[market-enricher] ticker=${ticker} dropped ${zeroRowsDropped} all-zero-OHLC rows before indicator math`,
-    );
-  }
-  rawRows = filteredRawRows;
+    // 4. Extract typed arrays from raw rows
+    // Columns: ticker(0), date(1), open(2), high(3), low(4), close(5)
+    const dates = rawRows.map((r) => r[1] as string);
+    const opens = rawRows.map((r) => Number(r[2]));
+    const highs = rawRows.map((r) => Number(r[3]));
+    const lows = rawRows.map((r) => Number(r[4]));
+    const closes = rawRows.map((r) => Number(r[5]));
 
-  // 4. Extract typed arrays from raw rows
-  // Columns: ticker(0), date(1), open(2), high(3), low(4), close(5)
-  const dates = rawRows.map((r) => r[1] as string);
-  const opens = rawRows.map((r) => Number(r[2]));
-  const highs = rawRows.map((r) => Number(r[3]));
-  const lows = rawRows.map((r) => Number(r[4]));
-  const closes = rawRows.map((r) => Number(r[5]));
+    // 5. Compute Tier 1 indicators
+    const rsi14 = computeRSI(closes, 14);
+    const atrArr = computeATR(highs, lows, closes, 14);
+    const ema21 = computeEMA(closes, 21);
+    const sma50 = computeSMA(closes, 50);
+    const rvol5 = computeRealizedVol(closes, 5);
+    const rvol20 = computeRealizedVol(closes, 20);
+    const consecutiveDays = computeConsecutiveDays(closes);
 
-  // 5. Compute Tier 1 indicators
-  const rsi14 = computeRSI(closes, 14);
-  const atrArr = computeATR(highs, lows, closes, 14);
-  const ema21 = computeEMA(closes, 21);
-  const sma50 = computeSMA(closes, 50);
-  const rvol5 = computeRealizedVol(closes, 5);
-  const rvol20 = computeRealizedVol(closes, 20);
-  const consecutiveDays = computeConsecutiveDays(closes);
+    // 6. Determine which rows to write back (only rows after watermark)
+    const writeRows =
+      watermark && !forceFull
+        ? rawRows.map((_, i) => i).filter((i) => dates[i] > watermark)
+        : rawRows.map((_, i) => i);
 
-  // 6. Determine which rows to write back (only rows after watermark)
-  const writeRows =
-    watermark && !forceFull
-      ? rawRows.map((_, i) => i).filter((i) => dates[i] > watermark)
-      : rawRows.map((_, i) => i);
+    if (writeRows.length === 0) {
+      const tier2Targets = workingTables
+        ? {
+            daily: workingTables.dailyTable,
+            dateContext: workingTables.dateContextTable,
+          }
+        : undefined;
+      const tier2Result = await runTier2(conn, tier2Targets, io?.spotStore);
 
-  if (writeRows.length === 0) {
-    const tier2Targets = workingTables ? {
-      daily: workingTables.dailyTable,
-      dateContext: workingTables.dateContextTable,
-    } : undefined;
+      // Flush even if no Tier 1 rows — Tier 2 may have written to working tables
+      if (parquetMode && workingTables && opts.dataDir) {
+        await flushEnrichedToParquet(conn, opts.dataDir, ticker, workingTables);
+      }
+
+      return {
+        ticker,
+        tier1: { status: "complete", fieldsWritten: 0, reason: "already up to date" },
+        tier2: tier2Result,
+        tier3: {
+          status: "skipped",
+          reason: "no intraday data in market.spot",
+        },
+        rowsEnriched: 0,
+        enrichedThrough: watermark,
+      };
+    }
+
+    // 7. Build enriched rows for batch UPDATE
+    const enrichedRows = writeRows.map((i) => {
+      const atrVal = atrArr[i];
+      const atrPct = !isNaN(atrVal) && closes[i] > 0 ? (atrVal / closes[i]) * 100 : null;
+      const priorClose = i > 0 ? closes[i - 1] : null;
+      const priorReturn = i > 1 ? ((closes[i - 1] - closes[i - 2]) / closes[i - 2]) * 100 : null;
+      const gapPct =
+        priorClose !== null && priorClose > 0 ? ((opens[i] - priorClose) / priorClose) * 100 : null;
+      // Intraday_Range_Pct: high-low range as % of close.
+      // Use close (not open) for consistency with every other "_Pct" column in
+      // this file (ATR_Pct, Price_vs_EMA21_Pct, Return_5D, etc. all divide by
+      // close). Also guards against zero-low contamination: if the day's low
+      // came in as 0 from a bad minute bar, (high - 0) inflates to ~100% of
+      // close — meaningless. Requiring lows[i] > 0 forces such rows to null.
+      const intradayRangePct =
+        closes[i] > 0 && highs[i] > 0 && lows[i] > 0
+          ? ((highs[i] - lows[i]) / closes[i]) * 100
+          : null;
+      const intradayReturnPct = opens[i] > 0 ? ((closes[i] - opens[i]) / opens[i]) * 100 : null;
+      const hiLoRange = highs[i] - lows[i];
+      const closePosInRange = hiLoRange > 0 ? (closes[i] - lows[i]) / hiLoRange : null;
+      const ret5d =
+        i >= 5 && closes[i - 5] > 0 ? ((closes[i] - closes[i - 5]) / closes[i - 5]) * 100 : null;
+      const ret20d =
+        i >= 20 && closes[i - 20] > 0
+          ? ((closes[i] - closes[i - 20]) / closes[i - 20]) * 100
+          : null;
+      const gapFilled =
+        priorClose !== null ? isGapFilled(opens[i], highs[i], lows[i], priorClose) : null;
+      const dateObj = parseDateStr(dates[i]);
+      const dayOfWeek = dateObj ? dateObj.getDay() : null; // 0=Sun..6=Sat
+      const monthVal = dateObj ? dateObj.getMonth() + 1 : null;
+      const opex = isOpex(dates[i]);
+      const ema21val = ema21[i];
+      const sma50val = sma50[i];
+      const priceVsEma21 =
+        !isNaN(ema21val) && ema21val > 0 ? ((closes[i] - ema21val) / ema21val) * 100 : null;
+      const priceVsSma50 =
+        !isNaN(sma50val) && sma50val > 0 ? ((closes[i] - sma50val) / sma50val) * 100 : null;
+      const rsi14val = rsi14[i];
+
+      // Prior_Range_vs_ATR: ratio of prior day's intraday range (% of close) to
+      // prior day's ATR (% of close). Known at market open — prior day range
+      // and ATR are both available before today's trading begins.
+      //
+      // Algebraically (range_pct / atr_pct) = (range / atr) since the close
+      // cancels, but writing it as a ratio of percents makes the intent
+      // explicit and matches how downstream analysis reads the column.
+      //
+      // Sanity guards: prior close > 0 (otherwise the percent denominators
+      // explode), prior high/low > 0 (catches zero-bar contamination from the
+      // upstream spot ingester), and priorATR > 0 (avoid div-by-zero).
+      // First bar (i=0) has no prior day → null.
+      let priorRangeVsATR: number | null = null;
+      if (i > 0) {
+        const priorClose = closes[i - 1];
+        const priorHigh = highs[i - 1];
+        const priorLow = lows[i - 1];
+        const priorATR = atrArr[i - 1];
+        if (priorClose > 0 && priorHigh > 0 && priorLow > 0 && !isNaN(priorATR) && priorATR > 0) {
+          const priorRangePct = ((priorHigh - priorLow) / priorClose) * 100;
+          const priorAtrPct = (priorATR / priorClose) * 100;
+          priorRangeVsATR = priorRangePct / priorAtrPct;
+        }
+      }
+
+      return {
+        ticker,
+        date: dates[i],
+        Prior_Close: priorClose,
+        Gap_Pct: gapPct,
+        RSI_14: isNaN(rsi14val) ? null : rsi14val,
+        ATR_Pct: atrPct,
+        Price_vs_EMA21_Pct: priceVsEma21,
+        Price_vs_SMA50_Pct: priceVsSma50,
+        Realized_Vol_5D: isNaN(rvol5[i]) ? null : rvol5[i],
+        Realized_Vol_20D: isNaN(rvol20[i]) ? null : rvol20[i],
+        Return_5D: ret5d,
+        Return_20D: ret20d,
+        Intraday_Range_Pct: intradayRangePct,
+        Intraday_Return_Pct: intradayReturnPct,
+        Close_Position_In_Range: closePosInRange,
+        Gap_Filled: gapFilled,
+        Consecutive_Days: consecutiveDays[i],
+        Prev_Return_Pct: priorReturn,
+        Day_of_Week: dayOfWeek,
+        Month: monthVal,
+        Is_Opex: opex,
+        Prior_Range_vs_ATR: priorRangeVsATR,
+      };
+    });
+
+    // 8. Batch UPDATE via DuckDB VALUES CTE, batches of 500
+    const BATCH_SIZE = 500;
+    const columns = [
+      "Prior_Close",
+      "Gap_Pct",
+      "RSI_14",
+      "ATR_Pct",
+      "Price_vs_EMA21_Pct",
+      "Price_vs_SMA50_Pct",
+      "Realized_Vol_5D",
+      "Realized_Vol_20D",
+      "Return_5D",
+      "Return_20D",
+      "Intraday_Range_Pct",
+      "Intraday_Return_Pct",
+      "Close_Position_In_Range",
+      "Gap_Filled",
+      "Consecutive_Days",
+      "Prev_Return_Pct",
+      "Day_of_Week",
+      "Month",
+      "Is_Opex",
+      "Prior_Range_vs_ATR",
+    ];
+    for (let start = 0; start < enrichedRows.length; start += BATCH_SIZE) {
+      const batch = enrichedRows.slice(start, start + BATCH_SIZE);
+      await batchUpdateDaily(conn, batch, columns, dailyTarget);
+    }
+
+    // 9. Run Tier 2 (VIX context enrichment) with parameterized targets
+    const tier2Targets = workingTables
+      ? {
+          daily: workingTables.dailyTable,
+          dateContext: workingTables.dateContextTable,
+        }
+      : undefined;
     const tier2Result = await runTier2(conn, tier2Targets, io?.spotStore);
 
-    // Flush even if no Tier 1 rows — Tier 2 may have written to working tables
+    // 10. Tier 3 — intraday timing fields (routes through io.spotStore when provided)
+    const tier3Result = await runTier3(conn, ticker, dates, dailyTarget, io?.spotStore);
+
+    // 11. Persist the new watermark.
+    // Every watermark write goes through the JSON adapter. The legacy SQL
+    // UPSERT against the metadata sync table has been removed — when callers
+    // don't supply `io.watermarkStore` we fall back to
+    // `upsertEnrichedThrough(ticker, val, dataDir)` directly. If neither io
+    // nor dataDir is supplied the watermark simply isn't persisted (math
+    // still runs); callers that need watermark continuity must supply one of
+    // the two.
+    const newWatermark = dates[dates.length - 1];
+    if (io?.watermarkStore) {
+      await io.watermarkStore.upsert(ticker, newWatermark);
+    } else if (opts.dataDir) {
+      await upsertEnrichedThrough(ticker, newWatermark, opts.dataDir);
+    }
+
+    // 12. Parquet mode: write enrichment to the enriched/ partition layout
+    //     (legacy daily.parquet output retired)
     if (parquetMode && workingTables && opts.dataDir) {
       await flushEnrichedToParquet(conn, opts.dataDir, ticker, workingTables);
     }
 
     return {
       ticker,
-      tier1: { status: "complete", fieldsWritten: 0, reason: "already up to date" },
+      tier1: { status: "complete", fieldsWritten: columns.length },
       tier2: tier2Result,
-      tier3: {
-        status: "skipped",
-        reason: "no intraday data in market.spot",
-      },
-      rowsEnriched: 0,
-      enrichedThrough: watermark,
+      tier3: tier3Result,
+      rowsEnriched: enrichedRows.length,
+      enrichedThrough: newWatermark,
     };
-  }
-
-  // 7. Build enriched rows for batch UPDATE
-  const enrichedRows = writeRows.map((i) => {
-    const atrVal = atrArr[i];
-    const atrPct = !isNaN(atrVal) && closes[i] > 0 ? (atrVal / closes[i]) * 100 : null;
-    const priorClose = i > 0 ? closes[i - 1] : null;
-    const priorReturn =
-      i > 1 ? ((closes[i - 1] - closes[i - 2]) / closes[i - 2]) * 100 : null;
-    const gapPct =
-      priorClose !== null && priorClose > 0
-        ? ((opens[i] - priorClose) / priorClose) * 100
-        : null;
-    // Intraday_Range_Pct: high-low range as % of close.
-    // Use close (not open) for consistency with every other "_Pct" column in
-    // this file (ATR_Pct, Price_vs_EMA21_Pct, Return_5D, etc. all divide by
-    // close). Also guards against zero-low contamination: if the day's low
-    // came in as 0 from a bad minute bar, (high - 0) inflates to ~100% of
-    // close — meaningless. Requiring lows[i] > 0 forces such rows to null.
-    const intradayRangePct =
-      closes[i] > 0 && highs[i] > 0 && lows[i] > 0
-        ? ((highs[i] - lows[i]) / closes[i]) * 100
-        : null;
-    const intradayReturnPct =
-      opens[i] > 0 ? ((closes[i] - opens[i]) / opens[i]) * 100 : null;
-    const hiLoRange = highs[i] - lows[i];
-    const closePosInRange =
-      hiLoRange > 0 ? (closes[i] - lows[i]) / hiLoRange : null;
-    const ret5d =
-      i >= 5 && closes[i - 5] > 0
-        ? ((closes[i] - closes[i - 5]) / closes[i - 5]) * 100
-        : null;
-    const ret20d =
-      i >= 20 && closes[i - 20] > 0
-        ? ((closes[i] - closes[i - 20]) / closes[i - 20]) * 100
-        : null;
-    const gapFilled =
-      priorClose !== null ? isGapFilled(opens[i], highs[i], lows[i], priorClose) : null;
-    const dateObj = parseDateStr(dates[i]);
-    const dayOfWeek = dateObj ? dateObj.getDay() : null; // 0=Sun..6=Sat
-    const monthVal = dateObj ? dateObj.getMonth() + 1 : null;
-    const opex = isOpex(dates[i]);
-    const ema21val = ema21[i];
-    const sma50val = sma50[i];
-    const priceVsEma21 =
-      !isNaN(ema21val) && ema21val > 0
-        ? ((closes[i] - ema21val) / ema21val) * 100
-        : null;
-    const priceVsSma50 =
-      !isNaN(sma50val) && sma50val > 0
-        ? ((closes[i] - sma50val) / sma50val) * 100
-        : null;
-    const rsi14val = rsi14[i];
-
-    // Prior_Range_vs_ATR: ratio of prior day's intraday range (% of close) to
-    // prior day's ATR (% of close). Known at market open — prior day range
-    // and ATR are both available before today's trading begins.
-    //
-    // Algebraically (range_pct / atr_pct) = (range / atr) since the close
-    // cancels, but writing it as a ratio of percents makes the intent
-    // explicit and matches how downstream analysis reads the column.
-    //
-    // Sanity guards: prior close > 0 (otherwise the percent denominators
-    // explode), prior high/low > 0 (catches zero-bar contamination from the
-    // upstream spot ingester), and priorATR > 0 (avoid div-by-zero).
-    // First bar (i=0) has no prior day → null.
-    let priorRangeVsATR: number | null = null;
-    if (i > 0) {
-      const priorClose = closes[i - 1];
-      const priorHigh  = highs[i - 1];
-      const priorLow   = lows[i - 1];
-      const priorATR   = atrArr[i - 1];
-      if (
-        priorClose > 0 &&
-        priorHigh > 0 &&
-        priorLow > 0 &&
-        !isNaN(priorATR) && priorATR > 0
-      ) {
-        const priorRangePct = ((priorHigh - priorLow) / priorClose) * 100;
-        const priorAtrPct = (priorATR / priorClose) * 100;
-        priorRangeVsATR = priorRangePct / priorAtrPct;
-      }
-    }
-
-    return {
-      ticker,
-      date: dates[i],
-      Prior_Close: priorClose,
-      Gap_Pct: gapPct,
-      RSI_14: isNaN(rsi14val) ? null : rsi14val,
-      ATR_Pct: atrPct,
-      Price_vs_EMA21_Pct: priceVsEma21,
-      Price_vs_SMA50_Pct: priceVsSma50,
-      Realized_Vol_5D: isNaN(rvol5[i]) ? null : rvol5[i],
-      Realized_Vol_20D: isNaN(rvol20[i]) ? null : rvol20[i],
-      Return_5D: ret5d,
-      Return_20D: ret20d,
-      Intraday_Range_Pct: intradayRangePct,
-      Intraday_Return_Pct: intradayReturnPct,
-      Close_Position_In_Range: closePosInRange,
-      Gap_Filled: gapFilled,
-      Consecutive_Days: consecutiveDays[i],
-      Prev_Return_Pct: priorReturn,
-      Day_of_Week: dayOfWeek,
-      Month: monthVal,
-      Is_Opex: opex,
-      Prior_Range_vs_ATR: priorRangeVsATR,
-    };
-  });
-
-  // 8. Batch UPDATE via DuckDB VALUES CTE, batches of 500
-  const BATCH_SIZE = 500;
-  const columns = [
-    "Prior_Close",
-    "Gap_Pct",
-    "RSI_14",
-    "ATR_Pct",
-    "Price_vs_EMA21_Pct",
-    "Price_vs_SMA50_Pct",
-    "Realized_Vol_5D",
-    "Realized_Vol_20D",
-    "Return_5D",
-    "Return_20D",
-    "Intraday_Range_Pct",
-    "Intraday_Return_Pct",
-    "Close_Position_In_Range",
-    "Gap_Filled",
-    "Consecutive_Days",
-    "Prev_Return_Pct",
-    "Day_of_Week",
-    "Month",
-    "Is_Opex",
-    "Prior_Range_vs_ATR",
-  ];
-  for (let start = 0; start < enrichedRows.length; start += BATCH_SIZE) {
-    const batch = enrichedRows.slice(start, start + BATCH_SIZE);
-    await batchUpdateDaily(conn, batch, columns, dailyTarget);
-  }
-
-  // 9. Run Tier 2 (VIX context enrichment) with parameterized targets
-  const tier2Targets = workingTables ? {
-    daily: workingTables.dailyTable,
-    dateContext: workingTables.dateContextTable,
-  } : undefined;
-  const tier2Result = await runTier2(conn, tier2Targets, io?.spotStore);
-
-  // 10. Tier 3 — intraday timing fields (routes through io.spotStore when provided)
-  const tier3Result = await runTier3(conn, ticker, dates, dailyTarget, io?.spotStore);
-
-  // 11. Persist the new watermark.
-  // Every watermark write goes through the JSON adapter. The legacy SQL
-  // UPSERT against the metadata sync table has been removed — when callers
-  // don't supply `io.watermarkStore` we fall back to
-  // `upsertEnrichedThrough(ticker, val, dataDir)` directly. If neither io
-  // nor dataDir is supplied the watermark simply isn't persisted (math
-  // still runs); callers that need watermark continuity must supply one of
-  // the two.
-  const newWatermark = dates[dates.length - 1];
-  if (io?.watermarkStore) {
-    await io.watermarkStore.upsert(ticker, newWatermark);
-  } else if (opts.dataDir) {
-    await upsertEnrichedThrough(ticker, newWatermark, opts.dataDir);
-  }
-
-  // 12. Parquet mode: write enrichment to the enriched/ partition layout
-  //     (legacy daily.parquet output retired)
-  if (parquetMode && workingTables && opts.dataDir) {
-    await flushEnrichedToParquet(conn, opts.dataDir, ticker, workingTables);
-  }
-
-  return {
-    ticker,
-    tier1: { status: "complete", fieldsWritten: columns.length },
-    tier2: tier2Result,
-    tier3: tier3Result,
-    rowsEnriched: enrichedRows.length,
-    enrichedThrough: newWatermark,
-  };
-
   } finally {
     // Sole owner of working table cleanup — always runs on success or error.
     // On success: tables still exist (flushParquetWorkingTables does not drop them).
     // On error: tables may contain partial results useful for debugging, but we
     // clean up to avoid leaking temp tables across calls.
     if (workingTables) {
-      try { await conn.run(`DROP TABLE IF EXISTS "${workingTables.dailyTable}"`); } catch { /* */ }
-      try { await conn.run(`DROP TABLE IF EXISTS "${workingTables.dateContextTable}"`); } catch { /* */ }
+      try {
+        await conn.run(`DROP TABLE IF EXISTS "${workingTables.dailyTable}"`);
+      } catch {
+        /* */
+      }
+      try {
+        await conn.run(`DROP TABLE IF EXISTS "${workingTables.dateContextTable}"`);
+      } catch {
+        /* */
+      }
     }
   }
 }
@@ -1586,7 +1595,7 @@ function hhmmToDecimalHours(time: string): number {
  * @returns Computed fields or null if bars is empty
  */
 export function computeIntradayTimingFields(
-  bars: Array<{ time: string; open: number; high: number; low: number; close: number }>
+  bars: Array<{ time: string; open: number; high: number; low: number; close: number }>,
 ): {
   highTime: number;
   lowTime: number;
@@ -1603,10 +1612,14 @@ export function computeIntradayTimingFields(
   // makes the pure function safe regardless of caller.
   bars = bars.filter(
     (b) =>
-      Number.isFinite(b.open) && b.open > 0 &&
-      Number.isFinite(b.high) && b.high > 0 &&
-      Number.isFinite(b.low)  && b.low  > 0 &&
-      Number.isFinite(b.close)&& b.close> 0,
+      Number.isFinite(b.open) &&
+      b.open > 0 &&
+      Number.isFinite(b.high) &&
+      b.high > 0 &&
+      Number.isFinite(b.low) &&
+      b.low > 0 &&
+      Number.isFinite(b.close) &&
+      b.close > 0,
   );
   if (bars.length === 0) return null;
 
@@ -1637,17 +1650,18 @@ export function computeIntradayTimingFields(
   const lowInAfternoon = lowTime >= 12;
 
   let reversalType = 0;
-  if (highInMorning && lowInAfternoon) reversalType = 1;     // High morning, low afternoon
+  if (highInMorning && lowInAfternoon)
+    reversalType = 1; // High morning, low afternoon
   else if (lowInMorning && highInAfternoon) reversalType = -1; // Low morning, high afternoon
 
   // Opening Drive Strength: ratio of first-30-min range to full-day range
   // First 30 min = bars with time < 10:00 (market opens 09:30)
-  const openingBars = bars.filter(b => hhmmToDecimalHours(b.time) < 10);
+  const openingBars = bars.filter((b) => hhmmToDecimalHours(b.time) < 10);
   let openingDriveStrength = 0;
   const fullDayRange = maxHigh - minLow;
   if (openingBars.length > 0 && fullDayRange > 0) {
-    const openHigh = Math.max(...openingBars.map(b => b.high));
-    const openLow = Math.min(...openingBars.map(b => b.low));
+    const openHigh = Math.max(...openingBars.map((b) => b.high));
+    const openLow = Math.min(...openingBars.map((b) => b.low));
     openingDriveStrength = (openHigh - openLow) / fullDayRange;
   }
 
@@ -1671,7 +1685,14 @@ export function computeIntradayTimingFields(
     }
   }
 
-  return { highTime, lowTime, highBeforeLow, reversalType, openingDriveStrength, intradayRealizedVol };
+  return {
+    highTime,
+    lowTime,
+    highBeforeLow,
+    reversalType,
+    openingDriveStrength,
+    intradayRealizedVol,
+  };
 }
 
 /** Run Tier 3: compute intraday timing fields from market.spot and write to the daily write-target table */
@@ -1730,7 +1751,7 @@ async function runTier3(
          AND low   IS NOT NULL AND low   > 0
          AND close IS NOT NULL AND close > 0
        ORDER BY date, time`,
-      [ticker, dates[0], dates[dates.length - 1]]
+      [ticker, dates[0], dates[dates.length - 1]],
     );
 
     rows = result.getRows();
@@ -1744,7 +1765,10 @@ async function runTier3(
   }
 
   // Group bars by date
-  const barsByDate = new Map<string, Array<{ time: string; open: number; high: number; low: number; close: number }>>();
+  const barsByDate = new Map<
+    string,
+    Array<{ time: string; open: number; high: number; low: number; close: number }>
+  >();
   for (const row of rows) {
     const dateStr = String(row[dateIdx]);
     const bar = {
@@ -1766,7 +1790,14 @@ async function runTier3(
   }
 
   // Compute timing fields for each date and batch update the enriched table
-  const tier3Cols = ["High_Time", "Low_Time", "High_Before_Low", "Reversal_Type", "Opening_Drive_Strength", "Intraday_Realized_Vol"];
+  const tier3Cols = [
+    "High_Time",
+    "Low_Time",
+    "High_Before_Low",
+    "Reversal_Type",
+    "Opening_Drive_Strength",
+    "Intraday_Realized_Vol",
+  ];
   const enrichedRows: Array<Record<string, unknown>> = [];
 
   for (const [dateStr, bars] of barsByDate) {

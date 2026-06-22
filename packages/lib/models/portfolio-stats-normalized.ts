@@ -22,7 +22,7 @@
  * @see {@link @/lib/types/percentage} for type-safe unit utilities
  */
 
-import type { Decimal01 } from '../types/percentage.ts'
+import type { Decimal01 } from "../types/percentage.ts";
 
 /**
  * Normalized portfolio statistics with all percentages as decimals (0-1).
@@ -33,33 +33,33 @@ import type { Decimal01 } from '../types/percentage.ts'
  * - `timeInDrawdown`: 0.50 means 50%
  */
 export interface NormalizedPortfolioStats {
-  totalTrades: number
-  totalPl: number
-  winningTrades: number
-  losingTrades: number
-  breakEvenTrades: number
+  totalTrades: number;
+  totalPl: number;
+  winningTrades: number;
+  losingTrades: number;
+  breakEvenTrades: number;
 
   /**
    * Win rate as decimal.
    * @unit Decimal01 - 0.65 means 65%
    */
-  winRate: Decimal01
+  winRate: Decimal01;
 
-  avgWin: number
-  avgLoss: number
-  maxWin: number
-  maxLoss: number
-  sharpeRatio?: number
-  sortinoRatio?: number
-  calmarRatio?: number
+  avgWin: number;
+  avgLoss: number;
+  maxWin: number;
+  maxLoss: number;
+  sharpeRatio?: number;
+  sortinoRatio?: number;
+  calmarRatio?: number;
 
   /**
    * Compound Annual Growth Rate as decimal.
    * @unit Decimal01 - 0.12 means 12%
    */
-  cagr?: Decimal01
+  cagr?: Decimal01;
 
-  kellyPercentage?: number
+  kellyPercentage?: number;
 
   /**
    * Maximum drawdown as decimal.
@@ -67,36 +67,36 @@ export interface NormalizedPortfolioStats {
    *
    * This is now consistent with Monte Carlo's medianMaxDrawdown.
    */
-  maxDrawdown: Decimal01
+  maxDrawdown: Decimal01;
 
-  avgDailyPl: number
-  totalCommissions: number
-  netPl: number
-  profitFactor: number
-  initialCapital: number
+  avgDailyPl: number;
+  totalCommissions: number;
+  netPl: number;
+  profitFactor: number;
+  initialCapital: number;
 
   // Streak and consistency metrics
-  maxWinStreak?: number
-  maxLossStreak?: number
-  currentStreak?: number
+  maxWinStreak?: number;
+  maxLossStreak?: number;
+  currentStreak?: number;
 
   /**
    * Time in drawdown as decimal.
    * @unit Decimal01 - 0.50 means 50% of time
    */
-  timeInDrawdown?: Decimal01
+  timeInDrawdown?: Decimal01;
 
   /**
    * Monthly win rate as decimal.
    * @unit Decimal01 - 0.75 means 75%
    */
-  monthlyWinRate?: Decimal01
+  monthlyWinRate?: Decimal01;
 
   /**
    * Weekly win rate as decimal.
    * @unit Decimal01 - 0.80 means 80%
    */
-  weeklyWinRate?: Decimal01
+  weeklyWinRate?: Decimal01;
 }
 
 /**
@@ -105,17 +105,17 @@ export interface NormalizedPortfolioStats {
  * but NormalizedPortfolioStats uses decimal (0-1).
  */
 export const PERCENTAGE_TO_DECIMAL_FIELDS: (keyof NormalizedPortfolioStats)[] = [
-  'maxDrawdown',
-  'timeInDrawdown',
-]
+  "maxDrawdown",
+  "timeInDrawdown",
+];
 
 /**
  * Fields that are already in decimal format in both interfaces.
  * Listed here for documentation purposes.
  */
 export const ALREADY_DECIMAL_FIELDS: (keyof NormalizedPortfolioStats)[] = [
-  'winRate',
-  'cagr',
-  'monthlyWinRate',
-  'weeklyWinRate',
-]
+  "winRate",
+  "cagr",
+  "monthlyWinRate",
+  "weeklyWinRate",
+];

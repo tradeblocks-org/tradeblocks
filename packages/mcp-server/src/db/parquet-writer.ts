@@ -111,7 +111,11 @@ export async function writeParquetAtomic(
     return { rowCount };
   } catch (writeErr) {
     // Clean up sidecar on failure so the next attempt starts fresh
-    try { await fs.unlink(tempPath); } catch { /* may not exist */ }
+    try {
+      await fs.unlink(tempPath);
+    } catch {
+      /* may not exist */
+    }
     throw writeErr;
   } finally {
     // Always clean up staging table
@@ -222,9 +226,7 @@ export async function writeParquetPartition(
   // composing any path. Reject unsafe input (separators, whitespace, nulls).
   for (const [k, v] of Object.entries(partitions)) {
     if (!PARTITION_KEY_RE.test(k)) {
-      throw new Error(
-        `writeParquetPartition: unsafe partition key: ${JSON.stringify(k)}`,
-      );
+      throw new Error(`writeParquetPartition: unsafe partition key: ${JSON.stringify(k)}`);
     }
     if (!PARTITION_VALUE_RE.test(v)) {
       throw new Error(
@@ -234,9 +236,7 @@ export async function writeParquetPartition(
   }
 
   // Preserve insertion order (ES2015 guarantees for string keys).
-  const partitionSegments = Object.entries(partitions).map(
-    ([k, v]) => `${k}=${v}`,
-  );
+  const partitionSegments = Object.entries(partitions).map(([k, v]) => `${k}=${v}`);
   const targetPath = path.join(opts.baseDir, ...partitionSegments, filename);
 
   // writeParquetAtomic (existing, unchanged) handles: staging table → mkdir -p

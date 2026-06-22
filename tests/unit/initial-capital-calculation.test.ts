@@ -1,4 +1,9 @@
-import { PortfolioStatsCalculator, Trade, DailyLogEntry, calculateInitialCapitalFromDailyLog } from "@tradeblocks/lib";
+import {
+  PortfolioStatsCalculator,
+  Trade,
+  DailyLogEntry,
+  calculateInitialCapitalFromDailyLog,
+} from "@tradeblocks/lib";
 // calculateInitialCapital (the 2-arg daily-log/trade fallback) collides by name with
 // utils/equity-curve's single-arg export, so the barrel exposes only the latter.
 // Import the fallback variant directly from its source module.
@@ -9,7 +14,7 @@ function createMockTrade(
   dateOpened: Date,
   fundsAtClose: number,
   pl: number,
-  strategy: string = "Test Strategy"
+  strategy: string = "Test Strategy",
 ): Trade {
   return {
     dateOpened,
@@ -85,9 +90,7 @@ describe("Initial Capital Calculation", () => {
   });
 
   it("should work with single trade", () => {
-    const trades = [
-      createMockTrade(new Date("2024-01-01"), 105000, 5000),
-    ];
+    const trades = [createMockTrade(new Date("2024-01-01"), 105000, 5000)];
 
     const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(trades);
     expect(initialCapital).toBe(100000);
@@ -172,7 +175,7 @@ describe("Initial Capital Calculation", () => {
     function createDailyLogEntry(
       date: string,
       netLiquidity: number,
-      dailyPl: number
+      dailyPl: number,
     ): DailyLogEntry {
       return {
         date: new Date(date),
@@ -231,22 +234,16 @@ describe("Initial Capital Calculation", () => {
     });
 
     it("should prefer daily log over trades when both available", () => {
-      const trades = [
-        createMockTrade(new Date("2024-01-01"), 507690, 7690),
-      ];
+      const trades = [createMockTrade(new Date("2024-01-01"), 507690, 7690)];
 
-      const dailyLog = [
-        createDailyLogEntry("2024-01-01", 507690, 7690),
-      ];
+      const dailyLog = [createDailyLogEntry("2024-01-01", 507690, 7690)];
 
       const initialCapital = calculateInitialCapital(trades, dailyLog);
       expect(initialCapital).toBe(500000); // Should use daily log calculation
     });
 
     it("should fall back to trades when daily log is empty", () => {
-      const trades = [
-        createMockTrade(new Date("2024-01-01"), 507690, 7690),
-      ];
+      const trades = [createMockTrade(new Date("2024-01-01"), 507690, 7690)];
 
       const dailyLog: DailyLogEntry[] = [];
 

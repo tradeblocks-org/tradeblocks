@@ -27,10 +27,7 @@ import * as os from "os";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
 import { createToolOutput } from "../utils/output-formatter.ts";
-import {
-  parseCsvToBars,
-  parseDatabaseRowsToBars,
-} from "../utils/market-importer.ts";
+import { parseCsvToBars, parseDatabaseRowsToBars } from "../utils/market-importer.ts";
 import { normalizeTicker } from "../utils/ticker.ts";
 import type { MarketStores } from "../market/stores/index.ts";
 import type { BarRow } from "../market/stores/types.ts";
@@ -121,8 +118,8 @@ export function registerMarketImportTools(
           .record(z.string(), z.string())
           .describe(
             "Maps CSV column names (keys) to schema column names (values). " +
-            "Required: date (or unix time), open, high, low, close. " +
-            "Time auto-extracted from the date column when it carries a Unix timestamp.",
+              "Required: date (or unix time), open, high, low, close. " +
+              "Time auto-extracted from the date column when it carries a Unix timestamp.",
           ),
         dry_run: z
           .boolean()
@@ -133,7 +130,7 @@ export function registerMarketImportTools(
           .default(false)
           .describe(
             "If true, skips EnrichedStore.compute() (and computeContext for VIX-family) " +
-            "after the spot write. Re-run enrich_market_data later to populate derived fields.",
+              "after the spot write. Re-run enrich_market_data later to populate derived fields.",
           ),
       }),
     },
@@ -246,7 +243,7 @@ export function registerMarketImportTools(
           .string()
           .describe(
             "DuckDB SELECT query to execute against the external database. " +
-            "Must reference tables with the alias 'ext_import_source'.",
+              "Must reference tables with the alias 'ext_import_source'.",
           ),
         ticker: z
           .string()
@@ -257,8 +254,8 @@ export function registerMarketImportTools(
           .record(z.string(), z.string())
           .describe(
             "Maps query column names (keys) to schema column names (values). " +
-            "Required: date (or unix time), open, high, low, close. " +
-            "Time auto-extracted from the date column when it carries a Unix timestamp.",
+              "Required: date (or unix time), open, high, low, close. " +
+              "Time auto-extracted from the date column when it carries a Unix timestamp.",
           ),
         dry_run: z
           .boolean()
@@ -309,7 +306,11 @@ export function registerMarketImportTools(
         } finally {
           // Always DETACH regardless of success — non-fatal if the ATTACH never
           // succeeded (e.g. invalid db_path) so the original error surfaces.
-          try { await conn.run(`DETACH ${EXT_ALIAS}`); } catch { /* best-effort */ }
+          try {
+            await conn.run(`DETACH ${EXT_ALIAS}`);
+          } catch {
+            /* best-effort */
+          }
         }
 
         if (bars.length === 0) {
@@ -379,5 +380,4 @@ export function registerMarketImportTools(
       }
     },
   );
-
 }

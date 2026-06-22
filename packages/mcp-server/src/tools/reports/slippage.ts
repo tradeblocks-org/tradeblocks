@@ -17,10 +17,7 @@ import { registerSlippageTrendsTool } from "./slippage-trends.ts";
 /**
  * Register slippage-related report tools
  */
-export function registerSlippageTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerSlippageTools(server: McpServer, baseDir: string): void {
   registerDiscrepancyTool(server, baseDir);
   registerStrategyMatchesTool(server, baseDir);
   registerSlippageTrendsTool(server, baseDir);

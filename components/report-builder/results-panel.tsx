@@ -10,11 +10,7 @@
 import { memo, useState, useEffect } from "react";
 import { MultiSelect } from "@/components/multi-select";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -50,10 +46,7 @@ import { ThresholdChart } from "./threshold-chart";
 /**
  * Tooltip content for each chart type
  */
-const CHART_TYPE_TOOLTIPS: Record<
-  ChartType,
-  { flavor: string; detailed: string }
-> = {
+const CHART_TYPE_TOOLTIPS: Record<ChartType, { flavor: string; detailed: string }> = {
   scatter: {
     flavor: "How do two metrics relate to each other across your trades?",
     detailed:
@@ -109,12 +102,8 @@ function ChartTypeTooltip({ chartType }: { chartType: ChartType }) {
             <h4 className="text-sm font-semibold text-primary">{title}</h4>
           </div>
           <div className="px-4 pb-4 space-y-3">
-            <p className="text-sm font-medium text-foreground leading-relaxed">
-              {tooltip.flavor}
-            </p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {tooltip.detailed}
-            </p>
+            <p className="text-sm font-medium text-foreground leading-relaxed">{tooltip.flavor}</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{tooltip.detailed}</p>
           </div>
         </div>
       </HoverCardContent>
@@ -198,9 +187,7 @@ export const ResultsPanel = memo(function ResultsPanel({
   };
 
   // State for box bucket count input (two-state pattern for free editing)
-  const [boxBucketInputValue, setBoxBucketInputValue] = useState<string>(
-    String(boxBucketCount)
-  );
+  const [boxBucketInputValue, setBoxBucketInputValue] = useState<string>(String(boxBucketCount));
 
   // Sync input value when prop changes (e.g., loading a saved report)
   useEffect(() => {
@@ -224,9 +211,7 @@ export const ResultsPanel = memo(function ResultsPanel({
       <Card className="min-w-0">
         <CardHeader className="pb-2 space-y-2">
           {/* Report title (only shown when a report is loaded) */}
-          {reportName && (
-            <h3 className="text-base font-semibold">{reportName}</h3>
-          )}
+          {reportName && <h3 className="text-base font-semibold">{reportName}</h3>}
 
           {/* Compact controls row */}
           {chartType === "scatter" || chartType === "line" ? (
@@ -237,10 +222,7 @@ export const ResultsPanel = memo(function ResultsPanel({
                   Chart Type
                   <ChartTypeTooltip chartType={chartType} />
                 </Label>
-                <Select
-                  value={chartType}
-                  onValueChange={(v) => onChartTypeChange(v as ChartType)}
-                >
+                <Select value={chartType} onValueChange={(v) => onChartTypeChange(v as ChartType)}>
                   <SelectTrigger className="h-8 w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -296,10 +278,7 @@ export const ResultsPanel = memo(function ResultsPanel({
                   Chart Type
                   <ChartTypeTooltip chartType={chartType} />
                 </Label>
-                <Select
-                  value={chartType}
-                  onValueChange={(v) => onChartTypeChange(v as ChartType)}
-                >
+                <Select value={chartType} onValueChange={(v) => onChartTypeChange(v as ChartType)}>
                   <SelectTrigger className="h-8 w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -319,8 +298,8 @@ export const ResultsPanel = memo(function ResultsPanel({
                   chartType === "table"
                     ? "Group By"
                     : chartType === "threshold"
-                    ? "Analyze Field"
-                    : "X Axis"
+                      ? "Analyze Field"
+                      : "X Axis"
                 }
                 value={xAxis.field}
                 onChange={onXAxisChange}
@@ -341,9 +320,7 @@ export const ResultsPanel = memo(function ResultsPanel({
               {/* Bucket count for box plot (hidden for discrete timing fields which use natural categories) */}
               {chartType === "box" && !isDiscreteTimingField(xAxis.field) && (
                 <div className="min-w-0">
-                  <Label className="text-xs text-muted-foreground mb-1 block">
-                    Buckets
-                  </Label>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Buckets</Label>
                   <Input
                     type="number"
                     min={2}
@@ -364,21 +341,17 @@ export const ResultsPanel = memo(function ResultsPanel({
                   </Label>
                   <Select
                     value={thresholdMetric}
-                    onValueChange={(v) =>
-                      onThresholdMetricChange(v as ThresholdMetric)
-                    }
+                    onValueChange={(v) => onThresholdMetricChange(v as ThresholdMetric)}
                   >
                     <SelectTrigger className="h-8 w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(THRESHOLD_METRIC_LABELS).map(
-                        ([metric, label]) => (
-                          <SelectItem key={metric} value={metric}>
-                            {label}
-                          </SelectItem>
-                        )
-                      )}
+                      {Object.entries(THRESHOLD_METRIC_LABELS).map(([metric, label]) => (
+                        <SelectItem key={metric} value={metric}>
+                          {label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -408,45 +381,34 @@ export const ResultsPanel = memo(function ResultsPanel({
                 />
               </div>
               <div className={showWhatIf ? "" : "sm:col-span-2"}>
-                <Label className="text-xs text-muted-foreground mb-1 block">
-                  What-If Analysis
-                </Label>
+                <Label className="text-xs text-muted-foreground mb-1 block">What-If Analysis</Label>
                 <div className="flex items-center gap-2 h-8">
                   <Switch
                     id="what-if-toggle"
                     checked={showWhatIf}
                     onCheckedChange={onShowWhatIfChange}
                   />
-                  <Label
-                    htmlFor="what-if-toggle"
-                    className="text-xs cursor-pointer"
-                  >
+                  <Label htmlFor="what-if-toggle" className="text-xs cursor-pointer">
                     {showWhatIf ? "On" : "Off"}
                   </Label>
                 </div>
               </div>
               {showWhatIf && (
                 <div>
-                  <Label className="text-xs text-muted-foreground mb-1 block">
-                    Metric
-                  </Label>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Metric</Label>
                   <Select
                     value={thresholdMetric}
-                    onValueChange={(v) =>
-                      onThresholdMetricChange(v as ThresholdMetric)
-                    }
+                    onValueChange={(v) => onThresholdMetricChange(v as ThresholdMetric)}
                   >
                     <SelectTrigger className="h-8 w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(THRESHOLD_METRIC_LABELS).map(
-                        ([metric, label]) => (
-                          <SelectItem key={metric} value={metric}>
-                            {label}
-                          </SelectItem>
-                        )
-                      )}
+                      {Object.entries(THRESHOLD_METRIC_LABELS).map(([metric, label]) => (
+                        <SelectItem key={metric} value={metric}>
+                          {label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -463,9 +425,7 @@ export const ResultsPanel = memo(function ResultsPanel({
                 onChange={onTableBucketsChange}
               />
               <div className="min-w-0">
-                <Label className="text-xs text-muted-foreground mb-1 block">
-                  Columns
-                </Label>
+                <Label className="text-xs text-muted-foreground mb-1 block">Columns</Label>
                 <MultiSelect
                   options={TABLE_COLUMN_OPTIONS}
                   defaultValue={tableColumns}
@@ -477,7 +437,6 @@ export const ResultsPanel = memo(function ResultsPanel({
               </div>
             </div>
           )}
-
         </CardHeader>
         <CardContent className={chartType === "table" ? "overflow-hidden" : ""}>
           {chartType === "table" ? (
@@ -488,17 +447,9 @@ export const ResultsPanel = memo(function ResultsPanel({
               selectedColumns={tableColumns}
             />
           ) : chartType === "threshold" ? (
-            <ThresholdChart
-              trades={filteredTrades}
-              xAxis={xAxis}
-              metric={thresholdMetric}
-            />
+            <ThresholdChart trades={filteredTrades} xAxis={xAxis} metric={thresholdMetric} />
           ) : chartType === "histogram" ? (
-            <HistogramChart
-              trades={filteredTrades}
-              xAxis={xAxis}
-              metric={thresholdMetric}
-            />
+            <HistogramChart trades={filteredTrades} xAxis={xAxis} metric={thresholdMetric} />
           ) : chartType === "scatter" ? (
             <ScatterChart
               trades={filteredTrades}
@@ -538,9 +489,7 @@ export const ResultsPanel = memo(function ResultsPanel({
       </Card>
 
       {/* Comparison Stats - Only show when filtered */}
-      {isFiltered && comparisonStats && (
-        <ComparisonSummaryCard stats={comparisonStats} />
-      )}
+      {isFiltered && comparisonStats && <ComparisonSummaryCard stats={comparisonStats} />}
     </div>
   );
 });

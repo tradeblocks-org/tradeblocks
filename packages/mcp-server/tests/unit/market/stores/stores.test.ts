@@ -163,10 +163,9 @@ describe("shared-code-no-private-import static check (T-1-04)", () => {
     if (!existsSync(marketDir)) {
       throw new Error(`src/market/ missing at ${marketDir}`);
     }
-    const result = execSync(
-      `grep -rE "from ['\\\"]\\.{1,}/.*backtest/" "${marketDir}" || true`,
-      { encoding: "utf8" },
-    );
+    const result = execSync(`grep -rE "from ['\\\"]\\.{1,}/.*backtest/" "${marketDir}" || true`, {
+      encoding: "utf8",
+    });
     expect(result.trim()).toBe("");
   });
 });

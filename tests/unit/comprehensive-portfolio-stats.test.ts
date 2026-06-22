@@ -7,28 +7,28 @@
  * - test_performance_metrics.py
  */
 
-import { PortfolioStatsCalculator } from '../../packages/lib/calculations/portfolio-stats';
-import { Trade } from '../../packages/lib/models/trade';
+import { PortfolioStatsCalculator } from "../../packages/lib/calculations/portfolio-stats";
+import { Trade } from "../../packages/lib/models/trade";
 // import { DailyLogEntry } from '../../lib/models/daily-log';
-import { CsvTestDataLoader } from '../data/csv-loader';
+import { CsvTestDataLoader } from "../data/csv-loader";
 
-describe('Comprehensive Portfolio Statistics', () => {
+describe("Comprehensive Portfolio Statistics", () => {
   const calculator = new PortfolioStatsCalculator();
 
   // Sample trades matching legacy test data patterns
   const sampleTrades: Trade[] = [
     // Strategy A - Winning trades
     {
-      dateOpened: new Date('2024-01-01'),
-      timeOpened: '10:00:00',
+      dateOpened: new Date("2024-01-01"),
+      timeOpened: "10:00:00",
       openingPrice: 100,
-      legs: 'CALL',
+      legs: "CALL",
       premium: 500,
       pl: 150,
       numContracts: 1,
       fundsAtClose: 10150,
       marginReq: 1000,
-      strategy: 'Strategy A',
+      strategy: "Strategy A",
       openingCommissionsFees: 5,
       closingCommissionsFees: 5,
       openingShortLongRatio: 0.5,
@@ -39,24 +39,24 @@ describe('Comprehensive Portfolio Statistics', () => {
       movement: 1.5,
       maxProfit: 200,
       maxLoss: -100,
-      dateClosed: new Date('2024-01-02'),
-      timeClosed: '15:00:00',
+      dateClosed: new Date("2024-01-02"),
+      timeClosed: "15:00:00",
       closingPrice: 102,
       avgClosingCost: 102,
-      reasonForClose: 'Target',
+      reasonForClose: "Target",
     },
     // Strategy B - Losing trade
     {
-      dateOpened: new Date('2024-01-03'),
-      timeOpened: '11:00:00',
+      dateOpened: new Date("2024-01-03"),
+      timeOpened: "11:00:00",
       openingPrice: 105,
-      legs: 'PUT',
+      legs: "PUT",
       premium: 600,
       pl: -75,
       numContracts: 2,
       fundsAtClose: 10075,
       marginReq: 2000,
-      strategy: 'Strategy B',
+      strategy: "Strategy B",
       openingCommissionsFees: 10,
       closingCommissionsFees: 10,
       openingShortLongRatio: 0.6,
@@ -67,24 +67,24 @@ describe('Comprehensive Portfolio Statistics', () => {
       movement: -2,
       maxProfit: 300,
       maxLoss: -200,
-      dateClosed: new Date('2024-01-04'),
-      timeClosed: '14:00:00',
+      dateClosed: new Date("2024-01-04"),
+      timeClosed: "14:00:00",
       closingPrice: 103,
       avgClosingCost: 103,
-      reasonForClose: 'Stop',
+      reasonForClose: "Stop",
     },
     // Strategy A - Another winning trade
     {
-      dateOpened: new Date('2024-01-05'),
-      timeOpened: '09:30:00',
+      dateOpened: new Date("2024-01-05"),
+      timeOpened: "09:30:00",
       openingPrice: 102,
-      legs: 'SPREAD',
+      legs: "SPREAD",
       premium: 400,
       pl: 200,
       numContracts: 1,
       fundsAtClose: 10275,
       marginReq: 1500,
-      strategy: 'Strategy A',
+      strategy: "Strategy A",
       openingCommissionsFees: 7,
       closingCommissionsFees: 7,
       openingShortLongRatio: 0.4,
@@ -95,24 +95,24 @@ describe('Comprehensive Portfolio Statistics', () => {
       movement: 2.5,
       maxProfit: 250,
       maxLoss: -150,
-      dateClosed: new Date('2024-01-06'),
-      timeClosed: '16:00:00',
+      dateClosed: new Date("2024-01-06"),
+      timeClosed: "16:00:00",
       closingPrice: 104,
       avgClosingCost: 104,
-      reasonForClose: 'Target',
+      reasonForClose: "Target",
     },
     // Break-even trade
     {
-      dateOpened: new Date('2024-01-07'),
-      timeOpened: '12:00:00',
+      dateOpened: new Date("2024-01-07"),
+      timeOpened: "12:00:00",
       openingPrice: 103,
-      legs: 'STRADDLE',
+      legs: "STRADDLE",
       premium: 700,
       pl: 0,
       numContracts: 1,
       fundsAtClose: 10275,
       marginReq: 2000,
-      strategy: 'Strategy C',
+      strategy: "Strategy C",
       openingCommissionsFees: 8,
       closingCommissionsFees: 8,
       openingShortLongRatio: 0.5,
@@ -123,16 +123,16 @@ describe('Comprehensive Portfolio Statistics', () => {
       movement: 0,
       maxProfit: 350,
       maxLoss: -350,
-      dateClosed: new Date('2024-01-08'),
-      timeClosed: '15:30:00',
+      dateClosed: new Date("2024-01-08"),
+      timeClosed: "15:30:00",
       closingPrice: 103,
       avgClosingCost: 103,
-      reasonForClose: 'Manual',
+      reasonForClose: "Manual",
     },
   ];
 
-  describe('Basic Portfolio Metrics', () => {
-    test('should calculate metrics with all trades', () => {
+  describe("Basic Portfolio Metrics", () => {
+    test("should calculate metrics with all trades", () => {
       const stats = calculator.calculatePortfolioStats(sampleTrades);
 
       expect(stats.totalTrades).toBe(4);
@@ -145,7 +145,7 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(stats.avgLoss).toBe(-75);
     });
 
-    test('should handle empty portfolio', () => {
+    test("should handle empty portfolio", () => {
       const stats = calculator.calculatePortfolioStats([]);
 
       expect(stats.totalTrades).toBe(0);
@@ -159,9 +159,9 @@ describe('Comprehensive Portfolio Statistics', () => {
     });
   });
 
-  describe('Strategy Filtering', () => {
-    test('should filter by Strategy A', () => {
-      const strategyATrades = sampleTrades.filter(t => t.strategy === 'Strategy A');
+  describe("Strategy Filtering", () => {
+    test("should filter by Strategy A", () => {
+      const strategyATrades = sampleTrades.filter((t) => t.strategy === "Strategy A");
       const stats = calculator.calculatePortfolioStats(strategyATrades);
 
       expect(stats.totalTrades).toBe(2);
@@ -172,8 +172,8 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(stats.avgWin).toBe(175);
     });
 
-    test('should filter by Strategy B', () => {
-      const strategyBTrades = sampleTrades.filter(t => t.strategy === 'Strategy B');
+    test("should filter by Strategy B", () => {
+      const strategyBTrades = sampleTrades.filter((t) => t.strategy === "Strategy B");
       const stats = calculator.calculatePortfolioStats(strategyBTrades);
 
       expect(stats.totalTrades).toBe(1);
@@ -184,8 +184,8 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(stats.avgLoss).toBe(-75);
     });
 
-    test('should handle break-even trades separately', () => {
-      const strategyCTrades = sampleTrades.filter(t => t.strategy === 'Strategy C');
+    test("should handle break-even trades separately", () => {
+      const strategyCTrades = sampleTrades.filter((t) => t.strategy === "Strategy C");
       const stats = calculator.calculatePortfolioStats(strategyCTrades);
 
       expect(stats.totalTrades).toBe(1);
@@ -196,15 +196,15 @@ describe('Comprehensive Portfolio Statistics', () => {
     });
   });
 
-  describe('Win/Loss Streaks', () => {
-    test('should calculate win streaks correctly', () => {
+  describe("Win/Loss Streaks", () => {
+    test("should calculate win streaks correctly", () => {
       const streakTrades: Trade[] = [
-        { ...sampleTrades[0], pl: 100, dateOpened: new Date('2024-01-01') }, // Win
-        { ...sampleTrades[0], pl: 150, dateOpened: new Date('2024-01-02') }, // Win
-        { ...sampleTrades[0], pl: -50, dateOpened: new Date('2024-01-03') }, // Loss
-        { ...sampleTrades[0], pl: 75, dateOpened: new Date('2024-01-04') },  // Win
-        { ...sampleTrades[0], pl: 100, dateOpened: new Date('2024-01-05') }, // Win
-        { ...sampleTrades[0], pl: 125, dateOpened: new Date('2024-01-06') }, // Win
+        { ...sampleTrades[0], pl: 100, dateOpened: new Date("2024-01-01") }, // Win
+        { ...sampleTrades[0], pl: 150, dateOpened: new Date("2024-01-02") }, // Win
+        { ...sampleTrades[0], pl: -50, dateOpened: new Date("2024-01-03") }, // Loss
+        { ...sampleTrades[0], pl: 75, dateOpened: new Date("2024-01-04") }, // Win
+        { ...sampleTrades[0], pl: 100, dateOpened: new Date("2024-01-05") }, // Win
+        { ...sampleTrades[0], pl: 125, dateOpened: new Date("2024-01-06") }, // Win
       ];
 
       const stats = calculator.calculatePortfolioStats(streakTrades);
@@ -214,13 +214,13 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(stats.currentStreak).toBe(3); // Currently on win streak
     });
 
-    test('should handle break-even trades in streaks', () => {
+    test("should handle break-even trades in streaks", () => {
       const streakTrades: Trade[] = [
-        { ...sampleTrades[0], pl: 100, dateOpened: new Date('2024-01-01') },  // Win
-        { ...sampleTrades[0], pl: 150, dateOpened: new Date('2024-01-02') },  // Win
-        { ...sampleTrades[0], pl: 0, dateOpened: new Date('2024-01-03') },    // Break-even (resets)
-        { ...sampleTrades[0], pl: 75, dateOpened: new Date('2024-01-04') },   // Win
-        { ...sampleTrades[0], pl: -50, dateOpened: new Date('2024-01-05') },  // Loss
+        { ...sampleTrades[0], pl: 100, dateOpened: new Date("2024-01-01") }, // Win
+        { ...sampleTrades[0], pl: 150, dateOpened: new Date("2024-01-02") }, // Win
+        { ...sampleTrades[0], pl: 0, dateOpened: new Date("2024-01-03") }, // Break-even (resets)
+        { ...sampleTrades[0], pl: 75, dateOpened: new Date("2024-01-04") }, // Win
+        { ...sampleTrades[0], pl: -50, dateOpened: new Date("2024-01-05") }, // Loss
       ];
 
       const stats = calculator.calculatePortfolioStats(streakTrades);
@@ -230,48 +230,48 @@ describe('Comprehensive Portfolio Statistics', () => {
     });
   });
 
-  describe('Drawdown Calculations', () => {
-    test('should calculate max drawdown from trades', () => {
+  describe("Drawdown Calculations", () => {
+    test("should calculate max drawdown from trades", () => {
       const drawdownTrades: Trade[] = [
         {
           ...sampleTrades[0],
           pl: 100,
           fundsAtClose: 10100,
-          dateOpened: new Date('2024-01-01'),
-          dateClosed: new Date('2024-01-01'),
-          timeClosed: '15:59:00'
+          dateOpened: new Date("2024-01-01"),
+          dateClosed: new Date("2024-01-01"),
+          timeClosed: "15:59:00",
         },
         {
           ...sampleTrades[0],
           pl: 150,
           fundsAtClose: 10250,
-          dateOpened: new Date('2024-01-02'),
-          dateClosed: new Date('2024-01-02'),
-          timeClosed: '15:59:00'
+          dateOpened: new Date("2024-01-02"),
+          dateClosed: new Date("2024-01-02"),
+          timeClosed: "15:59:00",
         }, // Peak
         {
           ...sampleTrades[0],
           pl: -100,
           fundsAtClose: 10150,
-          dateOpened: new Date('2024-01-03'),
-          dateClosed: new Date('2024-01-03'),
-          timeClosed: '15:59:00'
+          dateOpened: new Date("2024-01-03"),
+          dateClosed: new Date("2024-01-03"),
+          timeClosed: "15:59:00",
         },
         {
           ...sampleTrades[0],
           pl: -50,
           fundsAtClose: 10100,
-          dateOpened: new Date('2024-01-04'),
-          dateClosed: new Date('2024-01-04'),
-          timeClosed: '15:59:00'
+          dateOpened: new Date("2024-01-04"),
+          dateClosed: new Date("2024-01-04"),
+          timeClosed: "15:59:00",
         }, // Trough
         {
           ...sampleTrades[0],
           pl: 75,
           fundsAtClose: 10175,
-          dateOpened: new Date('2024-01-05'),
-          dateClosed: new Date('2024-01-05'),
-          timeClosed: '15:59:00'
+          dateOpened: new Date("2024-01-05"),
+          dateClosed: new Date("2024-01-05"),
+          timeClosed: "15:59:00",
         },
       ];
 
@@ -281,12 +281,12 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(stats.maxDrawdown).toBeCloseTo(1.46, 1);
     });
 
-    test('should calculate time in drawdown', () => {
+    test("should calculate time in drawdown", () => {
       const trades: Trade[] = [
-        { ...sampleTrades[0], pl: 100, fundsAtClose: 10100, dateOpened: new Date('2024-01-01') },
-        { ...sampleTrades[0], pl: -50, fundsAtClose: 10050, dateOpened: new Date('2024-01-02') },
-        { ...sampleTrades[0], pl: -25, fundsAtClose: 10025, dateOpened: new Date('2024-01-03') },
-        { ...sampleTrades[0], pl: 100, fundsAtClose: 10125, dateOpened: new Date('2024-01-04') },
+        { ...sampleTrades[0], pl: 100, fundsAtClose: 10100, dateOpened: new Date("2024-01-01") },
+        { ...sampleTrades[0], pl: -50, fundsAtClose: 10050, dateOpened: new Date("2024-01-02") },
+        { ...sampleTrades[0], pl: -25, fundsAtClose: 10025, dateOpened: new Date("2024-01-03") },
+        { ...sampleTrades[0], pl: 100, fundsAtClose: 10125, dateOpened: new Date("2024-01-04") },
       ];
 
       const stats = calculator.calculatePortfolioStats(trades, undefined, false);
@@ -296,8 +296,8 @@ describe('Comprehensive Portfolio Statistics', () => {
     });
   });
 
-  describe('Risk Metrics', () => {
-    test('should calculate Sharpe ratio', () => {
+  describe("Risk Metrics", () => {
+    test("should calculate Sharpe ratio", () => {
       const stats = calculator.calculatePortfolioStats(sampleTrades);
 
       expect(stats.sharpeRatio).toBeDefined();
@@ -305,7 +305,7 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(stats.sharpeRatio).toBeLessThan(50);
     });
 
-    test('should calculate Sortino ratio', () => {
+    test("should calculate Sortino ratio", () => {
       const stats = calculator.calculatePortfolioStats(sampleTrades);
 
       expect(stats.sortinoRatio).toBeDefined();
@@ -313,7 +313,7 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(stats.sortinoRatio).toBeLessThan(100);
     });
 
-    test('should calculate Kelly percentage', () => {
+    test("should calculate Kelly percentage", () => {
       const stats = calculator.calculatePortfolioStats(sampleTrades);
 
       expect(stats.kellyPercentage).toBeDefined();
@@ -322,20 +322,20 @@ describe('Comprehensive Portfolio Statistics', () => {
     });
   });
 
-  describe('Edge Cases', () => {
-    test('should handle trades with missing optional fields', () => {
+  describe("Edge Cases", () => {
+    test("should handle trades with missing optional fields", () => {
       const minimalTrades: Trade[] = [
         {
-          dateOpened: new Date('2024-01-01'),
-          timeOpened: '10:00:00',
+          dateOpened: new Date("2024-01-01"),
+          timeOpened: "10:00:00",
           openingPrice: 100,
-          legs: 'CALL',
+          legs: "CALL",
           premium: 500,
           pl: 100,
           numContracts: 1,
           fundsAtClose: 10100,
           marginReq: 1000,
-          strategy: 'Test',
+          strategy: "Test",
           openingCommissionsFees: 1,
           closingCommissionsFees: 1,
           openingShortLongRatio: 0.5,
@@ -349,13 +349,13 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(stats.totalPl).toBe(100);
     });
 
-    test('should handle very large datasets', () => {
+    test("should handle very large datasets", () => {
       // Create 1000 trades
       const largeTrades: Trade[] = [];
       for (let i = 0; i < 1000; i++) {
         largeTrades.push({
           ...sampleTrades[0],
-          dateOpened: new Date(`2024-01-${String((i % 28) + 1).padStart(2, '0')}`),
+          dateOpened: new Date(`2024-01-${String((i % 28) + 1).padStart(2, "0")}`),
           pl: Math.random() > 0.5 ? Math.random() * 500 : -Math.random() * 300,
           fundsAtClose: 10000 + i * 10,
         });
@@ -369,12 +369,12 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(duration).toBeLessThan(1000); // Should complete in less than 1 second
     });
 
-    test('should handle trades with same date but different times', () => {
+    test("should handle trades with same date but different times", () => {
       const sameDateTrades: Trade[] = [
-        { ...sampleTrades[0], dateOpened: new Date('2024-01-01'), timeOpened: '09:30:00', pl: 100 },
-        { ...sampleTrades[0], dateOpened: new Date('2024-01-01'), timeOpened: '10:00:00', pl: -50 },
-        { ...sampleTrades[0], dateOpened: new Date('2024-01-01'), timeOpened: '14:00:00', pl: 75 },
-        { ...sampleTrades[0], dateOpened: new Date('2024-01-01'), timeOpened: '15:30:00', pl: 125 },
+        { ...sampleTrades[0], dateOpened: new Date("2024-01-01"), timeOpened: "09:30:00", pl: 100 },
+        { ...sampleTrades[0], dateOpened: new Date("2024-01-01"), timeOpened: "10:00:00", pl: -50 },
+        { ...sampleTrades[0], dateOpened: new Date("2024-01-01"), timeOpened: "14:00:00", pl: 75 },
+        { ...sampleTrades[0], dateOpened: new Date("2024-01-01"), timeOpened: "15:30:00", pl: 125 },
       ];
 
       const stats = calculator.calculatePortfolioStats(sameDateTrades);
@@ -384,12 +384,12 @@ describe('Comprehensive Portfolio Statistics', () => {
     });
   });
 
-  describe('CSV Data Validation', () => {
-    test('should handle invalid date formats gracefully', () => {
+  describe("CSV Data Validation", () => {
+    test("should handle invalid date formats gracefully", () => {
       const invalidTrades: Record<string, unknown>[] = [
         {
           ...sampleTrades[0],
-          dateOpened: 'invalid-date',
+          dateOpened: "invalid-date",
         },
       ];
 
@@ -399,9 +399,9 @@ describe('Comprehensive Portfolio Statistics', () => {
       }).not.toThrow();
     });
 
-    test('should handle missing required fields', () => {
+    test("should handle missing required fields", () => {
       const incompleteTrade: Record<string, unknown> = {
-        dateOpened: new Date('2024-01-01'),
+        dateOpened: new Date("2024-01-01"),
         // Missing many required fields
       };
 
@@ -412,11 +412,11 @@ describe('Comprehensive Portfolio Statistics', () => {
     });
   });
 
-  describe('Real CSV Data Integration', () => {
-    test('should validate against real CSV data if available', async () => {
+  describe("Real CSV Data Integration", () => {
+    test("should validate against real CSV data if available", async () => {
       const { trades, sources } = await CsvTestDataLoader.loadTestData();
 
-      if (sources.trades === 'csv') {
+      if (sources.trades === "csv") {
         const stats = calculator.calculatePortfolioStats(trades);
 
         // Basic sanity checks
@@ -427,9 +427,9 @@ describe('Comprehensive Portfolio Statistics', () => {
         expect(stats.maxDrawdown).toBeLessThanOrEqual(100);
 
         // Check all strategies are processed
-        const strategies = [...new Set(trades.map(t => t.strategy))];
-        strategies.forEach(strategy => {
-          const strategyTrades = trades.filter(t => t.strategy === strategy);
+        const strategies = [...new Set(trades.map((t) => t.strategy))];
+        strategies.forEach((strategy) => {
+          const strategyTrades = trades.filter((t) => t.strategy === strategy);
           const strategyStats = calculator.calculatePortfolioStats(strategyTrades);
 
           expect(strategyStats.totalTrades).toBe(strategyTrades.length);
@@ -441,8 +441,8 @@ describe('Comprehensive Portfolio Statistics', () => {
     });
   });
 
-  describe('Performance Benchmarks', () => {
-    test('should calculate stats for 100 trades in reasonable time', () => {
+  describe("Performance Benchmarks", () => {
+    test("should calculate stats for 100 trades in reasonable time", () => {
       const trades: Trade[] = [];
       for (let i = 0; i < 100; i++) {
         trades.push({ ...sampleTrades[i % sampleTrades.length] });
@@ -455,7 +455,7 @@ describe('Comprehensive Portfolio Statistics', () => {
       expect(duration).toBeLessThan(100); // Should complete in less than 100ms
     });
 
-    test('should calculate stats for 1000 trades in reasonable time', () => {
+    test("should calculate stats for 1000 trades in reasonable time", () => {
       const trades: Trade[] = [];
       for (let i = 0; i < 1000; i++) {
         trades.push({ ...sampleTrades[i % sampleTrades.length] });

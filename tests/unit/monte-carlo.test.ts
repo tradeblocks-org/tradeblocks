@@ -168,10 +168,7 @@ describe("Monte Carlo Simulation", () => {
 
   describe("runMonteCarloSimulation", () => {
     it("should throw error with insufficient trades", () => {
-      const trades = [
-        createMockTrade({ pl: 100 }),
-        createMockTrade({ pl: 200 }),
-      ];
+      const trades = [createMockTrade({ pl: 100 }), createMockTrade({ pl: 200 })];
 
       const params: MonteCarloParams = {
         numSimulations: 100,
@@ -181,9 +178,7 @@ describe("Monte Carlo Simulation", () => {
         tradesPerYear: 252,
       };
 
-      expect(() => runMonteCarloSimulation(trades, params)).toThrow(
-        "Insufficient trades"
-      );
+      expect(() => runMonteCarloSimulation(trades, params)).toThrow("Insufficient trades");
     });
 
     it("should run basic simulation with trade resampling", () => {
@@ -191,7 +186,7 @@ describe("Monte Carlo Simulation", () => {
         createMockTrade({
           pl: (i % 2 === 0 ? 100 : -50) * (1 + Math.random() * 0.1),
           dateOpened: new Date(2024, 0, i + 1),
-        })
+        }),
       );
 
       const params: MonteCarloParams = {
@@ -220,7 +215,7 @@ describe("Monte Carlo Simulation", () => {
         createMockTrade({
           pl: 100,
           dateOpened: new Date(2024, 0, i + 1),
-        })
+        }),
       );
 
       const params: MonteCarloParams = {
@@ -243,9 +238,9 @@ describe("Monte Carlo Simulation", () => {
     it("should produce reproducible results with fixed seed", () => {
       const trades = Array.from({ length: 20 }, (_, i) =>
         createMockTrade({
-          pl: (i % 2 === 0 ? 100 : -50),
+          pl: i % 2 === 0 ? 100 : -50,
           dateOpened: new Date(2024, 0, i + 1),
-        })
+        }),
       );
 
       const params: MonteCarloParams = {
@@ -261,12 +256,8 @@ describe("Monte Carlo Simulation", () => {
       const result2 = runMonteCarloSimulation(trades, params);
 
       // Results should be identical with same seed
-      expect(result1.simulations[0].finalValue).toBe(
-        result2.simulations[0].finalValue
-      );
-      expect(result1.statistics.meanTotalReturn).toBe(
-        result2.statistics.meanTotalReturn
-      );
+      expect(result1.simulations[0].finalValue).toBe(result2.simulations[0].finalValue);
+      expect(result1.statistics.meanTotalReturn).toBe(result2.statistics.meanTotalReturn);
     });
 
     it("should work with daily resampling method", () => {
@@ -274,7 +265,7 @@ describe("Monte Carlo Simulation", () => {
         createMockTrade({
           pl: 100 * (Math.random() - 0.5),
           dateOpened: new Date(2024, 0, 1 + Math.floor(i / 3)), // Multiple trades per day
-        })
+        }),
       );
 
       const params: MonteCarloParams = {
@@ -299,7 +290,7 @@ describe("Monte Carlo Simulation", () => {
         createMockTrade({
           pl: i % 2 === 0 ? 200 : -100, // 50% win rate, positive expectancy
           dateOpened: new Date(2024, 0, i + 1),
-        })
+        }),
       );
 
       const params: MonteCarloParams = {
@@ -325,12 +316,8 @@ describe("Monte Carlo Simulation", () => {
       expect(result.statistics.valueAtRisk.p25).toBeDefined();
 
       // Percentiles should be ordered
-      expect(result.statistics.valueAtRisk.p5).toBeLessThan(
-        result.statistics.valueAtRisk.p25
-      );
-      expect(result.statistics.valueAtRisk.p25).toBeLessThan(
-        result.statistics.medianTotalReturn
-      );
+      expect(result.statistics.valueAtRisk.p5).toBeLessThan(result.statistics.valueAtRisk.p25);
+      expect(result.statistics.valueAtRisk.p25).toBeLessThan(result.statistics.medianTotalReturn);
     });
 
     it("should filter by strategy", () => {
@@ -340,14 +327,14 @@ describe("Monte Carlo Simulation", () => {
             strategy: "Strategy A",
             pl: 100,
             dateOpened: new Date(2024, 0, i + 1),
-          })
+          }),
         ),
         ...Array.from({ length: 20 }, (_, i) =>
           createMockTrade({
             strategy: "Strategy B",
             pl: -50,
             dateOpened: new Date(2024, 0, i + 21),
-          })
+          }),
         ),
       ];
 
@@ -375,7 +362,7 @@ describe("Monte Carlo Simulation", () => {
           // Create a pattern with drawdowns
           pl: i < 5 ? 100 : i < 10 ? -150 : 100,
           dateOpened: new Date(2024, 0, i + 1),
-        })
+        }),
       );
 
       const params: MonteCarloParams = {
@@ -403,7 +390,7 @@ describe("Monte Carlo Simulation", () => {
         createMockTrade({
           pl: -250,
           dateOpened: new Date(2024, 0, i + 1),
-        })
+        }),
       );
 
       const params: MonteCarloParams = {
@@ -425,7 +412,7 @@ describe("Monte Carlo Simulation", () => {
         createMockTrade({
           pl: i === 2 ? 1000 : i === 5 ? -500 : 0,
           dateOpened: new Date(2024, 0, i + 1),
-        })
+        }),
       );
 
       const params: MonteCarloParams = {

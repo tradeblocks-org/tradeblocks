@@ -144,11 +144,7 @@ describe("tool/consumer contract — stores-backed spot/enriched reads", () => {
   describe("tools/market-data.ts — ORB + regime", () => {
     it("stores.spot.readBars returns the fixture bars used by the ORB path", async () => {
       // Underlying-store contract that calculate_orb depends on.
-      const bars = await stores.spot.readBars(
-        "SPX",
-        "2025-01-02",
-        "2025-01-02",
-      );
+      const bars = await stores.spot.readBars("SPX", "2025-01-02", "2025-01-02");
       expect(bars.length).toBe(3);
       expect(bars[0].time).toBe("09:30");
       expect(bars[0].high).toBe(5810);
@@ -165,17 +161,11 @@ describe("tool/consumer contract — stores-backed spot/enriched reads", () => {
       // test's captured `stores` reference; the contract-style test is
       // sufficient because the aggregation is deterministic over readBars
       // output.)
-      const bars = await stores.spot.readBars(
-        "SPX",
-        "2025-01-02",
-        "2025-01-02",
-      );
+      const bars = await stores.spot.readBars("SPX", "2025-01-02", "2025-01-02");
       // ORB window 09:30-09:30 (one bar) → high=5810, low=5795, range=15.
       const sqlStart = "09:30";
       const sqlEnd = "09:30";
-      const windowBars = bars.filter(
-        (b) => String(b.time) >= sqlStart && String(b.time) <= sqlEnd,
-      );
+      const windowBars = bars.filter((b) => String(b.time) >= sqlStart && String(b.time) <= sqlEnd);
       expect(windowBars.length).toBe(1);
       const orbHigh = Math.max(...windowBars.map((b) => b.high));
       const orbLow = Math.min(...windowBars.map((b) => b.low));
@@ -198,19 +188,11 @@ describe("tool/consumer contract — stores-backed spot/enriched reads", () => {
     it("stores.spot.readBars returns the same SPX bars used by the underlying-bars path", async () => {
       // Contract: the underlying-bars read returns the fixture rows. The
       // full handler test stays in tests/integration/trade-replay.test.ts.
-      const bars = await stores.spot.readBars(
-        "SPX",
-        "2025-01-02",
-        "2025-01-02",
-      );
+      const bars = await stores.spot.readBars("SPX", "2025-01-02", "2025-01-02");
       expect(bars.map((b) => b.time)).toEqual(["09:30", "10:00", "16:00"]);
       // Sanity: the daily fallback (readDailyBars) aggregates intraday into
       // one daily row using the same underlying data.
-      const daily = await stores.spot.readDailyBars(
-        "SPX",
-        "2025-01-02",
-        "2025-01-02",
-      );
+      const daily = await stores.spot.readDailyBars("SPX", "2025-01-02", "2025-01-02");
       expect(daily.length).toBe(1);
       expect(daily[0].date).toBe("2025-01-02");
     });
@@ -225,11 +207,7 @@ describe("tool/consumer contract — stores-backed spot/enriched reads", () => {
       // handler-level test would require constructing a full
       // StrategyDefinition + chain map; here we assert the underlying
       // store-call shape that the function depends on.
-      const bars = await stores.spot.readBars(
-        "SPX",
-        "2025-01-02",
-        "2025-01-02",
-      );
+      const bars = await stores.spot.readBars("SPX", "2025-01-02", "2025-01-02");
       expect(bars.length).toBe(3);
       // data-prep.ts uses the bars to find the entry-time bar — assert the
       // OHLC shape stays intact through readBars.
@@ -246,11 +224,7 @@ describe("tool/consumer contract — stores-backed spot/enriched reads", () => {
       // The loader reads underlying bulk bars, filter-intraday windows, and
       // daily OHLC + RSI inputs through stores.spot. Here we assert the
       // readBars contract the loader depends on.
-      const bars = await stores.spot.readBars(
-        "SPX",
-        "2025-01-02",
-        "2025-01-02",
-      );
+      const bars = await stores.spot.readBars("SPX", "2025-01-02", "2025-01-02");
       expect(bars.length).toBe(3);
 
       // The filter-intraday path also depends on time-window filtering at the

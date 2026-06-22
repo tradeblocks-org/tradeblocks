@@ -25,10 +25,7 @@ import type { ReportingTrade } from "@tradeblocks/lib";
 /**
  * Register edge decay analysis MCP tools
  */
-export function registerEdgeDecayTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerEdgeDecayTools(server: McpServer, baseDir: string): void {
   // Tool 1: analyze_period_metrics
   server.registerTool(
     "analyze_period_metrics",
@@ -37,10 +34,7 @@ export function registerEdgeDecayTools(
         "Segment a block's trades by year, quarter, and month with per-period statistics, trend detection via linear regression, and worst consecutive losing month identification. Foundation for edge decay analysis.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
       }),
     },
     withSyncedBlock(baseDir, async ({ blockId, strategy }) => {
@@ -104,7 +98,7 @@ export function registerEdgeDecayTools(
           isError: true as const,
         };
       }
-    })
+    }),
   );
 
   // Tool 2: analyze_rolling_metrics
@@ -115,37 +109,30 @@ export function registerEdgeDecayTools(
         "Compute rolling window statistics, quarterly seasonal averages, and recent-vs-historical comparison with structural flags for a block's trades. Foundation for edge decay analysis.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         windowSize: z
           .number()
           .min(5)
           .optional()
           .describe(
-            "Rolling window size in trades (default: auto-calculated based on trade count)"
+            "Rolling window size in trades (default: auto-calculated based on trade count)",
           ),
         recentWindowSize: z
           .number()
           .min(10)
           .optional()
-          .describe(
-            "Recent window size in trades for comparison (default: auto-calculated)"
-          ),
+          .describe("Recent window size in trades for comparison (default: auto-calculated)"),
         recentWindowDays: z
           .number()
           .min(7)
           .optional()
-          .describe(
-            "Override: recent window as calendar days instead of trade count"
-          ),
+          .describe("Override: recent window as calendar days instead of trade count"),
         includeSeries: z
           .boolean()
           .optional()
           .default(false)
           .describe(
-            "Include full rolling series data points in output (default: false, saves tokens)"
+            "Include full rolling series data points in output (default: false, saves tokens)",
           ),
       }),
     },
@@ -190,27 +177,17 @@ export function registerEdgeDecayTools(
           const seriesLength = result.series.length;
           const flags = result.recentVsHistorical.structuralFlags;
           const flagCount = flags.length;
-          const flagNames =
-            flagCount > 0
-              ? flags.map((f) => f.metric).join(", ")
-              : "none";
+          const flagNames = flagCount > 0 ? flags.map((f) => f.metric).join(", ") : "none";
 
           const recentMetrics = result.recentVsHistorical.metrics;
-          const recentWR =
-            recentMetrics.find((m) => m.metric === "winRate")?.recentValue;
-          const histWR =
-            recentMetrics.find((m) => m.metric === "winRate")?.historicalValue;
-          const recentPF =
-            recentMetrics.find((m) => m.metric === "profitFactor")
-              ?.recentValue;
-          const histPF =
-            recentMetrics.find((m) => m.metric === "profitFactor")
-              ?.historicalValue;
+          const recentWR = recentMetrics.find((m) => m.metric === "winRate")?.recentValue;
+          const histWR = recentMetrics.find((m) => m.metric === "winRate")?.historicalValue;
+          const recentPF = recentMetrics.find((m) => m.metric === "profitFactor")?.recentValue;
+          const histPF = recentMetrics.find((m) => m.metric === "profitFactor")?.historicalValue;
 
           const fmtPct = (v: number | undefined) =>
             v !== undefined ? `${(v * 100).toFixed(1)}%` : "N/A";
-          const fmtRatio = (v: number | undefined) =>
-            v !== undefined ? v.toFixed(2) : "N/A";
+          const fmtRatio = (v: number | undefined) => (v !== undefined ? v.toFixed(2) : "N/A");
 
           const summary = `Rolling metrics for ${blockId}${strategy ? ` (${strategy})` : ""}: ${result.dataQuality.totalTrades} trades, window=${result.windowSize}\nRolling series: ${seriesLength} data points\nStructural flags: ${flagCount} (${flagNames})\nRecent vs historical: win rate ${fmtPct(recentWR)} vs ${fmtPct(histWR)}, PF ${fmtRatio(recentPF)} vs ${fmtRatio(histPF)}`;
 
@@ -236,8 +213,8 @@ export function registerEdgeDecayTools(
             isError: true as const,
           };
         }
-      }
-    )
+      },
+    ),
   );
 
   // Tool 3: analyze_regime_comparison
@@ -248,36 +225,28 @@ export function registerEdgeDecayTools(
         "Run dual Monte Carlo simulations comparing full trade history vs recent window to detect regime divergence. Compares P(Profit), expected return, Sharpe ratio, and median max drawdown between the two periods. Returns a composite divergence score (0 = aligned, higher = more divergent).",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         recentWindowSize: z
           .number()
           .min(20)
           .optional()
           .describe(
-            "Number of recent trades for the recent window simulation (default: auto-calculated, typically max(20% of trades, 200))"
+            "Number of recent trades for the recent window simulation (default: auto-calculated, typically max(20% of trades, 200))",
           ),
         numSimulations: z
           .number()
           .min(50)
           .max(10000)
           .optional()
-          .describe(
-            "Number of Monte Carlo simulation paths (default: 1000)"
-          ),
+          .describe("Number of Monte Carlo simulation paths (default: 1000)"),
         simulationLength: z
           .number()
           .min(10)
           .optional()
           .describe(
-            "Number of trades to project forward per simulation (default: recentWindowSize)"
+            "Number of trades to project forward per simulation (default: recentWindowSize)",
           ),
-        randomSeed: z
-          .number()
-          .optional()
-          .describe("Random seed for reproducibility (default: 42)"),
+        randomSeed: z.number().optional().describe("Random seed for reproducibility (default: 42)"),
       }),
     },
     withSyncedBlock(
@@ -320,16 +289,12 @@ export function registerEdgeDecayTools(
           });
 
           // Build summary
-          const fullPProfit = (
-            result.fullHistory.statistics.probabilityOfProfit * 100
-          ).toFixed(1);
-          const recentPProfit = (
-            result.recentWindow.statistics.probabilityOfProfit * 100
-          ).toFixed(1);
-          const fullSharpe =
-            result.fullHistory.statistics.meanSharpeRatio.toFixed(2);
-          const recentSharpe =
-            result.recentWindow.statistics.meanSharpeRatio.toFixed(2);
+          const fullPProfit = (result.fullHistory.statistics.probabilityOfProfit * 100).toFixed(1);
+          const recentPProfit = (result.recentWindow.statistics.probabilityOfProfit * 100).toFixed(
+            1,
+          );
+          const fullSharpe = result.fullHistory.statistics.meanSharpeRatio.toFixed(2);
+          const recentSharpe = result.recentWindow.statistics.meanSharpeRatio.toFixed(2);
           const score = result.divergence.compositeScore.toFixed(2);
 
           const summary = `Regime comparison for ${blockId}${strategy ? ` (${strategy})` : ""}: ${result.fullHistory.tradeCount} full / ${result.recentWindow.tradeCount} recent trades\nP(Profit): ${fullPProfit}% (full) vs ${recentPProfit}% (recent) | Sharpe: ${fullSharpe} (full) vs ${recentSharpe} (recent)\nDivergence: score ${score}`;
@@ -341,36 +306,24 @@ export function registerEdgeDecayTools(
               tradeCount: result.fullHistory.tradeCount,
               dateRange: result.fullHistory.dateRange,
               statistics: {
-                probabilityOfProfit:
-                  result.fullHistory.statistics.probabilityOfProfit,
-                meanTotalReturn:
-                  result.fullHistory.statistics.meanTotalReturn,
-                meanSharpeRatio:
-                  result.fullHistory.statistics.meanSharpeRatio,
-                medianMaxDrawdown:
-                  result.fullHistory.statistics.medianMaxDrawdown,
-                meanFinalValue:
-                  result.fullHistory.statistics.meanFinalValue,
-                medianFinalValue:
-                  result.fullHistory.statistics.medianFinalValue,
+                probabilityOfProfit: result.fullHistory.statistics.probabilityOfProfit,
+                meanTotalReturn: result.fullHistory.statistics.meanTotalReturn,
+                meanSharpeRatio: result.fullHistory.statistics.meanSharpeRatio,
+                medianMaxDrawdown: result.fullHistory.statistics.medianMaxDrawdown,
+                meanFinalValue: result.fullHistory.statistics.meanFinalValue,
+                medianFinalValue: result.fullHistory.statistics.medianFinalValue,
               },
             },
             recentWindow: {
               tradeCount: result.recentWindow.tradeCount,
               dateRange: result.recentWindow.dateRange,
               statistics: {
-                probabilityOfProfit:
-                  result.recentWindow.statistics.probabilityOfProfit,
-                meanTotalReturn:
-                  result.recentWindow.statistics.meanTotalReturn,
-                meanSharpeRatio:
-                  result.recentWindow.statistics.meanSharpeRatio,
-                medianMaxDrawdown:
-                  result.recentWindow.statistics.medianMaxDrawdown,
-                meanFinalValue:
-                  result.recentWindow.statistics.meanFinalValue,
-                medianFinalValue:
-                  result.recentWindow.statistics.medianFinalValue,
+                probabilityOfProfit: result.recentWindow.statistics.probabilityOfProfit,
+                meanTotalReturn: result.recentWindow.statistics.meanTotalReturn,
+                meanSharpeRatio: result.recentWindow.statistics.meanSharpeRatio,
+                medianMaxDrawdown: result.recentWindow.statistics.medianMaxDrawdown,
+                meanFinalValue: result.recentWindow.statistics.meanFinalValue,
+                medianFinalValue: result.recentWindow.statistics.medianFinalValue,
               },
             },
             comparison: result.comparison,
@@ -390,8 +343,8 @@ export function registerEdgeDecayTools(
             isError: true as const,
           };
         }
-      }
-    )
+      },
+    ),
   );
 
   // Tool 4: analyze_walk_forward_degradation
@@ -402,24 +355,17 @@ export function registerEdgeDecayTools(
         "Run progressive walk-forward analysis to track whether out-of-sample performance is degrading relative to in-sample. Slides IS/OOS windows across trade history, computes efficiency ratios (OOS metric / IS metric) for Sharpe, win rate, and profit factor, detects trends via linear regression, and compares recent vs historical OOS efficiency.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         inSampleDays: z
           .number()
           .min(30)
           .optional()
-          .describe(
-            "In-sample window in calendar days (default: 365)"
-          ),
+          .describe("In-sample window in calendar days (default: 365)"),
         outOfSampleDays: z
           .number()
           .min(7)
           .optional()
-          .describe(
-            "Out-of-sample window in calendar days (default: 90)"
-          ),
+          .describe("Out-of-sample window in calendar days (default: 90)"),
         stepSizeDays: z
           .number()
           .min(7)
@@ -429,16 +375,12 @@ export function registerEdgeDecayTools(
           .number()
           .min(1)
           .optional()
-          .describe(
-            "Minimum trades for a period to be considered sufficient (default: 10)"
-          ),
+          .describe("Minimum trades for a period to be considered sufficient (default: 10)"),
         recentPeriodCount: z
           .number()
           .min(1)
           .optional()
-          .describe(
-            "Number of recent WF periods for comparison (default: 3)"
-          ),
+          .describe("Number of recent WF periods for comparison (default: 3)"),
       }),
     },
     withSyncedBlock(
@@ -485,8 +427,7 @@ export function registerEdgeDecayTools(
           // Build text summary
           const dq = result.dataQuality;
           const rvh = result.recentVsHistorical;
-          const fmtVal = (v: number | null) =>
-            v !== null ? v.toFixed(2) : "N/A";
+          const fmtVal = (v: number | null) => (v !== null ? v.toFixed(2) : "N/A");
 
           const summary = [
             `WF degradation for ${blockId}${strategy ? ` (${strategy})` : ""}: ${dq.totalTrades} trades, ${dq.totalPeriods} periods (${dq.sufficientPeriods} sufficient)`,
@@ -517,8 +458,8 @@ export function registerEdgeDecayTools(
             isError: true as const,
           };
         }
-      }
-    )
+      },
+    ),
   );
 
   // Tool 5: analyze_live_alignment
@@ -529,15 +470,12 @@ export function registerEdgeDecayTools(
         "Compare backtest trades against actual (reporting log) trades to assess live execution alignment. Computes direction agreement rate (% of days where both agree on win/loss), per-strategy execution efficiency (actual P/L as ratio of backtest P/L), and alignment trend over time via monthly regression. Returns graceful skip when no reporting log exists.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         scaling: z
           .enum(["raw", "perContract", "toReported"])
           .optional()
           .describe(
-            "P/L scaling mode: raw (as-is), perContract (divide by contracts, default), toReported (scale backtest to actual contract count)"
+            "P/L scaling mode: raw (as-is), perContract (divide by contracts, default), toReported (scale backtest to actual contract count)",
           ),
       }),
     },
@@ -557,7 +495,7 @@ export function registerEdgeDecayTools(
               strategy: strategy ?? null,
               available: false,
               reason: "no reporting log",
-            }
+            },
           );
         }
 
@@ -585,15 +523,12 @@ export function registerEdgeDecayTools(
         });
 
         if (!output.available) {
-          return createToolOutput(
-            `Live alignment for ${blockId}: skipped (${output.reason})`,
-            {
-              blockId,
-              strategy: strategy ?? null,
-              available: false,
-              reason: output.reason,
-            }
-          );
+          return createToolOutput(`Live alignment for ${blockId}: skipped (${output.reason})`, {
+            blockId,
+            strategy: strategy ?? null,
+            available: false,
+            reason: output.reason,
+          });
         }
 
         const result = output;
@@ -603,8 +538,7 @@ export function registerEdgeDecayTools(
         const ee = result.executionEfficiency;
         const dq = result.dataQuality;
         const fmtPct = (v: number) => (v * 100).toFixed(1) + "%";
-        const fmtVal = (v: number | null) =>
-          v !== null ? v.toFixed(2) : "N/A";
+        const fmtVal = (v: number | null) => (v !== null ? v.toFixed(2) : "N/A");
 
         const summary = [
           `Live alignment for ${blockId}${strategy ? ` (${strategy})` : ""}: ${dq.backtestTradeCount} backtest, ${dq.actualTradeCount} actual, ${dq.matchedTradeCount} matched (${fmtPct(dq.matchRate)})`,
@@ -636,7 +570,7 @@ export function registerEdgeDecayTools(
           isError: true as const,
         };
       }
-    })
+    }),
   );
 
   // Tool 6: analyze_edge_decay (unified)
@@ -651,95 +585,88 @@ export function registerEdgeDecayTools(
         "analyze_walk_forward_degradation, analyze_live_alignment) for detailed drill-down or custom parameters.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         recentWindow: z
           .number()
           .min(10)
           .optional()
           .describe(
-            "Number of recent trades for comparison (default: auto-calculated as max(20% of trades, 200))"
+            "Number of recent trades for comparison (default: auto-calculated as max(20% of trades, 200))",
           ),
       }),
     },
-    withSyncedBlock(
-      baseDir,
-      async ({ blockId, strategy, recentWindow }) => {
-        try {
-          const block = await loadBlock(baseDir, blockId);
-          const trades = applyStrategyFilter(block.trades, strategy);
+    withSyncedBlock(baseDir, async ({ blockId, strategy, recentWindow }) => {
+      try {
+        const block = await loadBlock(baseDir, blockId);
+        const trades = applyStrategyFilter(block.trades, strategy);
 
-          if (trades.length === 0) {
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: strategy
-                    ? `No trades found for strategy "${strategy}" in block "${blockId}".`
-                    : `No trades found in block "${blockId}".`,
-                },
-              ],
-              isError: true as const,
-            };
-          }
-
-          // Load reporting log -- graceful skip if missing
-          let actualTrades: ReportingTrade[] | undefined;
-          try {
-            const raw = await loadReportingLog(baseDir, blockId);
-            actualTrades = applyStrategyFilter(raw, strategy);
-          } catch {
-            actualTrades = undefined;
-          }
-
-          // Call pure synthesis engine
-          const result = synthesizeEdgeDecay(trades, actualTrades, {
-            recentWindow,
-          });
-
-          // Build text summary
-          const s = result.summary;
-          const fmtPct = (v: number | null) => v !== null ? (v * 100).toFixed(1) + "%" : "N/A";
-          const fmtRatio = (v: number | null) =>
-            v !== null ? v.toFixed(2) : "N/A";
-
-          const lines = [
-            `Edge decay analysis for ${blockId}${strategy ? ` (${strategy})` : ""}: ${s.totalTrades} trades, recent window=${s.recentWindow}`,
-            `Win rate: ${fmtPct(s.recentWinRate)} recent vs ${fmtPct(s.historicalWinRate)} historical`,
-            `Profit factor: ${fmtRatio(s.recentProfitFactor)} recent vs ${fmtRatio(s.historicalProfitFactor)} historical`,
-            `Sharpe: ${fmtRatio(s.recentSharpe)} recent vs ${fmtRatio(s.historicalSharpe)} historical`,
-            `Signals: ${result.metadata.signalsRun} run, ${result.metadata.signalsSkipped} skipped`,
-            `Observations: ${s.observationCount} notable (${s.structuralFlagCount} structural flags)`,
-          ];
-
-          if (s.mcProbabilityOfProfit) {
-            lines.push(
-              `MC P(Profit): ${(s.mcProbabilityOfProfit.full * 100).toFixed(1)}% full vs ${(s.mcProbabilityOfProfit.recent * 100).toFixed(1)}% recent`
-            );
-          }
-          if (s.liveDirectionAgreement !== null) {
-            lines.push(
-              `Live alignment: ${fmtPct(s.liveDirectionAgreement)} direction agreement, ${fmtRatio(s.liveExecutionEfficiency)} efficiency`
-            );
-          }
-
-          const summaryText = lines.join("\n");
-
-          return createToolOutput(summaryText, result);
-        } catch (error) {
+        if (trades.length === 0) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: `Error analyzing edge decay: ${(error as Error).message}`,
+                text: strategy
+                  ? `No trades found for strategy "${strategy}" in block "${blockId}".`
+                  : `No trades found in block "${blockId}".`,
               },
             ],
             isError: true as const,
           };
         }
+
+        // Load reporting log -- graceful skip if missing
+        let actualTrades: ReportingTrade[] | undefined;
+        try {
+          const raw = await loadReportingLog(baseDir, blockId);
+          actualTrades = applyStrategyFilter(raw, strategy);
+        } catch {
+          actualTrades = undefined;
+        }
+
+        // Call pure synthesis engine
+        const result = synthesizeEdgeDecay(trades, actualTrades, {
+          recentWindow,
+        });
+
+        // Build text summary
+        const s = result.summary;
+        const fmtPct = (v: number | null) => (v !== null ? (v * 100).toFixed(1) + "%" : "N/A");
+        const fmtRatio = (v: number | null) => (v !== null ? v.toFixed(2) : "N/A");
+
+        const lines = [
+          `Edge decay analysis for ${blockId}${strategy ? ` (${strategy})` : ""}: ${s.totalTrades} trades, recent window=${s.recentWindow}`,
+          `Win rate: ${fmtPct(s.recentWinRate)} recent vs ${fmtPct(s.historicalWinRate)} historical`,
+          `Profit factor: ${fmtRatio(s.recentProfitFactor)} recent vs ${fmtRatio(s.historicalProfitFactor)} historical`,
+          `Sharpe: ${fmtRatio(s.recentSharpe)} recent vs ${fmtRatio(s.historicalSharpe)} historical`,
+          `Signals: ${result.metadata.signalsRun} run, ${result.metadata.signalsSkipped} skipped`,
+          `Observations: ${s.observationCount} notable (${s.structuralFlagCount} structural flags)`,
+        ];
+
+        if (s.mcProbabilityOfProfit) {
+          lines.push(
+            `MC P(Profit): ${(s.mcProbabilityOfProfit.full * 100).toFixed(1)}% full vs ${(s.mcProbabilityOfProfit.recent * 100).toFixed(1)}% recent`,
+          );
+        }
+        if (s.liveDirectionAgreement !== null) {
+          lines.push(
+            `Live alignment: ${fmtPct(s.liveDirectionAgreement)} direction agreement, ${fmtRatio(s.liveExecutionEfficiency)} efficiency`,
+          );
+        }
+
+        const summaryText = lines.join("\n");
+
+        return createToolOutput(summaryText, result);
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error analyzing edge decay: ${(error as Error).message}`,
+            },
+          ],
+          isError: true as const,
+        };
       }
-    )
+    }),
   );
 }

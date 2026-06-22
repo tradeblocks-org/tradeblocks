@@ -41,9 +41,7 @@ export const registerUnderlyingSchema = z.object({
     .array(z.string().min(1).max(16).regex(TICKER_RE))
     .min(1)
     .max(32)
-    .describe(
-      "OCC roots that resolve to this underlying, e.g. ['SPX','SPXW','SPXQ']",
-    ),
+    .describe("OCC roots that resolve to this underlying, e.g. ['SPX','SPXW','SPXQ']"),
 });
 
 export const unregisterUnderlyingSchema = z.object({
@@ -62,7 +60,5 @@ export const resolveRootSchema = z.object({
     .string()
     .min(1)
     .max(32)
-    .describe(
-      "Bare root ('SPXW') or full OCC ticker ('SPXW251219C05000000')",
-    ),
+    .describe("Bare root ('SPXW') or full OCC ticker ('SPXW251219C05000000')"),
 });

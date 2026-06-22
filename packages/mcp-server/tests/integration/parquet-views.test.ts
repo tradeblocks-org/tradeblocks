@@ -19,7 +19,10 @@ describe("createMarketParquetViews", () => {
   let conn: DuckDBConnection;
 
   beforeEach(async () => {
-    tmpDir = join(tmpdir(), `parquet-views-test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    tmpDir = join(
+      tmpdir(),
+      `parquet-views-test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    );
     mkdirSync(tmpDir, { recursive: true });
     db = await DuckDBInstance.create(":memory:");
     conn = await db.connect();
@@ -27,7 +30,11 @@ describe("createMarketParquetViews", () => {
   });
 
   afterEach(() => {
-    try { conn.closeSync(); } catch { /* ignore */ }
+    try {
+      conn.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -64,12 +71,16 @@ describe("createMarketParquetViews", () => {
     expect(result.viewsCreated).toContain("option_quote_minutes");
 
     // Verify option_chain view data
-    const chainRows = (await conn.runAndReadAll("SELECT underlying, strike FROM market.option_chain")).getRows();
+    const chainRows = (
+      await conn.runAndReadAll("SELECT underlying, strike FROM market.option_chain")
+    ).getRows();
     expect(chainRows.length).toBe(1);
     expect(String(chainRows[0][0])).toBe("SPX");
     expect(Number(chainRows[0][1])).toBe(5800.0);
 
-    const quoteRows = (await conn.runAndReadAll("SELECT ticker, mid, date FROM market.option_quote_minutes")).getRows();
+    const quoteRows = (
+      await conn.runAndReadAll("SELECT ticker, mid, date FROM market.option_quote_minutes")
+    ).getRows();
     expect(quoteRows.length).toBe(1);
     expect(String(quoteRows[0][0])).toBe("SPXW250106C05800000");
     expect(Number(quoteRows[0][1])).toBe(1.1);
@@ -103,9 +114,11 @@ describe("createMarketParquetViews", () => {
     `);
     expect(Number(tableCount.getRows()[0][0])).toBe(0);
 
-    const rows = (await conn.runAndReadAll(`
+    const rows = (
+      await conn.runAndReadAll(`
       SELECT ticker, mid, date FROM market.option_quote_minutes
-    `)).getRows();
+    `)
+    ).getRows();
     expect(rows.length).toBe(1);
     expect(String(rows[0][0])).toBe("SPXW250106C05800000");
     expect(Number(rows[0][1])).toBe(1.1);
@@ -159,9 +172,12 @@ describe("createMarketParquetViews", () => {
     expect(result.viewsCreated).toEqual([]);
     expect(result.tablesKept).toEqual([
       // Hive-partitioned chain + quote views
-      "option_chain", "option_quote_minutes",
+      "option_chain",
+      "option_quote_minutes",
       // Canonical spot/enriched view names
-      "spot", "enriched", "enriched_context",
+      "spot",
+      "enriched",
+      "enriched_context",
       // Daily-bar bridge view backed by spot
       "spot_daily",
     ]);

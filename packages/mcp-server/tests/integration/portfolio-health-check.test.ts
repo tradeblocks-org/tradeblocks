@@ -9,17 +9,22 @@
  *
  * Expected: Summary line + JSON with 4 layers (verdict, grades, flags, keyNumbers)
  */
-import * as path from 'path';
-import { fileURLToPath } from 'url';
+import * as path from "path";
+import { fileURLToPath } from "url";
 
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { loadBlock, calculateCorrelationMatrix, performTailRiskAnalysis, PortfolioStatsCalculator } from '../../src/test-exports.ts';
+import {
+  loadBlock,
+  calculateCorrelationMatrix,
+  performTailRiskAnalysis,
+  PortfolioStatsCalculator,
+} from "../../src/test-exports.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
+const FIXTURES_DIR = path.join(__dirname, "..", "fixtures");
 
 interface Trade {
   strategy: string;
@@ -32,8 +37,8 @@ interface Trade {
 }
 
 interface Flag {
-  type: 'warning' | 'pass';
-  dimension: 'diversification' | 'tailRisk' | 'robustness' | 'consistency';
+  type: "warning" | "pass";
+  dimension: "diversification" | "tailRisk" | "robustness" | "consistency";
   message: string;
 }
 
@@ -47,15 +52,15 @@ interface HealthCheckResult {
     mddMultiplierThreshold: number;
   };
   verdict: {
-    status: 'HEALTHY' | 'MODERATE_CONCERNS' | 'ISSUES_DETECTED';
+    status: "HEALTHY" | "MODERATE_CONCERNS" | "ISSUES_DETECTED";
     oneLineSummary: string;
     flagCount: number;
   };
   grades: {
-    diversification: 'A' | 'B' | 'C' | 'F';
-    tailRisk: 'A' | 'B' | 'C' | 'F';
-    robustness: 'A' | 'B' | 'C' | 'F' | null;
-    consistency: 'A' | 'B' | 'C' | 'F';
+    diversification: "A" | "B" | "C" | "F";
+    tailRisk: "A" | "B" | "C" | "F";
+    robustness: "A" | "B" | "C" | "F" | null;
+    consistency: "A" | "B" | "C" | "F";
   };
   flags: Flag[];
   keyNumbers: {
@@ -98,7 +103,7 @@ async function simulatePortfolioHealthCheck(
     profitProbabilityThreshold?: number;
     wfeThreshold?: number;
     mddMultiplierThreshold?: number;
-  } = {}
+  } = {},
 ): Promise<HealthCheckResult> {
   const {
     correlationThreshold = HEALTH_CHECK_DEFAULTS.correlationThreshold,
@@ -114,14 +119,29 @@ async function simulatePortfolioHealthCheck(
   if (trades.length === 0) {
     return {
       blockId,
-      thresholds: { correlationThreshold, tailDependenceThreshold, profitProbabilityThreshold, wfeThreshold, mddMultiplierThreshold },
-      verdict: { status: 'HEALTHY', oneLineSummary: 'No trades', flagCount: 0 },
-      grades: { diversification: 'A', tailRisk: 'A', robustness: null, consistency: 'A' },
+      thresholds: {
+        correlationThreshold,
+        tailDependenceThreshold,
+        profitProbabilityThreshold,
+        wfeThreshold,
+        mddMultiplierThreshold,
+      },
+      verdict: { status: "HEALTHY", oneLineSummary: "No trades", flagCount: 0 },
+      grades: { diversification: "A", tailRisk: "A", robustness: null, consistency: "A" },
       flags: [],
       keyNumbers: {
-        strategies: 0, trades: 0, sharpe: null, sortino: null, maxDrawdownPct: 0,
-        netPl: 0, avgCorrelation: 0, avgTailDependence: 0, mcProbabilityOfProfit: 0,
-        mcMedianMdd: 0, mcMddMultiplier: null, wfe: null,
+        strategies: 0,
+        trades: 0,
+        sharpe: null,
+        sortino: null,
+        maxDrawdownPct: 0,
+        netPl: 0,
+        avgCorrelation: 0,
+        avgTailDependence: 0,
+        mcProbabilityOfProfit: 0,
+        mcMedianMdd: 0,
+        mcMddMultiplier: null,
+        wfe: null,
       },
       message: `No trades found in block "${blockId}"`,
     };
@@ -132,14 +152,29 @@ async function simulatePortfolioHealthCheck(
   if (strategies.length < 2) {
     return {
       blockId,
-      thresholds: { correlationThreshold, tailDependenceThreshold, profitProbabilityThreshold, wfeThreshold, mddMultiplierThreshold },
-      verdict: { status: 'HEALTHY', oneLineSummary: 'Single strategy', flagCount: 0 },
-      grades: { diversification: 'A', tailRisk: 'A', robustness: null, consistency: 'A' },
+      thresholds: {
+        correlationThreshold,
+        tailDependenceThreshold,
+        profitProbabilityThreshold,
+        wfeThreshold,
+        mddMultiplierThreshold,
+      },
+      verdict: { status: "HEALTHY", oneLineSummary: "Single strategy", flagCount: 0 },
+      grades: { diversification: "A", tailRisk: "A", robustness: null, consistency: "A" },
       flags: [],
       keyNumbers: {
-        strategies: strategies.length, trades: trades.length, sharpe: null, sortino: null,
-        maxDrawdownPct: 0, netPl: 0, avgCorrelation: 0, avgTailDependence: 0,
-        mcProbabilityOfProfit: 0, mcMedianMdd: 0, mcMddMultiplier: null, wfe: null,
+        strategies: strategies.length,
+        trades: trades.length,
+        sharpe: null,
+        sortino: null,
+        maxDrawdownPct: 0,
+        netPl: 0,
+        avgCorrelation: 0,
+        avgTailDependence: 0,
+        mcProbabilityOfProfit: 0,
+        mcMedianMdd: 0,
+        mcMddMultiplier: null,
+        wfe: null,
       },
       error: `Portfolio health check requires at least 2 strategies. Found ${strategies.length}.`,
     };
@@ -148,14 +183,29 @@ async function simulatePortfolioHealthCheck(
   if (trades.length < 20) {
     return {
       blockId,
-      thresholds: { correlationThreshold, tailDependenceThreshold, profitProbabilityThreshold, wfeThreshold, mddMultiplierThreshold },
-      verdict: { status: 'HEALTHY', oneLineSummary: 'Insufficient trades', flagCount: 0 },
-      grades: { diversification: 'A', tailRisk: 'A', robustness: null, consistency: 'A' },
+      thresholds: {
+        correlationThreshold,
+        tailDependenceThreshold,
+        profitProbabilityThreshold,
+        wfeThreshold,
+        mddMultiplierThreshold,
+      },
+      verdict: { status: "HEALTHY", oneLineSummary: "Insufficient trades", flagCount: 0 },
+      grades: { diversification: "A", tailRisk: "A", robustness: null, consistency: "A" },
       flags: [],
       keyNumbers: {
-        strategies: strategies.length, trades: trades.length, sharpe: null, sortino: null,
-        maxDrawdownPct: 0, netPl: 0, avgCorrelation: 0, avgTailDependence: 0,
-        mcProbabilityOfProfit: 0, mcMedianMdd: 0, mcMddMultiplier: null, wfe: null,
+        strategies: strategies.length,
+        trades: trades.length,
+        sharpe: null,
+        sortino: null,
+        maxDrawdownPct: 0,
+        netPl: 0,
+        avgCorrelation: 0,
+        avgTailDependence: 0,
+        mcProbabilityOfProfit: 0,
+        mcMedianMdd: 0,
+        mcMddMultiplier: null,
+        wfe: null,
       },
       error: `Portfolio health check requires at least 20 trades. Found ${trades.length}.`,
     };
@@ -167,17 +217,17 @@ async function simulatePortfolioHealthCheck(
 
   // Calculate correlation matrix
   const correlationMatrix = calculateCorrelationMatrix(trades, {
-    method: 'kendall',
-    normalization: 'raw',
-    dateBasis: 'opened',
-    alignment: 'shared',
+    method: "kendall",
+    normalization: "raw",
+    dateBasis: "opened",
+    alignment: "shared",
   });
 
   // Calculate tail risk
   const tailRisk = performTailRiskAnalysis(trades, {
     tailThreshold: 0.1,
-    normalization: 'raw',
-    dateBasis: 'opened',
+    normalization: "raw",
+    dateBasis: "opened",
     minTradingDays: 10,
   });
 
@@ -202,7 +252,12 @@ async function simulatePortfolioHealthCheck(
     for (let j = i + 1; j < tailRisk.strategies.length; j++) {
       const valAB = tailRisk.jointTailRiskMatrix[i]?.[j];
       const valBA = tailRisk.jointTailRiskMatrix[j]?.[i];
-      if (valAB !== undefined && valBA !== undefined && !Number.isNaN(valAB) && !Number.isNaN(valBA)) {
+      if (
+        valAB !== undefined &&
+        valBA !== undefined &&
+        !Number.isNaN(valAB) &&
+        !Number.isNaN(valBA)
+      ) {
         totalTailDependence += (valAB + valBA) / 2;
         tailCount++;
       }
@@ -220,21 +275,21 @@ async function simulatePortfolioHealthCheck(
       const val = correlationMatrix.correlationData[i][j];
       if (!Number.isNaN(val) && Math.abs(val) > correlationThreshold) {
         highCorrPairs.push(
-          `${correlationMatrix.strategies[i]} & ${correlationMatrix.strategies[j]} (${val.toFixed(2)})`
+          `${correlationMatrix.strategies[i]} & ${correlationMatrix.strategies[j]} (${val.toFixed(2)})`,
         );
       }
     }
   }
   if (highCorrPairs.length > 0) {
     flags.push({
-      type: 'warning',
-      dimension: 'diversification',
-      message: `High correlation pairs (>${correlationThreshold}): ${highCorrPairs.join(', ')}`,
+      type: "warning",
+      dimension: "diversification",
+      message: `High correlation pairs (>${correlationThreshold}): ${highCorrPairs.join(", ")}`,
     });
   } else {
     flags.push({
-      type: 'pass',
-      dimension: 'diversification',
+      type: "pass",
+      dimension: "diversification",
       message: `No correlation pairs above ${correlationThreshold} threshold`,
     });
   }
@@ -245,11 +300,16 @@ async function simulatePortfolioHealthCheck(
     for (let j = i + 1; j < tailRisk.strategies.length; j++) {
       const valAB = tailRisk.jointTailRiskMatrix[i]?.[j];
       const valBA = tailRisk.jointTailRiskMatrix[j]?.[i];
-      if (valAB !== undefined && valBA !== undefined && !Number.isNaN(valAB) && !Number.isNaN(valBA)) {
+      if (
+        valAB !== undefined &&
+        valBA !== undefined &&
+        !Number.isNaN(valAB) &&
+        !Number.isNaN(valBA)
+      ) {
         const avgTail = (valAB + valBA) / 2;
         if (avgTail > tailDependenceThreshold) {
           highTailPairs.push(
-            `${tailRisk.strategies[i]} & ${tailRisk.strategies[j]} (${avgTail.toFixed(2)})`
+            `${tailRisk.strategies[i]} & ${tailRisk.strategies[j]} (${avgTail.toFixed(2)})`,
           );
         }
       }
@@ -257,14 +317,14 @@ async function simulatePortfolioHealthCheck(
   }
   if (highTailPairs.length > 0) {
     flags.push({
-      type: 'warning',
-      dimension: 'tailRisk',
-      message: `High tail dependence pairs (>${tailDependenceThreshold}): ${highTailPairs.join(', ')}`,
+      type: "warning",
+      dimension: "tailRisk",
+      message: `High tail dependence pairs (>${tailDependenceThreshold}): ${highTailPairs.join(", ")}`,
     });
   } else {
     flags.push({
-      type: 'pass',
-      dimension: 'tailRisk',
+      type: "pass",
+      dimension: "tailRisk",
       message: `No tail dependence pairs above ${tailDependenceThreshold} threshold`,
     });
   }
@@ -272,59 +332,67 @@ async function simulatePortfolioHealthCheck(
   // Mock MC profit probability (simplified for tests)
   const mcProbabilityOfProfit = 0.98; // High for test purposes
   flags.push({
-    type: mcProbabilityOfProfit >= profitProbabilityThreshold ? 'pass' : 'warning',
-    dimension: 'consistency',
-    message: mcProbabilityOfProfit >= profitProbabilityThreshold
-      ? `Monte Carlo profit probability meets threshold`
-      : `Monte Carlo profit probability below threshold`,
+    type: mcProbabilityOfProfit >= profitProbabilityThreshold ? "pass" : "warning",
+    dimension: "consistency",
+    message:
+      mcProbabilityOfProfit >= profitProbabilityThreshold
+        ? `Monte Carlo profit probability meets threshold`
+        : `Monte Carlo profit probability below threshold`,
   });
 
   // Build grades
-  type Grade = 'A' | 'B' | 'C' | 'F';
+  type Grade = "A" | "B" | "C" | "F";
 
   let diversificationGrade: Grade;
-  if (avgCorrelation < 0.2) diversificationGrade = 'A';
-  else if (avgCorrelation < 0.4) diversificationGrade = 'B';
-  else if (avgCorrelation < 0.6) diversificationGrade = 'C';
-  else diversificationGrade = 'F';
+  if (avgCorrelation < 0.2) diversificationGrade = "A";
+  else if (avgCorrelation < 0.4) diversificationGrade = "B";
+  else if (avgCorrelation < 0.6) diversificationGrade = "C";
+  else diversificationGrade = "F";
 
   let tailRiskGrade: Grade;
-  if (avgTailDependence < 0.3) tailRiskGrade = 'A';
-  else if (avgTailDependence < 0.5) tailRiskGrade = 'B';
-  else if (avgTailDependence < 0.7) tailRiskGrade = 'C';
-  else tailRiskGrade = 'F';
+  if (avgTailDependence < 0.3) tailRiskGrade = "A";
+  else if (avgTailDependence < 0.5) tailRiskGrade = "B";
+  else if (avgTailDependence < 0.7) tailRiskGrade = "C";
+  else tailRiskGrade = "F";
 
   // WFA skipped for test simplicity
   const robustnessGrade: Grade | null = null;
 
   let consistencyGrade: Grade;
-  if (mcProbabilityOfProfit >= 0.98) consistencyGrade = 'A';
-  else if (mcProbabilityOfProfit >= 0.9) consistencyGrade = 'B';
-  else if (mcProbabilityOfProfit >= 0.7) consistencyGrade = 'C';
-  else consistencyGrade = 'F';
+  if (mcProbabilityOfProfit >= 0.98) consistencyGrade = "A";
+  else if (mcProbabilityOfProfit >= 0.9) consistencyGrade = "B";
+  else if (mcProbabilityOfProfit >= 0.7) consistencyGrade = "C";
+  else consistencyGrade = "F";
 
   // Build verdict
-  const warningFlags = flags.filter((f) => f.type === 'warning');
+  const warningFlags = flags.filter((f) => f.type === "warning");
   const flagCount = warningFlags.length;
-  let verdict: 'HEALTHY' | 'MODERATE_CONCERNS' | 'ISSUES_DETECTED';
+  let verdict: "HEALTHY" | "MODERATE_CONCERNS" | "ISSUES_DETECTED";
   let oneLineSummary: string;
 
   if (flagCount === 0) {
-    verdict = 'HEALTHY';
-    oneLineSummary = 'Portfolio shows strong diversification, controlled tail risk, and consistent outcomes.';
+    verdict = "HEALTHY";
+    oneLineSummary =
+      "Portfolio shows strong diversification, controlled tail risk, and consistent outcomes.";
   } else if (flagCount <= 2) {
-    verdict = 'MODERATE_CONCERNS';
+    verdict = "MODERATE_CONCERNS";
     const concernDimensions = [...new Set(warningFlags.map((f) => f.dimension))];
-    oneLineSummary = `Portfolio has ${flagCount} warning(s) in ${concernDimensions.join(', ')} - review flagged items.`;
+    oneLineSummary = `Portfolio has ${flagCount} warning(s) in ${concernDimensions.join(", ")} - review flagged items.`;
   } else {
-    verdict = 'ISSUES_DETECTED';
+    verdict = "ISSUES_DETECTED";
     const concernDimensions = [...new Set(warningFlags.map((f) => f.dimension))];
-    oneLineSummary = `Portfolio has ${flagCount} warnings across ${concernDimensions.join(', ')} - significant review recommended.`;
+    oneLineSummary = `Portfolio has ${flagCount} warnings across ${concernDimensions.join(", ")} - significant review recommended.`;
   }
 
   return {
     blockId,
-    thresholds: { correlationThreshold, tailDependenceThreshold, profitProbabilityThreshold, wfeThreshold, mddMultiplierThreshold },
+    thresholds: {
+      correlationThreshold,
+      tailDependenceThreshold,
+      profitProbabilityThreshold,
+      wfeThreshold,
+      mddMultiplierThreshold,
+    },
     verdict: { status: verdict, oneLineSummary, flagCount },
     grades: {
       diversification: diversificationGrade,
@@ -350,195 +418,213 @@ async function simulatePortfolioHealthCheck(
   };
 }
 
-describe('portfolio_health_check', () => {
-  describe('4-layer response structure', () => {
-    it('should return all 4 layers: verdict, grades, flags, keyNumbers', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+describe("portfolio_health_check", () => {
+  describe("4-layer response structure", () => {
+    it("should return all 4 layers: verdict, grades, flags, keyNumbers", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
-      expect(result).toHaveProperty('verdict');
-      expect(result).toHaveProperty('grades');
-      expect(result).toHaveProperty('flags');
-      expect(result).toHaveProperty('keyNumbers');
+      expect(result).toHaveProperty("verdict");
+      expect(result).toHaveProperty("grades");
+      expect(result).toHaveProperty("flags");
+      expect(result).toHaveProperty("keyNumbers");
     });
 
-    it('should have correct verdict structure', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+    it("should have correct verdict structure", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
-      expect(result.verdict).toHaveProperty('status');
-      expect(result.verdict).toHaveProperty('oneLineSummary');
-      expect(result.verdict).toHaveProperty('flagCount');
-      expect(['HEALTHY', 'MODERATE_CONCERNS', 'ISSUES_DETECTED']).toContain(result.verdict.status);
+      expect(result.verdict).toHaveProperty("status");
+      expect(result.verdict).toHaveProperty("oneLineSummary");
+      expect(result.verdict).toHaveProperty("flagCount");
+      expect(["HEALTHY", "MODERATE_CONCERNS", "ISSUES_DETECTED"]).toContain(result.verdict.status);
     });
 
-    it('should have correct grades structure with A/B/C/F values', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+    it("should have correct grades structure with A/B/C/F values", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
-      expect(result.grades).toHaveProperty('diversification');
-      expect(result.grades).toHaveProperty('tailRisk');
-      expect(result.grades).toHaveProperty('robustness');
-      expect(result.grades).toHaveProperty('consistency');
+      expect(result.grades).toHaveProperty("diversification");
+      expect(result.grades).toHaveProperty("tailRisk");
+      expect(result.grades).toHaveProperty("robustness");
+      expect(result.grades).toHaveProperty("consistency");
 
       // Grades should be A, B, C, F, or null
-      const validGrades = ['A', 'B', 'C', 'F', null];
+      const validGrades = ["A", "B", "C", "F", null];
       expect(validGrades).toContain(result.grades.diversification);
       expect(validGrades).toContain(result.grades.tailRisk);
       expect(validGrades).toContain(result.grades.robustness);
       expect(validGrades).toContain(result.grades.consistency);
     });
 
-    it('should have flags with type, dimension, and message', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+    it("should have flags with type, dimension, and message", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
       expect(result.flags.length).toBeGreaterThan(0);
       for (const flag of result.flags) {
-        expect(flag).toHaveProperty('type');
-        expect(flag).toHaveProperty('dimension');
-        expect(flag).toHaveProperty('message');
-        expect(['warning', 'pass']).toContain(flag.type);
-        expect(['diversification', 'tailRisk', 'robustness', 'consistency']).toContain(flag.dimension);
+        expect(flag).toHaveProperty("type");
+        expect(flag).toHaveProperty("dimension");
+        expect(flag).toHaveProperty("message");
+        expect(["warning", "pass"]).toContain(flag.type);
+        expect(["diversification", "tailRisk", "robustness", "consistency"]).toContain(
+          flag.dimension,
+        );
       }
     });
 
-    it('should have keyNumbers with required metrics', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+    it("should have keyNumbers with required metrics", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
-      expect(result.keyNumbers).toHaveProperty('strategies');
-      expect(result.keyNumbers).toHaveProperty('trades');
-      expect(result.keyNumbers).toHaveProperty('sharpe');
-      expect(result.keyNumbers).toHaveProperty('sortino');
-      expect(result.keyNumbers).toHaveProperty('maxDrawdownPct');
-      expect(result.keyNumbers).toHaveProperty('netPl');
-      expect(result.keyNumbers).toHaveProperty('avgCorrelation');
-      expect(result.keyNumbers).toHaveProperty('avgTailDependence');
-      expect(result.keyNumbers).toHaveProperty('mcProbabilityOfProfit');
+      expect(result.keyNumbers).toHaveProperty("strategies");
+      expect(result.keyNumbers).toHaveProperty("trades");
+      expect(result.keyNumbers).toHaveProperty("sharpe");
+      expect(result.keyNumbers).toHaveProperty("sortino");
+      expect(result.keyNumbers).toHaveProperty("maxDrawdownPct");
+      expect(result.keyNumbers).toHaveProperty("netPl");
+      expect(result.keyNumbers).toHaveProperty("avgCorrelation");
+      expect(result.keyNumbers).toHaveProperty("avgTailDependence");
+      expect(result.keyNumbers).toHaveProperty("mcProbabilityOfProfit");
     });
   });
 
-  describe('verdict logic', () => {
-    it('should return HEALTHY when no warnings', async () => {
+  describe("verdict logic", () => {
+    it("should return HEALTHY when no warnings", async () => {
       // Use very high thresholds so no pairs get flagged
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block', {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block", {
         correlationThreshold: 0.99,
         tailDependenceThreshold: 0.99,
       });
 
       expect(result.verdict.flagCount).toBe(0);
-      expect(result.verdict.status).toBe('HEALTHY');
+      expect(result.verdict.status).toBe("HEALTHY");
     });
 
-    it('should return MODERATE_CONCERNS when 1-2 warnings', async () => {
+    it("should return MODERATE_CONCERNS when 1-2 warnings", async () => {
       // Use thresholds that should trigger exactly some warnings
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block', {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block", {
         correlationThreshold: 0.3, // Low threshold to trigger warning
         tailDependenceThreshold: 0.99, // High threshold to avoid warning
       });
 
       if (result.verdict.flagCount >= 1 && result.verdict.flagCount <= 2) {
-        expect(result.verdict.status).toBe('MODERATE_CONCERNS');
+        expect(result.verdict.status).toBe("MODERATE_CONCERNS");
       }
     });
 
-    it('should return ISSUES_DETECTED when 3+ warnings', async () => {
+    it("should return ISSUES_DETECTED when 3+ warnings", async () => {
       // Use very low thresholds to trigger multiple warnings
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block', {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block", {
         correlationThreshold: 0.1,
         tailDependenceThreshold: 0.1,
         profitProbabilityThreshold: 0.999, // Very high to trigger warning
       });
 
       if (result.verdict.flagCount >= 3) {
-        expect(result.verdict.status).toBe('ISSUES_DETECTED');
+        expect(result.verdict.status).toBe("ISSUES_DETECTED");
       }
     });
   });
 
-  describe('grades calculation', () => {
-    it('should assign diversification grade based on avg correlation', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+  describe("grades calculation", () => {
+    it("should assign diversification grade based on avg correlation", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
       // Grade is A (<0.2), B (<0.4), C (<0.6), F (>=0.6)
       const avgCorr = result.keyNumbers.avgCorrelation;
-      if (avgCorr < 0.2) expect(result.grades.diversification).toBe('A');
-      else if (avgCorr < 0.4) expect(result.grades.diversification).toBe('B');
-      else if (avgCorr < 0.6) expect(result.grades.diversification).toBe('C');
-      else expect(result.grades.diversification).toBe('F');
+      if (avgCorr < 0.2) expect(result.grades.diversification).toBe("A");
+      else if (avgCorr < 0.4) expect(result.grades.diversification).toBe("B");
+      else if (avgCorr < 0.6) expect(result.grades.diversification).toBe("C");
+      else expect(result.grades.diversification).toBe("F");
     });
 
-    it('should assign tailRisk grade based on avg tail dependence', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+    it("should assign tailRisk grade based on avg tail dependence", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
       // Grade is A (<0.3), B (<0.5), C (<0.7), F (>=0.7)
       const avgTail = result.keyNumbers.avgTailDependence;
-      if (avgTail < 0.3) expect(result.grades.tailRisk).toBe('A');
-      else if (avgTail < 0.5) expect(result.grades.tailRisk).toBe('B');
-      else if (avgTail < 0.7) expect(result.grades.tailRisk).toBe('C');
-      else expect(result.grades.tailRisk).toBe('F');
+      if (avgTail < 0.3) expect(result.grades.tailRisk).toBe("A");
+      else if (avgTail < 0.5) expect(result.grades.tailRisk).toBe("B");
+      else if (avgTail < 0.7) expect(result.grades.tailRisk).toBe("C");
+      else expect(result.grades.tailRisk).toBe("F");
     });
 
-    it('should return null robustness grade when WFA cannot run', async () => {
+    it("should return null robustness grade when WFA cannot run", async () => {
       // For small test fixtures, WFA typically cannot run
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
       // WFA is typically skipped for small test fixtures
       expect(result.grades.robustness).toBeNull();
     });
   });
 
-  describe('flag generation', () => {
-    it('should flag high correlation pairs correctly', async () => {
+  describe("flag generation", () => {
+    it("should flag high correlation pairs correctly", async () => {
       // Use low threshold to ensure pairs are flagged
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block', {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block", {
         correlationThreshold: 0.3,
       });
 
-      const corrFlags = result.flags.filter((f) => f.dimension === 'diversification');
+      const corrFlags = result.flags.filter((f) => f.dimension === "diversification");
       expect(corrFlags.length).toBeGreaterThan(0);
     });
 
-    it('should include strategy names in flag messages', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block', {
+    it("should include strategy names in flag messages", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block", {
         correlationThreshold: 0.3, // Low threshold to trigger warnings
       });
 
-      const warningFlags = result.flags.filter((f) => f.type === 'warning');
+      const warningFlags = result.flags.filter((f) => f.type === "warning");
       for (const flag of warningFlags) {
         // Warning messages should contain specific info (strategy names or numbers)
         expect(flag.message.length).toBeGreaterThan(20);
       }
     });
 
-    it('should respect custom correlation threshold', async () => {
-      const highThreshold = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block', {
-        correlationThreshold: 0.99,
-      });
-      const lowThreshold = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block', {
-        correlationThreshold: 0.1,
-      });
+    it("should respect custom correlation threshold", async () => {
+      const highThreshold = await simulatePortfolioHealthCheck(
+        FIXTURES_DIR,
+        "similarity-test-block",
+        {
+          correlationThreshold: 0.99,
+        },
+      );
+      const lowThreshold = await simulatePortfolioHealthCheck(
+        FIXTURES_DIR,
+        "similarity-test-block",
+        {
+          correlationThreshold: 0.1,
+        },
+      );
 
       const highCorrWarnings = highThreshold.flags.filter(
-        (f) => f.dimension === 'diversification' && f.type === 'warning'
+        (f) => f.dimension === "diversification" && f.type === "warning",
       );
       const lowCorrWarnings = lowThreshold.flags.filter(
-        (f) => f.dimension === 'diversification' && f.type === 'warning'
+        (f) => f.dimension === "diversification" && f.type === "warning",
       );
 
       // Low threshold should flag more pairs
       expect(lowCorrWarnings.length).toBeGreaterThanOrEqual(highCorrWarnings.length);
     });
 
-    it('should respect custom tail dependence threshold', async () => {
-      const highThreshold = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block', {
-        tailDependenceThreshold: 0.99,
-      });
-      const lowThreshold = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block', {
-        tailDependenceThreshold: 0.1,
-      });
+    it("should respect custom tail dependence threshold", async () => {
+      const highThreshold = await simulatePortfolioHealthCheck(
+        FIXTURES_DIR,
+        "similarity-test-block",
+        {
+          tailDependenceThreshold: 0.99,
+        },
+      );
+      const lowThreshold = await simulatePortfolioHealthCheck(
+        FIXTURES_DIR,
+        "similarity-test-block",
+        {
+          tailDependenceThreshold: 0.1,
+        },
+      );
 
       const highTailWarnings = highThreshold.flags.filter(
-        (f) => f.dimension === 'tailRisk' && f.type === 'warning'
+        (f) => f.dimension === "tailRisk" && f.type === "warning",
       );
       const lowTailWarnings = lowThreshold.flags.filter(
-        (f) => f.dimension === 'tailRisk' && f.type === 'warning'
+        (f) => f.dimension === "tailRisk" && f.type === "warning",
       );
 
       // Low threshold should flag more pairs
@@ -546,40 +632,40 @@ describe('portfolio_health_check', () => {
     });
   });
 
-  describe('keyNumbers population', () => {
-    it('should populate strategy count correctly', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+  describe("keyNumbers population", () => {
+    it("should populate strategy count correctly", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
       // similarity-test-block has 4 strategies
       expect(result.keyNumbers.strategies).toBe(4);
     });
 
-    it('should populate trade count correctly', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+    it("should populate trade count correctly", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
       // similarity-test-block has 40 trades
       expect(result.keyNumbers.trades).toBe(40);
     });
 
-    it('should populate avgCorrelation', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+    it("should populate avgCorrelation", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
-      expect(typeof result.keyNumbers.avgCorrelation).toBe('number');
+      expect(typeof result.keyNumbers.avgCorrelation).toBe("number");
       expect(result.keyNumbers.avgCorrelation).toBeGreaterThanOrEqual(0);
       expect(result.keyNumbers.avgCorrelation).toBeLessThanOrEqual(1);
     });
 
-    it('should populate avgTailDependence', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+    it("should populate avgTailDependence", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
-      expect(typeof result.keyNumbers.avgTailDependence).toBe('number');
+      expect(typeof result.keyNumbers.avgTailDependence).toBe("number");
       expect(result.keyNumbers.avgTailDependence).toBeGreaterThanOrEqual(0);
     });
   });
 
-  describe('thresholds configuration', () => {
-    it('should use default thresholds when not specified', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+  describe("thresholds configuration", () => {
+    it("should use default thresholds when not specified", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
       expect(result.thresholds.correlationThreshold).toBe(0.5);
       expect(result.thresholds.tailDependenceThreshold).toBe(0.5);
@@ -588,7 +674,7 @@ describe('portfolio_health_check', () => {
       expect(result.thresholds.mddMultiplierThreshold).toBe(3.0);
     });
 
-    it('should respect custom thresholds', async () => {
+    it("should respect custom thresholds", async () => {
       const customThresholds = {
         correlationThreshold: 0.7,
         tailDependenceThreshold: 0.6,
@@ -599,8 +685,8 @@ describe('portfolio_health_check', () => {
 
       const result = await simulatePortfolioHealthCheck(
         FIXTURES_DIR,
-        'similarity-test-block',
-        customThresholds
+        "similarity-test-block",
+        customThresholds,
       );
 
       expect(result.thresholds.correlationThreshold).toBe(0.7);
@@ -611,10 +697,10 @@ describe('portfolio_health_check', () => {
     });
   });
 
-  describe('edge cases', () => {
-    it('should handle minimum 2 strategies', async () => {
+  describe("edge cases", () => {
+    it("should handle minimum 2 strategies", async () => {
       // mock-block has 2 strategies
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'mock-block');
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "mock-block");
 
       if (result.keyNumbers.strategies === 2) {
         expect(result.grades).toBeDefined();
@@ -622,35 +708,35 @@ describe('portfolio_health_check', () => {
       }
     });
 
-    it('should reject single strategy block', async () => {
+    it("should reject single strategy block", async () => {
       // This test would need a single-strategy fixture
       // For now, test that error message is set when strategy count check fails
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
       // Similarity-test-block has 4 strategies, so no error
       expect(result.error).toBeUndefined();
     });
 
-    it('should handle non-existent block gracefully', async () => {
+    it("should handle non-existent block gracefully", async () => {
       await expect(
-        simulatePortfolioHealthCheck(FIXTURES_DIR, 'non-existent-block')
+        simulatePortfolioHealthCheck(FIXTURES_DIR, "non-existent-block"),
       ).rejects.toThrow();
     });
   });
 
-  describe('blockId and thresholds in result', () => {
-    it('should include blockId in result', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+  describe("blockId and thresholds in result", () => {
+    it("should include blockId in result", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
-      expect(result.blockId).toBe('similarity-test-block');
+      expect(result.blockId).toBe("similarity-test-block");
     });
 
-    it('should include thresholds in result', async () => {
-      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, 'similarity-test-block');
+    it("should include thresholds in result", async () => {
+      const result = await simulatePortfolioHealthCheck(FIXTURES_DIR, "similarity-test-block");
 
       expect(result.thresholds).toBeDefined();
-      expect(typeof result.thresholds.correlationThreshold).toBe('number');
-      expect(typeof result.thresholds.tailDependenceThreshold).toBe('number');
+      expect(typeof result.thresholds.correlationThreshold).toBe("number");
+      expect(typeof result.thresholds.tailDependenceThreshold).toBe("number");
     });
   });
 });

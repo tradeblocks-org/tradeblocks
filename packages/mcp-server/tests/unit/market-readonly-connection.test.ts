@@ -30,7 +30,11 @@ describe("openMarketReadOnlyConnection", () => {
   });
 
   afterEach(() => {
-    try { rmSync(baseDir, { recursive: true, force: true }); } catch { /* non-fatal */ }
+    try {
+      rmSync(baseDir, { recursive: true, force: true });
+    } catch {
+      /* non-fatal */
+    }
   });
 
   /**
@@ -60,8 +64,16 @@ describe("openMarketReadOnlyConnection", () => {
         TO '${target}' (FORMAT parquet)
       `);
     } finally {
-      try { conn.closeSync(); } catch { /* non-fatal */ }
-      try { instance.closeSync(); } catch { /* non-fatal */ }
+      try {
+        conn.closeSync();
+      } catch {
+        /* non-fatal */
+      }
+      try {
+        instance.closeSync();
+      } catch {
+        /* non-fatal */
+      }
     }
   }
 
@@ -69,9 +81,7 @@ describe("openMarketReadOnlyConnection", () => {
     const ro = await openMarketReadOnlyConnection(baseDir);
     try {
       expect(ro.dataRoot).toBe(baseDir);
-      const reader = await ro.conn.runAndReadAll(
-        "SELECT count(*) AS n FROM market.spot",
-      );
+      const reader = await ro.conn.runAndReadAll("SELECT count(*) AS n FROM market.spot");
       const rows = reader.getRows() as Array<Array<unknown>>;
       expect(Number(rows[0][0])).toBe(2);
     } finally {
@@ -103,16 +113,12 @@ describe("openMarketReadOnlyConnection", () => {
     // live.
     const writer = await openMarketOnlyConnection(baseDir);
     try {
-      await writer.conn.run(
-        "CREATE TABLE IF NOT EXISTS market.writer_probe (k VARCHAR)",
-      );
+      await writer.conn.run("CREATE TABLE IF NOT EXISTS market.writer_probe (k VARCHAR)");
       await writer.conn.run("INSERT INTO market.writer_probe VALUES ('held')");
 
       const ro = await openMarketReadOnlyConnection(baseDir);
       try {
-        const reader = await ro.conn.runAndReadAll(
-          "SELECT count(*) AS n FROM market.spot",
-        );
+        const reader = await ro.conn.runAndReadAll("SELECT count(*) AS n FROM market.spot");
         const rows = reader.getRows() as Array<Array<unknown>>;
         expect(Number(rows[0][0])).toBe(2);
       } finally {

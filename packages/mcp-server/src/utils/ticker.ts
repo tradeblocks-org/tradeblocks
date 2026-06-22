@@ -37,7 +37,7 @@ export function normalizeTicker(value: string | null | undefined): string | null
  * Resolve ticker from arbitrary object fields (case/alias tolerant).
  */
 export function resolveTickerFromFields(
-  fields: Record<string, unknown> | null | undefined
+  fields: Record<string, unknown> | null | undefined,
 ): string | null {
   if (!fields) return null;
   for (const field of TICKER_FIELD_CANDIDATES) {
@@ -55,11 +55,10 @@ export function resolveTickerFromFields(
  */
 export function resolveTradeTicker(
   trade: Pick<Trade, "customFields">,
-  fallback: string = DEFAULT_MARKET_TICKER
+  fallback: string = DEFAULT_MARKET_TICKER,
 ): string {
   return (
-    resolveTickerFromFields(trade.customFields as Record<string, unknown> | undefined) ??
-    fallback
+    resolveTickerFromFields(trade.customFields as Record<string, unknown> | undefined) ?? fallback
   );
 }
 
@@ -68,12 +67,9 @@ export function resolveTradeTicker(
  */
 export function resolveTickerFromCsvRow(
   row: Record<string, string>,
-  fallback: string = DEFAULT_MARKET_TICKER
+  fallback: string = DEFAULT_MARKET_TICKER,
 ): string {
-  return (
-    resolveTickerFromFields(row as Record<string, unknown>) ??
-    fallback
-  );
+  return resolveTickerFromFields(row as Record<string, unknown>) ?? fallback;
 }
 
 /**

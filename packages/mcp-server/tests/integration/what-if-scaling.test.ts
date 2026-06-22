@@ -16,17 +16,17 @@
  * - Summary line: "What-If Scaling: {blockId} | Sharpe {original} → {scaled} ({delta}%) | MDD {original}% → {scaled}% ({delta}%)"
  * - structuredData: blockId, strategyWeights, dateRange, comparison, perStrategy
  */
-import * as path from 'path';
-import { fileURLToPath } from 'url';
+import * as path from "path";
+import { fileURLToPath } from "url";
 
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { loadBlock, PortfolioStatsCalculator } from '../../src/test-exports.ts';
+import { loadBlock, PortfolioStatsCalculator } from "../../src/test-exports.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
+const FIXTURES_DIR = path.join(__dirname, "..", "fixtures");
 
 interface Trade {
   strategy: string;
@@ -40,11 +40,7 @@ interface Trade {
 /**
  * Filter trades by date range (matching tool implementation)
  */
-function filterByDateRange(
-  trades: Trade[],
-  startDate?: string,
-  endDate?: string
-): Trade[] {
+function filterByDateRange(trades: Trade[], startDate?: string, endDate?: string): Trade[] {
   let filtered = trades;
 
   if (startDate) {
@@ -75,7 +71,7 @@ async function simulateWhatIfScaling(
     strategyWeights?: Record<string, number>;
     startDate?: string;
     endDate?: string;
-  } = {}
+  } = {},
 ) {
   const { strategyWeights, startDate, endDate } = options;
   const calculator = new PortfolioStatsCalculator();
@@ -88,7 +84,7 @@ async function simulateWhatIfScaling(
 
   if (trades.length === 0) {
     return {
-      error: `No trades found in block "${blockId}"${startDate || endDate ? ' for the specified date range' : ''}.`,
+      error: `No trades found in block "${blockId}"${startDate || endDate ? " for the specified date range" : ""}.`,
     };
   }
 
@@ -107,9 +103,7 @@ async function simulateWhatIfScaling(
   // Apply user-specified weights
   if (strategyWeights) {
     for (const [strategy, weight] of Object.entries(strategyWeights)) {
-      const matchedStrategy = strategies.find(
-        (s) => s.toLowerCase() === strategy.toLowerCase()
-      );
+      const matchedStrategy = strategies.find((s) => s.toLowerCase() === strategy.toLowerCase());
       if (matchedStrategy) {
         appliedWeights[matchedStrategy] = weight;
       } else {
@@ -122,7 +116,7 @@ async function simulateWhatIfScaling(
   const allZeroWeight = Object.values(appliedWeights).every((w) => w === 0);
   if (allZeroWeight) {
     return {
-      error: 'All strategies have weight 0. This would result in an empty portfolio.',
+      error: "All strategies have weight 0. This would result in an empty portfolio.",
     };
   }
 
@@ -268,10 +262,10 @@ async function simulateWhatIfScaling(
   };
 }
 
-describe('what_if_scaling', () => {
-  describe('no weights (baseline = scaled)', () => {
-    it('should return identical metrics when no weights specified', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block');
+describe("what_if_scaling", () => {
+  describe("no weights (baseline = scaled)", () => {
+    it("should return identical metrics when no weights specified", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block");
 
       expect(result.error).toBeUndefined();
       expect(result.comparison?.sharpeRatio.original).toBe(result.comparison?.sharpeRatio.scaled);
@@ -281,16 +275,16 @@ describe('what_if_scaling', () => {
       expect(result.comparison?.totalTrades.original).toBe(result.comparison?.totalTrades.scaled);
     });
 
-    it('should default all strategies to weight 1.0', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block');
+    it("should default all strategies to weight 1.0", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block");
 
       expect(result.strategyWeights?.HighSharpe).toBe(1.0);
       expect(result.strategyWeights?.Volatile).toBe(1.0);
       expect(result.strategyWeights?.Neutral).toBe(1.0);
     });
 
-    it('should show 0% delta for all strategies when unscaled', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block');
+    it("should show 0% delta for all strategies when unscaled", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block");
 
       for (const strategy of result.perStrategy ?? []) {
         expect(strategy.delta.netPlPct).toBe(0);
@@ -298,26 +292,26 @@ describe('what_if_scaling', () => {
     });
   });
 
-  describe('single strategy 0.5x', () => {
-    it('should halve the scaled strategy P/L', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+  describe("single strategy 0.5x", () => {
+    it("should halve the scaled strategy P/L", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0.5 },
       });
 
-      const highSharpe = result.perStrategy?.find((s) => s.strategy === 'HighSharpe');
+      const highSharpe = result.perStrategy?.find((s) => s.strategy === "HighSharpe");
       expect(highSharpe?.weight).toBe(0.5);
       // Net P/L should be halved (approximately, accounting for scaled commissions)
       expect(highSharpe?.scaled.netPl).toBeCloseTo(highSharpe!.original.netPl * 0.5, 1);
       expect(highSharpe?.delta.netPlPct).toBeCloseTo(-50, 1);
     });
 
-    it('should leave other strategies unchanged', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+    it("should leave other strategies unchanged", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0.5 },
       });
 
-      const volatile = result.perStrategy?.find((s) => s.strategy === 'Volatile');
-      const neutral = result.perStrategy?.find((s) => s.strategy === 'Neutral');
+      const volatile = result.perStrategy?.find((s) => s.strategy === "Volatile");
+      const neutral = result.perStrategy?.find((s) => s.strategy === "Neutral");
 
       expect(volatile?.weight).toBe(1.0);
       expect(volatile?.delta.netPlPct).toBe(0);
@@ -325,57 +319,57 @@ describe('what_if_scaling', () => {
       expect(neutral?.delta.netPlPct).toBe(0);
     });
 
-    it('should reduce portfolio net P/L proportionally', async () => {
-      const baseline = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block');
-      const scaled = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+    it("should reduce portfolio net P/L proportionally", async () => {
+      const baseline = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block");
+      const scaled = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0.5 },
       });
 
       // Scaled net P/L should be less than original
       expect(scaled.comparison?.netPl.scaled).toBeLessThan(
-        baseline.comparison?.netPl.original ?? 0
+        baseline.comparison?.netPl.original ?? 0,
       );
     });
   });
 
-  describe('single strategy 2.0x', () => {
-    it('should double the scaled strategy P/L', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+  describe("single strategy 2.0x", () => {
+    it("should double the scaled strategy P/L", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 2.0 },
       });
 
-      const highSharpe = result.perStrategy?.find((s) => s.strategy === 'HighSharpe');
+      const highSharpe = result.perStrategy?.find((s) => s.strategy === "HighSharpe");
       expect(highSharpe?.weight).toBe(2.0);
       expect(highSharpe?.scaled.netPl).toBeCloseTo(highSharpe!.original.netPl * 2.0, 1);
       expect(highSharpe?.delta.netPlPct).toBeCloseTo(100, 1);
     });
 
-    it('should increase portfolio net P/L proportionally', async () => {
-      const baseline = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block');
-      const scaled = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+    it("should increase portfolio net P/L proportionally", async () => {
+      const baseline = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block");
+      const scaled = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 2.0 },
       });
 
       expect(scaled.comparison?.netPl.scaled).toBeGreaterThan(
-        baseline.comparison?.netPl.original ?? 0
+        baseline.comparison?.netPl.original ?? 0,
       );
     });
   });
 
-  describe('weight 0 (exclude)', () => {
-    it('should exclude strategy trades from scaled portfolio', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+  describe("weight 0 (exclude)", () => {
+    it("should exclude strategy trades from scaled portfolio", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { Volatile: 0 },
       });
 
-      const volatile = result.perStrategy?.find((s) => s.strategy === 'Volatile');
+      const volatile = result.perStrategy?.find((s) => s.strategy === "Volatile");
       expect(volatile?.weight).toBe(0);
       expect(volatile?.scaled.trades).toBe(0);
       expect(volatile?.scaled.netPl).toBe(0);
     });
 
-    it('should reduce trade count in scaled portfolio', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+    it("should reduce trade count in scaled portfolio", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { Volatile: 0 },
       });
 
@@ -384,23 +378,23 @@ describe('what_if_scaling', () => {
       expect(result.comparison?.totalTrades.scaled).toBe(20);
     });
 
-    it('should still show excluded strategy in perStrategy breakdown', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+    it("should still show excluded strategy in perStrategy breakdown", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { Volatile: 0 },
       });
 
       // All 3 strategies should still appear
       expect(result.perStrategy?.length).toBe(3);
       const strategies = result.perStrategy?.map((s) => s.strategy);
-      expect(strategies).toContain('HighSharpe');
-      expect(strategies).toContain('Volatile');
-      expect(strategies).toContain('Neutral');
+      expect(strategies).toContain("HighSharpe");
+      expect(strategies).toContain("Volatile");
+      expect(strategies).toContain("Neutral");
     });
   });
 
-  describe('multiple strategy weights', () => {
-    it('should apply multiple weights correctly', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+  describe("multiple strategy weights", () => {
+    it("should apply multiple weights correctly", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0.5, Volatile: 1.5 },
       });
 
@@ -408,92 +402,92 @@ describe('what_if_scaling', () => {
       expect(result.strategyWeights?.Volatile).toBe(1.5);
       expect(result.strategyWeights?.Neutral).toBe(1.0);
 
-      const highSharpe = result.perStrategy?.find((s) => s.strategy === 'HighSharpe');
-      const volatile = result.perStrategy?.find((s) => s.strategy === 'Volatile');
+      const highSharpe = result.perStrategy?.find((s) => s.strategy === "HighSharpe");
+      const volatile = result.perStrategy?.find((s) => s.strategy === "Volatile");
 
       expect(highSharpe?.delta.netPlPct).toBeCloseTo(-50, 1);
       expect(volatile?.delta.netPlPct).toBeCloseTo(50, 1);
     });
   });
 
-  describe('unknown strategy in weights', () => {
-    it('should warn about unknown strategies but continue', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+  describe("unknown strategy in weights", () => {
+    it("should warn about unknown strategies but continue", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { NonExistent: 0.5, HighSharpe: 0.5 },
       });
 
       expect(result.error).toBeUndefined();
-      expect(result.unknownStrategies).toContain('NonExistent');
+      expect(result.unknownStrategies).toContain("NonExistent");
       expect(result.strategyWeights?.HighSharpe).toBe(0.5);
     });
 
-    it('should process valid weights even with unknown strategies', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+    it("should process valid weights even with unknown strategies", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { NonExistent: 0.5, HighSharpe: 0.5 },
       });
 
-      const highSharpe = result.perStrategy?.find((s) => s.strategy === 'HighSharpe');
+      const highSharpe = result.perStrategy?.find((s) => s.strategy === "HighSharpe");
       expect(highSharpe?.weight).toBe(0.5);
       expect(highSharpe?.delta.netPlPct).toBeCloseTo(-50, 1);
     });
   });
 
-  describe('all strategies weight 0', () => {
-    it('should return error for empty portfolio', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+  describe("all strategies weight 0", () => {
+    it("should return error for empty portfolio", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0, Volatile: 0, Neutral: 0 },
       });
 
-      expect(result.error).toContain('empty portfolio');
+      expect(result.error).toContain("empty portfolio");
     });
   });
 
-  describe('date range + weights', () => {
-    it('should apply both filters correctly', async () => {
+  describe("date range + weights", () => {
+    it("should apply both filters correctly", async () => {
       // Filter to January only (has HighSharpe and Volatile, partial Neutral)
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0.5 },
-        startDate: '2024-01-01',
-        endDate: '2024-01-31',
+        startDate: "2024-01-01",
+        endDate: "2024-01-31",
       });
 
-      expect(result.dateRange?.start).toBe('2024-01-01');
-      expect(result.dateRange?.end).toBe('2024-01-31');
+      expect(result.dateRange?.start).toBe("2024-01-01");
+      expect(result.dateRange?.end).toBe("2024-01-31");
 
       // Should have fewer trades than full dataset
       expect(result.comparison?.totalTrades.original).toBeLessThan(30);
 
       // HighSharpe should still be scaled
-      const highSharpe = result.perStrategy?.find((s) => s.strategy === 'HighSharpe');
+      const highSharpe = result.perStrategy?.find((s) => s.strategy === "HighSharpe");
       expect(highSharpe?.weight).toBe(0.5);
     });
   });
 
-  describe('commission scaling', () => {
-    it('should scale commissions proportionally with weight', async () => {
+  describe("commission scaling", () => {
+    it("should scale commissions proportionally with weight", async () => {
       // Get baseline total commissions for HighSharpe
-      const baseline = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block');
-      const baselineHighSharpe = baseline.perStrategy?.find((s) => s.strategy === 'HighSharpe');
+      const baseline = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block");
+      const baselineHighSharpe = baseline.perStrategy?.find((s) => s.strategy === "HighSharpe");
 
       // Scale HighSharpe to 0.5x
-      const scaled = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+      const scaled = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0.5 },
       });
-      const scaledHighSharpe = scaled.perStrategy?.find((s) => s.strategy === 'HighSharpe');
+      const scaledHighSharpe = scaled.perStrategy?.find((s) => s.strategy === "HighSharpe");
 
       // Net P/L should be scaled (P/L - commissions both scaled by 0.5)
       // Original: netPl = pl - comm
       // Scaled: netPl = (pl * 0.5) - (comm * 0.5) = (pl - comm) * 0.5
       expect(scaledHighSharpe?.scaled.netPl).toBeCloseTo(
         baselineHighSharpe!.original.netPl * 0.5,
-        1
+        1,
       );
     });
   });
 
-  describe('per-strategy breakdown', () => {
-    it('should show ALL strategies, not just scaled ones', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+  describe("per-strategy breakdown", () => {
+    it("should show ALL strategies, not just scaled ones", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0.5 },
       });
 
@@ -501,15 +495,15 @@ describe('what_if_scaling', () => {
       expect(result.perStrategy?.length).toBe(3);
     });
 
-    it('should sort strategies by original net P/L descending', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block');
+    it("should sort strategies by original net P/L descending", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block");
 
       // HighSharpe has highest net P/L, should be first
-      expect(result.perStrategy?.[0].strategy).toBe('HighSharpe');
+      expect(result.perStrategy?.[0].strategy).toBe("HighSharpe");
     });
 
-    it('should calculate contribution percentages correctly', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block');
+    it("should calculate contribution percentages correctly", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block");
 
       // Sum of contribution percentages should be ~100% (or proportional for mixed +/- P/L)
       let totalOrigContrib = 0;
@@ -521,9 +515,9 @@ describe('what_if_scaling', () => {
     });
   });
 
-  describe('comparison structure', () => {
-    it('should include all expected metrics', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+  describe("comparison structure", () => {
+    it("should include all expected metrics", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0.5 },
       });
 
@@ -535,8 +529,8 @@ describe('what_if_scaling', () => {
       expect(result.comparison?.totalTrades).toBeDefined();
     });
 
-    it('should calculate delta and deltaPct correctly', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+    it("should calculate delta and deltaPct correctly", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { HighSharpe: 0.5 },
       });
 
@@ -545,21 +539,19 @@ describe('what_if_scaling', () => {
       if (netPl?.original !== 0) {
         expect(netPl?.deltaPct).toBeCloseTo(
           ((netPl?.delta ?? 0) / Math.abs(netPl?.original ?? 1)) * 100,
-          1
+          1,
         );
       }
     });
   });
 
-  describe('edge cases', () => {
-    it('should handle empty block gracefully', async () => {
-      await expect(
-        simulateWhatIfScaling(FIXTURES_DIR, 'non-existent-block')
-      ).rejects.toThrow();
+  describe("edge cases", () => {
+    it("should handle empty block gracefully", async () => {
+      await expect(simulateWhatIfScaling(FIXTURES_DIR, "non-existent-block")).rejects.toThrow();
     });
 
-    it('should handle case-insensitive strategy names', async () => {
-      const result = await simulateWhatIfScaling(FIXTURES_DIR, 'marginal-test-block', {
+    it("should handle case-insensitive strategy names", async () => {
+      const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block", {
         strategyWeights: { highsharpe: 0.5 }, // lowercase
       });
 

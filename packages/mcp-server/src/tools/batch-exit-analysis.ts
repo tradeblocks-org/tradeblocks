@@ -59,34 +59,55 @@ async function mapWithLimit<T, R>(
 // ---------------------------------------------------------------------------
 
 const triggerTypeEnum = z.enum([
-  'profitTarget', 'stopLoss', 'trailingStop', 'profitAction',
-  'dteExit', 'ditExit', 'clockTimeExit',
-  'underlyingPriceMove', 'positionDelta', 'perLegDelta',
-  'vixMove', 'vix9dMove', 'vix9dVixRatio',
-  'slRatioThreshold', 'slRatioMove',
+  "profitTarget",
+  "stopLoss",
+  "trailingStop",
+  "profitAction",
+  "dteExit",
+  "ditExit",
+  "clockTimeExit",
+  "underlyingPriceMove",
+  "positionDelta",
+  "perLegDelta",
+  "vixMove",
+  "vix9dMove",
+  "vix9dVixRatio",
+  "slRatioThreshold",
+  "slRatioMove",
 ]);
 
 const triggerConfigSchema = z.object({
   type: triggerTypeEnum,
   threshold: z.number(),
-  unit: z.enum(['percent', 'dollar']).default('dollar').optional(),
+  unit: z.enum(["percent", "dollar"]).default("dollar").optional(),
   expiry: z.string().optional(),
   openDate: z.string().optional(),
   clockTime: z.string().optional(),
   trailAmount: z.number().optional(),
-  steps: z.array(z.object({
-    armAt: z.number(),
-    stopAt: z.number(),
-    closeAllocationPct: z.number().min(0).max(1).optional()
-      .describe("Fraction of REMAINING position to close at this milestone (0-1)"),
-  })).optional(),
+  steps: z
+    .array(
+      z.object({
+        armAt: z.number(),
+        stopAt: z.number(),
+        closeAllocationPct: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("Fraction of REMAINING position to close at this milestone (0-1)"),
+      }),
+    )
+    .optional(),
   spreadWidth: z.number().optional(),
   contracts: z.number().optional(),
-  legIndex: z.number().optional()
+  legIndex: z
+    .number()
+    .optional()
     .describe("0-based leg index for perLegDelta — targets specific leg"),
-  exitAbove: z.number().optional()
-    .describe("Fire when value exceeds this (directional, no abs)"),
-  exitBelow: z.number().optional()
+  exitAbove: z.number().optional().describe("Fire when value exceeds this (directional, no abs)"),
+  exitBelow: z
+    .number()
+    .optional()
     .describe("Fire when value drops below this (directional, no abs)"),
 });
 
@@ -97,40 +118,60 @@ const triggerConfigSchema = z.object({
 export const batchExitAnalysisSchema = z.object({
   block_id: z.string().describe("Block ID to analyze trades from"),
 
-  strategy: z.string().optional()
+  strategy: z
+    .string()
+    .optional()
     .describe("Filter trades by strategy name (case-insensitive ILIKE)"),
 
-  date_range: z.object({
-    from: z.string().optional().describe("Start date YYYY-MM-DD"),
-    to: z.string().optional().describe("End date YYYY-MM-DD"),
-  }).optional().describe("Filter trades by date range"),
+  date_range: z
+    .object({
+      from: z.string().optional().describe("Start date YYYY-MM-DD"),
+      to: z.string().optional().describe("End date YYYY-MM-DD"),
+    })
+    .optional()
+    .describe("Filter trades by date range"),
 
-  candidate_policy: z.array(triggerConfigSchema)
+  candidate_policy: z
+    .array(triggerConfigSchema)
     .describe("Candidate exit policy triggers to evaluate -- same schema as analyze_exit_triggers"),
 
-  leg_groups: z.array(z.object({
-    label: z.string(),
-    leg_indices: z.array(z.number()),
-    triggers: z.array(triggerConfigSchema),
-  })).optional().describe("Per-leg-group exit triggers for multi-structure strategies"),
+  leg_groups: z
+    .array(
+      z.object({
+        label: z.string(),
+        leg_indices: z.array(z.number()),
+        triggers: z.array(triggerConfigSchema),
+      }),
+    )
+    .optional()
+    .describe("Per-leg-group exit triggers for multi-structure strategies"),
 
-  baseline_mode: z.enum(['actual', 'holdToEnd']).default('actual')
-    .describe("'actual' compares candidate vs trade's actual P&L; 'holdToEnd' compares vs last replay timestamp"),
+  baseline_mode: z
+    .enum(["actual", "holdToEnd"])
+    .default("actual")
+    .describe(
+      "'actual' compares candidate vs trade's actual P&L; 'holdToEnd' compares vs last replay timestamp",
+    ),
 
-  limit: z.number().min(1).max(200).default(50)
+  limit: z
+    .number()
+    .min(1)
+    .max(200)
+    .default(50)
     .describe("Max trades to analyze. Most recent trades selected"),
 
-  min_pl: z.number().optional()
-    .describe("Only include trades with actual P&L >= this value"),
+  min_pl: z.number().optional().describe("Only include trades with actual P&L >= this value"),
 
-  max_pl: z.number().optional()
-    .describe("Only include trades with actual P&L <= this value"),
+  max_pl: z.number().optional().describe("Only include trades with actual P&L <= this value"),
 
-  multiplier: z.number().default(100)
-    .describe("Contract multiplier (default 100)"),
+  multiplier: z.number().default(100).describe("Contract multiplier (default 100)"),
 
-  format: z.enum(['summary', 'full']).default('summary')
-    .describe("'summary' returns aggregate stats + trigger attribution; 'full' adds per-trade breakdown"),
+  format: z
+    .enum(["summary", "full"])
+    .default("summary")
+    .describe(
+      "'summary' returns aggregate stats + trigger attribution; 'full' adds per-trade breakdown",
+    ),
 });
 
 // ---------------------------------------------------------------------------
@@ -140,7 +181,7 @@ export const batchExitAnalysisSchema = z.object({
 export async function handleBatchExitAnalysis(
   params: z.infer<typeof batchExitAnalysisSchema>,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
+  stores: MarketStores, // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<BatchExitResult> {
   const {
@@ -158,7 +199,7 @@ export async function handleBatchExitAnalysis(
   } = params;
 
   // 1. Query trades from DuckDB with deterministic ROW_NUMBER ordering
-  const conn = injectedConn ?? await getConnection(baseDir);
+  const conn = injectedConn ?? (await getConnection(baseDir));
   const escapedBlockId = block_id.replace(/'/g, "''");
 
   // Build WHERE clauses
@@ -193,7 +234,7 @@ export async function handleBatchExitAnalysis(
     )
     SELECT trade_idx, pl, date_opened
     FROM numbered
-    ${filterClauses.length > 0 ? 'WHERE ' + filterClauses.join(' AND ') : ''}
+    ${filterClauses.length > 0 ? "WHERE " + filterClauses.join(" AND ") : ""}
     ORDER BY date_opened DESC
     LIMIT ${limit}
   `;
@@ -226,7 +267,7 @@ export async function handleBatchExitAnalysis(
       triggerAttribution: [],
       perTrade: [],
       baselineMode: baseline_mode,
-      summary: 'Analyzed 0 trades: no matching trades found.',
+      summary: "Analyzed 0 trades: no matching trades found.",
     };
     return emptyResult;
   }
@@ -244,7 +285,7 @@ export async function handleBatchExitAnalysis(
     async (row): Promise<ReplayOutcome> => {
       const tradeIdx = Number(row[0] ?? 0);
       const pl = Number(row[1] ?? 0);
-      const dateOpened = String(row[2] ?? '');
+      const dateOpened = String(row[2] ?? "");
 
       try {
         // Always pass format:'full' to get complete pnlPath for analyzeBatch.
@@ -254,8 +295,8 @@ export async function handleBatchExitAnalysis(
             block_id,
             trade_index: tradeIdx,
             multiplier,
-            format: 'full',
-            close_at: 'trade',
+            format: "full",
+            close_at: "trade",
             skip_quotes: false,
           },
           baseDir,
@@ -283,7 +324,7 @@ export async function handleBatchExitAnalysis(
         return {
           ok: false,
           tradeIndex: Number(row[0] ?? 0),
-          dateOpened: String(row[2] ?? ''),
+          dateOpened: String(row[2] ?? ""),
           error: err instanceof Error ? err.message : String(err),
         };
       }
@@ -308,7 +349,7 @@ export async function handleBatchExitAnalysis(
   // 3. Build BatchExitConfig
   const config: BatchExitConfig = {
     candidatePolicy: candidate_policy as ExitTriggerConfig[],
-    legGroups: leg_groups?.map(g => ({
+    legGroups: leg_groups?.map((g) => ({
       label: g.label,
       legIndices: g.leg_indices,
       triggers: g.triggers as ExitTriggerConfig[],
@@ -332,14 +373,12 @@ export async function handleBatchExitAnalysis(
   // 6. Load profile context if strategy is specified (per D-16)
   if (strategy) {
     try {
-      const profileConn = injectedConn ?? await getConnection(baseDir);
+      const profileConn = injectedConn ?? (await getConnection(baseDir));
       const profile = await getProfile(profileConn, block_id, strategy, baseDir);
       if (profile) {
         result.profileContext = {
           structureType: profile.structureType,
-          exitRules: profile.exitRules.map(r =>
-            r.description ?? `${r.type} ${r.trigger}`
-          ),
+          exitRules: profile.exitRules.map((r) => r.description ?? `${r.type} ${r.trigger}`),
         };
       }
     } catch {
@@ -357,7 +396,7 @@ export async function handleBatchExitAnalysis(
 export function registerBatchExitAnalysisTools(
   server: McpServer,
   baseDir: string,
-  stores: MarketStores,   // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
+  stores: MarketStores, // Phase 4 CONSUMER-01 — threaded through for Wave 2+ rewrite.
 ): void {
   server.registerTool(
     "batch_exit_analysis",
@@ -378,13 +417,15 @@ export function registerBatchExitAnalysisTools(
         return createToolOutput(result.summary, result);
       } catch (error) {
         return {
-          content: [{
-            type: "text" as const,
-            text: `Error in batch exit analysis: ${(error as Error).message}`,
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text: `Error in batch exit analysis: ${(error as Error).message}`,
+            },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 }

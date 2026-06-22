@@ -28,7 +28,6 @@ export interface BlockSyncMetadata {
   sync_version: number;
 }
 
-
 /**
  * Get sync metadata for a block.
  *
@@ -39,7 +38,7 @@ export interface BlockSyncMetadata {
 export async function getSyncMetadata(
   conn: DuckDBConnection,
   blockId: string,
-  blocksDir?: string
+  blocksDir?: string,
 ): Promise<BlockSyncMetadata | null> {
   if (isParquetMode() && blocksDir) {
     return getSyncMetadataJson(blockId, blocksDir);
@@ -48,7 +47,7 @@ export async function getSyncMetadata(
     `SELECT block_id, tradelog_hash, dailylog_hash, reportinglog_hash, synced_at, sync_version
      FROM trades._sync_metadata
      WHERE block_id = $1`,
-    [blockId]
+    [blockId],
   );
 
   const rows = reader.getRows();
@@ -76,7 +75,7 @@ export async function getSyncMetadata(
 export async function upsertSyncMetadata(
   conn: DuckDBConnection,
   metadata: BlockSyncMetadata,
-  blocksDir?: string
+  blocksDir?: string,
 ): Promise<void> {
   if (isParquetMode() && blocksDir) {
     return upsertSyncMetadataJson(metadata, blocksDir);
@@ -92,7 +91,7 @@ export async function upsertSyncMetadata(
       metadata.reportinglog_hash,
       metadata.synced_at.toISOString(),
       metadata.sync_version,
-    ]
+    ],
   );
 }
 
@@ -105,16 +104,13 @@ export async function upsertSyncMetadata(
 export async function deleteSyncMetadata(
   conn: DuckDBConnection,
   blockId: string,
-  blocksDir?: string
+  blocksDir?: string,
 ): Promise<void> {
   if (isParquetMode() && blocksDir) {
     await deleteSyncMetadataJson(blockId, blocksDir);
     return;
   }
-  await conn.run(
-    `DELETE FROM trades._sync_metadata WHERE block_id = $1`,
-    [blockId]
-  );
+  await conn.run(`DELETE FROM trades._sync_metadata WHERE block_id = $1`, [blockId]);
 }
 
 /**
@@ -125,14 +121,12 @@ export async function deleteSyncMetadata(
  */
 export async function getAllSyncedBlockIds(
   conn: DuckDBConnection,
-  blocksDir?: string
+  blocksDir?: string,
 ): Promise<string[]> {
   if (isParquetMode() && blocksDir) {
     return getAllSyncedBlockIdsJson(blocksDir);
   }
-  const reader = await conn.runAndReadAll(
-    `SELECT block_id FROM trades._sync_metadata`
-  );
+  const reader = await conn.runAndReadAll(`SELECT block_id FROM trades._sync_metadata`);
 
   const rows = reader.getRows();
   return rows.map((row) => row[0] as string);
@@ -150,8 +144,8 @@ export async function getAllSyncedBlockIds(
  * Use these helpers for all Phase 61+ import tool calls.
  */
 export interface MarketImportMetadata {
-  source: string;       // e.g., "import_market_csv:/abs/path/to/file.csv"
-  ticker: string;       // Normalized ticker e.g. "SPX"
+  source: string; // e.g., "import_market_csv:/abs/path/to/file.csv"
+  ticker: string; // Normalized ticker e.g. "SPX"
   target_table: string; // "daily" | "date_context" | "intraday" | other canonical datasets
   max_date: string | null;
   synced_at: Date;
@@ -165,7 +159,7 @@ export async function getMarketImportMetadata(
   source: string,
   ticker: string,
   targetTable: string,
-  dataDir?: string
+  dataDir?: string,
 ): Promise<MarketImportMetadata | null> {
   if (isParquetMode() && dataDir) {
     return getMarketImportMetadataJson(source, ticker, targetTable, dataDir);
@@ -174,7 +168,7 @@ export async function getMarketImportMetadata(
     `SELECT source, ticker, target_table, max_date, synced_at
      FROM market._sync_metadata
      WHERE source = $1 AND ticker = $2 AND target_table = $3`,
-    [source, ticker, targetTable]
+    [source, ticker, targetTable],
   );
   const rows = reader.getRows();
   if (rows.length === 0) return null;
@@ -195,7 +189,7 @@ export async function getMarketImportMetadata(
 export async function upsertMarketImportMetadata(
   conn: DuckDBConnection,
   metadata: MarketImportMetadata,
-  dataDir?: string
+  dataDir?: string,
 ): Promise<void> {
   if (isParquetMode() && dataDir) {
     return upsertMarketImportMetadataJson(metadata, dataDir);
@@ -213,6 +207,6 @@ export async function upsertMarketImportMetadata(
       metadata.target_table,
       metadata.max_date,
       metadata.synced_at.toISOString(),
-    ]
+    ],
   );
 }

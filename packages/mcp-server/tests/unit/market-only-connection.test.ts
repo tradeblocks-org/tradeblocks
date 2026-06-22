@@ -23,10 +23,7 @@ describe("openMarketOnlyConnection", () => {
   let baseDir: string;
 
   beforeEach(() => {
-    baseDir = join(
-      tmpdir(),
-      `market-only-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    );
+    baseDir = join(tmpdir(), `market-only-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(baseDir, { recursive: true });
   });
 
@@ -35,8 +32,16 @@ describe("openMarketOnlyConnection", () => {
     // tmp baseDir, then rm the tmp dir. Order matters: closeConnection
     // releases the file lock on analytics.duckdb so rmSync can succeed on
     // platforms that hold mandatory locks (Windows).
-    try { await closeConnection(); } catch { /* non-fatal */ }
-    try { rmSync(baseDir, { recursive: true, force: true }); } catch { /* non-fatal */ }
+    try {
+      await closeConnection();
+    } catch {
+      /* non-fatal */
+    }
+    try {
+      rmSync(baseDir, { recursive: true, force: true });
+    } catch {
+      /* non-fatal */
+    }
   });
 
   it("opens cleanly against a fresh baseDir and reports the resolved market path", async () => {
@@ -62,9 +67,7 @@ describe("openMarketOnlyConnection", () => {
           v INTEGER NOT NULL
         )
       `);
-      await mo.conn.run(
-        `INSERT INTO market.test_market_writes VALUES ('alpha', 1), ('beta', 2)`,
-      );
+      await mo.conn.run(`INSERT INTO market.test_market_writes VALUES ('alpha', 1), ('beta', 2)`);
       const reader = await mo.conn.runAndReadAll(
         "SELECT count(*) AS n FROM market.test_market_writes",
       );

@@ -1,17 +1,7 @@
 "use client";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@tradeblocks/lib";
 import { HelpCircle } from "lucide-react";
@@ -119,10 +109,7 @@ export function ChartWrapper({
     const height = mergedStyle.height;
 
     return {
-      minHeight:
-        typeof height === "number" || typeof height === "string"
-          ? height
-          : 320,
+      minHeight: typeof height === "number" || typeof height === "string" ? height : 320,
     };
   }, [mergedStyle.height]);
 
@@ -168,7 +155,7 @@ export function ChartWrapper({
       triggerResize();
       onInitialized?.(figure);
     },
-    [onInitialized, triggerResize]
+    [onInitialized, triggerResize],
   );
 
   const handleUpdate = useCallback(
@@ -177,7 +164,7 @@ export function ChartWrapper({
       triggerResize();
       onUpdate?.(figure);
     },
-    [onUpdate, triggerResize]
+    [onUpdate, triggerResize],
   );
 
   // Enhanced layout with theme support
@@ -196,26 +183,8 @@ export function ChartWrapper({
         ...layout.font,
       },
       colorway: isDark
-        ? [
-            "#3b82f6",
-            "#10b981",
-            "#f59e0b",
-            "#ef4444",
-            "#8b5cf6",
-            "#06b6d4",
-            "#84cc16",
-            "#f97316",
-          ]
-        : [
-            "#2563eb",
-            "#059669",
-            "#d97706",
-            "#dc2626",
-            "#7c3aed",
-            "#0891b2",
-            "#65a30d",
-            "#ea580c",
-          ],
+        ? ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#84cc16", "#f97316"]
+        : ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#65a30d", "#ea580c"],
       xaxis: {
         gridcolor: isDark ? "#334155" : "#e2e8f0",
         linecolor: isDark ? "#475569" : "#cbd5e1",
@@ -267,13 +236,13 @@ export function ChartWrapper({
       },
       ...config,
     }),
-    [config, title]
+    [config, title],
   );
 
-  const headerActions = actions ?? children
+  const headerActions = actions ?? children;
 
   // Only render CardHeader if there's content to show
-  const hasHeader = title || description || tooltip || headerAddon || headerActions
+  const hasHeader = title || description || tooltip || headerAddon || headerActions;
 
   return (
     <Card className={cn("h-full", className)}>
@@ -337,7 +306,7 @@ export function ChartWrapper({
               divId={chartId}
               data={data}
               layout={themedLayout}
-              config={enhancedConfig as unknown as Parameters<typeof Plot>[0]['config']}
+              config={enhancedConfig as unknown as Parameters<typeof Plot>[0]["config"]}
               onInitialized={handleInitialized}
               onUpdate={handleUpdate}
               style={mergedStyle}
@@ -346,18 +315,14 @@ export function ChartWrapper({
             />
           </Suspense>
         </div>
-        {footer && (
-          <div className="mt-4">{footer}</div>
-        )}
+        {footer && <div className="mt-4">{footer}</div>}
       </CardContent>
     </Card>
   );
 }
 
 // Utility function to create common chart configurations
-export const createChartConfig = (
-  overrides?: Partial<Config>
-): Partial<Config> => ({
+export const createChartConfig = (overrides?: Partial<Config>): Partial<Config> => ({
   showTips: false,
   showAxisDragHandles: false,
   showAxisRangeEntryBoxes: false,
@@ -369,7 +334,7 @@ export const createChartConfig = (
 export const createLineChartLayout = (
   title?: string,
   xTitle?: string,
-  yTitle?: string
+  yTitle?: string,
 ): Partial<Layout> => ({
   title: title ? { text: title, x: 0.05 } : undefined,
   xaxis: {
@@ -395,7 +360,7 @@ export const createLineChartLayout = (
 export const createBarChartLayout = (
   title?: string,
   xTitle?: string,
-  yTitle?: string
+  yTitle?: string,
 ): Partial<Layout> => ({
   title: title ? { text: title, x: 0.05 } : undefined,
   xaxis: {
@@ -414,7 +379,7 @@ export const createBarChartLayout = (
 export const createHistogramLayout = (
   title?: string,
   xTitle?: string,
-  yTitle?: string
+  yTitle?: string,
 ): Partial<Layout> => ({
   title: title ? { text: title, x: 0.05 } : undefined,
   xaxis: {

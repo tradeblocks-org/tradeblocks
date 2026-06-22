@@ -164,8 +164,7 @@ describe("Statistical Utilities", () => {
       const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
       const transformed = probabilityIntegralTransform(values);
 
-      const mean =
-        transformed.reduce((sum, x) => sum + x, 0) / transformed.length;
+      const mean = transformed.reduce((sum, x) => sum + x, 0) / transformed.length;
       expect(mean).toBeCloseTo(0, 1);
     });
 
@@ -173,11 +172,9 @@ describe("Statistical Utilities", () => {
       const values = Array.from({ length: 100 }, (_, i) => i + 1);
       const transformed = probabilityIntegralTransform(values);
 
-      const mean =
-        transformed.reduce((sum, x) => sum + x, 0) / transformed.length;
+      const mean = transformed.reduce((sum, x) => sum + x, 0) / transformed.length;
       const variance =
-        transformed.reduce((sum, x) => sum + (x - mean) ** 2, 0) /
-        transformed.length;
+        transformed.reduce((sum, x) => sum + (x - mean) ** 2, 0) / transformed.length;
       const std = Math.sqrt(variance);
 
       expect(std).toBeCloseTo(1, 1);

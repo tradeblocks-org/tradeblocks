@@ -27,7 +27,7 @@ function classifyRegime(
   sliceStats: SliceStats,
   overallWinRate: number,
   isExpected: boolean,
-  minTrades: number
+  minTrades: number,
 ): "thesis_aligned" | "thesis_violation" | "hidden_edge" | "neutral" {
   const wrDelta = sliceStats.winRate - overallWinRate;
 
@@ -337,12 +337,7 @@ describe("Phase 65: Portfolio Analysis Tools", () => {
     test("all expected grade dimension keys are documented", () => {
       // This test validates that the health check reports 9 total grade dimensions:
       // 4 original + 5 profile-aware
-      const originalGrades = [
-        "diversification",
-        "tailRisk",
-        "robustness",
-        "consistency",
-      ];
+      const originalGrades = ["diversification", "tailRisk", "robustness", "consistency"];
       const profileAwareGrades = [
         "regimeCoverage",
         "dayCoverage",

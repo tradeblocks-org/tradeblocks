@@ -1,20 +1,20 @@
-import { IconSparkles } from "@tabler/icons-react"
+import { IconSparkles } from "@tabler/icons-react";
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface PlaceholderItem {
-  title: string
-  description: string
+  title: string;
+  description: string;
 }
 
 interface PagePlaceholderProps {
-  title: string
-  description: string
-  badge?: string
-  items?: PlaceholderItem[]
-  actionLabel?: string
-  onActionClick?: () => void
+  title: string;
+  description: string;
+  badge?: string;
+  items?: PlaceholderItem[];
+  actionLabel?: string;
+  onActionClick?: () => void;
 }
 
 export function PagePlaceholder({
@@ -56,14 +56,12 @@ export function PagePlaceholder({
               key={item.title}
               className="rounded-2xl border border-border/50 bg-background/70 p-4 shadow-xs"
             >
-              <h3 className="text-base font-semibold text-foreground">
-                {item.title}
-              </h3>
+              <h3 className="text-base font-semibold text-foreground">{item.title}</h3>
               <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
             </div>
           ))}
         </section>
       ) : null}
     </div>
-  )
+  );
 }

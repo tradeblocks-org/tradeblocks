@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 /**
  * Chart Axis Selector
@@ -8,9 +8,9 @@
  * Supports both static fields and custom fields from trade/daily log CSVs.
  */
 
-import { useMemo, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,29 +18,29 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu'
-import { Label } from '@/components/ui/label'
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
 import {
   getFieldsByCategoryWithAll,
   getFieldInfo,
   getAllCategoryLabels,
   FieldCategory,
   CustomFieldCategory,
-  StaticDatasetFieldInfo
-} from '@tradeblocks/lib'
-import { EnrichedTrade } from '@tradeblocks/lib'
+  StaticDatasetFieldInfo,
+} from "@tradeblocks/lib";
+import { EnrichedTrade } from "@tradeblocks/lib";
 
 interface ChartAxisSelectorProps {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  allowNone?: boolean
-  className?: string
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  allowNone?: boolean;
+  className?: string;
   /** Enriched trades to extract custom fields from */
-  trades?: EnrichedTrade[]
+  trades?: EnrichedTrade[];
   /** Static datasets for field discovery */
-  staticDatasets?: StaticDatasetFieldInfo[]
+  staticDatasets?: StaticDatasetFieldInfo[];
 }
 
 export function ChartAxisSelector({
@@ -50,77 +50,63 @@ export function ChartAxisSelector({
   allowNone = false,
   className,
   trades = [],
-  staticDatasets
+  staticDatasets,
 }: ChartAxisSelectorProps) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(false);
   const fieldsByCategory = useMemo(
     () => getFieldsByCategoryWithAll(trades, staticDatasets),
-    [trades, staticDatasets]
-  )
-  const allCategoryLabels = getAllCategoryLabels()
+    [trades, staticDatasets],
+  );
+  const allCategoryLabels = getAllCategoryLabels();
 
   // Get the display label for the current value
-  const currentField = value === 'none' ? null : getFieldInfo(value)
-  const displayValue = value === 'none'
-    ? 'None'
-    : currentField
-      ? currentField.label
-      : value
+  const currentField = value === "none" ? null : getFieldInfo(value);
+  const displayValue = value === "none" ? "None" : currentField ? currentField.label : value;
 
   const handleSelect = (fieldValue: string) => {
-    onChange(fieldValue)
-    setOpen(false)
-  }
+    onChange(fieldValue);
+    setOpen(false);
+  };
 
   return (
     <div className={`min-w-0 ${className ?? ""}`}>
       <Label className="text-xs text-muted-foreground mb-1 block">{label}</Label>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 w-full justify-between font-normal"
-          >
+          <Button variant="outline" size="sm" className="h-8 w-full justify-between font-normal">
             <span className="truncate">{displayValue}</span>
             <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           {allowNone && (
-            <DropdownMenuItem onClick={() => handleSelect('none')}>
-              None
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleSelect("none")}>None</DropdownMenuItem>
           )}
 
           {Array.from(fieldsByCategory.entries()).map(([category, fields]) => {
-            if (fields.length === 0) return null
+            if (fields.length === 0) return null;
 
             // Use category label from known categories, or the category name itself (for static datasets)
-            const categoryLabel = allCategoryLabels[category as FieldCategory | CustomFieldCategory] ?? category
+            const categoryLabel =
+              allCategoryLabels[category as FieldCategory | CustomFieldCategory] ?? category;
 
             return (
               <DropdownMenuSub key={category}>
-                <DropdownMenuSubTrigger>
-                  {categoryLabel}
-                </DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger>{categoryLabel}</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="w-52">
-                  {fields.map(field => (
-                    <DropdownMenuItem
-                      key={field.field}
-                      onClick={() => handleSelect(field.field)}
-                    >
+                  {fields.map((field) => (
+                    <DropdownMenuItem key={field.field} onClick={() => handleSelect(field.field)}>
                       {field.label}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
-            )
+            );
           })}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
-  )
+  );
 }
 
-export default ChartAxisSelector
+export default ChartAxisSelector;

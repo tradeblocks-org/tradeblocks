@@ -9,7 +9,11 @@ import { MatchStrategiesDialog } from "@/components/trading-calendar/match-strat
 import { StatsHeader } from "@/components/trading-calendar/stats-header";
 import { TradeDetailView } from "@/components/trading-calendar/trade-detail-view";
 import { Card, CardContent } from "@/components/ui/card";
-import { useBlockStore, useTradingCalendarStore, type NavigationView } from "@tradeblocks/lib/stores";
+import {
+  useBlockStore,
+  useTradingCalendarStore,
+  type NavigationView,
+} from "@tradeblocks/lib/stores";
 import { Loader2 } from "lucide-react";
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -17,11 +21,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 // Wrapper component to handle Suspense boundary for useSearchParams
 export default function TradingCalendarPage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
       <TradingCalendarContent />
     </Suspense>
   );
@@ -39,7 +45,7 @@ function TradingCalendarContent() {
     selectedStrategy,
     loadCalendarData,
     reset,
-    setNavigationFromUrl
+    setNavigationFromUrl,
   } = useTradingCalendarStore();
 
   const [matchDialogOpen, setMatchDialogOpen] = useState(false);
@@ -52,9 +58,9 @@ function TradingCalendarContent() {
 
   // Sync URL to store on initial load and URL changes
   useEffect(() => {
-    const view = searchParams.get('view') as NavigationView | null;
-    const date = searchParams.get('date');
-    const strategy = searchParams.get('strategy');
+    const view = searchParams.get("view") as NavigationView | null;
+    const date = searchParams.get("date");
+    const strategy = searchParams.get("strategy");
 
     // Set flag to prevent store->URL sync from firing
     isUpdatingFromUrl.current = true;
@@ -63,7 +69,7 @@ function TradingCalendarContent() {
       setNavigationFromUrl(view, date, strategy);
     } else if (setNavigationFromUrl) {
       // No view param means calendar view
-      setNavigationFromUrl('calendar', null, null);
+      setNavigationFromUrl("calendar", null, null);
     }
 
     // Mark initial URL as applied after first render
@@ -86,19 +92,19 @@ function TradingCalendarContent() {
 
     const params = new URLSearchParams();
 
-    if (navigationView !== 'calendar') {
-      params.set('view', navigationView);
+    if (navigationView !== "calendar") {
+      params.set("view", navigationView);
       if (selectedDate) {
-        params.set('date', selectedDate);
+        params.set("date", selectedDate);
       }
-      if (navigationView === 'trade' && selectedStrategy) {
-        params.set('strategy', selectedStrategy);
+      if (navigationView === "trade" && selectedStrategy) {
+        params.set("strategy", selectedStrategy);
       }
     }
 
     const newUrl = params.toString()
       ? `/trading-calendar?${params.toString()}`
-      : '/trading-calendar';
+      : "/trading-calendar";
 
     // Only update if URL actually changed
     const currentParams = searchParams.toString();
@@ -177,10 +183,7 @@ function TradingCalendarContent() {
       {navigationView === "calendar" && <EquityCurveChart />}
 
       {/* Strategy matching dialog */}
-      <MatchStrategiesDialog
-        open={matchDialogOpen}
-        onOpenChange={setMatchDialogOpen}
-      />
+      <MatchStrategiesDialog open={matchDialogOpen} onOpenChange={setMatchDialogOpen} />
     </div>
   );
 }

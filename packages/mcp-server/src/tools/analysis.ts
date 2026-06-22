@@ -34,44 +34,35 @@ import { resolveTradeTicker } from "../utils/ticker.ts";
  */
 function filterByStrategy(trades: Trade[], strategy?: string): Trade[] {
   if (!strategy) return trades;
-  return trades.filter(
-    (t) => t.strategy.toLowerCase() === strategy.toLowerCase()
-  );
+  return trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
 }
 
 /**
  * Register all analysis MCP tools
  */
-export function registerAnalysisTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerAnalysisTools(server: McpServer, baseDir: string): void {
   // Tool 1: run_walk_forward
   server.registerTool(
     "run_walk_forward",
     {
-      description:
-        "Execute walk-forward analysis to test parameter robustness across time windows",
+      description: "Execute walk-forward analysis to test parameter robustness across time windows",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         // Window count mode (convenience parameters)
         isWindowCount: z
           .number()
           .min(2)
           .default(5)
           .describe(
-            "Number of in-sample windows (default: 5). Used to calculate inSampleDays if not explicitly provided."
+            "Number of in-sample windows (default: 5). Used to calculate inSampleDays if not explicitly provided.",
           ),
         oosWindowCount: z
           .number()
           .min(1)
           .default(1)
           .describe(
-            "Number of out-of-sample windows (default: 1). Used to calculate outOfSampleDays if not explicitly provided."
+            "Number of out-of-sample windows (default: 1). Used to calculate outOfSampleDays if not explicitly provided.",
           ),
         // Explicit days mode (overrides window count calculations)
         inSampleDays: z
@@ -79,22 +70,20 @@ export function registerAnalysisTools(
           .min(7)
           .optional()
           .describe(
-            "Explicit in-sample period in days. Overrides isWindowCount calculation if provided."
+            "Explicit in-sample period in days. Overrides isWindowCount calculation if provided.",
           ),
         outOfSampleDays: z
           .number()
           .min(1)
           .optional()
           .describe(
-            "Explicit out-of-sample period in days. Overrides oosWindowCount calculation if provided."
+            "Explicit out-of-sample period in days. Overrides oosWindowCount calculation if provided.",
           ),
         stepSizeDays: z
           .number()
           .min(1)
           .optional()
-          .describe(
-            "Days to slide forward each period. If not provided, equals outOfSampleDays."
-          ),
+          .describe("Days to slide forward each period. If not provided, equals outOfSampleDays."),
         // Optimization settings
         optimizationTarget: z
           .enum([
@@ -137,36 +126,50 @@ export function registerAnalysisTools(
         dateRangeFrom: z
           .string()
           .optional()
-          .describe("Start date for analysis (ISO format: YYYY-MM-DD). Only include trades on or after this date."),
+          .describe(
+            "Start date for analysis (ISO format: YYYY-MM-DD). Only include trades on or after this date.",
+          ),
         dateRangeTo: z
           .string()
           .optional()
-          .describe("End date for analysis (ISO format: YYYY-MM-DD). Only include trades on or before this date."),
+          .describe(
+            "End date for analysis (ISO format: YYYY-MM-DD). Only include trades on or before this date.",
+          ),
         // Performance floor constraints (reject parameter combinations that don't meet minimums)
         minSharpeRatio: z
           .number()
           .optional()
-          .describe("Minimum Sharpe ratio required during in-sample optimization. Combinations below this are rejected."),
+          .describe(
+            "Minimum Sharpe ratio required during in-sample optimization. Combinations below this are rejected.",
+          ),
         minProfitFactor: z
           .number()
           .min(0)
           .optional()
-          .describe("Minimum profit factor required during in-sample optimization. Combinations below this are rejected."),
+          .describe(
+            "Minimum profit factor required during in-sample optimization. Combinations below this are rejected.",
+          ),
         requirePositiveNetPl: z
           .boolean()
           .default(false)
-          .describe("Require positive net P&L during in-sample optimization. Reject combinations with losses."),
+          .describe(
+            "Require positive net P&L during in-sample optimization. Reject combinations with losses.",
+          ),
         // Diversification constraints
         enableCorrelationConstraint: z
           .boolean()
           .default(false)
-          .describe("Enable correlation constraint to reject highly correlated strategy combinations during optimization."),
+          .describe(
+            "Enable correlation constraint to reject highly correlated strategy combinations during optimization.",
+          ),
         maxCorrelationThreshold: z
           .number()
           .min(0)
           .max(1)
           .default(0.7)
-          .describe("Maximum allowed correlation between any strategy pair (default: 0.7). Only used if enableCorrelationConstraint is true."),
+          .describe(
+            "Maximum allowed correlation between any strategy pair (default: 0.7). Only used if enableCorrelationConstraint is true.",
+          ),
         correlationMethod: z
           .enum(["kendall", "spearman", "pearson"])
           .default("kendall")
@@ -174,19 +177,25 @@ export function registerAnalysisTools(
         enableTailRiskConstraint: z
           .boolean()
           .default(false)
-          .describe("Enable tail risk constraint to reject combinations with high joint tail dependence."),
+          .describe(
+            "Enable tail risk constraint to reject combinations with high joint tail dependence.",
+          ),
         maxTailDependenceThreshold: z
           .number()
           .min(0)
           .max(1)
           .default(0.5)
-          .describe("Maximum allowed tail dependence between any strategy pair (default: 0.5). Only used if enableTailRiskConstraint is true."),
+          .describe(
+            "Maximum allowed tail dependence between any strategy pair (default: 0.5). Only used if enableTailRiskConstraint is true.",
+          ),
         tailThreshold: z
           .number()
           .min(0.01)
           .max(0.5)
           .default(0.1)
-          .describe("Percentile threshold for tail definition (default: 0.1 = worst 10%). Only used if enableTailRiskConstraint is true."),
+          .describe(
+            "Percentile threshold for tail definition (default: 0.1 = worst 10%). Only used if enableTailRiskConstraint is true.",
+          ),
         diversificationNormalization: z
           .enum(["raw", "margin", "notional"])
           .default("raw")
@@ -197,24 +206,21 @@ export function registerAnalysisTools(
           .describe("Which trade date to use for diversification calculations (default: opened)."),
         // Parameter ranges for position sizing sweeps
         parameterRanges: z
-          .record(
-            z.string(),
-            z.array(z.number()).min(3).max(3)
-          )
+          .record(z.string(), z.array(z.number()).min(3).max(3))
           .optional()
           .describe(
             "Parameter ranges for optimization sweep. Format: {paramName: [min, max, step]}. " +
-            "POSITION SIZING: " +
-            "'kellyMultiplier' scales P&L by multiplier (e.g., {\"kellyMultiplier\": [0.25, 1.0, 0.25]} tests quarter/half/3-quarter/full Kelly); " +
-            "'fixedFractionPct' scales relative to 2% baseline (e.g., [1, 4, 1] tests 1-4%); " +
-            "'fixedContracts' scales relative to avg contracts (e.g., [1, 5, 1] tests 1-5 contracts). " +
-            "RISK CONSTRAINTS (reject combinations exceeding threshold): " +
-            "'maxDrawdownPct' max drawdown % (e.g., [15, 25, 5] allows 15-25%); " +
-            "'maxDailyLossPct' max single-day loss %; " +
-            "'consecutiveLossLimit' max consecutive losing trades. " +
-            "STRATEGY WEIGHTS: " +
-            "'strategy:StrategyName' weight multiplier per strategy (e.g., {\"strategy:IronCondor\": [0, 1, 0.5], \"strategy:Straddle\": [0, 1, 0.5]} tests include/exclude combinations). " +
-            "Multiple parameters create a grid search across all combinations."
+              "POSITION SIZING: " +
+              "'kellyMultiplier' scales P&L by multiplier (e.g., {\"kellyMultiplier\": [0.25, 1.0, 0.25]} tests quarter/half/3-quarter/full Kelly); " +
+              "'fixedFractionPct' scales relative to 2% baseline (e.g., [1, 4, 1] tests 1-4%); " +
+              "'fixedContracts' scales relative to avg contracts (e.g., [1, 5, 1] tests 1-5 contracts). " +
+              "RISK CONSTRAINTS (reject combinations exceeding threshold): " +
+              "'maxDrawdownPct' max drawdown % (e.g., [15, 25, 5] allows 15-25%); " +
+              "'maxDailyLossPct' max single-day loss %; " +
+              "'consecutiveLossLimit' max consecutive losing trades. " +
+              "STRATEGY WEIGHTS: " +
+              '\'strategy:StrategyName\' weight multiplier per strategy (e.g., {"strategy:IronCondor": [0, 1, 0.5], "strategy:Straddle": [0, 1, 0.5]} tests include/exclude combinations). ' +
+              "Multiple parameters create a grid search across all combinations.",
           ),
       }),
     },
@@ -257,9 +263,7 @@ export function registerAnalysisTools(
         // Apply ticker filter (supports both explicit ticker columns and legs-derived symbols)
         if (tickerFilter) {
           const tickerLower = tickerFilter.toLowerCase();
-          trades = trades.filter(
-            (t) => resolveTradeTicker(t).toLowerCase() === tickerLower
-          );
+          trades = trades.filter((t) => resolveTradeTicker(t).toLowerCase() === tickerLower);
         }
 
         // Apply date range filter
@@ -267,12 +271,8 @@ export function registerAnalysisTools(
 
         // Apply selectedStrategies filter if provided (in addition to single strategy filter)
         if (selectedStrategies && selectedStrategies.length > 0) {
-          const strategySet = new Set(
-            selectedStrategies.map((s) => s.toLowerCase())
-          );
-          trades = trades.filter((t) =>
-            strategySet.has(t.strategy.toLowerCase())
-          );
+          const strategySet = new Set(selectedStrategies.map((s) => s.toLowerCase()));
+          trades = trades.filter((t) => strategySet.has(t.strategy.toLowerCase()));
         }
 
         if (trades.length < 20) {
@@ -289,15 +289,12 @@ export function registerAnalysisTools(
 
         // Calculate date range and window sizes
         const sortedTrades = [...trades].sort(
-          (a, b) =>
-            new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime()
+          (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
         );
         const firstDate = new Date(sortedTrades[0].dateOpened);
-        const lastDate = new Date(
-          sortedTrades[sortedTrades.length - 1].dateOpened
-        );
+        const lastDate = new Date(sortedTrades[sortedTrades.length - 1].dateOpened);
         const totalDays = Math.ceil(
-          (lastDate.getTime() - firstDate.getTime()) / (24 * 60 * 60 * 1000)
+          (lastDate.getTime() - firstDate.getTime()) / (24 * 60 * 60 * 1000),
         );
 
         // Determine window sizes: explicit days override window count calculations
@@ -320,7 +317,8 @@ export function registerAnalysisTools(
         }
 
         // Build performance floor config if any constraints are set
-        const hasPerformanceFloor = minSharpeRatio !== undefined || minProfitFactor !== undefined || requirePositiveNetPl;
+        const hasPerformanceFloor =
+          minSharpeRatio !== undefined || minProfitFactor !== undefined || requirePositiveNetPl;
         const performanceFloor = hasPerformanceFloor
           ? {
               enableMinSharpe: minSharpeRatio !== undefined,
@@ -332,7 +330,8 @@ export function registerAnalysisTools(
           : undefined;
 
         // Build diversification config if any constraints are enabled
-        const hasDiversificationConstraints = enableCorrelationConstraint || enableTailRiskConstraint;
+        const hasDiversificationConstraints =
+          enableCorrelationConstraint || enableTailRiskConstraint;
         const diversificationConfig = hasDiversificationConstraints
           ? {
               enableCorrelationConstraint,
@@ -415,8 +414,7 @@ export function registerAnalysisTools(
             : null,
           summary: {
             avgInSamplePerformance: results.summary.avgInSamplePerformance,
-            avgOutOfSamplePerformance:
-              results.summary.avgOutOfSamplePerformance,
+            avgOutOfSamplePerformance: results.summary.avgOutOfSamplePerformance,
             degradationFactor: results.summary.degradationFactor,
             parameterStability: results.summary.parameterStability,
             robustnessScore: results.summary.robustnessScore,
@@ -464,7 +462,7 @@ export function registerAnalysisTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Tool 2: run_monte_carlo
@@ -475,10 +473,7 @@ export function registerAnalysisTools(
         "Run Monte Carlo simulation to project future performance and calculate risk metrics",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         numSimulations: z
           .number()
           .min(100)
@@ -490,34 +485,34 @@ export function registerAnalysisTools(
           .min(10)
           .optional()
           .describe(
-            "Number of trades/days to project forward. If not specified, uses the number of historical trades."
+            "Number of trades/days to project forward. If not specified, uses the number of historical trades.",
           ),
         resampleWindow: z
           .number()
           .min(5)
           .optional()
           .describe(
-            "Size of resample pool (how many recent trades/days to sample from). If not specified, uses all available data."
+            "Size of resample pool (how many recent trades/days to sample from). If not specified, uses all available data.",
           ),
         resampleMethod: z
           .enum(["trades", "daily", "percentage"])
           .default("trades")
           .describe(
-            "What to resample: 'trades' (individual trade P&L), 'daily' (daily aggregated returns), 'percentage' (percentage returns for compounding strategies)"
+            "What to resample: 'trades' (individual trade P&L), 'daily' (daily aggregated returns), 'percentage' (percentage returns for compounding strategies)",
           ),
         initialCapital: z
           .number()
           .positive()
           .optional()
           .describe(
-            "Starting capital for simulations. If not specified, inferred from first trade."
+            "Starting capital for simulations. If not specified, inferred from first trade.",
           ),
         tradesPerYear: z
           .number()
           .min(1)
           .optional()
           .describe(
-            "Expected trades per year for annualization. If not specified, calculated from historical data."
+            "Expected trades per year for annualization. If not specified, calculated from historical data.",
           ),
         randomSeed: z
           .number()
@@ -527,7 +522,7 @@ export function registerAnalysisTools(
           .boolean()
           .default(false)
           .describe(
-            "Normalize trades to 1-lot by dividing P&L by contract count. Useful for comparing different position sizes."
+            "Normalize trades to 1-lot by dividing P&L by contract count. Useful for comparing different position sizes.",
           ),
         includeWorstCase: z
           .boolean()
@@ -539,32 +534,32 @@ export function registerAnalysisTools(
           .max(100)
           .default(5)
           .describe(
-            "Percentage of simulation length that should be max-loss scenarios (0-100, default: 5)"
+            "Percentage of simulation length that should be max-loss scenarios (0-100, default: 5)",
           ),
         worstCaseMode: z
           .enum(["pool", "guarantee"])
           .default("pool")
           .describe(
-            "How to inject worst-case: 'pool' adds synthetic losses to resample pool, 'guarantee' ensures worst-case appears in every simulation"
+            "How to inject worst-case: 'pool' adds synthetic losses to resample pool, 'guarantee' ensures worst-case appears in every simulation",
           ),
         worstCaseSizing: z
           .enum(["absolute", "relative"])
           .default("relative")
           .describe(
-            "Worst-case sizing: 'absolute' uses historical dollar amounts, 'relative' scales to account capital ratio"
+            "Worst-case sizing: 'absolute' uses historical dollar amounts, 'relative' scales to account capital ratio",
           ),
         worstCaseBasedOn: z
           .enum(["simulation", "historical"])
           .default("simulation")
           .describe(
-            "What to base worst-case percentage on: 'simulation' (simulation length) or 'historical' (historical data size)"
+            "What to base worst-case percentage on: 'simulation' (simulation length) or 'historical' (historical data size)",
           ),
         historicalInitialCapital: z
           .number()
           .positive()
           .optional()
           .describe(
-            "Historical initial capital for percentage return calculation. Only needed when filtering strategies from multi-strategy portfolios where fundsAtClose reflects combined portfolio."
+            "Historical initial capital for percentage return calculation. Only needed when filtering strategies from multi-strategy portfolios where fundsAtClose reflects combined portfolio.",
           ),
       }),
     },
@@ -607,8 +602,7 @@ export function registerAnalysisTools(
 
         // Calculate initial capital and trades per year if not provided
         const sortedTrades = [...trades].sort(
-          (a, b) =>
-            new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime()
+          (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
         );
         const firstTrade = sortedTrades[0];
         const lastTrade = sortedTrades[sortedTrades.length - 1];
@@ -620,11 +614,9 @@ export function registerAnalysisTools(
 
         // Use provided trades per year or calculate from data
         const daySpan =
-          (new Date(lastTrade.dateOpened).getTime() -
-            new Date(firstTrade.dateOpened).getTime()) /
+          (new Date(lastTrade.dateOpened).getTime() - new Date(firstTrade.dateOpened).getTime()) /
           (24 * 60 * 60 * 1000);
-        const calculatedTradesPerYear =
-          daySpan > 0 ? (trades.length / daySpan) * 365 : 252;
+        const calculatedTradesPerYear = daySpan > 0 ? (trades.length / daySpan) * 365 : 252;
         const tradesPerYear = tradesPerYearParam ?? calculatedTradesPerYear;
 
         // Use provided simulation length or default to trade count
@@ -716,34 +708,33 @@ export function registerAnalysisTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Tool 3: get_correlation_matrix
   server.registerTool(
     "get_correlation_matrix",
     {
-      description:
-        "Calculate correlation matrix between strategies to identify diversification",
+      description: "Calculate correlation matrix between strategies to identify diversification",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         method: z
           .enum(["kendall", "spearman", "pearson"])
           .default("kendall")
           .describe(
-            "Correlation method: 'kendall' (robust, rank-based), 'spearman' (rank), 'pearson' (linear)"
+            "Correlation method: 'kendall' (robust, rank-based), 'spearman' (rank), 'pearson' (linear)",
           ),
         alignment: z
           .enum(["shared", "zero-pad"])
           .default("shared")
           .describe(
-            "How to handle missing dates: 'shared' uses only days both strategies traded, 'zero-pad' fills missing days with 0"
+            "How to handle missing dates: 'shared' uses only days both strategies traded, 'zero-pad' fills missing days with 0",
           ),
         normalization: z
           .enum(["raw", "margin", "notional"])
           .default("raw")
           .describe(
-            "How to normalize returns: 'raw' absolute P&L, 'margin' P&L/margin, 'notional' P&L/notional"
+            "How to normalize returns: 'raw' absolute P&L, 'margin' P&L/margin, 'notional' P&L/notional",
           ),
         dateBasis: z
           .enum(["opened", "closed"])
@@ -769,17 +760,23 @@ export function registerAnalysisTools(
         dateRangeFrom: z
           .string()
           .optional()
-          .describe("Start date for analysis (ISO format: YYYY-MM-DD). Only include trades on or after this date."),
+          .describe(
+            "Start date for analysis (ISO format: YYYY-MM-DD). Only include trades on or after this date.",
+          ),
         dateRangeTo: z
           .string()
           .optional()
-          .describe("End date for analysis (ISO format: YYYY-MM-DD). Only include trades on or before this date."),
+          .describe(
+            "End date for analysis (ISO format: YYYY-MM-DD). Only include trades on or before this date.",
+          ),
         highlightThreshold: z
           .number()
           .min(0)
           .max(1)
           .default(0.7)
-          .describe("Threshold for highlighting highly correlated pairs (default: 0.7 = |r| > 0.7)"),
+          .describe(
+            "Threshold for highlighting highly correlated pairs (default: 0.7 = |r| > 0.7)",
+          ),
       }),
     },
     async ({
@@ -803,9 +800,7 @@ export function registerAnalysisTools(
         // Apply ticker filter (supports both explicit ticker columns and legs-derived symbols)
         if (tickerFilter) {
           const tickerLower = tickerFilter.toLowerCase();
-          trades = trades.filter(
-            (t) => resolveTradeTicker(t).toLowerCase() === tickerLower
-          );
+          trades = trades.filter((t) => resolveTradeTicker(t).toLowerCase() === tickerLower);
         }
 
         // Apply date range filter
@@ -818,9 +813,7 @@ export function registerAnalysisTools(
         }
 
         // Get unique strategies after filtering
-        const strategies = Array.from(
-          new Set(trades.map((t) => t.strategy))
-        ).filter(Boolean);
+        const strategies = Array.from(new Set(trades.map((t) => t.strategy))).filter(Boolean);
 
         if (strategies.length < 2) {
           return {
@@ -845,12 +838,20 @@ export function registerAnalysisTools(
         const analytics = calculateCorrelationAnalytics(matrix, minSamples);
 
         // Find highly correlated pairs
-        const highlyCorrelated: Array<{ pair: [string, string]; value: number; sampleSize: number }> = [];
+        const highlyCorrelated: Array<{
+          pair: [string, string];
+          value: number;
+          sampleSize: number;
+        }> = [];
         for (let i = 0; i < matrix.strategies.length; i++) {
           for (let j = i + 1; j < matrix.strategies.length; j++) {
             const val = matrix.correlationData[i][j];
             const sampleSize = matrix.sampleSizes[i][j];
-            if (!Number.isNaN(val) && Math.abs(val) > highlightThreshold && sampleSize >= minSamples) {
+            if (
+              !Number.isNaN(val) &&
+              Math.abs(val) > highlightThreshold &&
+              sampleSize >= minSamples
+            ) {
               highlyCorrelated.push({
                 pair: [matrix.strategies[i], matrix.strategies[j]],
                 value: val,
@@ -861,7 +862,9 @@ export function registerAnalysisTools(
         }
 
         // Brief summary for user display
-        const avgCorr = Number.isNaN(analytics.averageCorrelation) ? "N/A" : formatRatio(analytics.averageCorrelation);
+        const avgCorr = Number.isNaN(analytics.averageCorrelation)
+          ? "N/A"
+          : formatRatio(analytics.averageCorrelation);
         const summary = `Correlation: ${blockId} | ${strategies.length} strategies | Avg: ${avgCorr} | High-corr pairs: ${highlyCorrelated.length}`;
 
         // Build structured data for Claude reasoning
@@ -914,15 +917,14 @@ export function registerAnalysisTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Tool 4: get_tail_risk
   server.registerTool(
     "get_tail_risk",
     {
-      description:
-        "Calculate Gaussian copula tail dependence to identify extreme co-movement risk",
+      description: "Calculate Gaussian copula tail dependence to identify extreme co-movement risk",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         tailThreshold: z
@@ -931,7 +933,7 @@ export function registerAnalysisTools(
           .max(0.5)
           .default(0.1)
           .describe(
-            "Percentile threshold for tail events (0.1 = worst 10% of days). Lower = more extreme events only."
+            "Percentile threshold for tail events (0.1 = worst 10% of days). Lower = more extreme events only.",
           ),
         minTradingDays: z
           .number()
@@ -942,7 +944,7 @@ export function registerAnalysisTools(
           .enum(["raw", "margin", "notional"])
           .default("raw")
           .describe(
-            "How to normalize returns: 'raw' absolute P&L, 'margin' P&L/margin, 'notional' P&L/notional"
+            "How to normalize returns: 'raw' absolute P&L, 'margin' P&L/margin, 'notional' P&L/notional",
           ),
         dateBasis: z
           .enum(["opened", "closed"])
@@ -959,18 +961,22 @@ export function registerAnalysisTools(
         dateRangeFrom: z
           .string()
           .optional()
-          .describe("Start date for analysis (ISO format: YYYY-MM-DD). Only include trades on or after this date."),
+          .describe(
+            "Start date for analysis (ISO format: YYYY-MM-DD). Only include trades on or after this date.",
+          ),
         dateRangeTo: z
           .string()
           .optional()
-          .describe("End date for analysis (ISO format: YYYY-MM-DD). Only include trades on or before this date."),
+          .describe(
+            "End date for analysis (ISO format: YYYY-MM-DD). Only include trades on or before this date.",
+          ),
         varianceThreshold: z
           .number()
           .min(0.5)
           .max(0.99)
           .default(0.8)
           .describe(
-            "Variance threshold for determining effective factors (0.8 = 80% variance explained)"
+            "Variance threshold for determining effective factors (0.8 = 80% variance explained)",
           ),
       }),
     },
@@ -991,9 +997,7 @@ export function registerAnalysisTools(
         const trades = block.trades;
 
         // Get unique strategies
-        const strategies = Array.from(
-          new Set(trades.map((t) => t.strategy))
-        ).filter(Boolean);
+        const strategies = Array.from(new Set(trades.map((t) => t.strategy))).filter(Boolean);
 
         if (strategies.length < 2) {
           return {
@@ -1022,8 +1026,12 @@ export function registerAnalysisTools(
         });
 
         // Determine risk level for summary
-        const riskLevel = result.analytics.averageJointTailRisk > 0.5 ? "HIGH" :
-          result.analytics.averageJointTailRisk > 0.3 ? "MODERATE" : "LOW";
+        const riskLevel =
+          result.analytics.averageJointTailRisk > 0.5
+            ? "HIGH"
+            : result.analytics.averageJointTailRisk > 0.3
+              ? "MODERATE"
+              : "LOW";
 
         // Brief summary for user display
         const summary = `Tail Risk: ${blockId} | ${result.strategies.length} strategies | Avg Joint Risk: ${formatRatio(result.analytics.averageJointTailRisk)} | Level: ${riskLevel}`;
@@ -1077,30 +1085,28 @@ export function registerAnalysisTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Tool 5: get_position_sizing
   server.registerTool(
     "get_position_sizing",
     {
-      description:
-        "Calculate Kelly criterion position sizing for optimal capital allocation",
+      description: "Calculate Kelly criterion position sizing for optimal capital allocation",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        capitalBase: z
-          .number()
-          .positive()
-          .describe("Starting capital in dollars"),
+        capitalBase: z.number().positive().describe("Starting capital in dollars"),
         strategy: z
           .string()
           .optional()
-          .describe("Filter to a specific strategy name (case-insensitive). If provided, only calculates Kelly for that strategy."),
+          .describe(
+            "Filter to a specific strategy name (case-insensitive). If provided, only calculates Kelly for that strategy.",
+          ),
         kellyFraction: z
           .enum(["full", "half", "quarter"])
           .default("half")
           .describe(
-            "Kelly fraction to use: 'full' (100%), 'half' (50%, recommended), 'quarter' (25%, conservative)"
+            "Kelly fraction to use: 'full' (100%), 'half' (50%, recommended), 'quarter' (25%, conservative)",
           ),
         maxAllocationPct: z
           .number()
@@ -1112,23 +1118,27 @@ export function registerAnalysisTools(
           .boolean()
           .default(true)
           .describe(
-            "Include strategies with negative Kelly in output (useful for identifying loss-reduction opportunities)"
+            "Include strategies with negative Kelly in output (useful for identifying loss-reduction opportunities)",
           ),
         useMarginReturns: z
           .boolean()
           .default(false)
           .describe(
-            "Prefer percentage returns based on margin requirement instead of absolute P&L. More appropriate for compounding strategies with variable position sizes."
+            "Prefer percentage returns based on margin requirement instead of absolute P&L. More appropriate for compounding strategies with variable position sizes.",
           ),
         minTrades: z
           .number()
           .min(1)
           .default(10)
-          .describe("Minimum trades required per strategy for valid Kelly calculation (default: 10)"),
+          .describe(
+            "Minimum trades required per strategy for valid Kelly calculation (default: 10)",
+          ),
         sortBy: z
           .enum(["name", "kelly", "winRate", "payoffRatio", "allocation"])
           .default("kelly")
-          .describe("Sort strategies by: 'name', 'kelly' percentage, 'winRate', 'payoffRatio', or 'allocation' amount"),
+          .describe(
+            "Sort strategies by: 'name', 'kelly' percentage, 'winRate', 'payoffRatio', or 'allocation' amount",
+          ),
         sortOrder: z
           .enum(["asc", "desc"])
           .default("desc")
@@ -1181,7 +1191,7 @@ export function registerAnalysisTools(
         const skippedStrategies: string[] = [];
         for (const [strategyName, kelly] of strategyKelly.entries()) {
           const strategyTrades = trades.filter(
-            (t) => t.strategy.toLowerCase() === strategyName.toLowerCase()
+            (t) => t.strategy.toLowerCase() === strategyName.toLowerCase(),
           );
           if (strategyTrades.length >= minTrades) {
             filteredStrategyKelly.set(strategyName, kelly);
@@ -1210,21 +1220,19 @@ export function registerAnalysisTools(
           }
 
           // Calculate raw allocation (full Kelly)
-          const rawAllocation = kelly.hasValidKelly
-            ? capitalBase * Math.max(0, kelly.fraction)
-            : 0;
+          const rawAllocation = kelly.hasValidKelly ? capitalBase * Math.max(0, kelly.fraction) : 0;
 
           // Apply Kelly multiplier and cap
           const adjustedFraction = Math.min(
             kelly.fraction * kellyMultiplier,
-            maxAllocationFraction
+            maxAllocationFraction,
           );
           const adjustedAllocation = kelly.hasValidKelly
             ? capitalBase * Math.max(0, adjustedFraction)
             : 0;
 
           const tradeCount = trades.filter(
-            (t) => t.strategy.toLowerCase() === strategyName.toLowerCase()
+            (t) => t.strategy.toLowerCase() === strategyName.toLowerCase(),
           ).length;
 
           strategyResults.push({
@@ -1274,9 +1282,17 @@ export function registerAnalysisTools(
         }
 
         // Brief summary for user display
-        const kellyDisplay = portfolioKelly.hasValidKelly ? formatPercent(portfolioKelly.percent) : "N/A";
+        const kellyDisplay = portfolioKelly.hasValidKelly
+          ? formatPercent(portfolioKelly.percent)
+          : "N/A";
         const allocDisplay = portfolioKelly.hasValidKelly
-          ? formatCurrency(capitalBase * Math.max(0, Math.min(portfolioKelly.fraction * kellyMultiplier, maxAllocationFraction)))
+          ? formatCurrency(
+              capitalBase *
+                Math.max(
+                  0,
+                  Math.min(portfolioKelly.fraction * kellyMultiplier, maxAllocationFraction),
+                ),
+            )
           : "N/A";
         const summary = `Position Sizing: ${blockId}${strategy ? ` (${strategy})` : ""} | Kelly: ${kellyDisplay} | ${kellyFraction} allocation: ${allocDisplay} | ${strategyResults.length} strategies`;
 
@@ -1309,7 +1325,10 @@ export function registerAnalysisTools(
               : null,
             recommendedAllocation: portfolioKelly.hasValidKelly
               ? capitalBase *
-                Math.max(0, Math.min(portfolioKelly.fraction * kellyMultiplier, maxAllocationFraction))
+                Math.max(
+                  0,
+                  Math.min(portfolioKelly.fraction * kellyMultiplier, maxAllocationFraction),
+                )
               : null,
             fullKelly: portfolioKelly.hasValidKelly
               ? Math.min(portfolioKelly.fraction, maxAllocationFraction)
@@ -1327,25 +1346,27 @@ export function registerAnalysisTools(
             calculationMethod: portfolioKelly.calculationMethod ?? null,
             hasUnrealisticValues: portfolioKelly.hasUnrealisticValues ?? false,
           },
-          strategies: strategyResults.map(({ name, kelly, rawAllocation, adjustedAllocation, tradeCount }) => ({
-            name,
-            tradeCount,
-            winRate: kelly.winRate,
-            avgWin: kelly.avgWin,
-            avgLoss: kelly.avgLoss,
-            payoffRatio: kelly.payoffRatio,
-            rawKellyFraction: kelly.fraction,
-            rawKellyPercent: kelly.percent,
-            hasValidKelly: kelly.hasValidKelly,
-            rawAllocation,
-            adjustedAllocation,
-            // Margin-based metrics
-            avgWinPct: kelly.avgWinPct ?? null,
-            avgLossPct: kelly.avgLossPct ?? null,
-            normalizedKellyPct: kelly.normalizedKellyPct ?? null,
-            calculationMethod: kelly.calculationMethod ?? null,
-            hasUnrealisticValues: kelly.hasUnrealisticValues ?? false,
-          })),
+          strategies: strategyResults.map(
+            ({ name, kelly, rawAllocation, adjustedAllocation, tradeCount }) => ({
+              name,
+              tradeCount,
+              winRate: kelly.winRate,
+              avgWin: kelly.avgWin,
+              avgLoss: kelly.avgLoss,
+              payoffRatio: kelly.payoffRatio,
+              rawKellyFraction: kelly.fraction,
+              rawKellyPercent: kelly.percent,
+              hasValidKelly: kelly.hasValidKelly,
+              rawAllocation,
+              adjustedAllocation,
+              // Margin-based metrics
+              avgWinPct: kelly.avgWinPct ?? null,
+              avgLossPct: kelly.avgLossPct ?? null,
+              normalizedKellyPct: kelly.normalizedKellyPct ?? null,
+              calculationMethod: kelly.calculationMethod ?? null,
+              hasUnrealisticValues: kelly.hasUnrealisticValues ?? false,
+            }),
+          ),
           skippedStrategies,
           warnings,
         };
@@ -1362,6 +1383,6 @@ export function registerAnalysisTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

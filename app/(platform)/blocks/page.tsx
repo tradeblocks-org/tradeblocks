@@ -22,7 +22,20 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useBlockStore, type Block } from "@tradeblocks/lib/stores";
-import { Activity, AlertTriangle, Calendar, ChevronDown, Download, Grid3X3, Info, List, Plus, Search, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Calendar,
+  ChevronDown,
+  Download,
+  Grid3X3,
+  Info,
+  List,
+  Plus,
+  Search,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import React, { useCallback, useState } from "react";
 import { ProgressDialog } from "@/components/progress-dialog";
 import type { SnapshotProgress } from "@tradeblocks/lib";
@@ -30,15 +43,9 @@ import { waitForRender } from "@tradeblocks/lib";
 import { useProgressDialog } from "@/hooks/use-progress-dialog";
 import { ImportGuideDialog } from "@/components/import-guide-dialog";
 
-function BlockCard({
-  block,
-  onEdit,
-}: {
-  block: Block;
-  onEdit: (block: Block) => void;
-}) {
-  const setActiveBlock = useBlockStore(state => state.setActiveBlock);
-  const recalculateBlock = useBlockStore(state => state.recalculateBlock);
+function BlockCard({ block, onEdit }: { block: Block; onEdit: (block: Block) => void }) {
+  const setActiveBlock = useBlockStore((state) => state.setActiveBlock);
+  const recalculateBlock = useBlockStore((state) => state.recalculateBlock);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const progress = useProgressDialog();
 
@@ -67,19 +74,19 @@ function BlockCard({
         (p: SnapshotProgress) => {
           progress.update(p.step, p.percent);
         },
-        signal
+        signal,
       );
 
       // If this block is active, also refresh the performance store
       if (block.isActive) {
-        const { usePerformanceStore } = await import('@tradeblocks/lib/stores');
+        const { usePerformanceStore } = await import("@tradeblocks/lib/stores");
         await usePerformanceStore.getState().fetchPerformanceData(block.id);
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         console.log("Recalculation cancelled by user");
       } else {
-        console.error('Failed to recalculate block:', error);
+        console.error("Failed to recalculate block:", error);
       }
     } finally {
       progress.finish();
@@ -93,20 +100,14 @@ function BlockCard({
         block.isActive ? "ring-2 ring-primary" : ""
       }`}
     >
-      {block.isActive && (
-        <Badge className="absolute -top-2 -right-2 bg-primary">ACTIVE</Badge>
-      )}
+      {block.isActive && <Badge className="absolute -top-2 -right-2 bg-primary">ACTIVE</Badge>}
 
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <CardTitle className="text-lg font-semibold leading-tight">
-              {block.name}
-            </CardTitle>
+            <CardTitle className="text-lg font-semibold leading-tight">{block.name}</CardTitle>
             {block.description && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {block.description}
-              </p>
+              <p className="text-sm text-muted-foreground mt-1">{block.description}</p>
             )}
           </div>
         </div>
@@ -170,8 +171,10 @@ function BlockCard({
             disabled={isRecalculating}
             title="Recalculate statistics and charts"
           >
-            <RotateCcw className={`h-4 w-4 ${isRecalculating ? 'animate-spin' : ''}`} />
-            <span className="ml-1.5 hidden sm:inline">{isRecalculating ? 'Recalculating...' : 'Recalculate'}</span>
+            <RotateCcw className={`h-4 w-4 ${isRecalculating ? "animate-spin" : ""}`} />
+            <span className="ml-1.5 hidden sm:inline">
+              {isRecalculating ? "Recalculating..." : "Recalculate"}
+            </span>
           </Button>
         </div>
       </CardContent>
@@ -188,15 +191,9 @@ function BlockCard({
   );
 }
 
-function BlockRow({
-  block,
-  onEdit,
-}: {
-  block: Block;
-  onEdit: (block: Block) => void;
-}) {
-  const setActiveBlock = useBlockStore(state => state.setActiveBlock);
-  const recalculateBlock = useBlockStore(state => state.recalculateBlock);
+function BlockRow({ block, onEdit }: { block: Block; onEdit: (block: Block) => void }) {
+  const setActiveBlock = useBlockStore((state) => state.setActiveBlock);
+  const recalculateBlock = useBlockStore((state) => state.recalculateBlock);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const progress = useProgressDialog();
 
@@ -225,18 +222,18 @@ function BlockRow({
         (p: SnapshotProgress) => {
           progress.update(p.step, p.percent);
         },
-        signal
+        signal,
       );
 
       if (block.isActive) {
-        const { usePerformanceStore } = await import('@tradeblocks/lib/stores');
+        const { usePerformanceStore } = await import("@tradeblocks/lib/stores");
         await usePerformanceStore.getState().fetchPerformanceData(block.id);
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         console.log("Recalculation cancelled by user");
       } else {
-        console.error('Failed to recalculate block:', error);
+        console.error("Failed to recalculate block:", error);
       }
     } finally {
       progress.finish();
@@ -255,13 +252,13 @@ function BlockRow({
         <div className="flex items-center gap-2">
           <h3 className="font-semibold truncate">{block.name}</h3>
           {block.isActive && (
-            <Badge variant="default" className="text-xs">ACTIVE</Badge>
+            <Badge variant="default" className="text-xs">
+              ACTIVE
+            </Badge>
           )}
         </div>
         {block.description && (
-          <p className="text-sm text-muted-foreground truncate mt-0.5">
-            {block.description}
-          </p>
+          <p className="text-sm text-muted-foreground truncate mt-0.5">{block.description}</p>
         )}
       </div>
 
@@ -298,18 +295,11 @@ function BlockRow({
       {/* Actions */}
       <div className="flex items-center gap-2 ml-auto">
         {!block.isActive && (
-          <Button
-            size="sm"
-            onClick={() => setActiveBlock(block.id)}
-          >
+          <Button size="sm" onClick={() => setActiveBlock(block.id)}>
             Activate
           </Button>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => onEdit(block)}
-        >
+        <Button size="sm" variant="outline" onClick={() => onEdit(block)}>
           Edit
         </Button>
         <Button
@@ -319,7 +309,7 @@ function BlockRow({
           disabled={isRecalculating}
           title="Recalculate statistics and charts"
         >
-          <RotateCcw className={`h-4 w-4 ${isRecalculating ? 'animate-spin' : ''}`} />
+          <RotateCcw className={`h-4 w-4 ${isRecalculating ? "animate-spin" : ""}`} />
         </Button>
       </div>
 
@@ -357,11 +347,11 @@ Bull Put Spread,2024-01-15,09:30:00,4535.25,SPX 15JAN24 4500P/4450P,2.50,1,125.0
 Bear Call Spread,2024-01-16,10:15:00,4542.75,SPX 19JAN24 4600C/4650C,3.25,2,275.00,0.50,2024-01-18,14:30:00,0.50,Profit Target`;
 
 export default function BlockManagementPage() {
-  const blocks = useBlockStore(state => state.blocks);
-  const isInitialized = useBlockStore(state => state.isInitialized);
-  const isStuck = useBlockStore(state => state.isStuck);
-  const error = useBlockStore(state => state.error);
-  const clearAllData = useBlockStore(state => state.clearAllData);
+  const blocks = useBlockStore((state) => state.blocks);
+  const isInitialized = useBlockStore((state) => state.isInitialized);
+  const isStuck = useBlockStore((state) => state.isStuck);
+  const error = useBlockStore((state) => state.error);
+  const clearAllData = useBlockStore((state) => state.clearAllData);
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"new" | "edit">("new");
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null);
@@ -376,9 +366,7 @@ export default function BlockManagementPage() {
     if (!searchQuery.trim()) return blocks;
 
     const query = searchQuery.toLowerCase();
-    return blocks.filter(block =>
-      block.name.toLowerCase().includes(query)
-    );
+    return blocks.filter((block) => block.name.toLowerCase().includes(query));
   }, [blocks, searchQuery]);
 
   const handleNewBlock = () => {
@@ -393,32 +381,32 @@ export default function BlockManagementPage() {
     setIsBlockDialogOpen(true);
   };
 
-  const handleDownloadTemplate = (type: 'complete' | 'minimal' | 'daily-log' | 'reporting-log') => {
+  const handleDownloadTemplate = (type: "complete" | "minimal" | "daily-log" | "reporting-log") => {
     let content: string;
     let filename: string;
 
     switch (type) {
-      case 'complete':
+      case "complete":
         content = COMPLETE_TEMPLATE_CSV;
-        filename = 'tradeblocks-tradelog-complete.csv';
+        filename = "tradeblocks-tradelog-complete.csv";
         break;
-      case 'minimal':
+      case "minimal":
         content = MINIMAL_TEMPLATE_CSV;
-        filename = 'tradeblocks-tradelog-minimal.csv';
+        filename = "tradeblocks-tradelog-minimal.csv";
         break;
-      case 'daily-log':
+      case "daily-log":
         content = DAILY_LOG_TEMPLATE_CSV;
-        filename = 'tradeblocks-dailylog-template.csv';
+        filename = "tradeblocks-dailylog-template.csv";
         break;
-      case 'reporting-log':
+      case "reporting-log":
         content = REPORTING_LOG_TEMPLATE_CSV;
-        filename = 'tradeblocks-reporting-log-template.csv';
+        filename = "tradeblocks-reporting-log-template.csv";
         break;
     }
 
-    const blob = new Blob([content], { type: 'text/csv' });
+    const blob = new Blob([content], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);
@@ -450,7 +438,7 @@ export default function BlockManagementPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-72">
-              <DropdownMenuItem onClick={() => handleDownloadTemplate('minimal')}>
+              <DropdownMenuItem onClick={() => handleDownloadTemplate("minimal")}>
                 <div className="flex flex-col gap-1">
                   <span className="font-medium">Trade Log - Minimal</span>
                   <span className="text-xs text-muted-foreground">
@@ -458,7 +446,7 @@ export default function BlockManagementPage() {
                   </span>
                 </div>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownloadTemplate('complete')}>
+              <DropdownMenuItem onClick={() => handleDownloadTemplate("complete")}>
                 <div className="flex flex-col gap-1">
                   <span className="font-medium">Trade Log - Complete</span>
                   <span className="text-xs text-muted-foreground">
@@ -466,7 +454,7 @@ export default function BlockManagementPage() {
                   </span>
                 </div>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownloadTemplate('daily-log')}>
+              <DropdownMenuItem onClick={() => handleDownloadTemplate("daily-log")}>
                 <div className="flex flex-col gap-1">
                   <span className="font-medium">Daily Log Template</span>
                   <span className="text-xs text-muted-foreground">
@@ -474,7 +462,7 @@ export default function BlockManagementPage() {
                   </span>
                 </div>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownloadTemplate('reporting-log')}>
+              <DropdownMenuItem onClick={() => handleDownloadTemplate("reporting-log")}>
                 <div className="flex flex-col gap-1">
                   <span className="font-medium">Reporting Log Template</span>
                   <span className="text-xs text-muted-foreground">
@@ -514,8 +502,8 @@ export default function BlockManagementPage() {
             {!isInitialized
               ? "Loading..."
               : searchQuery.trim()
-              ? `${filteredBlocks.length} of ${blocks.length} blocks`
-              : `${blocks.length} blocks`}
+                ? `${filteredBlocks.length} of ${blocks.length} blocks`
+                : `${blocks.length} blocks`}
           </span>
         </div>
 
@@ -544,11 +532,7 @@ export default function BlockManagementPage() {
                     <RotateCcw className="w-4 h-4 mr-2" />
                     Reload Page
                   </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setShowClearConfirm(true)}
-                  >
+                  <Button variant="destructive" size="sm" onClick={() => setShowClearConfirm(true)}>
                     <Trash2 className="w-4 h-4 mr-2" />
                     Clear Data & Reload
                   </Button>
@@ -580,9 +564,7 @@ export default function BlockManagementPage() {
           <div className="text-center py-12">
             <Search className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">No blocks found</h3>
-            <p className="text-muted-foreground mb-4">
-              No blocks match &quot;{searchQuery}&quot;
-            </p>
+            <p className="text-muted-foreground mb-4">No blocks match &quot;{searchQuery}&quot;</p>
             <Button variant="outline" onClick={() => setSearchQuery("")}>
               Clear Search
             </Button>
@@ -608,7 +590,7 @@ export default function BlockManagementPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="center" className="w-72">
-                  <DropdownMenuItem onClick={() => handleDownloadTemplate('minimal')}>
+                  <DropdownMenuItem onClick={() => handleDownloadTemplate("minimal")}>
                     <div className="flex flex-col gap-1">
                       <span className="font-medium">Trade Log - Minimal</span>
                       <span className="text-xs text-muted-foreground">
@@ -616,7 +598,7 @@ export default function BlockManagementPage() {
                       </span>
                     </div>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleDownloadTemplate('complete')}>
+                  <DropdownMenuItem onClick={() => handleDownloadTemplate("complete")}>
                     <div className="flex flex-col gap-1">
                       <span className="font-medium">Trade Log - Complete</span>
                       <span className="text-xs text-muted-foreground">
@@ -624,7 +606,7 @@ export default function BlockManagementPage() {
                       </span>
                     </div>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleDownloadTemplate('daily-log')}>
+                  <DropdownMenuItem onClick={() => handleDownloadTemplate("daily-log")}>
                     <div className="flex flex-col gap-1">
                       <span className="font-medium">Daily Log Template</span>
                       <span className="text-xs text-muted-foreground">
@@ -641,10 +623,13 @@ export default function BlockManagementPage() {
                 <div>
                   <p className="font-medium mb-1">Required CSV Fields</p>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    <span className="font-medium">Must have values:</span> Date Opened, Time Opened (H:mm:ss), Opening Price, Legs, Premium, P/L, No. of Contracts, Funds at Close, Margin Req., Strategy
+                    <span className="font-medium">Must have values:</span> Date Opened, Time Opened
+                    (H:mm:ss), Opening Price, Legs, Premium, P/L, No. of Contracts, Funds at Close,
+                    Margin Req., Strategy
                   </p>
                   <p className="text-muted-foreground text-xs leading-relaxed mt-1">
-                    <span className="font-medium">Optional standard:</span> VIX, Gap, Movement, Commissions, Short/Long Ratio, Max Profit/Loss
+                    <span className="font-medium">Optional standard:</span> VIX, Gap, Movement,
+                    Commissions, Short/Long Ratio, Max Profit/Loss
                   </p>
                 </div>
               </div>
@@ -653,7 +638,8 @@ export default function BlockManagementPage() {
                 <div>
                   <p className="font-medium mb-1">Custom Numeric Fields</p>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    Add extra numeric columns to your CSV for custom filtering and charting in the Report Builder.
+                    Add extra numeric columns to your CSV for custom filtering and charting in the
+                    Report Builder.
                   </p>
                 </div>
               </div>
@@ -687,8 +673,8 @@ export default function BlockManagementPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Clear All Data?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete all your trading blocks and analyses.
-              You can re-import your data from Option Omega after clearing.
+              This will permanently delete all your trading blocks and analyses. You can re-import
+              your data from Option Omega after clearing.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

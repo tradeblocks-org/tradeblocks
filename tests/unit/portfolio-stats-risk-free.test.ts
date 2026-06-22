@@ -30,11 +30,7 @@ function getNextTradingDay(date: Date): Date {
   return next;
 }
 
-function createMockTradesForPeriod(
-  startDate: Date,
-  numDays: number,
-  dailyPls: number[]
-): Trade[] {
+function createMockTradesForPeriod(startDate: Date, numDays: number, dailyPls: number[]): Trade[] {
   const trades: Trade[] = [];
   let currentDate = new Date(startDate);
   let fundsAtClose = 100000; // Start with $100k
@@ -84,7 +80,7 @@ function createMockTradesForPeriod(
 function createMockDailyLogsForPeriod(
   startDate: Date,
   numDays: number,
-  dailyPls: number[]
+  dailyPls: number[],
 ): DailyLogEntry[] {
   const entries: DailyLogEntry[] = [];
   let currentDate = new Date(startDate);
@@ -115,9 +111,7 @@ function createMockDailyLogsForPeriod(
 describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
   // Use consistent daily P&L pattern for all tests:
   // 10 trading days with mixed positive/negative returns
-  const standardDailyPls = [
-    500, -200, 300, -100, 400, -150, 250, -300, 350, 100,
-  ];
+  const standardDailyPls = [500, -200, 300, -100, 400, -150, 250, -300, 350, 100];
 
   describe("Sharpe Ratio - Date-Based vs Fixed Rate Differences", () => {
     it("should calculate different Sharpe for 2020 COVID period vs fixed 2% rate", () => {
@@ -125,18 +119,11 @@ describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
       // Fixed 2% would subtract more from returns than actual near-0% rates
       const covidStart = new Date(2020, 2, 16); // March 16, 2020
       const trades = createMockTradesForPeriod(covidStart, 10, standardDailyPls);
-      const dailyLogs = createMockDailyLogsForPeriod(
-        covidStart,
-        10,
-        standardDailyPls
-      );
+      const dailyLogs = createMockDailyLogsForPeriod(covidStart, 10, standardDailyPls);
 
       // Calculator with date-based rates (the new behavior)
       const calculator = new PortfolioStatsCalculator();
-      const statsDateBased = calculator.calculatePortfolioStats(
-        trades,
-        dailyLogs
-      );
+      const statsDateBased = calculator.calculatePortfolioStats(trades, dailyLogs);
 
       // The key test: date-based calculation should exist and be a number
       expect(statsDateBased.sharpeRatio).toBeDefined();
@@ -156,17 +143,10 @@ describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
       // Fixed 2% would subtract less from returns than actual ~5% rates
       const hikeStart = new Date(2023, 5, 5); // June 5, 2023
       const trades = createMockTradesForPeriod(hikeStart, 10, standardDailyPls);
-      const dailyLogs = createMockDailyLogsForPeriod(
-        hikeStart,
-        10,
-        standardDailyPls
-      );
+      const dailyLogs = createMockDailyLogsForPeriod(hikeStart, 10, standardDailyPls);
 
       const calculator = new PortfolioStatsCalculator();
-      const statsDateBased = calculator.calculatePortfolioStats(
-        trades,
-        dailyLogs
-      );
+      const statsDateBased = calculator.calculatePortfolioStats(trades, dailyLogs);
 
       expect(statsDateBased.sharpeRatio).toBeDefined();
       expect(typeof statsDateBased.sharpeRatio).toBe("number");
@@ -182,34 +162,15 @@ describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
       const covidStart = new Date(2020, 2, 16);
       const hikeStart = new Date(2023, 5, 5);
 
-      const covidTrades = createMockTradesForPeriod(
-        covidStart,
-        10,
-        standardDailyPls
-      );
-      const covidLogs = createMockDailyLogsForPeriod(
-        covidStart,
-        10,
-        standardDailyPls
-      );
+      const covidTrades = createMockTradesForPeriod(covidStart, 10, standardDailyPls);
+      const covidLogs = createMockDailyLogsForPeriod(covidStart, 10, standardDailyPls);
 
-      const hikeTrades = createMockTradesForPeriod(
-        hikeStart,
-        10,
-        standardDailyPls
-      );
-      const hikeLogs = createMockDailyLogsForPeriod(
-        hikeStart,
-        10,
-        standardDailyPls
-      );
+      const hikeTrades = createMockTradesForPeriod(hikeStart, 10, standardDailyPls);
+      const hikeLogs = createMockDailyLogsForPeriod(hikeStart, 10, standardDailyPls);
 
       const calculator = new PortfolioStatsCalculator();
 
-      const covidStats = calculator.calculatePortfolioStats(
-        covidTrades,
-        covidLogs
-      );
+      const covidStats = calculator.calculatePortfolioStats(covidTrades, covidLogs);
       const hikeStats = calculator.calculatePortfolioStats(hikeTrades, hikeLogs);
 
       // Both should have valid Sharpe ratios
@@ -231,17 +192,10 @@ describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
     it("should calculate different Sortino for 2020 COVID period vs fixed 2% rate", () => {
       const covidStart = new Date(2020, 2, 16);
       const trades = createMockTradesForPeriod(covidStart, 10, standardDailyPls);
-      const dailyLogs = createMockDailyLogsForPeriod(
-        covidStart,
-        10,
-        standardDailyPls
-      );
+      const dailyLogs = createMockDailyLogsForPeriod(covidStart, 10, standardDailyPls);
 
       const calculator = new PortfolioStatsCalculator();
-      const statsDateBased = calculator.calculatePortfolioStats(
-        trades,
-        dailyLogs
-      );
+      const statsDateBased = calculator.calculatePortfolioStats(trades, dailyLogs);
 
       expect(statsDateBased.sortinoRatio).toBeDefined();
       expect(typeof statsDateBased.sortinoRatio).toBe("number");
@@ -254,17 +208,10 @@ describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
     it("should calculate different Sortino for 2023 high-rate period vs fixed 2% rate", () => {
       const hikeStart = new Date(2023, 5, 5);
       const trades = createMockTradesForPeriod(hikeStart, 10, standardDailyPls);
-      const dailyLogs = createMockDailyLogsForPeriod(
-        hikeStart,
-        10,
-        standardDailyPls
-      );
+      const dailyLogs = createMockDailyLogsForPeriod(hikeStart, 10, standardDailyPls);
 
       const calculator = new PortfolioStatsCalculator();
-      const statsDateBased = calculator.calculatePortfolioStats(
-        trades,
-        dailyLogs
-      );
+      const statsDateBased = calculator.calculatePortfolioStats(trades, dailyLogs);
 
       expect(statsDateBased.sortinoRatio).toBeDefined();
       expect(typeof statsDateBased.sortinoRatio).toBe("number");
@@ -278,34 +225,15 @@ describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
       const covidStart = new Date(2020, 2, 16);
       const hikeStart = new Date(2023, 5, 5);
 
-      const covidTrades = createMockTradesForPeriod(
-        covidStart,
-        10,
-        standardDailyPls
-      );
-      const covidLogs = createMockDailyLogsForPeriod(
-        covidStart,
-        10,
-        standardDailyPls
-      );
+      const covidTrades = createMockTradesForPeriod(covidStart, 10, standardDailyPls);
+      const covidLogs = createMockDailyLogsForPeriod(covidStart, 10, standardDailyPls);
 
-      const hikeTrades = createMockTradesForPeriod(
-        hikeStart,
-        10,
-        standardDailyPls
-      );
-      const hikeLogs = createMockDailyLogsForPeriod(
-        hikeStart,
-        10,
-        standardDailyPls
-      );
+      const hikeTrades = createMockTradesForPeriod(hikeStart, 10, standardDailyPls);
+      const hikeLogs = createMockDailyLogsForPeriod(hikeStart, 10, standardDailyPls);
 
       const calculator = new PortfolioStatsCalculator();
 
-      const covidStats = calculator.calculatePortfolioStats(
-        covidTrades,
-        covidLogs
-      );
+      const covidStats = calculator.calculatePortfolioStats(covidTrades, covidLogs);
       const hikeStats = calculator.calculatePortfolioStats(hikeTrades, hikeLogs);
 
       expect(covidStats.sortinoRatio).toBeDefined();
@@ -411,11 +339,7 @@ describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
       // - Sortino should be in a reasonable range relative to Sharpe (typically 1.0-3.0x)
       const covidStart = new Date(2020, 2, 16);
       const trades = createMockTradesForPeriod(covidStart, 10, standardDailyPls);
-      const dailyLogs = createMockDailyLogsForPeriod(
-        covidStart,
-        10,
-        standardDailyPls
-      );
+      const dailyLogs = createMockDailyLogsForPeriod(covidStart, 10, standardDailyPls);
 
       const calculator = new PortfolioStatsCalculator();
       const stats = calculator.calculatePortfolioStats(trades, dailyLogs);
@@ -480,11 +404,7 @@ describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
       // regardless of how it's instantiated
       const startDate = new Date(2023, 5, 5); // High-rate period
       const trades = createMockTradesForPeriod(startDate, 10, standardDailyPls);
-      const dailyLogs = createMockDailyLogsForPeriod(
-        startDate,
-        10,
-        standardDailyPls
-      );
+      const dailyLogs = createMockDailyLogsForPeriod(startDate, 10, standardDailyPls);
 
       // Create multiple calculator instances
       const calc1 = new PortfolioStatsCalculator();
@@ -509,16 +429,8 @@ describe("Portfolio Stats - Date-Based Risk-Free Rates", () => {
       const covidStart = new Date(2020, 2, 16);
       const hikeStart = new Date(2023, 5, 5);
 
-      const covidTrades = createMockTradesForPeriod(
-        covidStart,
-        10,
-        standardDailyPls
-      );
-      const hikeTrades = createMockTradesForPeriod(
-        hikeStart,
-        10,
-        standardDailyPls
-      );
+      const covidTrades = createMockTradesForPeriod(covidStart, 10, standardDailyPls);
+      const hikeTrades = createMockTradesForPeriod(hikeStart, 10, standardDailyPls);
 
       const calculator = new PortfolioStatsCalculator();
 

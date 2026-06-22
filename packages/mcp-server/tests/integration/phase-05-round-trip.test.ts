@@ -22,10 +22,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { existsSync } from "fs";
 import { join } from "path";
-import {
-  buildStoreFixture,
-  type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.ts";
+import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import {
   createMarketStores,
@@ -92,9 +89,7 @@ class MockProvider implements MarketDataProvider {
     return bars;
   }
 
-  async fetchOptionSnapshot(
-    _opts: FetchSnapshotOptions,
-  ): Promise<FetchSnapshotResult> {
+  async fetchOptionSnapshot(_opts: FetchSnapshotOptions): Promise<FetchSnapshotResult> {
     return { contracts: [], underlying_price: 0, underlying_ticker: "SPX" };
   }
 }
@@ -163,10 +158,7 @@ describe("market data round-trip — spot backfill → enriched layout → verif
       selectQuery: `SELECT * FROM _enriched_stage`,
     });
 
-    const expected = join(
-      handle.ctx.dataDir,
-      "market/enriched/ticker=SPX/data.parquet",
-    );
+    const expected = join(handle.ctx.dataDir, "market/enriched/ticker=SPX/data.parquet");
     expect(existsSync(expected)).toBe(true);
 
     // Assert the enriched file schema does NOT include OHLCV — enriched
@@ -199,10 +191,7 @@ describe("market data round-trip — spot backfill → enriched layout → verif
       selectQuery: `SELECT * FROM _context_stage`,
     });
 
-    const expected = join(
-      handle.ctx.dataDir,
-      "market/enriched/context/data.parquet",
-    );
+    const expected = join(handle.ctx.dataDir, "market/enriched/context/data.parquet");
     expect(existsSync(expected)).toBe(true);
 
     const schema = await handle.ctx.conn.runAndReadAll(
@@ -217,13 +206,7 @@ describe("market data round-trip — spot backfill → enriched layout → verif
   it("drift detection — Gap_Pct delta 5e-8 exceeds 1e-9 tolerance", () => {
     const oldRow = { Gap_Pct: 0.01 };
     const newRow = { Gap_Pct: 0.01 + 5e-8 };
-    const diff = compareRow(
-      oldRow,
-      newRow,
-      "enriched",
-      "SPX",
-      "2024-08-05",
-    );
+    const diff = compareRow(oldRow, newRow, "enriched", "SPX", "2024-08-05");
     expect(diff.anyFailure).toBe(true);
     const gap = diff.fields.find((f) => f.field === "Gap_Pct");
     expect(gap?.passed).toBe(false);
@@ -235,12 +218,7 @@ describe("market data round-trip — spot backfill → enriched layout → verif
   it("in-process backfill via MockProvider writes spot/ partition and coverage reports it", async () => {
     // Small 3-date backfill — first 3 sample dates that are ≥ 2024 so MockProvider's
     // deterministic close values are reasonable.
-    const allSamples = selectVerificationSampleDates(
-      "2024-01-01",
-      "2024-12-31",
-      20260418,
-      1,
-    );
+    const allSamples = selectVerificationSampleDates("2024-01-01", "2024-12-31", 20260418, 1);
     const dates = allSamples.slice(0, 3).map((s) => s.date);
     for (const d of dates) {
       const bars = await mockProvider.fetchBars({
@@ -255,11 +233,7 @@ describe("market data round-trip — spot backfill → enriched layout → verif
     }
 
     // Every written partition is now reflected in coverage.
-    const cov = await stores.spot.getCoverage(
-      "SPX",
-      dates[0],
-      dates[dates.length - 1],
-    );
+    const cov = await stores.spot.getCoverage("SPX", dates[0], dates[dates.length - 1]);
     expect(cov.totalDates).toBe(dates.length);
 
     // Re-read via the view and count.

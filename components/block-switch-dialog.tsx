@@ -14,14 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useBlockStore } from "@tradeblocks/lib/stores";
-import {
-  Search,
-  Check,
-  Activity,
-  Calendar,
-  Plus,
-  Settings
-} from "lucide-react";
+import { Search, Check, Activity, Calendar, Plus, Settings } from "lucide-react";
 
 interface BlockSwitchDialogProps {
   open: boolean;
@@ -34,9 +27,10 @@ export function BlockSwitchDialog({ open, onOpenChange }: BlockSwitchDialogProps
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const router = useRouter();
 
-  const filteredBlocks = blocks.filter(block =>
-    block.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    block.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredBlocks = blocks.filter(
+    (block) =>
+      block.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      block.description?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const handleSelectBlock = (blockId: string) => {
@@ -45,7 +39,7 @@ export function BlockSwitchDialog({ open, onOpenChange }: BlockSwitchDialogProps
   };
 
   const handleManageBlocks = () => {
-    router.push('/blocks');
+    router.push("/blocks");
     onOpenChange(false);
   };
 
@@ -82,9 +76,10 @@ export function BlockSwitchDialog({ open, onOpenChange }: BlockSwitchDialogProps
                 key={block.id}
                 className={`
                   relative p-4 rounded-lg border cursor-pointer transition-all hover:shadow-md
-                  ${block.isActive
-                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                    : 'border-border hover:border-border/80'
+                  ${
+                    block.isActive
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border hover:border-border/80"
                   }
                 `}
                 onClick={() => handleSelectBlock(block.id)}
@@ -106,9 +101,7 @@ export function BlockSwitchDialog({ open, onOpenChange }: BlockSwitchDialogProps
                         <h3 className="font-semibold">{block.name}</h3>
                       </div>
                       {block.description && (
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {block.description}
-                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">{block.description}</p>
                       )}
                     </div>
                   </div>

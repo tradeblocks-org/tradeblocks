@@ -102,26 +102,19 @@ describe("TickerRegistry — toJSON", () => {
 describe("TickerRegistry — regex validation (T-1-02 defense layer 2)", () => {
   it("rejects path-traversal in underlying", () => {
     const r = new TickerRegistry(defaults);
-    expect(() =>
-      r.register({ underlying: "SPX/../etc", roots: ["SPX"] }),
-    ).toThrow(/invalid underlying/);
-    expect(() => r.register({ underlying: "..", roots: ["X"] })).toThrow(
+    expect(() => r.register({ underlying: "SPX/../etc", roots: ["SPX"] })).toThrow(
       /invalid underlying/,
     );
+    expect(() => r.register({ underlying: "..", roots: ["X"] })).toThrow(/invalid underlying/);
   });
   it("rejects control chars / whitespace in roots", () => {
     const r = new TickerRegistry(defaults);
-    expect(() =>
-      r.register({ underlying: "XSP", roots: ["XSP\n"] }),
-    ).toThrow(/invalid root/);
-    expect(() => r.register({ underlying: "XSP", roots: ["XS P"] })).toThrow(
-      /invalid root/,
-    );
+    expect(() => r.register({ underlying: "XSP", roots: ["XSP\n"] })).toThrow(/invalid root/);
+    expect(() => r.register({ underlying: "XSP", roots: ["XS P"] })).toThrow(/invalid root/);
   });
   it("rejects malformed defaults at construction time", () => {
-    expect(
-      () =>
-        new TickerRegistry([{ underlying: "SPX/../etc", roots: ["SPX"] }]),
-    ).toThrow(/invalid underlying/);
+    expect(() => new TickerRegistry([{ underlying: "SPX/../etc", roots: ["SPX"] }])).toThrow(
+      /invalid underlying/,
+    );
   });
 });

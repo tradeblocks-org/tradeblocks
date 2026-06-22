@@ -32,11 +32,7 @@ export function toCsvRow(values: unknown[]): string {
 /**
  * Creates and triggers a file download
  */
-export function downloadFile(
-  content: string,
-  filename: string,
-  mimeType: string
-): void {
+export function downloadFile(content: string, filename: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -80,7 +76,7 @@ export function sanitizeFilename(name: string): string {
 export function generateExportFilename(
   blockName: string,
   suffix: string,
-  extension: "json" | "csv"
+  extension: "json" | "csv",
 ): string {
   const sanitized = sanitizeFilename(blockName);
   const date = new Date().toISOString().split("T")[0];

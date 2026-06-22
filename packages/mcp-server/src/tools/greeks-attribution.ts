@@ -81,11 +81,15 @@ export const getGreeksAttributionSchema = z.object({
     .int()
     .min(0)
     .optional()
-    .describe("Trade index (required for instance mode). Use get_block_info to find trade indices."),
+    .describe(
+      "Trade index (required for instance mode). Use get_block_info to find trade indices.",
+    ),
   skip_quotes: z
     .boolean()
     .default(true)
-    .describe("Use cached bar data only (fast). Set false to fetch NBBO quotes for higher precision."),
+    .describe(
+      "Use cached bar data only (fast). Set false to fetch NBBO quotes for higher precision.",
+    ),
   detailed: z
     .boolean()
     .default(false)
@@ -105,7 +109,16 @@ const COLLAPSE_MAP: Record<string, string> = {
   vanna: "vega",
 };
 
-const FACTOR_ORDER: string[] = ["theta", "vega", "delta", "gamma", "residual", "time_and_vol", "charm", "vanna"];
+const FACTOR_ORDER: string[] = [
+  "theta",
+  "vega",
+  "delta",
+  "gamma",
+  "residual",
+  "time_and_vol",
+  "charm",
+  "vanna",
+];
 
 export function collapseFactors(
   factors: FactorContribution[],
@@ -182,10 +195,26 @@ export async function handleGetGreeksAttribution(
     if (trade_index == null) {
       throw new Error("trade_index is required for instance mode");
     }
-    return handleInstanceMode(block_id, trade_index, skip_quotes, detailed, baseDir, stores, injectedConn);
+    return handleInstanceMode(
+      block_id,
+      trade_index,
+      skip_quotes,
+      detailed,
+      baseDir,
+      stores,
+      injectedConn,
+    );
   }
 
-  return handleSummaryMode(block_id, skip_quotes, detailed, strategy, baseDir, stores, injectedConn);
+  return handleSummaryMode(
+    block_id,
+    skip_quotes,
+    detailed,
+    strategy,
+    baseDir,
+    stores,
+    injectedConn,
+  );
 }
 
 async function handleSummaryMode(
@@ -197,7 +226,7 @@ async function handleSummaryMode(
   stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<AttributionSummaryResult> {
-  const conn = injectedConn ?? await getConnection(baseDir);
+  const conn = injectedConn ?? (await getConnection(baseDir));
 
   const selectedTradesQuery = strategy
     ? `SELECT trade_index, pl
@@ -224,7 +253,7 @@ async function handleSummaryMode(
     throw new Error(
       strategy
         ? `No trades found for block "${block_id}" with strategy "${strategy}"`
-        : `No trades found for block "${block_id}"`
+        : `No trades found for block "${block_id}"`,
     );
   }
 
@@ -254,16 +283,21 @@ async function handleSummaryMode(
           baseDir,
           stores,
           injectedConn,
-        ).then(result => {
-          for (const factor of result.factors) {
-            accumulated.set(factor.factor, (accumulated.get(factor.factor) ?? 0) + factor.totalPnl);
-          }
-          actualTotalPnl += trade.actualPl;
-          markTotalPnl += result.totalPnlChange;
-          decomposed++;
-        }).catch(() => {
-          skipped++;
-        })
+        )
+          .then((result) => {
+            for (const factor of result.factors) {
+              accumulated.set(
+                factor.factor,
+                (accumulated.get(factor.factor) ?? 0) + factor.totalPnl,
+              );
+            }
+            actualTotalPnl += trade.actualPl;
+            markTotalPnl += result.totalPnlChange;
+            decomposed++;
+          })
+          .catch(() => {
+            skipped++;
+          }),
       );
     }
     await Promise.allSettled(promises);
@@ -306,16 +340,15 @@ async function handleSummaryMode(
   // low-quality market data rather than genuine fill advantage.
   const hints: string[] = [];
   if (hint) hints.push(hint);
-  const edgeRatio = Math.abs(actualTotalPnl) > 0.01
-    ? Math.abs(executionEdge) / Math.abs(actualTotalPnl)
-    : 0;
+  const edgeRatio =
+    Math.abs(actualTotalPnl) > 0.01 ? Math.abs(executionEdge) / Math.abs(actualTotalPnl) : 0;
   if (edgeRatio > 3) {
     hints.push(
       `Execution edge is ${Math.round(edgeRatio)}x the actual P&L — ` +
-      `mark-to-market pricing may be based on sparse or low-quality data. ` +
-      (skip_quotes
-        ? `Re-run with skip_quotes=false for NBBO-based marks.`
-        : `Consider whether intraday bar coverage is sufficient for this date range.`)
+        `mark-to-market pricing may be based on sparse or low-quality data. ` +
+        (skip_quotes
+          ? `Re-run with skip_quotes=false for NBBO-based marks.`
+          : `Consider whether intraday bar coverage is sufficient for this date range.`),
     );
   }
 
@@ -330,7 +363,7 @@ async function handleSummaryMode(
     gross_attribution_flow: Math.round(grossAttributionFlow * 100) / 100,
     attribution,
     precision,
-    ...(hints.length > 0 ? { hint: hints.join(' ') } : {}),
+    ...(hints.length > 0 ? { hint: hints.join(" ") } : {}),
   };
 }
 
@@ -343,7 +376,7 @@ async function handleInstanceMode(
   stores: MarketStores,
   injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<AttributionInstanceResult> {
-  const conn = injectedConn ?? await getConnection(baseDir);
+  const conn = injectedConn ?? (await getConnection(baseDir));
 
   // Get trade date for the response
   const tradeResult = await conn.runAndReadAll(
@@ -351,7 +384,7 @@ async function handleInstanceMode(
      WHERE block_id = $1
      ORDER BY date_opened, rowid
      LIMIT 1 OFFSET $2`,
-    [block_id, trade_index]
+    [block_id, trade_index],
   );
   const tradeRows = tradeResult.getRows();
   if (tradeRows.length === 0) {
@@ -398,10 +431,20 @@ async function handleInstanceMode(
   for (let i = 0; i <= stepCount; i++) {
     const entry: AttributionStepEntry = {
       date: getStepDate(i),
-      delta: getStepValue(factorSteps, "delta", i, detailed ? 0 : (factorSteps.get("charm")?.[i] ?? 0)),
+      delta: getStepValue(
+        factorSteps,
+        "delta",
+        i,
+        detailed ? 0 : (factorSteps.get("charm")?.[i] ?? 0),
+      ),
       gamma: getStepValue(factorSteps, "gamma", i, 0),
       theta: getStepValue(factorSteps, "theta", i, 0),
-      vega: getStepValue(factorSteps, "vega", i, detailed ? 0 : (factorSteps.get("vanna")?.[i] ?? 0)),
+      vega: getStepValue(
+        factorSteps,
+        "vega",
+        i,
+        detailed ? 0 : (factorSteps.get("vanna")?.[i] ?? 0),
+      ),
       residual: getStepValue(factorSteps, "residual", i, 0),
     };
     // time_and_vol: present when numerical fallback was used (theta/vega couldn't be separated)
@@ -441,10 +484,16 @@ async function handleInstanceMode(
  * Keeps the output compact and useful.
  */
 export function filterSparseSteps(steps: AttributionStepEntry[]): AttributionStepEntry[] {
-  return steps.filter(s =>
-    s.delta !== 0 || s.gamma !== 0 || s.theta !== 0 || s.vega !== 0 ||
-    s.residual !== 0 || (s.time_and_vol ?? 0) !== 0 ||
-    (s.charm ?? 0) !== 0 || (s.vanna ?? 0) !== 0
+  return steps.filter(
+    (s) =>
+      s.delta !== 0 ||
+      s.gamma !== 0 ||
+      s.theta !== 0 ||
+      s.vega !== 0 ||
+      s.residual !== 0 ||
+      (s.time_and_vol ?? 0) !== 0 ||
+      (s.charm ?? 0) !== 0 ||
+      (s.vanna ?? 0) !== 0,
   );
 }
 
@@ -482,8 +531,8 @@ export function registerGreeksAttributionTools(
 
         const isSummary = !("steps" in result);
         const summary = isSummary
-          ? `Block "${params.block_id}" attribution (${(result as AttributionSummaryResult).trades_decomposed}/${(result as AttributionSummaryResult).trades_total} trades): ${(result as AttributionSummaryResult).attribution.map(a => `${a.factor} ${a.pct_of_gross ?? a.pct}%`).join(", ")}, actual P&L ${(result as AttributionSummaryResult).total_pnl}, execution edge ${(result as AttributionSummaryResult).execution_edge}`
-          : `Trade #${(result as AttributionInstanceResult).trade_index} attribution: ${(result as AttributionInstanceResult).attribution.map(a => `${a.factor} ${a.pct_of_gross ?? a.pct}%`).join(", ")}, actual P&L ${(result as AttributionInstanceResult).total_pnl}, execution edge ${(result as AttributionInstanceResult).execution_edge}`;
+          ? `Block "${params.block_id}" attribution (${(result as AttributionSummaryResult).trades_decomposed}/${(result as AttributionSummaryResult).trades_total} trades): ${(result as AttributionSummaryResult).attribution.map((a) => `${a.factor} ${a.pct_of_gross ?? a.pct}%`).join(", ")}, actual P&L ${(result as AttributionSummaryResult).total_pnl}, execution edge ${(result as AttributionSummaryResult).execution_edge}`
+          : `Trade #${(result as AttributionInstanceResult).trade_index} attribution: ${(result as AttributionInstanceResult).attribution.map((a) => `${a.factor} ${a.pct_of_gross ?? a.pct}%`).join(", ")}, actual P&L ${(result as AttributionInstanceResult).total_pnl}, execution edge ${(result as AttributionInstanceResult).execution_edge}`;
 
         return createToolOutput(summary, result);
       } catch (error) {

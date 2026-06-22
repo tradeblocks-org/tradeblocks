@@ -4,11 +4,7 @@ import { MetricCard } from "@/components/metric-card";
 import { MetricSection } from "@/components/metric-section";
 import { MultiSelect } from "@/components/multi-select";
 import { Button } from "@/components/ui/button";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,11 +20,7 @@ import {
   formatPercent,
   scaleStrategyComparison,
 } from "@tradeblocks/lib";
-import {
-  ScalingMode,
-  TradeFilterMode,
-  useTradingCalendarStore,
-} from "@tradeblocks/lib/stores";
+import { ScalingMode, TradeFilterMode, useTradingCalendarStore } from "@tradeblocks/lib/stores";
 import { AlertTriangle, BarChart3, HelpCircle, TrendingUp } from "lucide-react";
 import { useMemo } from "react";
 
@@ -60,8 +52,7 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
 
   const hasActualTrades = actualTrades.length > 0;
   const hasUnmatched =
-    unmatchedBacktestStrategies.length > 0 ||
-    unmatchedActualStrategies.length > 0;
+    unmatchedBacktestStrategies.length > 0 || unmatchedActualStrategies.length > 0;
 
   // Check if viewing a specific day
   const isViewingDay = navigationView === "day" || navigationView === "trade";
@@ -72,16 +63,15 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
     if (!isViewingDay || !dayData) return null;
 
     const comparisons = aggregateTradesByStrategy(dayData, strategyMatches);
-    const scaledComparisons = comparisons.map((c) =>
-      scaleStrategyComparison(c, scalingMode)
-    );
+    const scaledComparisons = comparisons.map((c) => scaleStrategyComparison(c, scalingMode));
 
     // Filter comparisons based on trade filter mode
-    const filteredComparisons = tradeFilterMode === 'matched'
-      ? scaledComparisons.filter(c => c.isMatched)
-      : tradeFilterMode === 'unmatched'
-        ? scaledComparisons.filter(c => !c.isMatched)
-        : scaledComparisons;
+    const filteredComparisons =
+      tradeFilterMode === "matched"
+        ? scaledComparisons.filter((c) => c.isMatched)
+        : tradeFilterMode === "unmatched"
+          ? scaledComparisons.filter((c) => !c.isMatched)
+          : scaledComparisons;
 
     let scaledBacktestPl = 0;
     let scaledActualPl = 0;
@@ -106,30 +96,28 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
     }
 
     // Calculate filtered trade counts
-    const filteredBacktestCount = tradeFilterMode !== 'all'
-      ? filteredComparisons.reduce((sum, c) => sum + (c.backtest?.trades.length ?? 0), 0)
-      : dayData.backtestTradeCount;
-    const filteredActualCount = tradeFilterMode !== 'all'
-      ? filteredComparisons.reduce((sum, c) => sum + (c.actual?.trades.length ?? 0), 0)
-      : dayData.actualTradeCount;
+    const filteredBacktestCount =
+      tradeFilterMode !== "all"
+        ? filteredComparisons.reduce((sum, c) => sum + (c.backtest?.trades.length ?? 0), 0)
+        : dayData.backtestTradeCount;
+    const filteredActualCount =
+      tradeFilterMode !== "all"
+        ? filteredComparisons.reduce((sum, c) => sum + (c.actual?.trades.length ?? 0), 0)
+        : dayData.actualTradeCount;
 
     // Determine if we have data after filtering
-    const hasFilteredBacktest = filteredComparisons.some(c => c.backtest !== null);
-    const hasFilteredActual = filteredComparisons.some(c => c.actual !== null);
+    const hasFilteredBacktest = filteredComparisons.some((c) => c.backtest !== null);
+    const hasFilteredActual = filteredComparisons.some((c) => c.actual !== null);
 
     const variance =
-      hasFilteredBacktest && hasFilteredActual
-        ? scaledActualPl - scaledBacktestPl
-        : null;
+      hasFilteredBacktest && hasFilteredActual ? scaledActualPl - scaledBacktestPl : null;
     const variancePercent =
       variance !== null && scaledBacktestPl !== 0
         ? (variance / Math.abs(scaledBacktestPl)) * 100
         : null;
 
     const winRate =
-      filteredComparisons.length > 0
-        ? (winningStrategies / filteredComparisons.length) * 100
-        : 0;
+      filteredComparisons.length > 0 ? (winningStrategies / filteredComparisons.length) * 100 : 0;
 
     // Calculate day-specific performance metrics
     const dayMetrics = calculateDayMetrics(dayData);
@@ -159,7 +147,7 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
   // Build strategy options for MultiSelect
   const strategyOptions = useMemo(
     () => allStrategies.map((s) => ({ label: s, value: s })),
-    [allStrategies]
+    [allStrategies],
   );
 
   // Build actions for Performance section header
@@ -177,15 +165,12 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
               <HoverCardContent className="w-80 p-0 overflow-hidden">
                 <div className="space-y-3">
                   <div className="bg-primary/5 border-b px-4 py-3">
-                    <h4 className="text-sm font-semibold text-primary">
-                      Strategy Filter
-                    </h4>
+                    <h4 className="text-sm font-semibold text-primary">Strategy Filter</h4>
                   </div>
                   <div className="px-4 pb-4 space-y-3">
                     <p className="text-sm text-foreground leading-relaxed">
-                      Filter calendar data to specific strategies. All
-                      calculations, charts, and stats update to reflect only the
-                      selected strategies.
+                      Filter calendar data to specific strategies. All calculations, charts, and
+                      stats update to reflect only the selected strategies.
                     </p>
                   </div>
                 </div>
@@ -215,27 +200,22 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
             <HoverCardContent className="w-80 p-0 overflow-hidden">
               <div className="space-y-3">
                 <div className="bg-primary/5 border-b px-4 py-3">
-                  <h4 className="text-sm font-semibold text-primary">
-                    P&L Scaling
-                  </h4>
+                  <h4 className="text-sm font-semibold text-primary">P&L Scaling</h4>
                 </div>
                 <div className="px-4 pb-4 space-y-3">
                   <p className="text-sm text-foreground leading-relaxed">
-                    Normalize P&L values for fair comparison between backtest
-                    and actual.
+                    Normalize P&L values for fair comparison between backtest and actual.
                   </p>
                   <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
                     <li>
-                      <strong>Raw Values:</strong> Show original P&L without
-                      adjustment
+                      <strong>Raw Values:</strong> Show original P&L without adjustment
                     </li>
                     <li>
-                      <strong>Per Contract:</strong> Divide by contract count
-                      for per-lot comparison
+                      <strong>Per Contract:</strong> Divide by contract count for per-lot comparison
                     </li>
                     <li>
-                      <strong>Scale to Reported:</strong> Scale backtest down to
-                      match actual contract counts
+                      <strong>Scale to Reported:</strong> Scale backtest down to match actual
+                      contract counts
                     </li>
                   </ul>
                 </div>
@@ -243,10 +223,7 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
             </HoverCardContent>
           </HoverCard>
         </div>
-        <Select
-          value={scalingMode}
-          onValueChange={(value) => setScalingMode(value as ScalingMode)}
-        >
+        <Select value={scalingMode} onValueChange={(value) => setScalingMode(value as ScalingMode)}>
           <SelectTrigger className="w-[200px]">
             <SelectValue />
           </SelectTrigger>
@@ -269,9 +246,7 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
             <HoverCardContent className="w-80 p-0 overflow-hidden">
               <div className="space-y-3">
                 <div className="bg-primary/5 border-b px-4 py-3">
-                  <h4 className="text-sm font-semibold text-primary">
-                    Trade Filter
-                  </h4>
+                  <h4 className="text-sm font-semibold text-primary">Trade Filter</h4>
                 </div>
                 <div className="px-4 pb-4 space-y-3">
                   <p className="text-sm text-foreground leading-relaxed">
@@ -282,10 +257,12 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                       <strong>All Trades:</strong> Include all backtest and actual trades
                     </li>
                     <li>
-                      <strong>Matched Only:</strong> Only include trades from strategies that have both backtest and actual data
+                      <strong>Matched Only:</strong> Only include trades from strategies that have
+                      both backtest and actual data
                     </li>
                     <li>
-                      <strong>Unmatched Only:</strong> Only include trades from strategies missing a counterpart
+                      <strong>Unmatched Only:</strong> Only include trades from strategies missing a
+                      counterpart
                     </li>
                   </ul>
                 </div>
@@ -317,9 +294,7 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
           onClick={onMatchStrategiesClick}
         >
           <AlertTriangle className="h-4 w-4 mr-2" />
-          {unmatchedBacktestStrategies.length +
-            unmatchedActualStrategies.length}{" "}
-          unmatched
+          {unmatchedBacktestStrategies.length + unmatchedActualStrategies.length} unmatched
         </Button>
       )}
     </>
@@ -365,42 +340,33 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 value={
                   isViewingDay && dayStats
                     ? dayStats.backtestPl
-                    : comparisonStats?.backtestPl ?? 0
+                    : (comparisonStats?.backtestPl ?? 0)
                 }
                 format="currency"
                 subtitle={
-                  isViewingDay && dayStats
-                    ? `${dayStats.backtestTradeCount} trades`
-                    : undefined
+                  isViewingDay && dayStats ? `${dayStats.backtestTradeCount} trades` : undefined
                 }
                 isPositive={isPositive(
                   isViewingDay && dayStats
                     ? dayStats.backtestPl
-                    : comparisonStats?.backtestPl ?? 0
+                    : (comparisonStats?.backtestPl ?? 0),
                 )}
                 tooltip={{
                   flavor: "Total P&L from backtest trades",
-                  detailed:
-                    "Sum of all backtest trade results (scaled if scaling mode is active)",
+                  detailed: "Sum of all backtest trade results (scaled if scaling mode is active)",
                 }}
               />
               <MetricCard
                 title="Actual P&L"
                 value={
-                  isViewingDay && dayStats
-                    ? dayStats.actualPl
-                    : comparisonStats?.actualPl ?? 0
+                  isViewingDay && dayStats ? dayStats.actualPl : (comparisonStats?.actualPl ?? 0)
                 }
                 format="currency"
                 subtitle={
-                  isViewingDay && dayStats
-                    ? `${dayStats.actualTradeCount} trades`
-                    : undefined
+                  isViewingDay && dayStats ? `${dayStats.actualTradeCount} trades` : undefined
                 }
                 isPositive={isPositive(
-                  isViewingDay && dayStats
-                    ? dayStats.actualPl
-                    : comparisonStats?.actualPl ?? 0
+                  isViewingDay && dayStats ? dayStats.actualPl : (comparisonStats?.actualPl ?? 0),
                 )}
                 tooltip={{
                   flavor: "Total P&L from actual trades",
@@ -411,8 +377,8 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 title="Variance"
                 value={
                   isViewingDay && dayStats
-                    ? dayStats.variance ?? 0
-                    : comparisonStats?.totalSlippage ?? 0
+                    ? (dayStats.variance ?? 0)
+                    : (comparisonStats?.totalSlippage ?? 0)
                 }
                 format="currency"
                 subtitle={
@@ -421,17 +387,16 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                       ? formatPercent(dayStats.variancePercent)
                       : undefined
                     : comparisonStats && comparisonStats.backtestPl !== 0
-                    ? formatPercent(
-                        (comparisonStats.totalSlippage /
-                          Math.abs(comparisonStats.backtestPl)) *
-                          100
-                      )
-                    : undefined
+                      ? formatPercent(
+                          (comparisonStats.totalSlippage / Math.abs(comparisonStats.backtestPl)) *
+                            100,
+                        )
+                      : undefined
                 }
                 isPositive={isPositive(
                   isViewingDay && dayStats
-                    ? dayStats.variance ?? 0
-                    : comparisonStats?.totalSlippage ?? 0
+                    ? (dayStats.variance ?? 0)
+                    : (comparisonStats?.totalSlippage ?? 0),
                 )}
                 tooltip={{
                   flavor: "Performance difference between actual and backtest",
@@ -444,35 +409,30 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 value={
                   isViewingDay && dayStats
                     ? dayStats.strategyCount > 0
-                      ? `${Math.round(
-                          (dayStats.matchedCount / dayStats.strategyCount) * 100
-                        )}%`
+                      ? `${Math.round((dayStats.matchedCount / dayStats.strategyCount) * 100)}%`
                       : "-"
                     : comparisonStats
-                    ? `${comparisonStats.matchRate.toFixed(0)}%`
-                    : "-"
+                      ? `${comparisonStats.matchRate.toFixed(0)}%`
+                      : "-"
                 }
                 subtitle={
                   isViewingDay && dayStats
                     ? dayStats.strategyCount - dayStats.matchedCount > 0
-                      ? `${
-                          dayStats.strategyCount - dayStats.matchedCount
-                        } unmatched`
+                      ? `${dayStats.strategyCount - dayStats.matchedCount} unmatched`
                       : "All matched"
                     : comparisonStats &&
-                      comparisonStats.unmatchedBacktestCount +
-                        comparisonStats.unmatchedActualCount >
-                        0
-                    ? `${
                         comparisonStats.unmatchedBacktestCount +
-                        comparisonStats.unmatchedActualCount
-                      } unmatched`
-                    : "All matched"
+                          comparisonStats.unmatchedActualCount >
+                          0
+                      ? `${
+                          comparisonStats.unmatchedBacktestCount +
+                          comparisonStats.unmatchedActualCount
+                        } unmatched`
+                      : "All matched"
                 }
                 tooltip={{
                   flavor: "Percentage of strategies that were matched",
-                  detailed:
-                    "How many backtest strategies have corresponding actual trades",
+                  detailed: "How many backtest strategies have corresponding actual trades",
                 }}
               />
             </>
@@ -514,8 +474,8 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 ? `${dayStats.winRate.toFixed(0)}%`
                 : "-"
               : performanceStats
-              ? `${performanceStats.winRate.toFixed(0)}%`
-              : "-"
+                ? `${performanceStats.winRate.toFixed(0)}%`
+                : "-"
           }
           subtitle={
             isViewingDay
@@ -523,8 +483,8 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 ? `${dayStats.strategyCount} strategies`
                 : "0 strategies"
               : performanceStats
-              ? `${performanceStats.tradingDays} days · ${performanceStats.dataSource === 'actual' ? 'Actual' : 'Backtest'}`
-              : undefined
+                ? `${performanceStats.tradingDays} days · ${performanceStats.dataSource === "actual" ? "Actual" : "Backtest"}`
+                : undefined
           }
           tooltip={{
             flavor: isViewingDay
@@ -541,8 +501,8 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
             isViewingDay
               ? "-"
               : performanceStats?.cagr !== null
-              ? formatPct(performanceStats?.cagr)
-              : "-"
+                ? formatPct(performanceStats?.cagr)
+                : "-"
           }
           isPositive={
             !isViewingDay && performanceStats?.cagr !== null
@@ -593,14 +553,10 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 ? formatPct(dayStats.maxDrawdown)
                 : "-"
               : performanceStats?.maxDrawdown != null
-              ? formatPct(performanceStats.maxDrawdown)
-              : "-"
+                ? formatPct(performanceStats.maxDrawdown)
+                : "-"
           }
-          subtitle={
-            !isViewingDay && performanceStats?.maxDrawdown != null
-              ? "Backtest"
-              : undefined
-          }
+          subtitle={!isViewingDay && performanceStats?.maxDrawdown != null ? "Backtest" : undefined}
           isPositive={false}
           tooltip={{
             flavor: isViewingDay
@@ -633,8 +589,8 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 ? formatPct(dayStats.avgRom)
                 : "-"
               : performanceStats?.avgRom != null
-              ? formatPct(performanceStats.avgRom)
-              : "-"
+                ? formatPct(performanceStats.avgRom)
+                : "-"
           }
           subtitle={
             (isViewingDay ? dayStats?.avgRom : performanceStats?.avgRom) != null
@@ -647,8 +603,8 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 ? isPositive(dayStats.avgRom)
                 : undefined
               : performanceStats?.avgRom != null
-              ? isPositive(performanceStats.avgRom)
-              : undefined
+                ? isPositive(performanceStats.avgRom)
+                : undefined
           }
           tooltip={{
             flavor: "Average Return on Margin",
@@ -664,12 +620,14 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 ? formatPct(dayStats.avgPremiumCapture)
                 : "-"
               : performanceStats?.avgPremiumCapture != null
-              ? formatPct(performanceStats.avgPremiumCapture)
-              : "-"
+                ? formatPct(performanceStats.avgPremiumCapture)
+                : "-"
           }
           subtitle={
             !isViewingDay && performanceStats?.avgPremiumCapture != null
-              ? performanceStats.dataSource === 'actual' ? 'Actual' : 'Backtest'
+              ? performanceStats.dataSource === "actual"
+                ? "Actual"
+                : "Backtest"
               : undefined
           }
           isPositive={
@@ -678,8 +636,8 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
                 ? isPositive(dayStats.avgPremiumCapture)
                 : undefined
               : performanceStats?.avgPremiumCapture != null
-              ? isPositive(performanceStats.avgPremiumCapture)
-              : undefined
+                ? isPositive(performanceStats.avgPremiumCapture)
+                : undefined
           }
           tooltip={{
             flavor: "Average premium captured per trade",

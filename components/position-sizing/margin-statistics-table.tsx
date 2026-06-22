@@ -4,11 +4,7 @@
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import {
   Table,
   TableBody,
@@ -61,9 +57,7 @@ export function MarginStatisticsTable({
   for (const analysis of strategyAnalysis) {
     if (analysis.maxMarginPct > 0 && analysis.inputPct > 0) {
       const projectedMargin =
-        analysis.maxMarginPct *
-        (portfolioKellyPct / 100) *
-        (analysis.inputPct / 100);
+        analysis.maxMarginPct * (portfolioKellyPct / 100) * (analysis.inputPct / 100);
       statistics.push({
         name: analysis.name,
         historicalMax: analysis.maxMarginPct,
@@ -108,7 +102,10 @@ export function MarginStatisticsTable({
                       Analyzes how your Kelly settings affect margin requirements across strategies.
                     </p>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      This table helps you understand the capital requirements for each strategy at your chosen Kelly fraction. Compare projected margin needs against allocated capital to ensure you have sufficient margin for your position sizing strategy.
+                      This table helps you understand the capital requirements for each strategy at
+                      your chosen Kelly fraction. Compare projected margin needs against allocated
+                      capital to ensure you have sufficient margin for your position sizing
+                      strategy.
                     </p>
                   </div>
                 </div>
@@ -125,16 +122,15 @@ export function MarginStatisticsTable({
           <div className="text-xs space-y-2">
             <ul className="list-disc list-inside space-y-1">
               <li>
-                <strong>Historical Max:</strong> Highest margin usage observed
-                historically.
+                <strong>Historical Max:</strong> Highest margin usage observed historically.
               </li>
               <li>
-                <strong>Projected Margin:</strong> Historical max × portfolio Kelly ×
-                strategy Kelly. Example: 80% × 50% × 50% ≈ 20%.
+                <strong>Projected Margin:</strong> Historical max × portfolio Kelly × strategy
+                Kelly. Example: 80% × 50% × 50% ≈ 20%.
               </li>
               <li>
-                <strong>Allocated:</strong> Kelly edge × portfolio Kelly × strategy Kelly
-                (what fraction of capital you&apos;re actually sizing to this strategy).
+                <strong>Allocated:</strong> Kelly edge × portfolio Kelly × strategy Kelly (what
+                fraction of capital you&apos;re actually sizing to this strategy).
               </li>
             </ul>
           </div>
@@ -156,16 +152,16 @@ export function MarginStatisticsTable({
                       <HoverCardContent className="w-80 p-0 overflow-hidden">
                         <div className="space-y-3">
                           <div className="bg-primary/5 border-b px-4 py-3">
-                            <h4 className="text-sm font-semibold text-primary">
-                              Historical Max
-                            </h4>
+                            <h4 className="text-sm font-semibold text-primary">Historical Max</h4>
                           </div>
                           <div className="px-4 pb-4 space-y-3">
                             <p className="text-sm font-medium text-foreground leading-relaxed">
                               Highest margin usage observed historically.
                             </p>
                             <p className="text-xs text-muted-foreground leading-relaxed">
-                              Peak margin requirement as % of starting capital when trades were actually placed. This represents the maximum capital commitment that was needed at any point in your trading history.
+                              Peak margin requirement as % of starting capital when trades were
+                              actually placed. This represents the maximum capital commitment that
+                              was needed at any point in your trading history.
                             </p>
                           </div>
                         </div>
@@ -183,16 +179,17 @@ export function MarginStatisticsTable({
                       <HoverCardContent className="w-80 p-0 overflow-hidden">
                         <div className="space-y-3">
                           <div className="bg-primary/5 border-b px-4 py-3">
-                            <h4 className="text-sm font-semibold text-primary">
-                              Kelly %
-                            </h4>
+                            <h4 className="text-sm font-semibold text-primary">Kelly %</h4>
                           </div>
                           <div className="px-4 pb-4 space-y-3">
                             <p className="text-sm font-medium text-foreground leading-relaxed">
-                              Strategy-level Kelly multiplier (portfolio slider applies globally on top of this).
+                              Strategy-level Kelly multiplier (portfolio slider applies globally on
+                              top of this).
                             </p>
                             <p className="text-xs text-muted-foreground leading-relaxed">
-                              This is the per-strategy knob on top of the portfolio Kelly fraction. Example: 25% here with a 50% portfolio Kelly means the strategy ultimately runs at 12.5% of full Kelly.
+                              This is the per-strategy knob on top of the portfolio Kelly fraction.
+                              Example: 25% here with a 50% portfolio Kelly means the strategy
+                              ultimately runs at 12.5% of full Kelly.
                             </p>
                           </div>
                         </div>
@@ -210,16 +207,17 @@ export function MarginStatisticsTable({
                       <HoverCardContent className="w-80 p-0 overflow-hidden">
                         <div className="space-y-3">
                           <div className="bg-primary/5 border-b px-4 py-3">
-                            <h4 className="text-sm font-semibold text-primary">
-                              Projected Margin
-                            </h4>
+                            <h4 className="text-sm font-semibold text-primary">Projected Margin</h4>
                           </div>
                           <div className="px-4 pb-4 space-y-3">
                             <p className="text-sm font-medium text-foreground leading-relaxed">
                               Expected margin requirement at your Kelly fraction.
                             </p>
                             <p className="text-xs text-muted-foreground leading-relaxed">
-                              Calculated as Historical Max × (Portfolio Kelly % / 100) × (Strategy Kelly % / 100). Example: 80% historical max × 50% portfolio × 50% strategy ≈ 20%. This estimates how much margin you&apos;ll need once both multipliers are applied.
+                              Calculated as Historical Max × (Portfolio Kelly % / 100) × (Strategy
+                              Kelly % / 100). Example: 80% historical max × 50% portfolio × 50%
+                              strategy ≈ 20%. This estimates how much margin you&apos;ll need once
+                              both multipliers are applied.
                             </p>
                           </div>
                         </div>
@@ -237,16 +235,17 @@ export function MarginStatisticsTable({
                       <HoverCardContent className="w-80 p-0 overflow-hidden">
                         <div className="space-y-3">
                           <div className="bg-primary/5 border-b px-4 py-3">
-                            <h4 className="text-sm font-semibold text-primary">
-                              Allocated
-                            </h4>
+                            <h4 className="text-sm font-semibold text-primary">Allocated</h4>
                           </div>
                           <div className="px-4 pb-4 space-y-3">
                             <p className="text-sm font-medium text-foreground leading-relaxed">
-                              Capital allocated to this strategy after portfolio + strategy Kelly multipliers.
+                              Capital allocated to this strategy after portfolio + strategy Kelly
+                              multipliers.
                             </p>
                             <p className="text-xs text-muted-foreground leading-relaxed">
-                              Calculated as Optimal Kelly × (Portfolio Kelly % / 100) × (Strategy Kelly % / 100). That final percentage is how much of starting capital is earmarked for the strategy at your current risk settings.
+                              Calculated as Optimal Kelly × (Portfolio Kelly % / 100) × (Strategy
+                              Kelly % / 100). That final percentage is how much of starting capital
+                              is earmarked for the strategy at your current risk settings.
                             </p>
                           </div>
                         </div>
@@ -265,24 +264,16 @@ export function MarginStatisticsTable({
                       {stat.name}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">
-                    {stat.historicalMax.toFixed(1)}%
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {stat.kellyPct.toFixed(0)}%
-                  </TableCell>
+                  <TableCell className="text-right">{stat.historicalMax.toFixed(1)}%</TableCell>
+                  <TableCell className="text-right">{stat.kellyPct.toFixed(0)}%</TableCell>
                   <TableCell
                     className={`text-right ${
-                      stat.projectedMargin <= stat.allocated
-                        ? "text-blue-600"
-                        : "text-orange-600"
+                      stat.projectedMargin <= stat.allocated ? "text-blue-600" : "text-orange-600"
                     }`}
                   >
                     {stat.projectedMargin.toFixed(1)}%
                   </TableCell>
-                  <TableCell className="text-right">
-                    {stat.allocated.toFixed(1)}%
-                  </TableCell>
+                  <TableCell className="text-right">{stat.allocated.toFixed(1)}%</TableCell>
                 </TableRow>
               ))}
 
@@ -297,21 +288,15 @@ export function MarginStatisticsTable({
                   <TableCell className="text-right text-sm">
                     {stat.historicalMax.toFixed(1)}%
                   </TableCell>
-                  <TableCell className="text-right text-sm">
-                    {stat.kellyPct.toFixed(0)}%
-                  </TableCell>
+                  <TableCell className="text-right text-sm">{stat.kellyPct.toFixed(0)}%</TableCell>
                   <TableCell
                     className={`text-right text-sm ${
-                      stat.projectedMargin <= stat.allocated
-                        ? "text-blue-600"
-                        : "text-orange-600"
+                      stat.projectedMargin <= stat.allocated ? "text-blue-600" : "text-orange-600"
                     }`}
                   >
                     {stat.projectedMargin.toFixed(1)}%
                   </TableCell>
-                  <TableCell className="text-right text-sm">
-                    {stat.allocated.toFixed(1)}%
-                  </TableCell>
+                  <TableCell className="text-right text-sm">{stat.allocated.toFixed(1)}%</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -321,11 +306,10 @@ export function MarginStatisticsTable({
         {/* Color coding explanation */}
         <Alert>
           <AlertDescription className="text-xs">
-            <strong>Color coding:</strong>{" "}
-            <span className="text-blue-600 font-medium">Blue</span> = Expected margin
-            ≤ Allocated capital (good).{" "}
-            <span className="text-orange-600 font-medium">Orange</span> = Expected
-            margin &gt; Allocated capital (may need more capital or lower Kelly %).
+            <strong>Color coding:</strong> <span className="text-blue-600 font-medium">Blue</span> =
+            Expected margin ≤ Allocated capital (good).{" "}
+            <span className="text-orange-600 font-medium">Orange</span> = Expected margin &gt;
+            Allocated capital (may need more capital or lower Kelly %).
           </AlertDescription>
         </Alert>
       </div>

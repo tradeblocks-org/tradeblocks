@@ -22,7 +22,10 @@ describe("MarketIngestor.ingestFlatFile", () => {
   let tickers: TickerRegistry;
 
   beforeEach(async () => {
-    dataDir = join(tmpdir(), `ingestor-flatfile-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    dataDir = join(
+      tmpdir(),
+      `ingestor-flatfile-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     mkdirSync(dataDir, { recursive: true });
     instance = await DuckDBInstance.create(":memory:");
     conn = await instance.connect();
@@ -32,7 +35,11 @@ describe("MarketIngestor.ingestFlatFile", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -195,9 +202,7 @@ describe("MarketIngestor.ingestFlatFile", () => {
       expect(result.status).toBe("skipped");
       expect(result.rowsWritten).toBe(0);
 
-      const probe = await conn.runAndReadAll(
-        `SELECT COUNT(*)::INTEGER FROM market.spot`,
-      );
+      const probe = await conn.runAndReadAll(`SELECT COUNT(*)::INTEGER FROM market.spot`);
       expect(Number(probe.getRows()[0][0])).toBe(0);
     });
   });

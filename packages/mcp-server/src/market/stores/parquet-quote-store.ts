@@ -17,17 +17,9 @@
 import { existsSync } from "fs";
 import * as path from "path";
 import { QuoteStore } from "./quote-store.ts";
-import type {
-  QuoteRow,
-  CoverageReport,
-  ReadWindowParams,
-  WindowQuoteRow,
-} from "./types.ts";
+import type { QuoteRow, CoverageReport, ReadWindowParams, WindowQuoteRow } from "./types.ts";
 import { listPartitionValues } from "./coverage.ts";
-import {
-  resolveMarketDir,
-  writeQuoteMinutesPartition,
-} from "../../db/market-datasets.ts";
+import { resolveMarketDir, writeQuoteMinutesPartition } from "../../db/market-datasets.ts";
 import { extractRoot } from "../tickers/resolver.ts";
 import {
   describeQueryColumns,
@@ -53,7 +45,7 @@ function parseQuoteRow(row: unknown[]): QuoteRow {
     theta: row[11] == null ? null : Number(row[11]),
     vega: row[12] == null ? null : Number(row[12]),
     iv: row[13] == null ? null : Number(row[13]),
-    greeks_source: row[14] == null ? null : String(row[14]) as QuoteRow["greeks_source"],
+    greeks_source: row[14] == null ? null : (String(row[14]) as QuoteRow["greeks_source"]),
     greeks_revision: row[15] == null ? null : Number(row[15]),
     rate_type: row[16] == null ? null : String(row[16]),
     rate_value: row[17] == null ? null : Number(row[17]),
@@ -62,11 +54,7 @@ function parseQuoteRow(row: unknown[]): QuoteRow {
 }
 
 export class ParquetQuoteStore extends QuoteStore {
-  async writeQuotes(
-    underlying: string,
-    date: string,
-    quotes: QuoteRow[],
-  ): Promise<void> {
+  async writeQuotes(underlying: string, date: string, quotes: QuoteRow[]): Promise<void> {
     if (quotes.length === 0) return;
     // Append rows via DuckDBAppender (typed per-column, no SQL parse overhead)
     // rather than a parameterized INSERT with O(N) placeholders — the latter
@@ -173,9 +161,7 @@ export class ParquetQuoteStore extends QuoteStore {
     // D-07: validate all tickers resolve to the same underlying BEFORE any SQL
     // runs. A mixed batch is almost always a bug in the caller; surface it
     // with both conflicting OCC tickers + resolved underlyings for debugging.
-    const firstUnderlying = this.ctx.tickers.resolve(
-      extractRoot(occTickers[0]),
-    );
+    const firstUnderlying = this.ctx.tickers.resolve(extractRoot(occTickers[0]));
     for (const t of occTickers) {
       const u = this.ctx.tickers.resolve(extractRoot(t));
       if (u !== firstUnderlying) {
@@ -208,9 +194,7 @@ export class ParquetQuoteStore extends QuoteStore {
     // under sustained read load. See readWindow below for the full writeup.
     const fromLit = `'${escapeSqlLiteral(from)}'`;
     const toLit = `'${escapeSqlLiteral(to)}'`;
-    const tickerList = occTickers
-      .map((t) => `'${escapeSqlLiteral(t)}'`)
-      .join(", ");
+    const tickerList = occTickers.map((t) => `'${escapeSqlLiteral(t)}'`).join(", ");
     const reader = await this.ctx.conn.runAndReadAll(
       `SELECT ${projection}
          FROM ${source} AS q
@@ -293,7 +277,7 @@ export class ParquetQuoteStore extends QuoteStore {
       if (perf) {
         console.log(
           `    [P] readQuotesBulk underlying=${underlying} dates=${filePaths.length} ` +
-          `tickers=${occUnion.size} rows=${rows.length} queryMs=${Date.now() - queryStart}`,
+            `tickers=${occUnion.size} rows=${rows.length} queryMs=${Date.now() - queryStart}`,
         );
       }
       for (const row of rows) {
@@ -407,15 +391,11 @@ export class ParquetQuoteStore extends QuoteStore {
       theta: r[10] == null ? null : Number(r[10]),
       vega: r[11] == null ? null : Number(r[11]),
       iv: r[12] == null ? null : Number(r[12]),
-      greeks_source: r[13] == null ? null : String(r[13]) as WindowQuoteRow["greeks_source"],
+      greeks_source: r[13] == null ? null : (String(r[13]) as WindowQuoteRow["greeks_source"]),
     }));
   }
 
-  async getCoverage(
-    underlying: string,
-    from: string,
-    to: string,
-  ): Promise<CoverageReport> {
+  async getCoverage(underlying: string, from: string, to: string): Promise<CoverageReport> {
     const dir = path.join(
       resolveMarketDir(this.ctx.dataDir),
       "option_quote_minutes",

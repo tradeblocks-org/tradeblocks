@@ -45,7 +45,7 @@ export interface CorrelationAnalytics {
  */
 export function calculateCorrelationMatrix(
   trades: Trade[],
-  options: CorrelationOptions = {}
+  options: CorrelationOptions = {},
 ): CorrelationMatrix {
   const {
     method = "pearson",
@@ -87,10 +87,7 @@ export function calculateCorrelationMatrix(
   // Aggregate by time period (no-op for daily)
   const strategyReturns: Record<string, Record<string, number>> = {};
   for (const strategy of Object.keys(strategyDailyReturns)) {
-    strategyReturns[strategy] = aggregateByPeriod(
-      strategyDailyReturns[strategy],
-      timePeriod
-    );
+    strategyReturns[strategy] = aggregateByPeriod(strategyDailyReturns[strategy], timePeriod);
   }
 
   // Build allDates from aggregated data
@@ -106,7 +103,7 @@ export function calculateCorrelationMatrix(
   // Need at least 2 strategies
   if (strategies.length < 2) {
     const identityMatrix = strategies.map((_, i) =>
-      strategies.map((_, j) => (i === j ? 1.0 : NaN))
+      strategies.map((_, j) => (i === j ? 1.0 : NaN)),
     );
     const sampleSizeMatrix = strategies.map((strategy) => [
       Object.keys(strategyReturns[strategy]).length,
@@ -117,15 +114,13 @@ export function calculateCorrelationMatrix(
   const correlationData: number[][] = [];
   const sampleSizes: number[][] = [];
 
-  const sortedPeriods = alignment === "zero-pad"
-    ? Array.from(allDates).sort()
-    : [];
+  const sortedPeriods = alignment === "zero-pad" ? Array.from(allDates).sort() : [];
 
   const zeroPaddedReturns: Record<string, number[]> = {};
   if (alignment === "zero-pad") {
     for (const strategy of strategies) {
       zeroPaddedReturns[strategy] = sortedPeriods.map(
-        (period) => strategyReturns[strategy][period] || 0
+        (period) => strategyReturns[strategy][period] || 0,
       );
     }
   }
@@ -275,10 +270,7 @@ function kendallCorrelation(x: number[], y: number[]): number {
 // Re-export getRanks for backwards compatibility
 export { getRanks } from "./statistical-utils.ts";
 
-function normalizeReturn(
-  trade: Trade,
-  mode: CorrelationNormalization
-): number | null {
+function normalizeReturn(trade: Trade, mode: CorrelationNormalization): number | null {
   switch (mode) {
     case "margin": {
       if (!trade.marginReq) {
@@ -287,9 +279,7 @@ function normalizeReturn(
       return trade.pl / trade.marginReq;
     }
     case "notional": {
-      const notional = Math.abs(
-        (trade.openingPrice || 0) * (trade.numContracts || 0)
-      );
+      const notional = Math.abs((trade.openingPrice || 0) * (trade.numContracts || 0));
       if (!notional) {
         return null;
       }
@@ -300,16 +290,11 @@ function normalizeReturn(
   }
 }
 
-function getTradeDateKey(
-  trade: Trade,
-  basis: CorrelationDateBasis
-): string {
+function getTradeDateKey(trade: Trade, basis: CorrelationDateBasis): string {
   const date = basis === "closed" ? trade.dateClosed : trade.dateOpened;
 
   if (!date) {
-    throw new Error(
-      "Trade is missing required date information for correlation calculation"
-    );
+    throw new Error("Trade is missing required date information for correlation calculation");
   }
 
   // Extract calendar date components directly to preserve Eastern Time date
@@ -339,9 +324,7 @@ function getIsoWeekKey(dateStr: string): string {
   thursday.setUTCDate(thursday.getUTCDate() + (4 - dayOfWeek));
 
   const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(
-    ((thursday.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
-  );
+  const weekNum = Math.ceil(((thursday.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 
   return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
 }
@@ -358,7 +341,7 @@ function getMonthKey(dateStr: string): string {
  */
 function aggregateByPeriod(
   dailyReturns: Record<string, number>,
-  period: CorrelationTimePeriod
+  period: CorrelationTimePeriod,
 ): Record<string, number> {
   if (period === "daily") return dailyReturns;
 
@@ -380,7 +363,7 @@ function aggregateByPeriod(
  */
 export function calculateCorrelationAnalytics(
   matrix: CorrelationMatrix,
-  minSamples: number = 2
+  minSamples: number = 2,
 ): CorrelationAnalytics {
   const { strategies, correlationData, sampleSizes } = matrix;
 

@@ -15,17 +15,8 @@
  *   - getCoverage on populated ticker
  *   - getCoverage on missing ticker returns empty report
  */
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-} from "@jest/globals";
-import {
-  ParquetSpotStore,
-  DuckdbSpotStore,
-} from "../../../../src/test-exports.ts";
+import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { ParquetSpotStore, DuckdbSpotStore } from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,

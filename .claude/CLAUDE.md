@@ -9,27 +9,32 @@ TradeBlocks is a Next.js 15 application for analyzing options trading performanc
 ## Development Commands
 
 ### Running the Application
+
 - `npm run dev` - Start development server with Turbopack
 - `npm run build` - Build production bundle with Turbopack
 - `npm start` - Start production server
 
 ### Testing
+
 - `npm test` - Run all tests with Jest
 - `npm run test:watch` - Run tests in watch mode
 - `npm run test:coverage` - Generate coverage report
 - `npm run test:portfolio` - Run portfolio stats tests specifically
 
 To run a single test file:
+
 ```bash
 npm test -- path/to/test-file.test.ts
 ```
 
 To run a specific test case:
+
 ```bash
 npm test -- path/to/test-file.test.ts -t "test name pattern"
 ```
 
 ### Code Quality
+
 - `npm run lint` - Run ESLint on the codebase
 
 ## Architecture
@@ -48,18 +53,21 @@ npm test -- path/to/test-file.test.ts -t "test name pattern"
 ### Key Architectural Patterns
 
 **Block-Based Organization**: Trading data is organized into "blocks" - each block represents a trading portfolio/strategy with:
+
 - Trade log (required): Individual trade records
 - Daily log (optional): Daily portfolio values for enhanced performance calculations
 - Calculated statistics cached for performance
 
 **Dual Storage Pattern**:
+
 - Raw trade/daily log data → IndexedDB (via `lib/db/`)
 - UI state & metadata → Zustand stores (via `lib/stores/`)
 - This separation allows efficient data handling for large datasets
 
 **Math.js for Statistical Calculations**: All statistics use `math.js` library to ensure consistency:
+
 - Sharpe Ratio: Uses sample standard deviation (N-1) via `std(data, 'uncorrected')`
-- Sortino Ratio: Uses standard downside deviation = sqrt((1/N) * sum(min(excess_i, 0)^2)) where N = total observations. This is the RMS of negative excess returns from zero, NOT std() of only the negative returns.
+- Sortino Ratio: Uses standard downside deviation = sqrt((1/N) \* sum(min(excess_i, 0)^2)) where N = total observations. This is the RMS of negative excess returns from zero, NOT std() of only the negative returns.
 
 ### Directory Structure
 
@@ -82,6 +90,7 @@ npm test -- path/to/test-file.test.ts -t "test name pattern"
 ### Critical Implementation Details
 
 **Timezone Handling**: All dates and times are processed and displayed as **US Eastern Time** (America/New_York). This is critical because:
+
 - Trading data originates from US markets operating on Eastern Time
 - CSVs contain dates/times in Eastern Time format
 - When parsing dates, preserve the calendar date as-is (don't convert to UTC)
@@ -98,6 +107,7 @@ npm test -- path/to/test-file.test.ts -t "test name pattern"
 **The critical mistake** is mixing these two: creating a Date at local midnight (type 1) but then reading it with ET timezone conversion (type 2). On a UTC server, local midnight = 19:00 ET the previous day → off by one.
 
 Rules for type 1 (trade dates from CSVs):
+
 - **DO**: Use string comparison on YYYY-MM-DD for date range filtering. Use `filterByDateRange()` from `tools/shared/filters.ts` or `toCalendarDateStr()` / `formatTradeDate()`.
 - **DO**: Extract calendar date from strings via regex (`/^(\d{4})-(\d{2})-(\d{2})/`) before parsing to Date.
 - **DO**: Use local date components (`getFullYear()`, `getMonth()`, `getDate()`) when you need YYYY-MM-DD from a Date that came from `parseDatePreservingCalendarDay`.
@@ -110,11 +120,13 @@ Rules for type 1 (trade dates from CSVs):
 **Date Handling**: Trades use separate `dateOpened` (Date object) and `timeOpened` (string) fields. When processing CSVs, parse dates carefully and maintain consistency with legacy format.
 
 **Trade P&L Calculations**:
+
 - Always separate gross P&L (`trade.pl`) from commissions (`openingCommissionsFees` + `closingCommissionsFees`)
 - Net P&L = gross P&L - total commissions
 - Strategy filtering MUST use trade-based calculations only (not daily logs) since daily logs represent full portfolio performance
 
 **Drawdown Calculations**:
+
 - Uses daily logs when available for more accurate drawdowns
 - Falls back to trade-based equity curve when daily logs are missing
 - Portfolio value tracks cumulative returns over time
@@ -123,6 +135,7 @@ Rules for type 1 (trade dates from CSVs):
 **IndexedDB Data References**: The `ProcessedBlock` interface uses `dataReferences` to store keys for related data in IndexedDB. When working with blocks, always load associated trades/daily logs separately.
 
 **Risk-Free Rate Data**: Historical Treasury rates are stored in `lib/data/treasury-rates.ts`. See the file header for update instructions. To update with new rates:
+
 1. Fetch CSV from FRED: `https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3&cosd=START_DATE&coed=END_DATE`
 2. Add entries in format `"YYYY-MM-DD": X.XX,`
 3. Run tests: `npm test -- tests/unit/risk-free-rate.test.ts`
@@ -132,12 +145,14 @@ Rules for type 1 (trade dates from CSVs):
 **Design principle — the LLM is the intelligence layer.** When designing MCP tools, push sniffing, classification, and config decisions UP to the caller instead of hardcoding them into a dispatch matrix. The LLM has `describe_database`, `run_sql` with path-gated `read_parquet`/`read_csv`/`read_json`, and schema context — it can inspect any file, match it to a target store, and supply a transforming SELECT. Tools should accept that config (e.g., `{file_path, dataset_type, select_sql, partition}`) rather than bake in per-provider or per-format parsers.
 
 Symptoms you're building in the wrong place:
+
 - Adding a "format registry" or per-format parser class to the server
 - Dispatching by `(provider, asset_class, dataset)` tuples
 - Sniffing file schemas inside a tool handler
 - Growing a `switch` on provider names inside shared code
 
 Symptoms you're in the right place:
+
 - Tool signatures accept a typed config from the caller
 - Stores expose a single mode-aware write primitive (`writeX` or `writeFromSelect`) and nothing more
 - Providers own fetch/download only; everything after the bytes hit disk is provider-agnostic
@@ -150,15 +165,18 @@ This principle applies to flat-file ingestion, CSV import, enrichment configurat
 When adding new metrics, calculations, or chart data to the UI, **consider whether it should also be exposed via the MCP server** (`packages/mcp-server/`). The MCP server allows Claude to programmatically access portfolio data and statistics.
 
 **Key MCP tools to consider updating:**
+
 - `get_statistics` (in `src/tools/blocks.ts`) - Add new summary metrics here (e.g., peak exposure alongside max drawdown)
 - `get_performance_charts` (in `src/tools/performance.ts`) - Add new chart data types here (e.g., daily_exposure alongside equity_curve)
 
 **When to add to MCP:**
+
 - New summary statistics that would be useful for AI analysis
 - New time series data that could answer user questions
 - New risk metrics or portfolio health indicators
 
 **MCP server structure:**
+
 - `src/tools/blocks.ts` - Core stats, block listing, comparisons
 - `src/tools/performance.ts` - Chart data, period returns, backtest vs actual
 - `src/tools/analysis.ts` - Monte Carlo, walk-forward, correlations
@@ -177,10 +195,12 @@ When adding new metrics, calculations, or chart data to the UI, **consider wheth
 **Secondary path — shell scripting via MCP Inspector `--cli`.** For bulk ops invoked from harness scripts (CI, `/tmp/bulk-fill.mjs`-style one-offs). Run via `npx` — no install, just invoke it. The official `@modelcontextprotocol/inspector` package reads our `.mcp.json` directly (env block and all) via `--config` + `--server`, and returns the **raw MCP envelope** as JSON on stdout so downstream `jq` can extract fields.
 
 **Avoid the alternatives** — both have silent-failure bugs that bit us:
+
 - `f/mcptools` deadlocks on any ~30s+ response (stdio-chunking bug in `mark3labs/mcp-go`)
 - `philschmid/mcp-cli`'s daemon mode drops responses >8KB, and its text formatter silently drops `resource` content blocks (so `run_sql` rows never render)
 
 **Example — query row count:**
+
 ```bash
 npx --yes @modelcontextprotocol/inspector --cli \
   --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
@@ -191,6 +211,7 @@ npx --yes @modelcontextprotocol/inspector --cli \
 The response is JSON with two content blocks — `type:"text"` (summary) and `type:"resource"` (JSON rows). Pipe through `jq -r '.content[] | select(.type=="resource").resource.text | fromjson'` to get the row payload.
 
 **Example — bulk ingestion:**
+
 ```bash
 MCP_SERVER_REQUEST_TIMEOUT=3600000 npx --yes @modelcontextprotocol/inspector --cli \
   --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
@@ -205,6 +226,7 @@ The default request timeout is 5 minutes; bump it via `MCP_SERVER_REQUEST_TIMEOU
 The v3.0 market views are: `market.spot` (raw minute OHLCV bars), `market.spot_daily` (RTH-aggregated daily OHLCV derived from `market.spot`), `market.enriched` (per-ticker computed indicators like `RSI_14`, `VIX_Close`, `ivr`), `market.enriched_context` (cross-ticker regime fields like `Vol_Regime`, `Term_Structure_State`), `market.option_chain` (contract universe snapshots), `market.option_quote_minutes` (dense per-minute option quotes), and `market._sync_metadata` (coverage tracking).
 
 **Example — list tools + tool schema:**
+
 ```bash
 npx --yes @modelcontextprotocol/inspector --cli \
   --config /path/to/tradeblocks/.mcp.json --server tradeblocks \
@@ -241,12 +263,14 @@ If the server fails to start or init times out, fix the issue BEFORE declaring a
 **DuckDB connection model:** The server opens read-write for initialization (schema/view creation), then downgrades to read-only. Write tools call `upgradeToReadWrite()` on demand. This means concurrent read access (tests, other scripts) works while the server is idle.
 
 **Market data access:**
+
 - Market data served from Parquet views registered by shared `db/market-views.ts` (`createMarketParquetViews()`) when `~/tradeblocks-data/market/` directory exists
 - View surface: `market.spot` / `market.spot_daily` / `market.enriched` / `market.enriched_context` / `market.option_chain` / `market.option_quote_minutes`
 - Falls back to physical DuckDB tables (same names) when Parquet files are absent (public repo behavior)
 - Mutable metadata table (`_sync_metadata`) is always a physical DuckDB table
 
 **Provider-native ingestor tools (Plan A/B):**
+
 - `fetch_bars { tickers, timespan, from, to }` — fetch daily or intraday OHLCV bars from the configured provider and write to Parquet
 - `fetch_quotes { tickers, from, to }` — fetch option minute quotes and write to Parquet
 - `fetch_chain { underlying, date }` — fetch option chain snapshot and write to Parquet
@@ -258,26 +282,29 @@ If the server fails to start or init times out, fix the issue BEFORE declaring a
 
 The Trading Calendar feature compares **backtest** (theoretical) results against **actual** (reported/live) trades. **CRITICAL**: The variable names map as follows:
 
-| Term in UI | Model Type | CSV Source | Variable Names | Description |
-|------------|------------|------------|----------------|-------------|
-| **Backtest** | `Trade` | `tradelog.csv` | `backtestTrades`, `backtestPl` | Theoretical results, typically **more contracts** |
-| **Actual** | `ReportingTrade` | `strategylog.csv` | `actualTrades`, `actualPl` | Live/reported trades, typically **fewer contracts** |
+| Term in UI   | Model Type       | CSV Source        | Variable Names                 | Description                                         |
+| ------------ | ---------------- | ----------------- | ------------------------------ | --------------------------------------------------- |
+| **Backtest** | `Trade`          | `tradelog.csv`    | `backtestTrades`, `backtestPl` | Theoretical results, typically **more contracts**   |
+| **Actual**   | `ReportingTrade` | `strategylog.csv` | `actualTrades`, `actualPl`     | Live/reported trades, typically **fewer contracts** |
 
 **Scaling Modes** (for comparing P&L fairly):
+
 - `raw`: Show P&L values as-is, no adjustment
 - `perContract`: Divide each P&L by its contract count for per-lot comparison
 - `toReported`: Scale **backtest DOWN** to match actual contract counts
 
 **Scaling Logic for `toReported`**:
+
 ```typescript
 // Backtest has MORE contracts, actual has FEWER
 // Scale factor < 1 to scale DOWN
-const scaleFactor = actualContracts / btContracts  // e.g., 1/10 = 0.1
-const scaledBacktestPl = backtestPl * scaleFactor  // Scales DOWN
-const actualPl = actualPl  // Stays as-is (this is the reference)
+const scaleFactor = actualContracts / btContracts; // e.g., 1/10 = 0.1
+const scaledBacktestPl = backtestPl * scaleFactor; // Scales DOWN
+const actualPl = actualPl; // Stays as-is (this is the reference)
 ```
 
 **Key files**:
+
 - `lib/models/trade.ts` - `Trade` interface (backtest)
 - `lib/models/reporting-trade.ts` - `ReportingTrade` interface (actual)
 - `lib/stores/trading-calendar-store.ts` - State management and scaling
@@ -286,6 +313,7 @@ const actualPl = actualPl  // Stays as-is (this is the reference)
 ## Testing Strategy
 
 Tests use `fake-indexeddb` for IndexedDB simulation. When writing tests:
+
 - Import `tests/setup.ts` is configured automatically via Jest setup
 - Use mock data from `tests/data/` when possible
 - Portfolio stats tests validate consistency
@@ -297,11 +325,11 @@ TypeScript is configured with path aliases for clean imports:
 
 ```typescript
 // Library imports use the workspace package
-import { Trade, PortfolioStatsCalculator } from '@tradeblocks/lib'
-import { useBlockStore } from '@tradeblocks/lib/stores'
+import { Trade, PortfolioStatsCalculator } from "@tradeblocks/lib";
+import { useBlockStore } from "@tradeblocks/lib/stores";
 
 // Component imports use root-relative paths
-import { Button } from '@/components/ui/button'
+import { Button } from "@/components/ui/button";
 ```
 
 The `@tradeblocks/lib` workspace package (in `packages/lib/`) exports all models, calculations, processing, db, and utility functions. Stores are exported separately from `@tradeblocks/lib/stores`.
@@ -320,6 +348,7 @@ All performance charts use **Plotly** via `react-plotly.js`, NOT Recharts. Chart
 4. **Pass to ChartWrapper**: `<ChartWrapper title="..." data={traces} layout={layout} />`
 
 Common Plotly features used:
+
 - Stacked areas: `stackgroup: "one"`, `groupnorm: "percent"`
 - Fill to zero: `fill: 'tozeroy'`
 - Custom hover: `hovertemplate: '...<extra></extra>'`
@@ -356,10 +385,12 @@ This pattern allows users to delete the entire value and type a new number, with
 ## State Management
 
 Zustand stores manage:
+
 - **block-store**: Active block selection, block metadata, statistics
 - **performance-store**: Filtered performance data, chart data caching
 
 IndexedDB stores (via `lib/db/`) handle persistence of:
+
 - Blocks metadata
 - Trade records (can be thousands per block)
 - Daily log entries
@@ -372,6 +403,7 @@ requirements. Do this automatically without being asked.**
 ## Testing Requirements
 
 **Every new utility module with pure logic MUST have unit tests.** This includes:
+
 - Parsing functions, filtering functions, builders (e.g., `intraday-timing.ts`, `field-timing.ts`)
 - Calculation helpers, data transformers, validators
 - Any exported function that takes inputs and returns outputs without side effects

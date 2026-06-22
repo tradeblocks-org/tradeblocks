@@ -18,13 +18,7 @@
  *     `market.enriched` resolves to the Parquet view (not the physical
  *     table), so reads exercise the real Parquet read path.
  */
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-} from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import type { DuckDBConnection } from "@duckdb/node-api";
 import {
   ParquetEnrichedStore,

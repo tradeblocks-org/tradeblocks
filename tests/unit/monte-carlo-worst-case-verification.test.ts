@@ -2,11 +2,7 @@
  * Verification tests to ensure worst-case feature doesn't affect baseline simulations
  */
 
-import {
-  runMonteCarloSimulation,
-  MonteCarloParams,
-  Trade,
-} from "@tradeblocks/lib";
+import { runMonteCarloSimulation, MonteCarloParams, Trade } from "@tradeblocks/lib";
 
 /**
  * Helper to create a trade with specific properties
@@ -51,7 +47,7 @@ describe("Worst-case feature verification - no side effects", () => {
       strategy: "Test Strategy",
       numContracts: 1,
       fundsAtClose: 100000 + i * 100,
-    })
+    }),
   );
 
   const baseParams: MonteCarloParams = {
@@ -75,19 +71,19 @@ describe("Worst-case feature verification - no side effects", () => {
 
     // Should be EXACTLY the same
     expect(resultUndefined.statistics.meanTotalReturn).toBe(
-      resultExplicitlyFalse.statistics.meanTotalReturn
+      resultExplicitlyFalse.statistics.meanTotalReturn,
     );
     expect(resultUndefined.statistics.medianTotalReturn).toBe(
-      resultExplicitlyFalse.statistics.medianTotalReturn
+      resultExplicitlyFalse.statistics.medianTotalReturn,
     );
     expect(resultUndefined.statistics.meanFinalValue).toBe(
-      resultExplicitlyFalse.statistics.meanFinalValue
+      resultExplicitlyFalse.statistics.meanFinalValue,
     );
     expect(resultUndefined.statistics.meanMaxDrawdown).toBe(
-      resultExplicitlyFalse.statistics.meanMaxDrawdown
+      resultExplicitlyFalse.statistics.meanMaxDrawdown,
     );
     expect(resultUndefined.statistics.meanSharpeRatio).toBe(
-      resultExplicitlyFalse.statistics.meanSharpeRatio
+      resultExplicitlyFalse.statistics.meanSharpeRatio,
     );
   });
 
@@ -103,10 +99,10 @@ describe("Worst-case feature verification - no side effects", () => {
 
     // Should be EXACTLY the same
     expect(resultNormal.statistics.meanTotalReturn).toBe(
-      resultZeroPercent.statistics.meanTotalReturn
+      resultZeroPercent.statistics.meanTotalReturn,
     );
     expect(resultNormal.statistics.meanFinalValue).toBe(
-      resultZeroPercent.statistics.meanFinalValue
+      resultZeroPercent.statistics.meanFinalValue,
     );
   });
 
@@ -122,7 +118,7 @@ describe("Worst-case feature verification - no side effects", () => {
 
     // Should be EXACTLY the same
     expect(resultNormal.statistics.meanTotalReturn).toBe(
-      resultUndefinedPercent.statistics.meanTotalReturn
+      resultUndefinedPercent.statistics.meanTotalReturn,
     );
   });
 
@@ -154,12 +150,12 @@ describe("Worst-case feature verification - no side effects", () => {
 
     // Results should be different when actually enabled
     expect(resultWithWorstCase.statistics.meanTotalReturn).not.toBe(
-      resultNormal.statistics.meanTotalReturn
+      resultNormal.statistics.meanTotalReturn,
     );
 
     // Worst-case should produce worse results
     expect(resultWithWorstCase.statistics.meanTotalReturn).toBeLessThan(
-      resultNormal.statistics.meanTotalReturn
+      resultNormal.statistics.meanTotalReturn,
     );
   });
 
@@ -178,11 +174,7 @@ describe("Worst-case feature verification - no side effects", () => {
       });
     });
 
-    const methods: Array<"trades" | "daily" | "percentage"> = [
-      "trades",
-      "daily",
-      "percentage",
-    ];
+    const methods: Array<"trades" | "daily" | "percentage"> = ["trades", "daily", "percentage"];
 
     for (const method of methods) {
       const resultNormal = runMonteCarloSimulation(tradesWithDates, {
@@ -206,7 +198,7 @@ describe("Worst-case feature verification - no side effects", () => {
 
       // Worst-case should produce worse results for this method
       expect(resultWithWorstCase.statistics.meanTotalReturn).toBeLessThan(
-        resultNormal.statistics.meanTotalReturn
+        resultNormal.statistics.meanTotalReturn,
       );
     }
   });
@@ -229,12 +221,8 @@ describe("Worst-case feature verification - no side effects", () => {
     });
 
     // Should produce identical results with same seed
-    expect(result1.statistics.meanTotalReturn).toBe(
-      result2.statistics.meanTotalReturn
-    );
-    expect(result1.statistics.meanFinalValue).toBe(
-      result2.statistics.meanFinalValue
-    );
+    expect(result1.statistics.meanTotalReturn).toBe(result2.statistics.meanTotalReturn);
+    expect(result1.statistics.meanFinalValue).toBe(result2.statistics.meanFinalValue);
   });
 
   it("should produce consistent results across multiple runs (smoke test)", () => {

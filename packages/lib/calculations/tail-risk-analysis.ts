@@ -14,7 +14,7 @@ import type {
   MarginalContribution,
   TailRiskAnalysisOptions,
   TailRiskAnalysisResult,
-  TailRiskAnalytics
+  TailRiskAnalytics,
 } from "../models/tail-risk.ts";
 import type { Trade } from "../models/trade.ts";
 import {
@@ -42,10 +42,7 @@ const MIN_TAIL_OBSERVATIONS_FLOOR = 5;
  * Scales with tailThreshold and actual observations to be more stringent for larger datasets
  * while maintaining a floor of 5 for small datasets
  */
-function getMinTailObservations(
-  tailThreshold: number,
-  sharedTradingDays: number
-): number {
+function getMinTailObservations(tailThreshold: number, sharedTradingDays: number): number {
   // For larger datasets, require at least 10% of expected tail events
   // This prevents accepting 5 observations when you have 500 potential tail days
   const expectedTailDays = tailThreshold * sharedTradingDays;
@@ -63,7 +60,7 @@ function getMinTailObservations(
  */
 export function performTailRiskAnalysis(
   trades: Trade[],
-  options: TailRiskAnalysisOptions = {}
+  options: TailRiskAnalysisOptions = {},
 ): TailRiskAnalysisResult {
   const startTime = performance.now();
 
@@ -98,9 +95,7 @@ export function performTailRiskAnalysis(
 
   if (strategyFilter && strategyFilter.length > 0) {
     const filterSet = new Set(strategyFilter);
-    filteredTrades = filteredTrades.filter(
-      (t) => t.strategy && filterSet.has(t.strategy)
-    );
+    filteredTrades = filteredTrades.filter((t) => t.strategy && filterSet.has(t.strategy));
   }
 
   // Filter by date range if provided
@@ -128,62 +123,47 @@ export function performTailRiskAnalysis(
   }
 
   // Step 2: Aggregate daily returns and align strategies
-  const aligned = aggregateAndAlignReturns(
-    filteredTrades,
-    normalization,
-    dateBasis
-  );
+  const aligned = aggregateAndAlignReturns(filteredTrades, normalization, dateBasis);
 
   // Handle edge cases
   if (aligned.strategies.length < 2) {
-    return createEmptyResult(
-      aligned,
-      tailThreshold,
-      varianceThreshold,
-      startTime
-    );
+    return createEmptyResult(aligned, tailThreshold, varianceThreshold, startTime);
   }
 
   if (aligned.dates.length < minTradingDays) {
-    return createEmptyResult(
-      aligned,
-      tailThreshold,
-      varianceThreshold,
-      startTime
-    );
+    return createEmptyResult(aligned, tailThreshold, varianceThreshold, startTime);
   }
 
   // Step 3: Apply PIT to each strategy's returns
   const transformedReturns = aligned.returns.map((strategyReturns) =>
-    probabilityIntegralTransform(strategyReturns)
+    probabilityIntegralTransform(strategyReturns),
   );
 
   // Step 4: Compute copula correlation matrix (Pearson on transformed data)
   const copulaCorrelationMatrix = computeCorrelationMatrix(transformedReturns);
 
   // Step 5: Eigenvalue decomposition
-  const { eigenvalues, eigenvectors, explainedVariance, effectiveFactors } =
-    performEigenAnalysis(copulaCorrelationMatrix, varianceThreshold);
+  const { eigenvalues, eigenvectors, explainedVariance, effectiveFactors } = performEigenAnalysis(
+    copulaCorrelationMatrix,
+    varianceThreshold,
+  );
 
   // Step 6: Estimate empirical joint tail risk (tail co-probability)
   const jointTailRiskResult = estimateJointTailRisk(
     transformedReturns,
     aligned.tradedMask,
-    tailThreshold
+    tailThreshold,
   );
 
   // Step 7: Calculate analytics
-  const analytics = calculateTailRiskAnalytics(
-    jointTailRiskResult.matrix,
-    aligned.strategies
-  );
+  const analytics = calculateTailRiskAnalytics(jointTailRiskResult.matrix, aligned.strategies);
 
   // Step 8: Calculate marginal contributions
   const marginalContributions = calculateMarginalContributions(
     copulaCorrelationMatrix,
     jointTailRiskResult.matrix,
     eigenvectors,
-    aligned.strategies
+    aligned.strategies,
   );
 
   const endTime = performance.now();
@@ -217,7 +197,7 @@ export function performTailRiskAnalysis(
 function aggregateAndAlignReturns(
   trades: Trade[],
   normalization: "raw" | "margin" | "notional",
-  dateBasis: "opened" | "closed"
+  dateBasis: "opened" | "closed",
 ): AlignedStrategyReturns {
   // Group trades by strategy and date (use null prototype to prevent prototype pollution)
   const strategyDailyReturns: Record<string, Record<string, number>> = Object.create(null);
@@ -304,10 +284,7 @@ function aggregateAndAlignReturns(
  * Normalize trade return based on selected mode
  * Returns null for invalid/non-finite values to prevent corrupted calculations
  */
-function normalizeReturn(
-  trade: Trade,
-  mode: "raw" | "margin" | "notional"
-): number | null {
+function normalizeReturn(trade: Trade, mode: "raw" | "margin" | "notional"): number | null {
   let result: number;
 
   switch (mode) {
@@ -319,9 +296,7 @@ function normalizeReturn(
       break;
     }
     case "notional": {
-      const notional = Math.abs(
-        (trade.openingPrice || 0) * (trade.numContracts || 0)
-      );
+      const notional = Math.abs((trade.openingPrice || 0) * (trade.numContracts || 0));
       if (!notional || notional === 0) {
         return null;
       }
@@ -375,7 +350,7 @@ function computeCorrelationMatrix(transformedReturns: number[][]): number[][] {
  */
 function performEigenAnalysis(
   correlationMatrix: number[][],
-  varianceThreshold: number = 0.8
+  varianceThreshold: number = 0.8,
 ): {
   eigenvalues: number[];
   eigenvectors: number[][];
@@ -462,14 +437,11 @@ function performEigenAnalysis(
     };
   } catch (error) {
     // Fallback for numerical issues (e.g., near-singular matrices)
-    console.warn(
-      "Eigenvalue decomposition failed, using identity fallback:",
-      error
-    );
+    console.warn("Eigenvalue decomposition failed, using identity fallback:", error);
     return {
       eigenvalues: new Array(n).fill(1),
       eigenvectors: correlationMatrix.map((_, i) =>
-        new Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))
+        new Array(n).fill(0).map((_, j) => (i === j ? 1 : 0)),
       ),
       explainedVariance: new Array(n).fill(0).map((_, i) => (i + 1) / n),
       effectiveFactors: n,
@@ -499,7 +471,7 @@ interface JointTailRiskResult {
 function estimateJointTailRisk(
   transformedReturns: number[][],
   tradedMask: boolean[][],
-  tailThreshold: number
+  tailThreshold: number,
 ): JointTailRiskResult {
   const n = transformedReturns.length;
   const m = transformedReturns[0]?.length || 0;
@@ -536,7 +508,7 @@ function estimateJointTailRisk(
   // 1. The strategy actually traded that day (not zero-padded)
   // 2. The return is at or below the threshold
   const inTail: boolean[][] = transformedReturns.map((returns, i) =>
-    returns.map((val, t) => tradedMask[i][t] && val <= thresholdValues[i])
+    returns.map((val, t) => tradedMask[i][t] && val <= thresholdValues[i]),
   );
 
   // Compute joint tail risk matrix
@@ -570,10 +542,7 @@ function estimateJointTailRisk(
       }
 
       // Calculate dynamic minimum based on shared trading days for this pair
-      const minTailObs = getMinTailObservations(
-        tailThreshold,
-        sharedTradingDays
-      );
+      const minTailObs = getMinTailObservations(tailThreshold, sharedTradingDays);
 
       // Check if we have enough tail observations for a valid estimate
       if (iInTailAndBothTraded < minTailObs) {
@@ -596,7 +565,7 @@ function estimateJointTailRisk(
  */
 function calculateTailRiskAnalytics(
   jointTailRiskMatrix: number[][],
-  strategies: string[]
+  strategies: string[],
 ): TailRiskAnalytics {
   const n = strategies.length;
 
@@ -669,7 +638,7 @@ function calculateMarginalContributions(
   _copulaCorrelationMatrix: number[][],
   jointTailRiskMatrix: number[][],
   eigenvectors: number[][],
-  strategies: string[]
+  strategies: string[],
 ): MarginalContribution[] {
   // Note: copulaCorrelationMatrix is passed for potential future use
   // (e.g., incorporating copula-based risk measures) but currently unused
@@ -683,17 +652,12 @@ function calculateMarginalContributions(
 
   // Get first eigenvector (dominant factor)
   const firstEigenvector = eigenvectors[0] || new Array(n).fill(0);
-  const sumAbsLoadings = firstEigenvector.reduce(
-    (sum, val) => sum + Math.abs(val),
-    0
-  );
+  const sumAbsLoadings = firstEigenvector.reduce((sum, val) => sum + Math.abs(val), 0);
 
   for (let i = 0; i < n; i++) {
     // Concentration score: loading on first factor
     const concentrationScore =
-      sumAbsLoadings > 0
-        ? Math.abs(firstEigenvector[i]) / sumAbsLoadings
-        : 1 / n;
+      sumAbsLoadings > 0 ? Math.abs(firstEigenvector[i]) / sumAbsLoadings : 1 / n;
 
     // Average joint tail risk with other strategies (skip NaN pairs)
     let sumJointRisk = 0;
@@ -715,9 +679,7 @@ function calculateMarginalContributions(
     // Tail risk contribution: weighted combination of concentration and avg dependence
     // Higher concentration + higher avg dependence = higher contribution
     const tailRiskContribution =
-      (concentrationScore * CONCENTRATION_WEIGHT +
-        avgTailDependence * DEPENDENCE_WEIGHT) *
-      100;
+      (concentrationScore * CONCENTRATION_WEIGHT + avgTailDependence * DEPENDENCE_WEIGHT) * 100;
 
     contributions.push({
       strategy: strategies[i],
@@ -740,11 +702,11 @@ function createEmptyResult(
   aligned: AlignedStrategyReturns,
   tailThreshold: number,
   varianceThreshold: number,
-  startTime: number
+  startTime: number,
 ): TailRiskAnalysisResult {
   const n = aligned.strategies.length;
   const identity = aligned.strategies.map((_, i) =>
-    aligned.strategies.map((_, j) => (i === j ? 1.0 : 0.0))
+    aligned.strategies.map((_, j) => (i === j ? 1.0 : 0.0)),
   );
 
   return {
@@ -753,9 +715,7 @@ function createEmptyResult(
     dateRange: {
       start: aligned.dates.length > 0 ? new Date(aligned.dates[0]) : new Date(),
       end:
-        aligned.dates.length > 0
-          ? new Date(aligned.dates[aligned.dates.length - 1])
-          : new Date(),
+        aligned.dates.length > 0 ? new Date(aligned.dates[aligned.dates.length - 1]) : new Date(),
     },
     tailThreshold,
     varianceThreshold,
@@ -764,9 +724,7 @@ function createEmptyResult(
     insufficientDataPairs: 0,
     eigenvalues: new Array(n).fill(1),
     eigenvectors: identity,
-    explainedVariance: new Array(n)
-      .fill(0)
-      .map((_, i) => (i + 1) / Math.max(n, 1)),
+    explainedVariance: new Array(n).fill(0).map((_, i) => (i + 1) / Math.max(n, 1)),
     effectiveFactors: n,
     analytics: {
       highestJointTailRisk: { value: 0, pair: ["", ""] },

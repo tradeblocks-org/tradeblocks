@@ -25,18 +25,8 @@ import {
 
 describe("selectVerificationSampleDates (D-08 deterministic seeding)", () => {
   it("returns the SAME list on repeat calls with the same seed", () => {
-    const a = selectVerificationSampleDates(
-      "2022-01-01",
-      "2026-04-17",
-      PHASE_5_FIXTURE_SEED,
-      9,
-    );
-    const b = selectVerificationSampleDates(
-      "2022-01-01",
-      "2026-04-17",
-      PHASE_5_FIXTURE_SEED,
-      9,
-    );
+    const a = selectVerificationSampleDates("2022-01-01", "2026-04-17", PHASE_5_FIXTURE_SEED, 9);
+    const b = selectVerificationSampleDates("2022-01-01", "2026-04-17", PHASE_5_FIXTURE_SEED, 9);
     expect(a).toEqual(b);
   });
 

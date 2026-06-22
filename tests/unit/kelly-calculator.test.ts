@@ -1,15 +1,15 @@
-import { calculateKellyMetrics, Trade } from '@tradeblocks/lib';
+import { calculateKellyMetrics, Trade } from "@tradeblocks/lib";
 
-describe('Kelly Calculator', () => {
-  describe('calculateKellyMetrics', () => {
-    test('should return correct win rate for 100% winning trades', () => {
+describe("Kelly Calculator", () => {
+  describe("calculateKellyMetrics", () => {
+    test("should return correct win rate for 100% winning trades", () => {
       const trades: Trade[] = [
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-01'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-01"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: 100,
           premium: 100,
           numContracts: 1,
@@ -20,11 +20,11 @@ describe('Kelly Calculator', () => {
           openingShortLongRatio: 1.0,
         } as Trade,
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-02'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-02"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: 200,
           premium: 200,
           numContracts: 1,
@@ -35,11 +35,11 @@ describe('Kelly Calculator', () => {
           openingShortLongRatio: 1.0,
         } as Trade,
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-03'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-03"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: 150,
           premium: 150,
           numContracts: 1,
@@ -61,14 +61,14 @@ describe('Kelly Calculator', () => {
       expect(metrics.percent).toBe(0);
     });
 
-    test('should return correct win rate for 100% losing trades', () => {
+    test("should return correct win rate for 100% losing trades", () => {
       const trades: Trade[] = [
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-01'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-01"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: -100,
           premium: 100,
           numContracts: 1,
@@ -79,11 +79,11 @@ describe('Kelly Calculator', () => {
           openingShortLongRatio: 1.0,
         } as Trade,
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-02'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-02"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: -200,
           premium: 200,
           numContracts: 1,
@@ -105,14 +105,14 @@ describe('Kelly Calculator', () => {
       expect(metrics.percent).toBe(0);
     });
 
-    test('should calculate valid Kelly with both wins and losses', () => {
+    test("should calculate valid Kelly with both wins and losses", () => {
       const trades: Trade[] = [
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-01'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-01"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: 100,
           premium: 100,
           numContracts: 1,
@@ -123,11 +123,11 @@ describe('Kelly Calculator', () => {
           openingShortLongRatio: 1.0,
         } as Trade,
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-02'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-02"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: 200,
           premium: 200,
           numContracts: 1,
@@ -138,11 +138,11 @@ describe('Kelly Calculator', () => {
           openingShortLongRatio: 1.0,
         } as Trade,
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-03'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-03"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: -100,
           premium: 100,
           numContracts: 1,
@@ -153,11 +153,11 @@ describe('Kelly Calculator', () => {
           openingShortLongRatio: 1.0,
         } as Trade,
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-04'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-04"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: -50,
           premium: 50,
           numContracts: 1,
@@ -183,14 +183,14 @@ describe('Kelly Calculator', () => {
       expect(metrics.percent).toBeCloseTo(25);
     });
 
-    test('should handle trades with zero P/L', () => {
+    test("should handle trades with zero P/L", () => {
       const trades: Trade[] = [
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-01'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-01"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: 100,
           premium: 100,
           numContracts: 1,
@@ -201,11 +201,11 @@ describe('Kelly Calculator', () => {
           openingShortLongRatio: 1.0,
         } as Trade,
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-02'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-02"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: 0,
           premium: 100,
           numContracts: 1,
@@ -216,11 +216,11 @@ describe('Kelly Calculator', () => {
           openingShortLongRatio: 1.0,
         } as Trade,
         {
-          strategy: 'Test',
-          dateOpened: new Date('2024-01-03'),
-          timeOpened: '09:30:00',
+          strategy: "Test",
+          dateOpened: new Date("2024-01-03"),
+          timeOpened: "09:30:00",
           openingPrice: 100,
-          legs: 'Test',
+          legs: "Test",
           pl: -50,
           premium: 50,
           numContracts: 1,
@@ -240,7 +240,7 @@ describe('Kelly Calculator', () => {
       expect(metrics.hasValidKelly).toBe(true);
     });
 
-    test('should return zero metrics for empty trades array', () => {
+    test("should return zero metrics for empty trades array", () => {
       const trades: Trade[] = [];
       const metrics = calculateKellyMetrics(trades);
 

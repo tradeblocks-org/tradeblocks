@@ -21,9 +21,7 @@
     "entry_point": "server/index.js",
     "mcp_config": {
       "command": "node",
-      "args": [
-        "${__dirname}/server/index.js"
-      ],
+      "args": ["${__dirname}/server/index.js"],
       "env": {
         "BLOCKS_DIRECTORY": "${user_config.blocks_directory}"
       }
@@ -96,9 +94,7 @@
     {
       "name": "analyze_strategy",
       "description": "Comprehensive strategy analysis workflow",
-      "arguments": [
-        "block_id"
-      ],
+      "arguments": ["block_id"],
       "text": "Analyze the strategy '${arguments.block_id}' comprehensively:\n\n1. First get basic statistics with `get_statistics`\n2. Run walk-forward analysis with `run_walk_forward` to check for overfitting\n3. Run Monte Carlo simulation with `run_monte_carlo` for risk assessment\n4. Calculate position sizing with `calculate_position_sizing`\n5. Check tail risk with `get_tail_risk`\n\nProvide insights on:\n- Is this strategy robust or potentially overfit?\n- What position size is appropriate given the risk?\n- What are the worst-case scenarios?\n- Any red flags or concerns?"
     },
     {
@@ -128,11 +124,7 @@
   },
   "compatibility": {
     "claude_desktop": ">=0.10.0",
-    "platforms": [
-      "darwin",
-      "win32",
-      "linux"
-    ],
+    "platforms": ["darwin", "win32", "linux"],
     "runtimes": {
       "node": ">=18.0.0"
     }

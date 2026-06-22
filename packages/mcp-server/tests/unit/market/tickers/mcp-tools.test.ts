@@ -32,9 +32,7 @@ interface ResourceContent {
 }
 
 function getJsonPayload(out: { content: Array<{ type: string }> }): unknown {
-  const chunk = out.content.find((c) => c.type === "resource") as
-    | ResourceContent
-    | undefined;
+  const chunk = out.content.find((c) => c.type === "resource") as ResourceContent | undefined;
   if (!chunk) throw new Error("No resource chunk in tool output");
   return JSON.parse(chunk.resource.text);
 }
@@ -103,9 +101,9 @@ describe("handleRegisterUnderlying — round-trip", () => {
 describe("handleUnregisterUnderlying — bundled-default protection", () => {
   it("throws when called with a bundled default (SPX)", async () => {
     const r = await loadRegistry({ dataDir: tmpDataDir });
-    await expect(
-      handleUnregisterUnderlying({ underlying: "SPX" }, r, tmpDataDir),
-    ).rejects.toThrow(/cannot unregister bundled default/);
+    await expect(handleUnregisterUnderlying({ underlying: "SPX" }, r, tmpDataDir)).rejects.toThrow(
+      /cannot unregister bundled default/,
+    );
   });
 
   it("succeeds for a user-added entry and persists removal", async () => {
@@ -138,22 +136,15 @@ describe("handleListUnderlyings — source annotation", () => {
     const payload = getJsonPayload(out) as {
       entries: Array<{ underlying: string; source: string }>;
     };
-    expect(payload.entries.find((e) => e.underlying === "SPX")?.source).toBe(
-      "default",
-    );
-    expect(payload.entries.find((e) => e.underlying === "XSP")?.source).toBe(
-      "user",
-    );
+    expect(payload.entries.find((e) => e.underlying === "SPX")?.source).toBe("default");
+    expect(payload.entries.find((e) => e.underlying === "XSP")?.source).toBe("user");
   });
 });
 
 describe("handleResolveRoot — debug helper", () => {
   it("returns root, underlying, source for a bundled OCC ticker", async () => {
     const r = await loadRegistry({ dataDir: tmpDataDir });
-    const out = await handleResolveRoot(
-      { input: "SPXW251219C05000000" },
-      r,
-    );
+    const out = await handleResolveRoot({ input: "SPXW251219C05000000" }, r);
     const payload = getJsonPayload(out);
     expect(payload).toEqual({
       root: "SPXW",
@@ -227,15 +218,10 @@ describe("Zod schemas — T-1-02 defense layer 1", () => {
   });
 
   it("rejects unregister with empty underlying", () => {
-    expect(
-      unregisterUnderlyingSchema.safeParse({ underlying: "" }).success,
-    ).toBe(false);
+    expect(unregisterUnderlyingSchema.safeParse({ underlying: "" }).success).toBe(false);
   });
 
   it("rejects unregister with path-traversal", () => {
-    expect(
-      unregisterUnderlyingSchema.safeParse({ underlying: "SPX/../etc" })
-        .success,
-    ).toBe(false);
+    expect(unregisterUnderlyingSchema.safeParse({ underlying: "SPX/../etc" }).success).toBe(false);
   });
 });

@@ -9,12 +9,7 @@ import type { PortfolioStats } from "../models/portfolio-stats.ts";
 import type { Trade } from "../models/trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
 import type { SnapshotChartData } from "../services/performance-snapshot.ts";
-import {
-  promisifyRequest,
-  STORES,
-  withReadTransaction,
-  withWriteTransaction,
-} from "./index.ts";
+import { promisifyRequest, STORES, withReadTransaction, withWriteTransaction } from "./index.ts";
 
 /**
  * Cache entry for performance snapshot
@@ -58,7 +53,7 @@ export async function storePerformanceSnapshotCache(
     chartData: SnapshotChartData;
     filteredTrades: Trade[];
     filteredDailyLogs: DailyLogEntry[];
-  }
+  },
 ): Promise<void> {
   const cacheEntry: PerformanceSnapshotCache = {
     id: getCacheId(blockId),
@@ -81,7 +76,7 @@ export async function storePerformanceSnapshotCache(
  * Restore Date objects from serialized cache data
  */
 function restoreDates<T extends { dateOpened?: Date | string; dateClosed?: Date | string | null }>(
-  items: T[]
+  items: T[],
 ): T[] {
   return items.map((item) => ({
     ...item,
@@ -116,7 +111,7 @@ function restoreChartDataDates(chartData: SnapshotChartData): SnapshotChartData 
  * Returns null if cache doesn't exist
  */
 export async function getPerformanceSnapshotCache(
-  blockId: string
+  blockId: string,
 ): Promise<CachedPerformanceSnapshot | null> {
   return withReadTransaction(STORES.CALCULATIONS, async (transaction) => {
     const store = transaction.objectStore(STORES.CALCULATIONS);
@@ -143,9 +138,7 @@ export async function getPerformanceSnapshotCache(
 /**
  * Delete cached performance snapshot for a block
  */
-export async function deletePerformanceSnapshotCache(
-  blockId: string
-): Promise<void> {
+export async function deletePerformanceSnapshotCache(blockId: string): Promise<void> {
   await withWriteTransaction(STORES.CALCULATIONS, async (transaction) => {
     const store = transaction.objectStore(STORES.CALCULATIONS);
     const cacheId = getCacheId(blockId);
@@ -161,9 +154,7 @@ export async function deletePerformanceSnapshotCache(
 /**
  * Check if performance snapshot cache exists for a block
  */
-export async function hasPerformanceSnapshotCache(
-  blockId: string
-): Promise<boolean> {
+export async function hasPerformanceSnapshotCache(blockId: string): Promise<boolean> {
   return withReadTransaction(STORES.CALCULATIONS, async (transaction) => {
     const store = transaction.objectStore(STORES.CALCULATIONS);
     const cacheId = getCacheId(blockId);

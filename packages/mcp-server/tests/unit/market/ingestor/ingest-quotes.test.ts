@@ -17,7 +17,10 @@ describe("MarketIngestor.ingestQuotes", () => {
   let tickers: TickerRegistry;
 
   beforeEach(async () => {
-    dataDir = join(tmpdir(), `ingestor-quotes-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    dataDir = join(
+      tmpdir(),
+      `ingestor-quotes-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     mkdirSync(dataDir, { recursive: true });
     instance = await DuckDBInstance.create(":memory:");
     conn = await instance.connect();
@@ -59,7 +62,11 @@ describe("MarketIngestor.ingestQuotes", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -80,7 +87,11 @@ describe("MarketIngestor.ingestQuotes", () => {
       fetchOptionSnapshot: async () => ({ contracts: [] }),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({
       tickers: ["SPXW260319C04800000"],
@@ -115,7 +126,11 @@ describe("MarketIngestor.ingestQuotes", () => {
       },
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({
       tickers: ["SPXW260319C04800000"],
@@ -131,14 +146,24 @@ describe("MarketIngestor.ingestQuotes", () => {
     const provider: MarketDataProvider = {
       name: "any",
       capabilities: () => ({
-        tradeBars: true, quotes: true, greeks: false, flatFiles: false,
-        bulkByRoot: true, perTicker: true, minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async () => [],
       fetchOptionSnapshot: async () => ({ contracts: [] }),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({ from: "2026-01-05", to: "2026-01-05" });
 
@@ -150,14 +175,24 @@ describe("MarketIngestor.ingestQuotes", () => {
     const provider: MarketDataProvider = {
       name: "any",
       capabilities: () => ({
-        tradeBars: true, quotes: true, greeks: false, flatFiles: false,
-        bulkByRoot: true, perTicker: true, minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async () => [],
       fetchOptionSnapshot: async () => ({ contracts: [] }),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({
       tickers: ["SPXW260319C04800000"],
@@ -173,15 +208,25 @@ describe("MarketIngestor.ingestQuotes", () => {
     const provider: MarketDataProvider = {
       name: "per-ticker-only",
       capabilities: () => ({
-        tradeBars: true, quotes: true, greeks: false, flatFiles: false,
-        bulkByRoot: false, perTicker: true, minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async () => [],
       fetchOptionSnapshot: async () => ({ contracts: [] }),
       fetchQuotes: async () => new Map(),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({
       underlyings: ["SPX"],
@@ -198,8 +243,14 @@ describe("MarketIngestor.ingestQuotes", () => {
     const provider: MarketDataProvider = {
       name: "bulk",
       capabilities: () => ({
-        tradeBars: true, quotes: true, greeks: false, flatFiles: false,
-        bulkByRoot: true, perTicker: false, minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async () => [],
       fetchOptionSnapshot: async () => ({ contracts: [] }),
@@ -217,7 +268,11 @@ describe("MarketIngestor.ingestQuotes", () => {
       },
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({
       underlyings: ["SPXW"],
@@ -241,8 +296,14 @@ describe("MarketIngestor.ingestQuotes", () => {
     const provider: MarketDataProvider = {
       name: "bulk-wide-strike",
       capabilities: () => ({
-        tradeBars: true, quotes: true, greeks: false, flatFiles: false,
-        bulkByRoot: true, perTicker: false, minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async () => [],
       fetchOptionSnapshot: async () => ({ contracts: [] }),
@@ -258,7 +319,11 @@ describe("MarketIngestor.ingestQuotes", () => {
       },
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers: spxTickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({
       underlyings: ["SPX"],
@@ -290,19 +355,27 @@ describe("MarketIngestor.ingestQuotes", () => {
     const provider: MarketDataProvider = {
       name: "bulk-mismatch",
       capabilities: () => ({
-        tradeBars: true, quotes: true, greeks: false, flatFiles: false,
-        bulkByRoot: true, perTicker: false, minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: true,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: true,
+        perTicker: false,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async () => [],
       fetchOptionSnapshot: async () => ({ contracts: [] }),
       fetchBulkQuotes: async function* () {
-        yield [
-          { ticker: "QQQ241227P00500000", timestamp: "2024-12-20 09:30", bid: 1.0, ask: 1.2 },
-        ];
+        yield [{ ticker: "QQQ241227P00500000", timestamp: "2024-12-20 09:30", bid: 1.0, ask: 1.2 }];
       },
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers: mixedTickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     await expect(
       ingestor.ingestQuotes({
@@ -319,8 +392,14 @@ describe("MarketIngestor.ingestQuotes", () => {
     const provider: MarketDataProvider = {
       name: "test-provider",
       capabilities: () => ({
-        tradeBars: true, quotes: false, greeks: false, flatFiles: false,
-        bulkByRoot: false, perTicker: true, minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: false,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async () => [],
       fetchOptionSnapshot: async () => ({ contracts: [] }),
@@ -331,7 +410,11 @@ describe("MarketIngestor.ingestQuotes", () => {
       },
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({
       tickers: ["SPXW260319C04800000"],
@@ -339,7 +422,7 @@ describe("MarketIngestor.ingestQuotes", () => {
       to: "2026-01-05",
     });
 
-    expect(result.status).toBe("ok");          // not "unsupported"
+    expect(result.status).toBe("ok"); // not "unsupported"
     expect(result.rowsWritten).toBe(1);
   });
 
@@ -347,15 +430,25 @@ describe("MarketIngestor.ingestQuotes", () => {
     const provider: MarketDataProvider = {
       name: "no-quotes-provider",
       capabilities: () => ({
-        tradeBars: true, quotes: false, greeks: false, flatFiles: false,
-        bulkByRoot: false, perTicker: true, minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: false,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async () => [],
       fetchOptionSnapshot: async () => ({ contracts: [] }),
       // fetchQuotes intentionally omitted
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({
       tickers: ["SPXW260319C04800000"],
@@ -372,19 +465,30 @@ describe("MarketIngestor.ingestQuotes", () => {
     process.env.MASSIVE_API_KEY = "test-key";
 
     const fetchSpy = jest.spyOn(globalThis, "fetch") as unknown as jest.SpiedFunction<typeof fetch>;
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({
-      ticker: "O:SPX250107C05000000",
-      queryCount: 1,
-      resultsCount: 1,
-      adjusted: false,
-      results: [{ v: 50, vw: 13.0, o: 12.8, c: 13.20, h: 13.5, l: 12.5, t: 1736260200000, n: 10 }],
-      status: "OK",
-      request_id: "req-001",
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ticker: "O:SPX250107C05000000",
+          queryCount: 1,
+          resultsCount: 1,
+          adjusted: false,
+          results: [
+            { v: 50, vw: 13.0, o: 12.8, c: 13.2, h: 13.5, l: 12.5, t: 1736260200000, n: 10 },
+          ],
+          status: "OK",
+          request_id: "req-001",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
 
     const provider = new MassiveProvider();
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestQuotes({
       tickers: ["SPX250107C05000000"],
@@ -398,12 +502,14 @@ describe("MarketIngestor.ingestQuotes", () => {
     // Read back via the store reader. parquetMode: false → DuckdbQuoteStore.
     // Both backends now persist `source` (Task 5).
     const persisted = await stores.quote.readQuotes(
-      ["SPX250107C05000000"], "2025-01-07", "2025-01-07"
+      ["SPX250107C05000000"],
+      "2025-01-07",
+      "2025-01-07",
     );
     const rows = persisted.get("SPX250107C05000000")!;
     expect(rows).toHaveLength(1);
-    expect(rows[0].bid).toBe(13.20);
-    expect(rows[0].ask).toBe(13.20);
+    expect(rows[0].bid).toBe(13.2);
+    expect(rows[0].ask).toBe(13.2);
     expect(rows[0].source).toBe("synth_close");
     expect(rows[0].occ_ticker).toBe("SPX250107C05000000");
 

@@ -1,11 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { cn } from "@tradeblocks/lib";
 import { HelpCircle, TrendingDown, TrendingUp } from "lucide-react";
 
@@ -63,9 +59,7 @@ export function MetricCard({
 
   const getValueColor = () => {
     if (isPositive === undefined) return "text-foreground";
-    return isPositive
-      ? "text-green-600 dark:text-green-400"
-      : "text-red-600 dark:text-red-400";
+    return isPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400";
   };
 
   const getTrendIcon = () => {
@@ -93,16 +87,16 @@ export function MetricCard({
     <Card
       className={cn(
         "relative backdrop-blur-sm bg-background/50 border-border/50 transition-all duration-200 hover:shadow-md hover:bg-background/80 py-0",
-        className
+        className,
       )}
     >
-      <CardContent className={cn("px-0 flex flex-col justify-center min-h-[80px]", sizeClasses[size])}>
+      <CardContent
+        className={cn("px-0 flex flex-col justify-center min-h-[80px]", sizeClasses[size])}
+      >
         <div className="space-y-1 text-center">
           {/* Title Row */}
           <div className="flex items-center justify-center gap-1">
-            <span className="text-xs font-medium text-muted-foreground">
-              {title}
-            </span>
+            <span className="text-xs font-medium text-muted-foreground">{title}</span>
             {tooltip && (
               <HoverCard>
                 <HoverCardTrigger asChild>
@@ -135,14 +129,10 @@ export function MetricCard({
           </div>
 
           {/* Value */}
-          <div className={cn(valueSizeClasses[size], getValueColor())}>
-            {formatValue(value)}
-          </div>
+          <div className={cn(valueSizeClasses[size], getValueColor())}>{formatValue(value)}</div>
 
           {/* Subtitle */}
-          {subtitle && (
-            <div className="text-xs text-muted-foreground">{subtitle}</div>
-          )}
+          {subtitle && <div className="text-xs text-muted-foreground">{subtitle}</div>}
         </div>
       </CardContent>
     </Card>

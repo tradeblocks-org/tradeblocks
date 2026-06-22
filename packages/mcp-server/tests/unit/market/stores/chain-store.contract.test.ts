@@ -6,17 +6,8 @@
  * asserts that both backends return identical readChain output for the same
  * writeChain input.
  */
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-} from "@jest/globals";
-import {
-  ParquetChainStore,
-  DuckdbChainStore,
-} from "../../../../src/test-exports.ts";
+import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { ParquetChainStore, DuckdbChainStore } from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
@@ -76,9 +67,7 @@ describe.each([
 
     const read = await store.readChain("SPX", "2025-01-06");
     expect(read.length).toBe(3);
-    expect(read.map((r) => r.ticker).sort()).toEqual(
-      rows.map((r) => r.ticker).sort(),
-    );
+    expect(read.map((r) => r.ticker).sort()).toEqual(rows.map((r) => r.ticker).sort());
     expect(read.every((r) => r.underlying === "SPX")).toBe(true);
     expect(read.every((r) => r.date === "2025-01-06")).toBe(true);
   });
@@ -140,11 +129,11 @@ describe("ChainStore backend parity", () => {
       await d.store.writeChain("SPX", "2025-01-06", rows);
       await createMarketParquetViews(p.fixture.ctx.conn, p.fixture.ctx.dataDir);
 
-      const fromP = (await p.store.readChain("SPX", "2025-01-06")).sort(
-        (a, b) => a.ticker.localeCompare(b.ticker),
+      const fromP = (await p.store.readChain("SPX", "2025-01-06")).sort((a, b) =>
+        a.ticker.localeCompare(b.ticker),
       );
-      const fromD = (await d.store.readChain("SPX", "2025-01-06")).sort(
-        (a, b) => a.ticker.localeCompare(b.ticker),
+      const fromD = (await d.store.readChain("SPX", "2025-01-06")).sort((a, b) =>
+        a.ticker.localeCompare(b.ticker),
       );
       expect(fromP).toEqual(fromD);
     } finally {

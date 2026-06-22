@@ -100,11 +100,9 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
           unique: false,
         });
         tradesStore.createIndex("pl", "pl", { unique: false });
-        tradesStore.createIndex(
-          "composite_block_date",
-          ["blockId", "dateOpened"],
-          { unique: false }
-        );
+        tradesStore.createIndex("composite_block_date", ["blockId", "dateOpened"], {
+          unique: false,
+        });
       }
 
       // Create daily logs store
@@ -118,11 +116,7 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
         dailyLogsStore.createIndex(INDEXES.DAILY_LOGS_BY_DATE, "date", {
           unique: false,
         });
-        dailyLogsStore.createIndex(
-          "composite_block_date",
-          ["blockId", "date"],
-          { unique: false }
-        );
+        dailyLogsStore.createIndex("composite_block_date", ["blockId", "date"], { unique: false });
       }
 
       // Create reporting logs store
@@ -133,16 +127,12 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
         reportingStore.createIndex(INDEXES.REPORTING_LOGS_BY_BLOCK, "blockId", {
           unique: false,
         });
-        reportingStore.createIndex(
-          INDEXES.REPORTING_LOGS_BY_STRATEGY,
-          "strategy",
-          { unique: false }
-        );
-        reportingStore.createIndex(
-          "composite_block_date",
-          ["blockId", "dateOpened"],
-          { unique: false }
-        );
+        reportingStore.createIndex(INDEXES.REPORTING_LOGS_BY_STRATEGY, "strategy", {
+          unique: false,
+        });
+        reportingStore.createIndex("composite_block_date", ["blockId", "dateOpened"], {
+          unique: false,
+        });
       }
 
       // Create calculations store (for cached computations)
@@ -150,11 +140,7 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
         const calculationsStore = db.createObjectStore(STORES.CALCULATIONS, {
           keyPath: "id",
         });
-        calculationsStore.createIndex(
-          INDEXES.CALCULATIONS_BY_BLOCK,
-          "blockId",
-          { unique: false }
-        );
+        calculationsStore.createIndex(INDEXES.CALCULATIONS_BY_BLOCK, "blockId", { unique: false });
         calculationsStore.createIndex("calculationType", "calculationType", {
           unique: false,
         });
@@ -188,20 +174,16 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
         const staticDatasetRowsStore = db.createObjectStore(STORES.STATIC_DATASET_ROWS, {
           autoIncrement: true,
         });
-        staticDatasetRowsStore.createIndex(
-          INDEXES.STATIC_DATASET_ROWS_BY_DATASET,
-          "datasetId",
-          { unique: false }
-        );
-        staticDatasetRowsStore.createIndex(
-          INDEXES.STATIC_DATASET_ROWS_BY_TIMESTAMP,
-          "timestamp",
-          { unique: false }
-        );
+        staticDatasetRowsStore.createIndex(INDEXES.STATIC_DATASET_ROWS_BY_DATASET, "datasetId", {
+          unique: false,
+        });
+        staticDatasetRowsStore.createIndex(INDEXES.STATIC_DATASET_ROWS_BY_TIMESTAMP, "timestamp", {
+          unique: false,
+        });
         staticDatasetRowsStore.createIndex(
           "composite_dataset_timestamp",
           ["datasetId", "timestamp"],
-          { unique: false }
+          { unique: false },
         );
       }
 
@@ -287,7 +269,7 @@ export async function deleteDatabase(): Promise<void> {
  */
 export async function withReadTransaction<T>(
   stores: string | string[],
-  callback: (transaction: IDBTransaction) => Promise<T>
+  callback: (transaction: IDBTransaction) => Promise<T>,
 ): Promise<T> {
   const db = await getDatabase();
   const storeNames = Array.isArray(stores) ? stores : [stores];
@@ -301,7 +283,7 @@ export async function withReadTransaction<T>(
  */
 export async function withWriteTransaction<T>(
   stores: string | string[],
-  callback: (transaction: IDBTransaction) => Promise<T>
+  callback: (transaction: IDBTransaction) => Promise<T>,
 ): Promise<T> {
   const db = await getDatabase();
   const storeNames = Array.isArray(stores) ? stores : [stores];
@@ -372,12 +354,7 @@ export class DatabaseError extends Error {
   readonly operation: string;
   readonly store?: string;
   override readonly cause?: Error;
-  constructor(
-    message: string,
-    operation: string,
-    store?: string,
-    cause?: Error
-  ) {
+  constructor(message: string, operation: string, store?: string, cause?: Error) {
     super(message);
     this.name = "DatabaseError";
     this.operation = operation;
@@ -394,12 +371,7 @@ export class QuotaExceededError extends DatabaseError {
 }
 
 export class TransactionError extends DatabaseError {
-  constructor(
-    message: string,
-    operation: string,
-    store?: string,
-    cause?: Error
-  ) {
+  constructor(message: string, operation: string, store?: string, cause?: Error) {
     super(message, operation, store, cause);
     this.name = "TransactionError";
   }

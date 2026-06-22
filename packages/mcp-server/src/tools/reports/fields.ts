@@ -34,21 +34,10 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
         blockId: z.string().describe("Block folder name"),
         field: z
           .string()
-          .describe(
-            "Field name to analyze (e.g., 'openingVix', 'pl', 'rom', 'mfePercent')"
-          ),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
-        startDate: z
-          .string()
-          .optional()
-          .describe("Filter by start date (YYYY-MM-DD)"),
-        endDate: z
-          .string()
-          .optional()
-          .describe("Filter by end date (YYYY-MM-DD)"),
+          .describe("Field name to analyze (e.g., 'openingVix', 'pl', 'rom', 'mfePercent')"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
+        startDate: z.string().optional().describe("Filter by start date (YYYY-MM-DD)"),
+        endDate: z.string().optional().describe("Filter by end date (YYYY-MM-DD)"),
         histogramBuckets: z
           .number()
           .min(3)
@@ -59,14 +48,7 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
     },
     withSyncedBlock(
       baseDir,
-      async ({
-        blockId,
-        field,
-        strategy,
-        startDate,
-        endDate,
-        histogramBuckets,
-      }) => {
+      async ({ blockId, field, strategy, startDate, endDate, histogramBuckets }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
           let trades = block.trades;
@@ -168,7 +150,7 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
             isError: true,
           };
         }
-      }
-    )
+      },
+    ),
   );
 }

@@ -1,19 +1,15 @@
-import type { CSSProperties, ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react";
 
-import { AppSidebar } from "@/components/app-sidebar"
-import { SiteHeader } from "@/components/site-header"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/app-sidebar";
+import { SiteHeader } from "@/components/site-header";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 const providerStyle = {
   "--sidebar-width": "min(22rem, calc(100vw - 4rem))",
   "--header-height": "4.5rem",
-} as CSSProperties
+} as CSSProperties;
 
-export default function PlatformLayout({
-  children,
-}: {
-  children: ReactNode
-}) {
+export default function PlatformLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider style={providerStyle}>
       <AppSidebar variant="inset" />
@@ -28,5 +24,5 @@ export default function PlatformLayout({
         </div>
       </SidebarInset>
     </SidebarProvider>
-  )
+  );
 }

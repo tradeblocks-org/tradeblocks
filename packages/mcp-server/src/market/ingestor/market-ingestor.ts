@@ -20,7 +20,10 @@ import type {
   BulkProgressReporter,
 } from "./types.ts";
 import type { OiDailyRow, QuoteRow } from "../stores/types.ts";
-import { applyQuoteGreeksParallel, type QuoteGreeksStats } from "../../utils/option-quote-greeks.ts";
+import {
+  applyQuoteGreeksParallel,
+  type QuoteGreeksStats,
+} from "../../utils/option-quote-greeks.ts";
 
 export interface MarketIngestorDeps {
   stores: MarketStores;
@@ -201,7 +204,13 @@ export class MarketIngestor {
           assetClass,
         });
       } catch (error) {
-        const mapped = this.mapProviderFailure(provider, "bars", normalizedTicker, error, assetClass);
+        const mapped = this.mapProviderFailure(
+          provider,
+          "bars",
+          normalizedTicker,
+          error,
+          assetClass,
+        );
         if (mapped) return mapped;
         throw error;
       }
@@ -217,9 +226,10 @@ export class MarketIngestor {
       }
     }
 
-    const enrichment = opts.skipEnrichment || !minDate
-      ? null
-      : await this.triggerPerTickerEnrichment(opts.tickers, minDate, maxDate!);
+    const enrichment =
+      opts.skipEnrichment || !minDate
+        ? null
+        : await this.triggerPerTickerEnrichment(opts.tickers, minDate, maxDate!);
 
     return {
       status: "ok",
@@ -238,14 +248,23 @@ export class MarketIngestor {
     return getProvider();
   }
 
-  private timespanToProviderArgs(timespan: string): { timespan: "day" | "minute" | "hour"; multiplier: number } {
+  private timespanToProviderArgs(timespan: string): {
+    timespan: "day" | "minute" | "hour";
+    multiplier: number;
+  } {
     switch (timespan) {
-      case "1d": return { timespan: "day", multiplier: 1 };
-      case "1m": return { timespan: "minute", multiplier: 1 };
-      case "5m": return { timespan: "minute", multiplier: 5 };
-      case "15m": return { timespan: "minute", multiplier: 15 };
-      case "1h": return { timespan: "hour", multiplier: 1 };
-      default: throw new Error(`Unknown timespan: ${timespan}`);
+      case "1d":
+        return { timespan: "day", multiplier: 1 };
+      case "1m":
+        return { timespan: "minute", multiplier: 1 };
+      case "5m":
+        return { timespan: "minute", multiplier: 5 };
+      case "15m":
+        return { timespan: "minute", multiplier: 15 };
+      case "1h":
+        return { timespan: "hour", multiplier: 1 };
+      default:
+        throw new Error(`Unknown timespan: ${timespan}`);
     }
   }
 
@@ -290,15 +309,17 @@ export class MarketIngestor {
       assetClass === "index" &&
       /(TimeoutError|aborted due to timeout|timed out)/i.test(message)
     ) {
-      const reason = operation === "chain"
-        ? "current Massive provider path does not reliably support index option-chain refreshes"
-        : "current Massive provider path does not reliably support index data for this request";
+      const reason =
+        operation === "chain"
+          ? "current Massive provider path does not reliably support index option-chain refreshes"
+          : "current Massive provider path does not reliably support index data for this request";
       return unsupportedProviderResult(provider, operation, target, reason, message);
     }
     if (provider.name === "massive" && /HTTP 403 Forbidden/.test(message)) {
-      const reason = assetClass === "index"
-        ? "current Massive account/tier does not permit index data for this request"
-        : "current Massive account/tier does not permit this request";
+      const reason =
+        assetClass === "index"
+          ? "current Massive account/tier does not permit index data for this request"
+          : "current Massive account/tier does not permit this request";
       return unsupportedProviderResult(provider, operation, target, reason, message);
     }
     return null;
@@ -367,9 +388,10 @@ export class MarketIngestor {
     }
 
     try {
-      const coverage = dataset === "spot"
-        ? await this.deps.stores.spot.getCoverage(symbol.toUpperCase(), asOf, asOf)
-        : await this.deps.stores.chain.getCoverage(symbol.toUpperCase(), asOf, asOf);
+      const coverage =
+        dataset === "spot"
+          ? await this.deps.stores.spot.getCoverage(symbol.toUpperCase(), asOf, asOf)
+          : await this.deps.stores.chain.getCoverage(symbol.toUpperCase(), asOf, asOf);
       if (coverage.totalDates <= 0) return result;
 
       return {
@@ -533,11 +555,7 @@ export class MarketIngestor {
         if (mapped) return mapped;
         throw error;
       }
-      const written = await this.writeQuotesForTicker(
-        provider,
-        ticker,
-        quotes,
-      );
+      const written = await this.writeQuotesForTicker(provider, ticker, quotes);
       totalRows += written.rowsWritten;
       if (written.minDate && (!minDate || written.minDate < minDate)) minDate = written.minDate;
       if (written.maxDate && (!maxDate || written.maxDate > maxDate)) maxDate = written.maxDate;
@@ -583,12 +601,7 @@ export class MarketIngestor {
     for (const underlying of underlyings) {
       const upperUnderlying = underlying.toUpperCase();
       for (const date of dates) {
-        const drain = await this.drainBulkQuotes(
-          provider,
-          upperUnderlying,
-          date,
-          onProgress,
-        );
+        const drain = await this.drainBulkQuotes(provider, upperUnderlying, date, onProgress);
         if (drain.rowsWritten > 0) {
           totalRows += drain.rowsWritten;
           if (!minDate || date < minDate) minDate = date;
@@ -688,7 +701,11 @@ export class MarketIngestor {
         }
       : undefined;
 
-    const stream = provider.fetchBulkQuotes!({ underlying: upperUnderlying, date, onGroupComplete });
+    const stream = provider.fetchBulkQuotes!({
+      underlying: upperUnderlying,
+      date,
+      onGroupComplete,
+    });
     for await (const chunk of stream) {
       for (const row of chunk) {
         const root = extractRoot(row.ticker);
@@ -752,15 +769,12 @@ export class MarketIngestor {
         const message = error instanceof Error ? error.message : String(error);
         // Warn is still emitted for live tail-following — the load-bearing
         // signal is `result.skipped[]` / `status: "partial"`.
-        console.warn(
-          "[drainBulkQuotes] enrichQuoteRows failed; skipping batch",
-          {
-            underlying: resolvedUnderlying,
-            date,
-            rows: rows.length,
-            error: message,
-          },
-        );
+        console.warn("[drainBulkQuotes] enrichQuoteRows failed; skipping batch", {
+          underlying: resolvedUnderlying,
+          date,
+          rows: rows.length,
+          error: message,
+        });
         skipped.push({
           underlying: resolvedUnderlying,
           date,
@@ -809,7 +823,12 @@ export class MarketIngestor {
     provider: MarketDataProvider,
     ticker: string,
     quotes: Map<string, MinuteQuote>,
-  ): Promise<{ rowsWritten: number; minDate?: string; maxDate?: string; skipped: IngestSkippedBatch[] }> {
+  ): Promise<{
+    rowsWritten: number;
+    minDate?: string;
+    maxDate?: string;
+    skipped: IngestSkippedBatch[];
+  }> {
     const root = extractRoot(ticker);
     const underlying = this.deps.stores.quote.tickers.resolve(root);
 
@@ -856,16 +875,13 @@ export class MarketIngestor {
         const message = error instanceof Error ? error.message : String(error);
         // Warn is still emitted for live tail-following — the load-bearing
         // signal is `result.skipped[]` / `status: "partial"`.
-        console.warn(
-          "[writeQuotesForTicker] enrichQuoteRows failed; skipping batch",
-          {
-            underlying,
-            date,
-            ticker,
-            rows: rows.length,
-            error: message,
-          },
-        );
+        console.warn("[writeQuotesForTicker] enrichQuoteRows failed; skipping batch", {
+          underlying,
+          date,
+          ticker,
+          rows: rows.length,
+          error: message,
+        });
         skipped.push({
           underlying,
           date,
@@ -937,7 +953,12 @@ export class MarketIngestor {
     for (const underlying of opts.underlyings) {
       const upperUnderlying = underlying.toUpperCase();
       const assetClass = this.detectAssetClass(upperUnderlying);
-      const unsupported = this.preflightProviderSupport(provider, "chain", upperUnderlying, assetClass);
+      const unsupported = this.preflightProviderSupport(
+        provider,
+        "chain",
+        upperUnderlying,
+        assetClass,
+      );
       if (unsupported) return unsupported;
       // Enumerate trading dates in [from, to] and fetch the chain as-of each date.
       const dates = this.enumerateDates(opts.from, opts.to);
@@ -950,7 +971,13 @@ export class MarketIngestor {
             expired: true,
           });
         } catch (error) {
-          const mapped = this.mapProviderFailure(provider, "chain", upperUnderlying, error, assetClass);
+          const mapped = this.mapProviderFailure(
+            provider,
+            "chain",
+            upperUnderlying,
+            error,
+            assetClass,
+          );
           if (mapped) return mapped;
           throw error;
         }
@@ -1119,43 +1146,75 @@ export class MarketIngestor {
         case "spot_bars": {
           const ticker = opts.partition.ticker;
           if (!ticker) {
-            return { status: "error", rowsWritten: 0, error: "partition.ticker is required for datasetType='spot_bars'" };
+            return {
+              status: "error",
+              rowsWritten: 0,
+              error: "partition.ticker is required for datasetType='spot_bars'",
+            };
           }
           const { rowCount } = await this.deps.stores.spot.writeFromSelect(
             { ticker: ticker.toUpperCase(), date: partitionDate },
             opts.selectSql,
           );
-          return { status: "ok", rowsWritten: rowCount, dateRange: { from: partitionDate, to: partitionDate } };
+          return {
+            status: "ok",
+            rowsWritten: rowCount,
+            dateRange: { from: partitionDate, to: partitionDate },
+          };
         }
         case "option_quotes": {
           const underlying = opts.partition.underlying;
           if (!underlying) {
-            return { status: "error", rowsWritten: 0, error: "partition.underlying is required for datasetType='option_quotes'" };
+            return {
+              status: "error",
+              rowsWritten: 0,
+              error: "partition.underlying is required for datasetType='option_quotes'",
+            };
           }
           const { rowCount } = await this.deps.stores.quote.writeFromSelect(
             { underlying: underlying.toUpperCase(), date: partitionDate },
             opts.selectSql,
           );
-          return { status: "ok", rowsWritten: rowCount, dateRange: { from: partitionDate, to: partitionDate } };
+          return {
+            status: "ok",
+            rowsWritten: rowCount,
+            dateRange: { from: partitionDate, to: partitionDate },
+          };
         }
         case "option_chain": {
           const underlying = opts.partition.underlying;
           if (!underlying) {
-            return { status: "error", rowsWritten: 0, error: "partition.underlying is required for datasetType='option_chain'" };
+            return {
+              status: "error",
+              rowsWritten: 0,
+              error: "partition.underlying is required for datasetType='option_chain'",
+            };
           }
           const { rowCount } = await this.deps.stores.chain.writeFromSelect(
             { underlying: underlying.toUpperCase(), date: partitionDate },
             opts.selectSql,
           );
-          return { status: "ok", rowsWritten: rowCount, dateRange: { from: partitionDate, to: partitionDate } };
+          return {
+            status: "ok",
+            rowsWritten: rowCount,
+            dateRange: { from: partitionDate, to: partitionDate },
+          };
         }
         default: {
           const _exhaustive: never = opts.datasetType;
-          return { status: "error", rowsWritten: 0, error: `Unknown datasetType: ${String(_exhaustive)}` };
+          return {
+            status: "error",
+            rowsWritten: 0,
+            error: `Unknown datasetType: ${String(_exhaustive)}`,
+          };
         }
       }
     } catch (err) {
-      return { status: "error", rowsWritten: 0, error: err instanceof Error ? err.message : String(err) };
+      return {
+        status: "error",
+        rowsWritten: 0,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
   }
 
@@ -1271,13 +1330,21 @@ export class MarketIngestor {
     }
 
     // Coverage report — shallow summary per ticker
-    const coverage: Record<string, { totalDates: number; dateRange?: { from: string; to: string } }> = {};
+    const coverage: Record<
+      string,
+      { totalDates: number; dateRange?: { from: string; to: string } }
+    > = {};
     for (const ticker of opts.spotTickers) {
       try {
-        const cov = await this.deps.stores.spot.getCoverage(ticker.toUpperCase(), opts.asOf, opts.asOf);
+        const cov = await this.deps.stores.spot.getCoverage(
+          ticker.toUpperCase(),
+          opts.asOf,
+          opts.asOf,
+        );
         coverage[ticker] = {
           totalDates: cov.totalDates,
-          dateRange: cov.earliest && cov.latest ? { from: cov.earliest, to: cov.latest } : undefined,
+          dateRange:
+            cov.earliest && cov.latest ? { from: cov.earliest, to: cov.latest } : undefined,
         };
       } catch {
         coverage[ticker] = { totalDates: 0 };
@@ -1304,7 +1371,13 @@ export class MarketIngestor {
 
     return {
       status,
-      perOperation: { spot: spotResults, chain: chainResults, quotes: quoteResults, openInterest: openInterestResults, vixContext },
+      perOperation: {
+        spot: spotResults,
+        chain: chainResults,
+        quotes: quoteResults,
+        openInterest: openInterestResults,
+        vixContext,
+      },
       coverage,
       errors,
       ...(aggregateSkipped.length > 0 ? { skipped: aggregateSkipped } : {}),

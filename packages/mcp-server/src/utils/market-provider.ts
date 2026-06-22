@@ -18,16 +18,16 @@ import { ThetaDataProvider } from "./providers/thetadata.ts";
 
 /** Normalized OHLCV bar — shared output type for all providers. */
 export interface BarRow {
-  date: string;      // "YYYY-MM-DD" Eastern Time
+  date: string; // "YYYY-MM-DD" Eastern Time
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
-  ticker: string;    // Plain storage format (no prefix)
-  time?: string;     // "HH:MM" ET — only set for intraday (minute/hour) bars
-  bid?: number;      // Best bid — only set when provider supplies quote data
-  ask?: number;      // Best ask — only set when provider supplies quote data
+  ticker: string; // Plain storage format (no prefix)
+  time?: string; // "HH:MM" ET — only set for intraday (minute/hour) bars
+  bid?: number; // Best bid — only set when provider supplies quote data
+  ask?: number; // Best ask — only set when provider supplies quote data
 }
 
 /** Asset classes supported by market data providers. */
@@ -56,7 +56,7 @@ export interface OptionContract {
   underlying_price: number;
   contract_type: "call" | "put";
   strike: number;
-  expiration: string;        // "YYYY-MM-DD"
+  expiration: string; // "YYYY-MM-DD"
   exercise_style: string;
   delta: number | null;
   gamma: number | null;
@@ -93,19 +93,19 @@ export interface FetchSnapshotResult {
 /** Options for fetching historical option contract metadata (reference endpoint). */
 export interface FetchContractListOptions {
   underlying: string;
-  as_of: string;           // "YYYY-MM-DD" -- historical date
-  expired?: boolean;       // default true for historical contract lookup
-  expiration_date_gte?: string;  // Only contracts expiring on or after this date
-  expiration_date_lte?: string;  // Only contracts expiring on or before this date
+  as_of: string; // "YYYY-MM-DD" -- historical date
+  expired?: boolean; // default true for historical contract lookup
+  expiration_date_gte?: string; // Only contracts expiring on or after this date
+  expiration_date_lte?: string; // Only contracts expiring on or before this date
 }
 
 /** Single contract reference record (no greeks/pricing -- metadata only). */
 export interface ContractReference {
-  ticker: string;          // OCC ticker without O: prefix
+  ticker: string; // OCC ticker without O: prefix
   contract_type: "call" | "put";
   strike: number;
-  expiration: string;      // "YYYY-MM-DD"
-  exercise_style: string;  // "american" | "european"
+  expiration: string; // "YYYY-MM-DD"
+  exercise_style: string; // "american" | "european"
 }
 
 /** Result from contract list reference endpoint. */
@@ -147,7 +147,7 @@ export interface DataAvailability {
 
 /** Declares what data endpoints a provider supports. Used by the pipeline to build fetch plans. */
 export interface ProviderCapabilities {
-  tradeBars: boolean;       // minute OHLC from trade aggregates
+  tradeBars: boolean; // minute OHLC from trade aggregates
   /**
    * Strictly: "true NBBO bid/ask is available via this provider's dedicated
    * quotes endpoint". Use this when you specifically need real bid/ask spreads.
@@ -160,12 +160,12 @@ export interface ProviderCapabilities {
    * 'synth_close') for per-row provenance.
    */
   quotes: boolean;
-  greeks: boolean;          // provider-computed greeks on contracts
-  flatFiles: boolean;       // bulk S3/file download of historical data
-  bulkByRoot: boolean;      // provider has an every-contract path for an underlying/root
-  perTicker: boolean;       // one call per OCC ticker (Massive/Polygon pattern)
-  minuteBars: boolean;      // minute-level resolution available
-  dailyBars: boolean;       // daily-level resolution available
+  greeks: boolean; // provider-computed greeks on contracts
+  flatFiles: boolean; // bulk S3/file download of historical data
+  bulkByRoot: boolean; // provider has an every-contract path for an underlying/root
+  perTicker: boolean; // one call per OCC ticker (Massive/Polygon pattern)
+  minuteBars: boolean; // minute-level resolution available
+  dailyBars: boolean; // daily-level resolution available
   /** Earliest available data per asset class. Used by download tools and data pipelines to avoid requesting data that doesn't exist. */
   dataAvailability?: {
     option?: DataAvailability;
@@ -342,9 +342,7 @@ export function getProvider(): MarketDataProvider {
       _cached = new ThetaDataProvider();
       break;
     default:
-      throw new Error(
-        `Unknown MARKET_DATA_PROVIDER: "${name}". Supported: massive, thetadata`
-      );
+      throw new Error(`Unknown MARKET_DATA_PROVIDER: "${name}". Supported: massive, thetadata`);
   }
   return _cached!;
 }

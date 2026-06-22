@@ -117,8 +117,7 @@ export async function calibrateProviderFetch(
     }
   }
 
-  const avgCloseDelta =
-    deltas.length > 0 ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
+  const avgCloseDelta = deltas.length > 0 ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
   const maxCloseDelta = deltas.length > 0 ? Math.max(...deltas) : 0;
   return { avgCloseDelta, maxCloseDelta, dateResults };
 }

@@ -38,9 +38,7 @@ jest.unstable_mockModule("../../../src/sync/index.ts", () => ({
 
 // Dynamic import AFTER mocks are registered. Use top-level await (Node 18+/ESM) —
 // the Jest runner tolerates this because testMatch files are loaded as ESM.
-const { withFullSync } = await import(
-  "../../../src/tools/middleware/sync-middleware.ts"
-);
+const { withFullSync } = await import("../../../src/tools/middleware/sync-middleware.ts");
 
 // Shared fixture — a non-empty SyncResult from syncAllBlocks.
 const NORMAL_SYNC_RESULT = {
@@ -112,9 +110,7 @@ describe("withFullSync — retry + loud fallback (260421-j1b)", () => {
     jest.useFakeTimers();
 
     // First call → read_only, second call → read_write
-    getConnectionMode
-      .mockReturnValueOnce("read_only")
-      .mockReturnValueOnce("read_write");
+    getConnectionMode.mockReturnValueOnce("read_only").mockReturnValueOnce("read_write");
     syncAllBlocks.mockResolvedValue({ ...NORMAL_SYNC_RESULT });
 
     const handler = jest.fn(async (_input: unknown, ctx: { blockSyncResult: unknown }) => ctx);

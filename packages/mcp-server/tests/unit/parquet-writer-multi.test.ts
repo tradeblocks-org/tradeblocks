@@ -41,8 +41,16 @@ describe("writeParquetPartition (multi-level)", () => {
   });
 
   afterEach(() => {
-    try { conn.closeSync(); } catch { /* ignore */ }
-    try { db.closeSync(); } catch { /* ignore */ }
+    try {
+      conn.closeSync();
+    } catch {
+      /* ignore */
+    }
+    try {
+      db.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(tmpDir, { recursive: true, force: true });
   });
 

@@ -85,7 +85,7 @@ function requireDate(value, name) {
 }
 
 function requireRoots(value) {
-  if (!value) die("--roots is required (e.g. --roots \"SPXW SPX\")");
+  if (!value) die('--roots is required (e.g. --roots "SPXW SPX")');
   const roots = String(value)
     .split(/[\s,]+/)
     .map((r) => r.trim().toUpperCase())
@@ -178,7 +178,9 @@ async function main() {
     : resolve(process.cwd(), `oi-backfill-${ts}.log`);
   const logger = makeLogger(logfile);
 
-  logger.log(`START roots=${roots.join(",")} window=${start}..${end} chunkDays=${chunkDays} storeRoot=${storeRoot} logfile=${logfile}`);
+  logger.log(
+    `START roots=${roots.join(",")} window=${start}..${end} chunkDays=${chunkDays} storeRoot=${storeRoot} logfile=${logfile}`,
+  );
 
   const mod = await import(DIST);
   const {
@@ -193,7 +195,13 @@ async function main() {
   const marketDir = resolveMarketDir(storeRoot);
 
   function partitionFile(underlying, date) {
-    return join(marketDir, "option_oi_daily", `underlying=${underlying}`, `date=${date}`, "data.parquet");
+    return join(
+      marketDir,
+      "option_oi_daily",
+      `underlying=${underlying}`,
+      `date=${date}`,
+      "data.parquet",
+    );
   }
 
   // One :memory: DuckDB instance with external access for COPY ... TO parquet.
@@ -209,10 +217,14 @@ async function main() {
 
   const client = new ThetaMddsClient();
   await client.connect();
-  logger.log(`CONNECT authenticated session acquired target=${process.env.THETADATA_MDDS_HOST}:${process.env.THETADATA_MDDS_PORT}`);
+  logger.log(
+    `CONNECT authenticated session acquired target=${process.env.THETADATA_MDDS_HOST}:${process.env.THETADATA_MDDS_PORT}`,
+  );
 
   const startedAt = Date.now();
-  const perRoot = new Map(roots.map((r) => [r, { rows: 0, written: 0, skippedChunks: 0, failedChunks: 0 }]));
+  const perRoot = new Map(
+    roots.map((r) => [r, { rows: 0, written: 0, skippedChunks: 0, failedChunks: 0 }]),
+  );
   let cumulativeRows = 0;
   const failedChunkList = [];
 
@@ -262,7 +274,9 @@ async function main() {
               logger.log(`[${root}] ${chunk.from}..${chunk.to} ERROR session-collision: ${msg}`);
               await logger.close();
               client.close();
-              console.error("ERROR Invalid session ID / UNAUTHENTICATED — single account session collided with the running terminal. STOPPING (no retry).");
+              console.error(
+                "ERROR Invalid session ID / UNAUTHENTICATED — single account session collided with the running terminal. STOPPING (no retry).",
+              );
               process.exit(2);
             }
             if (NOT_FOUND_RE.test(msg)) {
@@ -271,7 +285,9 @@ async function main() {
             }
             lastError = error;
             if (!TRANSIENT_RE.test(msg) || attempt === MAX_CHUNK_ATTEMPTS) break;
-            logger.log(`[${root}] ${chunk.from}..${chunk.to} RETRY attempt=${attempt} transient: ${msg}`);
+            logger.log(
+              `[${root}] ${chunk.from}..${chunk.to} RETRY attempt=${attempt} transient: ${msg}`,
+            );
             await sleep(RETRY_BASE_MS * attempt);
           }
         }
@@ -280,7 +296,9 @@ async function main() {
           const msg = lastError instanceof Error ? lastError.message : String(lastError);
           rootStats.failedChunks += 1;
           failedChunkList.push({ root, from: chunk.from, to: chunk.to, error: msg });
-          logger.log(`[${root}] ${chunk.from}..${chunk.to} ERROR fetch failed after ${MAX_CHUNK_ATTEMPTS} attempts: ${msg}`);
+          logger.log(
+            `[${root}] ${chunk.from}..${chunk.to} ERROR fetch failed after ${MAX_CHUNK_ATTEMPTS} attempts: ${msg}`,
+          );
           continue;
         }
 
@@ -333,32 +351,52 @@ async function main() {
         rootStats.rows += oiRows.length;
         rootStats.written += written;
         cumulativeRows += oiRows.length;
-        logger.log(`[${root}] ${chunk.from}..${chunk.to} rows=${oiRows.length} wall=${wall}s cumulative=${cumulativeRows}/${elapsed}s`);
+        logger.log(
+          `[${root}] ${chunk.from}..${chunk.to} rows=${oiRows.length} wall=${wall}s cumulative=${cumulativeRows}/${elapsed}s`,
+        );
       }
 
-      logger.log(`DONE ${root} rows=${rootStats.rows} written=${rootStats.written} skippedChunks=${rootStats.skippedChunks} failedChunks=${rootStats.failedChunks}`);
+      logger.log(
+        `DONE ${root} rows=${rootStats.rows} written=${rootStats.written} skippedChunks=${rootStats.skippedChunks} failedChunks=${rootStats.failedChunks}`,
+      );
     }
   } finally {
     client.close();
-    try { conn.closeSync(); } catch { /* non-fatal */ }
-    try { instance.closeSync(); } catch { /* non-fatal */ }
+    try {
+      conn.closeSync();
+    } catch {
+      /* non-fatal */
+    }
+    try {
+      instance.closeSync();
+    } catch {
+      /* non-fatal */
+    }
   }
 
   const totalWall = ((Date.now() - startedAt) / 1000).toFixed(1);
   logger.log("SUMMARY ----------------------------------------");
   for (const [root, s] of perRoot) {
-    logger.log(`SUMMARY [${root}] rows=${s.rows} written=${s.written} skippedChunks=${s.skippedChunks} failedChunks=${s.failedChunks}`);
+    logger.log(
+      `SUMMARY [${root}] rows=${s.rows} written=${s.written} skippedChunks=${s.skippedChunks} failedChunks=${s.failedChunks}`,
+    );
   }
-  logger.log(`SUMMARY totalRows=${cumulativeRows} wall=${totalWall}s failedChunks=${failedChunkList.length}`);
+  logger.log(
+    `SUMMARY totalRows=${cumulativeRows} wall=${totalWall}s failedChunks=${failedChunkList.length}`,
+  );
   for (const f of failedChunkList) {
     logger.log(`SUMMARY FAILED-CHUNK [${f.root}] ${f.from}..${f.to} ${f.error}`);
   }
-  logger.log(failedChunkList.length === 0 ? "DONE ALL" : `DONE WITH FAILURES (${failedChunkList.length} chunks)`);
+  logger.log(
+    failedChunkList.length === 0
+      ? "DONE ALL"
+      : `DONE WITH FAILURES (${failedChunkList.length} chunks)`,
+  );
   await logger.close();
   process.exitCode = failedChunkList.length === 0 ? 0 : 1;
 }
 
 main().catch((error) => {
-  console.error("ERROR", error instanceof Error ? (error.stack || error.message) : String(error));
+  console.error("ERROR", error instanceof Error ? error.stack || error.message : String(error));
   process.exitCode = 1;
 });

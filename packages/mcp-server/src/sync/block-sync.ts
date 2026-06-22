@@ -38,7 +38,10 @@ export interface BlockSyncResult {
  */
 function parseCSV(content: string): Record<string, string>[] {
   // Strip UTF-8 BOM if present (common in Windows/Excel CSV exports)
-  const lines = content.replace(/^\uFEFF/, "").trim().split("\n");
+  const lines = content
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .split("\n");
   if (lines.length < 2) return [];
 
   const headers = parseCSVLine(lines[0]);
@@ -118,11 +121,7 @@ function normalizeCsvDate(value: string | undefined): string | null {
   }
 
   const dt = new Date(Date.UTC(year, month - 1, day));
-  if (
-    dt.getUTCFullYear() !== year ||
-    dt.getUTCMonth() + 1 !== month ||
-    dt.getUTCDate() !== day
-  ) {
+  if (dt.getUTCFullYear() !== year || dt.getUTCMonth() + 1 !== month || dt.getUTCDate() !== day) {
     return raw;
   }
 
@@ -137,9 +136,7 @@ function normalizeCsvDate(value: string | undefined): string | null {
  * Find the tradelog CSV file for a block using header-sniffing discovery.
  * No longer reads block.json — uses discoverCsvFiles from csv-discovery.ts.
  */
-async function findTradelogFile(
-  blockPath: string
-): Promise<string | null> {
+async function findTradelogFile(blockPath: string): Promise<string | null> {
   const { mappings } = await discoverCsvFiles(blockPath);
   return mappings.tradelog || null;
 }
@@ -149,7 +146,7 @@ async function findTradelogFile(
  * No longer reads block.json — uses discoverCsvFiles from csv-discovery.ts.
  */
 async function findOptionalLogFiles(
-  blockPath: string
+  blockPath: string,
 ): Promise<{ dailylog: string | null; reportinglog: string | null }> {
   const { mappings } = await discoverCsvFiles(blockPath);
   return {
@@ -174,7 +171,7 @@ async function insertTradeBatch(
   blockId: string,
   records: Record<string, string>[],
   startIdx: number,
-  batchSize: number
+  batchSize: number,
 ): Promise<void> {
   const batch = records.slice(startIdx, startIdx + batchSize);
   if (batch.length === 0) return;
@@ -188,10 +185,7 @@ async function insertTradeBatch(
   for (let rowIdx = 0; rowIdx < batch.length; rowIdx++) {
     const record = batch[rowIdx];
     const baseParam = rowIdx * columnsPerRow + 1;
-    const rowPlaceholders = Array.from(
-      { length: columnsPerRow },
-      (_, i) => `$${baseParam + i}`
-    );
+    const rowPlaceholders = Array.from({ length: columnsPerRow }, (_, i) => `$${baseParam + i}`);
     placeholders.push(`(${rowPlaceholders.join(", ")})`);
 
     // Parse numeric values safely
@@ -219,7 +213,7 @@ async function insertTradeBatch(
       isNaN(marginReq) ? null : marginReq, // margin_req
       isNaN(openingCommissions) ? 0 : openingCommissions, // opening_commissions
       isNaN(closingCommissions) ? 0 : closingCommissions, // closing_commissions
-      ticker // ticker
+      ticker, // ticker
     );
   }
 
@@ -264,7 +258,7 @@ async function insertReportingBatch(
   trades: ReportingTrade[],
   tickers: string[],
   startIdx: number,
-  batchSize: number
+  batchSize: number,
 ): Promise<void> {
   const batch = trades.slice(startIdx, startIdx + batchSize);
   const batchTickers = tickers.slice(startIdx, startIdx + batchSize);
@@ -278,10 +272,7 @@ async function insertReportingBatch(
   for (let rowIdx = 0; rowIdx < batch.length; rowIdx++) {
     const trade = batch[rowIdx];
     const baseParam = rowIdx * columnsPerRow + 1;
-    const rowPlaceholders = Array.from(
-      { length: columnsPerRow },
-      (_, i) => `$${baseParam + i}`
-    );
+    const rowPlaceholders = Array.from({ length: columnsPerRow }, (_, i) => `$${baseParam + i}`);
     placeholders.push(`(${rowPlaceholders.join(", ")})`);
 
     params.push(
@@ -299,7 +290,7 @@ async function insertReportingBatch(
       trade.avgClosingCost ?? null,
       trade.reasonForClose || null,
       trade.openingPrice ?? null,
-      batchTickers[rowIdx]
+      batchTickers[rowIdx],
     );
   }
 
@@ -347,7 +338,7 @@ function versionedHash(hash: string): string {
 export async function syncBlockInternal(
   conn: DuckDBConnection,
   blockId: string,
-  blockPath: string
+  blockPath: string,
 ): Promise<BlockSyncResult> {
   const blocksDir = path.dirname(blockPath);
   try {
@@ -361,14 +352,8 @@ export async function syncBlockInternal(
       if (existingMetadata) {
         await conn.run("BEGIN TRANSACTION");
         try {
-          await conn.run(
-            "DELETE FROM trades.trade_data WHERE block_id = $1",
-            [blockId]
-          );
-          await conn.run(
-            "DELETE FROM trades.reporting_data WHERE block_id = $1",
-            [blockId]
-          );
+          await conn.run("DELETE FROM trades.trade_data WHERE block_id = $1", [blockId]);
+          await conn.run("DELETE FROM trades.reporting_data WHERE block_id = $1", [blockId]);
           await deleteSyncMetadata(conn, blockId, blocksDir);
           await conn.run("COMMIT");
           return { blockId, status: "deleted" };
@@ -419,10 +404,7 @@ export async function syncBlockInternal(
 
     try {
       // Delete old trade data for this block
-      await conn.run(
-        "DELETE FROM trades.trade_data WHERE block_id = $1",
-        [blockId]
-      );
+      await conn.run("DELETE FROM trades.trade_data WHERE block_id = $1", [blockId]);
 
       // Read and parse CSV
       const csvContent = await fs.readFile(tradelogPath, "utf-8");
@@ -441,9 +423,9 @@ export async function syncBlockInternal(
 
       if (optionalLogs.dailylog) {
         try {
-          dailylogHash = versionedHash(await hashFileContent(
-            path.join(blockPath, optionalLogs.dailylog)
-          ));
+          dailylogHash = versionedHash(
+            await hashFileContent(path.join(blockPath, optionalLogs.dailylog)),
+          );
         } catch {
           // Dailylog file can't be read, leave hash null
         }
@@ -451,9 +433,9 @@ export async function syncBlockInternal(
 
       if (optionalLogs.reportinglog) {
         try {
-          reportinglogHash = versionedHash(await hashFileContent(
-            path.join(blockPath, optionalLogs.reportinglog)
-          ));
+          reportinglogHash = versionedHash(
+            await hashFileContent(path.join(blockPath, optionalLogs.reportinglog)),
+          );
         } catch {
           // Reportinglog file can't be read, leave hash null
         }
@@ -461,10 +443,7 @@ export async function syncBlockInternal(
 
       // Sync reporting log if it exists and has changed
       // Always delete old reporting data for this block (same pattern as trade_data)
-      await conn.run(
-        "DELETE FROM trades.reporting_data WHERE block_id = $1",
-        [blockId]
-      );
+      await conn.run("DELETE FROM trades.reporting_data WHERE block_id = $1", [blockId]);
 
       if (optionalLogs.reportinglog && reportinglogHash) {
         // Read and parse reporting CSV, then convert to ReportingTrade objects.
@@ -485,7 +464,14 @@ export async function syncBlockInternal(
 
         // Insert reporting trades in batches of 500
         for (let i = 0; i < reportingTrades.length; i += batchSize) {
-          await insertReportingBatch(conn, blockId, reportingTrades, reportingTickers, i, batchSize);
+          await insertReportingBatch(
+            conn,
+            blockId,
+            reportingTrades,
+            reportingTickers,
+            i,
+            batchSize,
+          );
         }
       }
 
@@ -517,14 +503,8 @@ export async function syncBlockInternal(
       if (existingMetadata) {
         try {
           await conn.run("BEGIN TRANSACTION");
-          await conn.run(
-            "DELETE FROM trades.trade_data WHERE block_id = $1",
-            [blockId]
-          );
-          await conn.run(
-            "DELETE FROM trades.reporting_data WHERE block_id = $1",
-            [blockId]
-          );
+          await conn.run("DELETE FROM trades.trade_data WHERE block_id = $1", [blockId]);
+          await conn.run("DELETE FROM trades.reporting_data WHERE block_id = $1", [blockId]);
           await deleteSyncMetadata(conn, blockId, blocksDir);
           await conn.run("COMMIT");
         } catch {
@@ -562,7 +542,7 @@ export async function syncBlockInternal(
  */
 export async function detectBlockChanges(
   conn: DuckDBConnection,
-  baseDir: string
+  baseDir: string,
 ): Promise<{ toSync: string[]; toDelete: string[] }> {
   const toSync: string[] = [];
   const toDelete: string[] = [];
@@ -577,7 +557,12 @@ export async function detectBlockChanges(
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     if (entry.name.startsWith(".") || entry.name.startsWith("_")) continue; // Skip hidden/internal folders
-    if (entry.name.endsWith(".tmp") || entry.name.endsWith(".duckdb") || entry.name.endsWith(".duckdb.tmp")) continue; // Skip DuckDB/temp files
+    if (
+      entry.name.endsWith(".tmp") ||
+      entry.name.endsWith(".duckdb") ||
+      entry.name.endsWith(".duckdb.tmp")
+    )
+      continue; // Skip DuckDB/temp files
 
     const blockId = entry.name;
     folderNames.add(blockId);
@@ -651,19 +636,13 @@ export async function detectBlockChanges(
 export async function cleanupDeletedBlocks(
   conn: DuckDBConnection,
   deletedBlockIds: string[],
-  blocksDir?: string
+  blocksDir?: string,
 ): Promise<void> {
   for (const blockId of deletedBlockIds) {
     await conn.run("BEGIN TRANSACTION");
     try {
-      await conn.run(
-        "DELETE FROM trades.trade_data WHERE block_id = $1",
-        [blockId]
-      );
-      await conn.run(
-        "DELETE FROM trades.reporting_data WHERE block_id = $1",
-        [blockId]
-      );
+      await conn.run("DELETE FROM trades.trade_data WHERE block_id = $1", [blockId]);
+      await conn.run("DELETE FROM trades.reporting_data WHERE block_id = $1", [blockId]);
       await deleteSyncMetadata(conn, blockId, blocksDir);
       await conn.run("COMMIT");
     } catch (err) {

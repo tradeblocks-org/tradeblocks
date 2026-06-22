@@ -70,7 +70,7 @@ function profilePath(blockId: string, strategyName: string, blocksDir: string): 
  */
 export async function upsertProfileJson(
   profile: Omit<StrategyProfile, "createdAt" | "updatedAt">,
-  blocksDir: string
+  blocksDir: string,
 ): Promise<StrategyProfile> {
   const filePath = profilePath(profile.blockId, profile.strategyName, blocksDir);
   const now = new Date();
@@ -97,7 +97,7 @@ export async function upsertProfileJson(
 export async function getProfileJson(
   blockId: string,
   strategyName: string,
-  blocksDir: string
+  blocksDir: string,
 ): Promise<StrategyProfile | null> {
   const filePath = profilePath(blockId, strategyName, blocksDir);
   const json = await readJsonFile<ProfileJson>(filePath);
@@ -113,7 +113,7 @@ export async function getProfileJson(
  */
 export async function listProfilesJson(
   blocksDir: string,
-  blockId?: string
+  blockId?: string,
 ): Promise<StrategyProfile[]> {
   if (blockId) {
     const profileDir = path.join(blocksDir, blockId, "profiles");
@@ -151,7 +151,7 @@ export async function listProfilesJson(
 export async function deleteProfileJson(
   blockId: string,
   strategyName: string,
-  blocksDir: string
+  blocksDir: string,
 ): Promise<boolean> {
   const filePath = profilePath(blockId, strategyName, blocksDir);
   return deleteJsonFile(filePath);
@@ -195,7 +195,7 @@ function syncMetaPath(blockId: string, blocksDir: string): string {
  */
 export async function getSyncMetadataJson(
   blockId: string,
-  blocksDir: string
+  blocksDir: string,
 ): Promise<BlockSyncMetadata | null> {
   const filePath = syncMetaPath(blockId, blocksDir);
   const json = await readJsonFile<SyncMetadataJson>(filePath);
@@ -207,7 +207,7 @@ export async function getSyncMetadataJson(
  */
 export async function upsertSyncMetadataJson(
   metadata: BlockSyncMetadata,
-  blocksDir: string
+  blocksDir: string,
 ): Promise<void> {
   const filePath = syncMetaPath(metadata.block_id, blocksDir);
   await writeJsonFile(filePath, syncMetaToJson(metadata));
@@ -218,10 +218,7 @@ export async function upsertSyncMetadataJson(
  *
  * @returns true if deleted, false if not found
  */
-export async function deleteSyncMetadataJson(
-  blockId: string,
-  blocksDir: string
-): Promise<boolean> {
+export async function deleteSyncMetadataJson(blockId: string, blocksDir: string): Promise<boolean> {
   const filePath = syncMetaPath(blockId, blocksDir);
   return deleteJsonFile(filePath);
 }
@@ -231,9 +228,7 @@ export async function deleteSyncMetadataJson(
  *
  * @returns Array of block IDs that have sync metadata
  */
-export async function getAllSyncedBlockIdsJson(
-  blocksDir: string
-): Promise<string[]> {
+export async function getAllSyncedBlockIdsJson(blocksDir: string): Promise<string[]> {
   let entries: import("fs").Dirent[];
   try {
     entries = await fs.readdir(blocksDir, { withFileTypes: true });
@@ -287,7 +282,7 @@ export async function getMarketImportMetadataJson(
   source: string,
   ticker: string,
   targetTable: string,
-  dataDir: string
+  dataDir: string,
 ): Promise<MarketImportMetadata | null> {
   const filePath = marketMetaFilePath(dataDir);
   const file = await readJsonFile<MarketSyncMetadataFile>(filePath);
@@ -309,10 +304,10 @@ export async function getMarketImportMetadataJson(
  */
 export async function upsertMarketImportMetadataJson(
   metadata: MarketImportMetadata,
-  dataDir: string
+  dataDir: string,
 ): Promise<void> {
   const filePath = marketMetaFilePath(dataDir);
-  const file = await readJsonFile<MarketSyncMetadataFile>(filePath) ?? { entries: {} };
+  const file = (await readJsonFile<MarketSyncMetadataFile>(filePath)) ?? { entries: {} };
 
   const key = marketMetaKey(metadata.source, metadata.ticker, metadata.target_table);
   file.entries[key] = {
@@ -362,7 +357,7 @@ export async function getFlatImportLogJson(
   underlying: string,
   from: string,
   to: string,
-  dataDir: string
+  dataDir: string,
 ): Promise<Set<string>> {
   const filePath = flatLogFilePath(dataDir);
   const file = await readJsonFile<FlatImportLogFile>(filePath);
@@ -388,13 +383,13 @@ export async function getFlatImportLogJson(
  */
 export async function upsertFlatImportLogJson(
   entry: FlatImportLogEntry,
-  dataDir: string
+  dataDir: string,
 ): Promise<void> {
   const filePath = flatLogFilePath(dataDir);
-  const file = await readJsonFile<FlatImportLogFile>(filePath) ?? { entries: [] };
+  const file = (await readJsonFile<FlatImportLogFile>(filePath)) ?? { entries: [] };
 
   const key = flatLogKey(entry);
-  const idx = file.entries.findIndex(e => flatLogKey(e) === key);
+  const idx = file.entries.findIndex((e) => flatLogKey(e) === key);
   if (idx >= 0) {
     file.entries[idx] = entry;
   } else {
@@ -430,7 +425,10 @@ const TickerEntrySchema = z
   .object({
     // ISO calendar date `YYYY-MM-DD` or null when the ticker has been
     // registered but not yet enriched through any date.
-    enriched_through: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    enriched_through: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
   })
   // Passthrough keeps forward compatibility — fields like `wilder_state` added
   // by future phases survive load/upsert round-trips without schema changes.
@@ -458,16 +456,12 @@ function watermarksFilePath(dataDir: string): string {
  * clear error; we never silently reset to empty, which would lose data
  * invisibly.
  */
-export async function loadEnrichmentWatermarks(
-  dataDir: string,
-): Promise<EnrichmentWatermarks> {
+export async function loadEnrichmentWatermarks(dataDir: string): Promise<EnrichmentWatermarks> {
   const raw = await readJsonFile<unknown>(watermarksFilePath(dataDir));
   if (raw === null) return { version: 1, watermarks: {} };
   const parsed = EnrichmentWatermarksSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new Error(
-      `enrichment-watermarks.json is malformed: ${parsed.error.message}`,
-    );
+    throw new Error(`enrichment-watermarks.json is malformed: ${parsed.error.message}`);
   }
   return parsed.data;
 }
@@ -479,10 +473,7 @@ export async function loadEnrichmentWatermarks(
  * same (most common case) can use the value directly; callers that need to
  * distinguish can read the raw file via `loadEnrichmentWatermarks`.
  */
-export async function getEnrichedThrough(
-  ticker: string,
-  dataDir: string,
-): Promise<string | null> {
+export async function getEnrichedThrough(ticker: string, dataDir: string): Promise<string | null> {
   const { watermarks } = await loadEnrichmentWatermarks(dataDir);
   return watermarks[ticker]?.enriched_through ?? null;
 }

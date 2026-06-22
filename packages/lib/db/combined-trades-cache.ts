@@ -38,7 +38,7 @@ function getCacheId(blockId: string): string {
  */
 export async function storeCombinedTradesCache(
   blockId: string,
-  combinedTrades: CombinedTrade[]
+  combinedTrades: CombinedTrade[],
 ): Promise<void> {
   const cacheEntry: CombinedTradesCache = {
     id: getCacheId(blockId),
@@ -59,9 +59,7 @@ export async function storeCombinedTradesCache(
  * Get cached combined trades for a block
  * Returns null if cache doesn't exist
  */
-export async function getCombinedTradesCache(
-  blockId: string
-): Promise<CombinedTrade[] | null> {
+export async function getCombinedTradesCache(blockId: string): Promise<CombinedTrade[] | null> {
   return withReadTransaction(STORES.CALCULATIONS, async (transaction) => {
     const store = transaction.objectStore(STORES.CALCULATIONS);
     const cacheId = getCacheId(blockId);
@@ -85,9 +83,7 @@ export async function getCombinedTradesCache(
 /**
  * Delete cached combined trades for a block
  */
-export async function deleteCombinedTradesCache(
-  blockId: string
-): Promise<void> {
+export async function deleteCombinedTradesCache(blockId: string): Promise<void> {
   await withWriteTransaction(STORES.CALCULATIONS, async (transaction) => {
     const store = transaction.objectStore(STORES.CALCULATIONS);
     const cacheId = getCacheId(blockId);
@@ -103,9 +99,7 @@ export async function deleteCombinedTradesCache(
 /**
  * Check if combined trades cache exists for a block
  */
-export async function hasCombinedTradesCache(
-  blockId: string
-): Promise<boolean> {
+export async function hasCombinedTradesCache(blockId: string): Promise<boolean> {
   return withReadTransaction(STORES.CALCULATIONS, async (transaction) => {
     const store = transaction.objectStore(STORES.CALCULATIONS);
     const cacheId = getCacheId(blockId);

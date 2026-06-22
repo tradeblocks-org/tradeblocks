@@ -9,12 +9,7 @@
  */
 
 import type { EnrichedTrade } from "../models/enriched-trade.ts";
-import {
-  promisifyRequest,
-  STORES,
-  withReadTransaction,
-  withWriteTransaction,
-} from "./index.ts";
+import { promisifyRequest, STORES, withReadTransaction, withWriteTransaction } from "./index.ts";
 
 /**
  * Cache entry for enriched trades
@@ -40,7 +35,7 @@ function getCacheId(blockId: string): string {
  */
 export async function storeEnrichedTradesCache(
   blockId: string,
-  enrichedTrades: EnrichedTrade[]
+  enrichedTrades: EnrichedTrade[],
 ): Promise<void> {
   const cacheEntry: EnrichedTradesCache = {
     id: getCacheId(blockId),
@@ -61,9 +56,7 @@ export async function storeEnrichedTradesCache(
  * Get cached enriched trades for a block
  * Returns null if cache doesn't exist
  */
-export async function getEnrichedTradesCache(
-  blockId: string
-): Promise<EnrichedTrade[] | null> {
+export async function getEnrichedTradesCache(blockId: string): Promise<EnrichedTrade[] | null> {
   return withReadTransaction(STORES.CALCULATIONS, async (transaction) => {
     const store = transaction.objectStore(STORES.CALCULATIONS);
     const cacheId = getCacheId(blockId);
@@ -87,9 +80,7 @@ export async function getEnrichedTradesCache(
 /**
  * Delete cached enriched trades for a block
  */
-export async function deleteEnrichedTradesCache(
-  blockId: string
-): Promise<void> {
+export async function deleteEnrichedTradesCache(blockId: string): Promise<void> {
   await withWriteTransaction(STORES.CALCULATIONS, async (transaction) => {
     const store = transaction.objectStore(STORES.CALCULATIONS);
     const cacheId = getCacheId(blockId);
@@ -105,9 +96,7 @@ export async function deleteEnrichedTradesCache(
 /**
  * Check if enriched trades cache exists for a block
  */
-export async function hasEnrichedTradesCache(
-  blockId: string
-): Promise<boolean> {
+export async function hasEnrichedTradesCache(blockId: string): Promise<boolean> {
   return withReadTransaction(STORES.CALCULATIONS, async (transaction) => {
     const store = transaction.objectStore(STORES.CALCULATIONS);
     const cacheId = getCacheId(blockId);

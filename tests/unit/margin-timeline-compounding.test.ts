@@ -1,8 +1,6 @@
 import { buildMarginTimeline, Trade } from "@tradeblocks/lib";
 
-function createTrade(
-  overrides: Partial<Trade> = {}
-): Trade {
+function createTrade(overrides: Partial<Trade> = {}): Trade {
   return {
     dateOpened: new Date("2023-01-01"),
     timeOpened: "09:30:00",
@@ -35,12 +33,7 @@ describe("buildMarginTimeline - compounding mode", () => {
       }),
     ];
 
-    const timeline = buildMarginTimeline(
-      trades,
-      ["Alpha"],
-      100_000,
-      "compounding"
-    );
+    const timeline = buildMarginTimeline(trades, ["Alpha"], 100_000, "compounding");
 
     expect(Array.from(timeline.netLiq.entries())).toEqual([
       ["2023-01-01", 100_500],

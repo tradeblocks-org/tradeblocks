@@ -133,10 +133,7 @@ export async function syncAllBlocks(baseDir: string): Promise<SyncResult> {
  * @param baseDir - Base data directory containing block folders
  * @returns Sync result for the block
  */
-export async function syncBlock(
-  blockId: string,
-  baseDir: string
-): Promise<BlockSyncResult> {
+export async function syncBlock(blockId: string, baseDir: string): Promise<BlockSyncResult> {
   const conn = await getConnection(baseDir);
   const blocksDir = getBlocksDir(baseDir);
   const blockPath = path.join(blocksDir, blockId);

@@ -48,7 +48,7 @@ export interface FullSyncContext {
  */
 export function withSyncedBlock<TInput extends { blockId: string }, TOutput>(
   baseDir: string,
-  handler: (input: TInput, ctx: SingleBlockContext) => Promise<TOutput>
+  handler: (input: TInput, ctx: SingleBlockContext) => Promise<TOutput>,
 ): (input: TInput) => Promise<TOutput | ToolError> {
   return async (input: TInput) => {
     // NOTE: single-shot RW upgrade + silent RO fallback. withFullSync uses a bounded
@@ -106,13 +106,12 @@ export function withSyncedBlocks<
   TOutput,
 >(
   baseDir: string,
-  handler: (input: TInput, ctx: MultiBlockContext) => Promise<TOutput>
+  handler: (input: TInput, ctx: MultiBlockContext) => Promise<TOutput>,
 ): (input: TInput) => Promise<TOutput | ToolError> {
   return async (input: TInput) => {
     // Collect block IDs from various input patterns
     const blockIds: string[] =
-      input.blockIds ??
-      [input.blockIdA, input.blockIdB].filter((id): id is string => !!id);
+      input.blockIds ?? [input.blockIdA, input.blockIdB].filter((id): id is string => !!id);
 
     const syncResults = new Map<string, BlockSyncResult>();
 
@@ -171,7 +170,7 @@ export function withSyncedBlocks<
  */
 export function withFullSync<TInput, TOutput>(
   baseDir: string,
-  handler: (input: TInput, ctx: FullSyncContext) => Promise<TOutput>
+  handler: (input: TInput, ctx: FullSyncContext) => Promise<TOutput>,
 ): (input: TInput) => Promise<TOutput> {
   return async (input: TInput) => {
     // Outer retry loop: papers over short RW-lock races where another session is
@@ -209,7 +208,7 @@ export function withFullSync<TInput, TOutput>(
       // tell that sync was skipped and data may be stale.
       console.warn(
         `[sync-middleware] sync skipped: could not acquire write lock after ${attempts} retries; ` +
-          `downstream data may be stale until next call succeeds.`
+          `downstream data may be stale until next call succeeds.`,
       );
       blockSyncResult = {
         blocksProcessed: 0,

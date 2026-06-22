@@ -10,11 +10,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock, loadReportingLog } from "../../utils/block-loader.ts";
-import {
-  createToolOutput,
-  formatPercent,
-  formatRatio,
-} from "../../utils/output-formatter.ts";
+import { createToolOutput, formatPercent, formatRatio } from "../../utils/output-formatter.ts";
 import {
   PortfolioStatsCalculator,
   calculateCorrelationMatrix,
@@ -28,10 +24,7 @@ import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
 import { listProfiles } from "../../db/profile-schemas.ts";
 import { computeSliceStats, type SliceStats } from "../../utils/analysis-stats.ts";
-import {
-  buildLookaheadFreeQuery,
-  type MarketLookupKey,
-} from "../../utils/field-timing.ts";
+import { buildLookaheadFreeQuery, type MarketLookupKey } from "../../utils/field-timing.ts";
 import {
   DEFAULT_MARKET_TICKER,
   marketTickerDateKey,
@@ -127,7 +120,7 @@ function resultToRecords(result: {
 }
 
 function recordsByTickerDate(
-  records: Record<string, unknown>[]
+  records: Record<string, unknown>[],
 ): Map<string, Record<string, unknown>> {
   const mapped = new Map<string, Record<string, unknown>>();
   for (const record of records) {
@@ -179,10 +172,14 @@ function getDteBucket(legs: { expiry: string }[]): string {
  * Returns the set of covered day numbers (1-5), or null if no DOW filter exists.
  */
 function extractDowCoverage(
-  entryFilters: { field: string; operator: string; value: string | number | (string | number)[] }[]
+  entryFilters: { field: string; operator: string; value: string | number | (string | number)[] }[],
 ): Set<number> | null {
   const dayNameToNum: Record<string, number> = {
-    monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
   };
 
   for (const filter of entryFilters) {
@@ -227,10 +224,13 @@ interface ProfileSectionResult {
 async function buildRegimeCoverageSection(
   profiles: StrategyProfile[],
   blockTrades: Trade[],
-  baseDir: string
+  baseDir: string,
 ): Promise<ProfileSectionResult> {
   const flags: ProfileSectionResult["flags"] = [];
-  const matrix: Record<string, Record<string, { expected: boolean; actual: SliceStats | null }>> = {};
+  const matrix: Record<
+    string,
+    Record<string, { expected: boolean; actual: SliceStats | null }>
+  > = {};
 
   // Collect all trades matched to market data
   const tradeKeys = uniqueTradeLookupKeys(blockTrades);
@@ -338,9 +338,7 @@ async function buildRegimeCoverageSection(
 /**
  * Section 2: Day-of-Week Coverage Heatmap
  */
-function buildDayCoverageSection(
-  profiles: StrategyProfile[]
-): ProfileSectionResult {
+function buildDayCoverageSection(profiles: StrategyProfile[]): ProfileSectionResult {
   const flags: ProfileSectionResult["flags"] = [];
   const heatmap: Record<string, Record<string, "covered" | "not_covered" | "no_filter">> = {};
   const coveredDays = new Set<number>();
@@ -390,27 +388,28 @@ function buildDayCoverageSection(
 /**
  * Section 3: Allocation Concentration
  */
-function buildConcentrationSection(
-  profiles: StrategyProfile[]
-): ProfileSectionResult {
+function buildConcentrationSection(profiles: StrategyProfile[]): ProfileSectionResult {
   const flags: ProfileSectionResult["flags"] = [];
 
   // Determine allocation weights per strategy
-  const allocations: { name: string; pct: number; structureType: string; underlying: string; dteBucket: string }[] = [];
+  const allocations: {
+    name: string;
+    pct: number;
+    structureType: string;
+    underlying: string;
+    dteBucket: string;
+  }[] = [];
   let hasAllocationData = false;
 
   const totalProfiles = profiles.length;
   for (const p of profiles) {
-    const pct =
-      p.positionSizing?.backtestAllocationPct ??
-      p.positionSizing?.allocationPct ??
-      null;
+    const pct = p.positionSizing?.backtestAllocationPct ?? p.positionSizing?.allocationPct ?? null;
 
     if (pct !== null) hasAllocationData = true;
 
     allocations.push({
       name: p.strategyName,
-      pct: pct ?? (100 / totalProfiles), // Equal weight fallback
+      pct: pct ?? 100 / totalProfiles, // Equal weight fallback
       structureType: p.structureType || "unspecified",
       underlying: p.underlying || "unspecified",
       dteBucket: getDteBucket(p.legs),
@@ -426,14 +425,15 @@ function buildConcentrationSection(
 
   // Group by each dimension
   function groupBy(
-    key: "structureType" | "underlying" | "dteBucket"
+    key: "structureType" | "underlying" | "dteBucket",
   ): Record<string, { strategies: string[]; allocationPct: number }> {
     const groups: Record<string, { strategies: string[]; allocationPct: number }> = {};
     for (const a of normalizedAllocations) {
       const category = a[key];
       if (!groups[category]) groups[category] = { strategies: [], allocationPct: 0 };
       groups[category].strategies.push(a.name);
-      groups[category].allocationPct = Math.round((groups[category].allocationPct + a.pct) * 100) / 100;
+      groups[category].allocationPct =
+        Math.round((groups[category].allocationPct + a.pct) * 100) / 100;
     }
     return groups;
   }
@@ -463,8 +463,14 @@ function buildConcentrationSection(
   }
 
   // Neutral observations
-  for (const [dim, groups] of Object.entries({ structure: byStructure, underlying: byUnderlying, dte: byDte })) {
-    const topCategory = Object.entries(groups).sort((a, b) => b[1].allocationPct - a[1].allocationPct)[0];
+  for (const [dim, groups] of Object.entries({
+    structure: byStructure,
+    underlying: byUnderlying,
+    dte: byDte,
+  })) {
+    const topCategory = Object.entries(groups).sort(
+      (a, b) => b[1].allocationPct - a[1].allocationPct,
+    )[0];
     if (topCategory) {
       flags.push({
         type: "info",
@@ -496,19 +502,19 @@ function buildConcentrationSection(
  * Section 4: Correlation Risk Flags
  * Finds profile pairs sharing underlying + DTE bucket + entry days overlap.
  */
-function buildCorrelationRiskSection(
-  profiles: StrategyProfile[]
-): ProfileSectionResult {
+function buildCorrelationRiskSection(profiles: StrategyProfile[]): ProfileSectionResult {
   const flags: ProfileSectionResult["flags"] = [];
 
   if (profiles.length < 2) {
     return {
       grade: null,
-      flags: [{
-        type: "info",
-        dimension: "correlationRisk",
-        message: "Skipped: need at least 2 profiles for correlation risk analysis",
-      }],
+      flags: [
+        {
+          type: "info",
+          dimension: "correlationRisk",
+          message: "Skipped: need at least 2 profiles for correlation risk analysis",
+        },
+      ],
       data: {},
       keyNumbers: {},
     };
@@ -576,7 +582,8 @@ function buildCorrelationRiskSection(
     flags.push({
       type: "info",
       dimension: "correlationRisk",
-      message: "No strategy pairs share all three: same underlying, same DTE bucket, overlapping entry days",
+      message:
+        "No strategy pairs share all three: same underlying, same DTE bucket, overlapping entry days",
     });
   }
 
@@ -595,15 +602,33 @@ async function buildScalingSection(
   profiles: StrategyProfile[],
   blockTrades: Trade[],
   baseDir: string,
-  blockId: string
+  blockId: string,
 ): Promise<ProfileSectionResult> {
   const flags: ProfileSectionResult["flags"] = [];
-  const scalingData: Record<string, {
-    standalone: { tradeCount: number; netPl: number; avgPlPerTrade: number; avgPlPerContract: number } | null;
-    portfolioBacktest: { tradeCount: number; netPl: number; avgPlPerTrade: number; avgPlPerContract: number } | null;
-    liveReporting: { tradeCount: number; netPl: number; avgPlPerTrade: number; avgPlPerContract: number } | null;
-    sizingNotes: string[];
-  }> = {};
+  const scalingData: Record<
+    string,
+    {
+      standalone: {
+        tradeCount: number;
+        netPl: number;
+        avgPlPerTrade: number;
+        avgPlPerContract: number;
+      } | null;
+      portfolioBacktest: {
+        tradeCount: number;
+        netPl: number;
+        avgPlPerTrade: number;
+        avgPlPerContract: number;
+      } | null;
+      liveReporting: {
+        tradeCount: number;
+        netPl: number;
+        avgPlPerTrade: number;
+        avgPlPerContract: number;
+      } | null;
+      sizingNotes: string[];
+    }
+  > = {};
 
   // Try to load reporting log for live data
   let reportingTrades: Array<{ strategy: string; pl: number; numContracts: number }> = [];
@@ -622,7 +647,7 @@ async function buildScalingSection(
   const deviations: number[] = [];
 
   for (const profile of profiles) {
-    const entry: typeof scalingData[string] = {
+    const entry: (typeof scalingData)[string] = {
       standalone: null,
       portfolioBacktest: null,
       liveReporting: null,
@@ -645,7 +670,8 @@ async function buildScalingSection(
             tradeCount: standaloneTrades.length,
             netPl: Math.round(totalPl * 100) / 100,
             avgPlPerTrade: Math.round((totalPl / standaloneTrades.length) * 100) / 100,
-            avgPlPerContract: totalContracts > 0 ? Math.round((totalPl / totalContracts) * 100) / 100 : 0,
+            avgPlPerContract:
+              totalContracts > 0 ? Math.round((totalPl / totalContracts) * 100) / 100 : 0,
           };
         }
       } catch {
@@ -666,13 +692,14 @@ async function buildScalingSection(
         tradeCount: portfolioTrades.length,
         netPl: Math.round(totalPl * 100) / 100,
         avgPlPerTrade: Math.round((totalPl / portfolioTrades.length) * 100) / 100,
-        avgPlPerContract: totalContracts > 0 ? Math.round((totalPl / totalContracts) * 100) / 100 : 0,
+        avgPlPerContract:
+          totalContracts > 0 ? Math.round((totalPl / totalContracts) * 100) / 100 : 0,
       };
     }
 
     // 3. Live reporting log
     const liveFiltered = reportingTrades.filter(
-      (t) => t.strategy.toLowerCase() === profile.strategyName.toLowerCase()
+      (t) => t.strategy.toLowerCase() === profile.strategyName.toLowerCase(),
     );
     if (liveFiltered.length > 0) {
       hasLiveData = true;
@@ -682,14 +709,15 @@ async function buildScalingSection(
         tradeCount: liveFiltered.length,
         netPl: Math.round(totalPl * 100) / 100,
         avgPlPerTrade: Math.round((totalPl / liveFiltered.length) * 100) / 100,
-        avgPlPerContract: totalContracts > 0 ? Math.round((totalPl / totalContracts) * 100) / 100 : 0,
+        avgPlPerContract:
+          totalContracts > 0 ? Math.round((totalPl / totalContracts) * 100) / 100 : 0,
       };
 
       // Compute per-contract deviation if we have backtest reference
       const btRef = entry.portfolioBacktest ?? entry.standalone;
       if (btRef && btRef.avgPlPerContract !== 0 && entry.liveReporting.avgPlPerContract !== 0) {
         const deviation = Math.abs(
-          (entry.liveReporting.avgPlPerContract - btRef.avgPlPerContract) / btRef.avgPlPerContract
+          (entry.liveReporting.avgPlPerContract - btRef.avgPlPerContract) / btRef.avgPlPerContract,
         );
         deviations.push(deviation);
       }
@@ -698,9 +726,13 @@ async function buildScalingSection(
     // Sizing notes
     if (profile.positionSizing) {
       const ps = profile.positionSizing;
-      if (ps.backtestAllocationPct && ps.liveAllocationPct && ps.backtestAllocationPct !== ps.liveAllocationPct) {
+      if (
+        ps.backtestAllocationPct &&
+        ps.liveAllocationPct &&
+        ps.backtestAllocationPct !== ps.liveAllocationPct
+      ) {
         entry.sizingNotes.push(
-          `Backtest allocation ${ps.backtestAllocationPct}% vs live ${ps.liveAllocationPct}%`
+          `Backtest allocation ${ps.backtestAllocationPct}% vs live ${ps.liveAllocationPct}%`,
         );
       }
       entry.sizingNotes.push(`Sizing method: ${ps.method}`);
@@ -752,10 +784,7 @@ async function buildScalingSection(
 /**
  * Register health block tools
  */
-export function registerHealthBlockTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerHealthBlockTools(server: McpServer, baseDir: string): void {
   const calculator = new PortfolioStatsCalculator();
 
   // Tool 13: portfolio_health_check
@@ -772,7 +801,7 @@ export function registerHealthBlockTools(
           .max(1)
           .default(HEALTH_CHECK_DEFAULTS.correlationThreshold)
           .describe(
-            `Flag correlation pairs above this (default: ${HEALTH_CHECK_DEFAULTS.correlationThreshold})`
+            `Flag correlation pairs above this (default: ${HEALTH_CHECK_DEFAULTS.correlationThreshold})`,
           ),
         tailDependenceThreshold: z
           .number()
@@ -780,7 +809,7 @@ export function registerHealthBlockTools(
           .max(1)
           .default(HEALTH_CHECK_DEFAULTS.tailDependenceThreshold)
           .describe(
-            `Flag tail dependence pairs above this (default: ${HEALTH_CHECK_DEFAULTS.tailDependenceThreshold})`
+            `Flag tail dependence pairs above this (default: ${HEALTH_CHECK_DEFAULTS.tailDependenceThreshold})`,
           ),
         profitProbabilityThreshold: z
           .number()
@@ -788,20 +817,20 @@ export function registerHealthBlockTools(
           .max(1)
           .default(HEALTH_CHECK_DEFAULTS.profitProbabilityThreshold)
           .describe(
-            `Monte Carlo profit probability warning threshold (default: ${HEALTH_CHECK_DEFAULTS.profitProbabilityThreshold})`
+            `Monte Carlo profit probability warning threshold (default: ${HEALTH_CHECK_DEFAULTS.profitProbabilityThreshold})`,
           ),
         wfeThreshold: z
           .number()
           .default(HEALTH_CHECK_DEFAULTS.wfeThreshold)
           .describe(
-            `Walk-forward efficiency warning threshold (default: ${HEALTH_CHECK_DEFAULTS.wfeThreshold})`
+            `Walk-forward efficiency warning threshold (default: ${HEALTH_CHECK_DEFAULTS.wfeThreshold})`,
           ),
         mddMultiplierThreshold: z
           .number()
           .min(1)
           .default(HEALTH_CHECK_DEFAULTS.mddMultiplierThreshold)
           .describe(
-            `MC median MDD vs historical MDD multiplier warning threshold (default: ${HEALTH_CHECK_DEFAULTS.mddMultiplierThreshold})`
+            `MC median MDD vs historical MDD multiplier warning threshold (default: ${HEALTH_CHECK_DEFAULTS.mddMultiplierThreshold})`,
           ),
       }),
     },
@@ -816,18 +845,14 @@ export function registerHealthBlockTools(
         mddMultiplierThreshold,
       }) => {
         // Apply defaults for optional parameters
-        const corrThreshold =
-          correlationThreshold ?? HEALTH_CHECK_DEFAULTS.correlationThreshold;
+        const corrThreshold = correlationThreshold ?? HEALTH_CHECK_DEFAULTS.correlationThreshold;
         const tailThreshold =
-          tailDependenceThreshold ??
-          HEALTH_CHECK_DEFAULTS.tailDependenceThreshold;
+          tailDependenceThreshold ?? HEALTH_CHECK_DEFAULTS.tailDependenceThreshold;
         const profitThreshold =
-          profitProbabilityThreshold ??
-          HEALTH_CHECK_DEFAULTS.profitProbabilityThreshold;
+          profitProbabilityThreshold ?? HEALTH_CHECK_DEFAULTS.profitProbabilityThreshold;
         const wfeThresh = wfeThreshold ?? HEALTH_CHECK_DEFAULTS.wfeThreshold;
         const mddMultThresh =
-          mddMultiplierThreshold ??
-          HEALTH_CHECK_DEFAULTS.mddMultiplierThreshold;
+          mddMultiplierThreshold ?? HEALTH_CHECK_DEFAULTS.mddMultiplierThreshold;
 
         try {
           const block = await loadBlock(baseDir, blockId);
@@ -845,12 +870,10 @@ export function registerHealthBlockTools(
             };
           }
 
-        // Get unique strategies
-        const strategies = Array.from(
-          new Set(trades.map((t) => t.strategy))
-        ).sort();
+          // Get unique strategies
+          const strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
 
-        // Require at least 2 strategies and 20 trades
+          // Require at least 2 strategies and 20 trades
           if (strategies.length < 2) {
             return {
               content: [
@@ -875,545 +898,530 @@ export function registerHealthBlockTools(
             };
           }
 
-        // Calculate portfolio stats
-        const stats = calculator.calculatePortfolioStats(
-          trades,
-          undefined, // No daily logs per Phase 17 constraint
-          true // Force trade-based calculations
-        );
-
-        // Calculate correlation matrix (kendall, raw, opened)
-        const correlationMatrix = calculateCorrelationMatrix(trades, {
-          method: "kendall",
-          normalization: "raw",
-          dateBasis: "opened",
-          alignment: "shared",
-        });
-
-        // Calculate tail risk (0.1 threshold)
-        const tailRisk = performTailRiskAnalysis(trades, {
-          tailThreshold: 0.1,
-          normalization: "raw",
-          dateBasis: "opened",
-          minTradingDays: 10, // Lower requirement for health check
-        });
-
-        // Run Monte Carlo (1000 sims, trades method)
-        const sortedTrades = [...trades].sort(
-          (a, b) =>
-            new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime()
-        );
-        const firstTrade = sortedTrades[0];
-        const lastTrade = sortedTrades[sortedTrades.length - 1];
-        const inferredCapital = firstTrade.fundsAtClose - firstTrade.pl;
-        const initialCapital = inferredCapital > 0 ? inferredCapital : 100000;
-        const daySpan =
-          (new Date(lastTrade.dateOpened).getTime() -
-            new Date(firstTrade.dateOpened).getTime()) /
-          (24 * 60 * 60 * 1000);
-        const calculatedTradesPerYear =
-          daySpan > 0 ? (trades.length / daySpan) * 365 : 252;
-
-        const mcParams: MonteCarloParams = {
-          numSimulations: 1000,
-          simulationLength: trades.length,
-          resampleMethod: "trades",
-          initialCapital,
-          tradesPerYear: calculatedTradesPerYear,
-          worstCaseEnabled: true,
-          worstCasePercentage: 5,
-          worstCaseMode: "pool",
-          worstCaseBasedOn: "simulation",
-          worstCaseSizing: "relative",
-        };
-
-        const mcResult = runMonteCarloSimulation(trades, mcParams);
-        const mcStats = mcResult.statistics;
-
-        // Run a second MC with percentage-based resampling to detect position sizing inflation
-        const mcPctParams: MonteCarloParams = {
-          ...mcParams,
-          resampleMethod: "percentage",
-          worstCaseEnabled: false, // Not needed for comparison
-        };
-        const mcPctResult = runMonteCarloSimulation(trades, mcPctParams);
-        const mcPctStats = mcPctResult.statistics;
-
-        // Detect percentage-based position sizing from profiles
-        let useNormalization = false;
-        let profiles: StrategyProfile[] = [];
-        try {
-          const conn = await getConnection(baseDir);
-          profiles = await listProfiles(conn, blockId, baseDir);
-          useNormalization = profiles.some(
-            (p) => p.positionSizing?.method === "pct_of_portfolio"
+          // Calculate portfolio stats
+          const stats = calculator.calculatePortfolioStats(
+            trades,
+            undefined, // No daily logs per Phase 17 constraint
+            true, // Force trade-based calculations
           );
-        } catch {
-          // Profile lookup is best-effort; default to no normalization
-        }
 
-        // Run WFD (walk-forward degradation) with weighted efficiency
-        let wfeResult: number | null = null;
-        let wfaSkipped = false;
-        try {
-          if (trades.length >= 20) {
-            const wfTrades = useNormalization ? normalizeToOneLot(trades) : trades;
-            const wfdResult = analyzeWalkForwardDegradation(wfTrades, {
-              normalizeTo1Lot: false, // Already normalized above if needed
-              weightByTradeCount: true,
-              minOosFraction: 0.5,
-            });
-            wfeResult = wfdResult.weightedOverallEfficiency.sharpe;
-          } else {
+          // Calculate correlation matrix (kendall, raw, opened)
+          const correlationMatrix = calculateCorrelationMatrix(trades, {
+            method: "kendall",
+            normalization: "raw",
+            dateBasis: "opened",
+            alignment: "shared",
+          });
+
+          // Calculate tail risk (0.1 threshold)
+          const tailRisk = performTailRiskAnalysis(trades, {
+            tailThreshold: 0.1,
+            normalization: "raw",
+            dateBasis: "opened",
+            minTradingDays: 10, // Lower requirement for health check
+          });
+
+          // Run Monte Carlo (1000 sims, trades method)
+          const sortedTrades = [...trades].sort(
+            (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
+          );
+          const firstTrade = sortedTrades[0];
+          const lastTrade = sortedTrades[sortedTrades.length - 1];
+          const inferredCapital = firstTrade.fundsAtClose - firstTrade.pl;
+          const initialCapital = inferredCapital > 0 ? inferredCapital : 100000;
+          const daySpan =
+            (new Date(lastTrade.dateOpened).getTime() - new Date(firstTrade.dateOpened).getTime()) /
+            (24 * 60 * 60 * 1000);
+          const calculatedTradesPerYear = daySpan > 0 ? (trades.length / daySpan) * 365 : 252;
+
+          const mcParams: MonteCarloParams = {
+            numSimulations: 1000,
+            simulationLength: trades.length,
+            resampleMethod: "trades",
+            initialCapital,
+            tradesPerYear: calculatedTradesPerYear,
+            worstCaseEnabled: true,
+            worstCasePercentage: 5,
+            worstCaseMode: "pool",
+            worstCaseBasedOn: "simulation",
+            worstCaseSizing: "relative",
+          };
+
+          const mcResult = runMonteCarloSimulation(trades, mcParams);
+          const mcStats = mcResult.statistics;
+
+          // Run a second MC with percentage-based resampling to detect position sizing inflation
+          const mcPctParams: MonteCarloParams = {
+            ...mcParams,
+            resampleMethod: "percentage",
+            worstCaseEnabled: false, // Not needed for comparison
+          };
+          const mcPctResult = runMonteCarloSimulation(trades, mcPctParams);
+          const mcPctStats = mcPctResult.statistics;
+
+          // Detect percentage-based position sizing from profiles
+          let useNormalization = false;
+          let profiles: StrategyProfile[] = [];
+          try {
+            const conn = await getConnection(baseDir);
+            profiles = await listProfiles(conn, blockId, baseDir);
+            useNormalization = profiles.some(
+              (p) => p.positionSizing?.method === "pct_of_portfolio",
+            );
+          } catch {
+            // Profile lookup is best-effort; default to no normalization
+          }
+
+          // Run WFD (walk-forward degradation) with weighted efficiency
+          let wfeResult: number | null = null;
+          let wfaSkipped = false;
+          try {
+            if (trades.length >= 20) {
+              const wfTrades = useNormalization ? normalizeToOneLot(trades) : trades;
+              const wfdResult = analyzeWalkForwardDegradation(wfTrades, {
+                normalizeTo1Lot: false, // Already normalized above if needed
+                weightByTradeCount: true,
+                minOosFraction: 0.5,
+              });
+              wfeResult = wfdResult.weightedOverallEfficiency.sharpe;
+            } else {
+              wfaSkipped = true;
+            }
+          } catch {
             wfaSkipped = true;
           }
-        } catch {
-          wfaSkipped = true;
-        }
 
-        // Calculate average correlation and tail dependence
-        let totalCorrelation = 0;
-        let correlationCount = 0;
-        for (let i = 0; i < correlationMatrix.strategies.length; i++) {
-          for (let j = i + 1; j < correlationMatrix.strategies.length; j++) {
-            const val = correlationMatrix.correlationData[i][j];
-            if (!Number.isNaN(val) && val !== null) {
-              totalCorrelation += Math.abs(val);
-              correlationCount++;
+          // Calculate average correlation and tail dependence
+          let totalCorrelation = 0;
+          let correlationCount = 0;
+          for (let i = 0; i < correlationMatrix.strategies.length; i++) {
+            for (let j = i + 1; j < correlationMatrix.strategies.length; j++) {
+              const val = correlationMatrix.correlationData[i][j];
+              if (!Number.isNaN(val) && val !== null) {
+                totalCorrelation += Math.abs(val);
+                correlationCount++;
+              }
             }
           }
-        }
-        const avgCorrelation =
-          correlationCount > 0 ? totalCorrelation / correlationCount : 0;
+          const avgCorrelation = correlationCount > 0 ? totalCorrelation / correlationCount : 0;
 
-        let totalTailDependence = 0;
-        let tailCount = 0;
-        for (let i = 0; i < tailRisk.strategies.length; i++) {
-          for (let j = i + 1; j < tailRisk.strategies.length; j++) {
-            const valAB = tailRisk.jointTailRiskMatrix[i]?.[j];
-            const valBA = tailRisk.jointTailRiskMatrix[j]?.[i];
-            if (
-              valAB !== undefined &&
-              valBA !== undefined &&
-              !Number.isNaN(valAB) &&
-              !Number.isNaN(valBA)
-            ) {
-              totalTailDependence += (valAB + valBA) / 2;
-              tailCount++;
+          let totalTailDependence = 0;
+          let tailCount = 0;
+          for (let i = 0; i < tailRisk.strategies.length; i++) {
+            for (let j = i + 1; j < tailRisk.strategies.length; j++) {
+              const valAB = tailRisk.jointTailRiskMatrix[i]?.[j];
+              const valBA = tailRisk.jointTailRiskMatrix[j]?.[i];
+              if (
+                valAB !== undefined &&
+                valBA !== undefined &&
+                !Number.isNaN(valAB) &&
+                !Number.isNaN(valBA)
+              ) {
+                totalTailDependence += (valAB + valBA) / 2;
+                tailCount++;
+              }
             }
           }
-        }
-        const avgTailDependence =
-          tailCount > 0 ? totalTailDependence / tailCount : 0;
+          const avgTailDependence = tailCount > 0 ? totalTailDependence / tailCount : 0;
 
-        // Build flags array (widened dimension type to include new sections)
-        type Flag = {
-          type: "warning" | "pass" | "info";
-          dimension: string;
-          message: string;
-        };
-        const flags: Flag[] = [];
+          // Build flags array (widened dimension type to include new sections)
+          type Flag = {
+            type: "warning" | "pass" | "info";
+            dimension: string;
+            message: string;
+          };
+          const flags: Flag[] = [];
 
-        // High correlation pairs
-        const highCorrPairs: string[] = [];
-        for (let i = 0; i < correlationMatrix.strategies.length; i++) {
-          for (let j = i + 1; j < correlationMatrix.strategies.length; j++) {
-            const val = correlationMatrix.correlationData[i][j];
-            const sampleSize = correlationMatrix.sampleSizes[i][j];
-            if (!Number.isNaN(val) && Math.abs(val) > corrThreshold && sampleSize >= 10) {
-              highCorrPairs.push(
-                `${correlationMatrix.strategies[i]} & ${correlationMatrix.strategies[j]} (${val.toFixed(2)}, n=${sampleSize})`
-              );
-            }
-          }
-        }
-        if (highCorrPairs.length > 0) {
-          flags.push({
-            type: "warning",
-            dimension: "diversification",
-            message: `High correlation pairs (>${corrThreshold}): ${highCorrPairs.join(", ")}`,
-          });
-        } else {
-          flags.push({
-            type: "pass",
-            dimension: "diversification",
-            message: `No correlation pairs above ${corrThreshold} threshold`,
-          });
-        }
-
-        // High tail dependence pairs
-        // Build strategy-to-correlation-index map for per-pair sample sizes
-        const corrStrategyIndex = new Map<string, number>();
-        correlationMatrix.strategies.forEach((s, i) =>
-          corrStrategyIndex.set(s, i)
-        );
-
-        const highTailPairs: string[] = [];
-        for (let i = 0; i < tailRisk.strategies.length; i++) {
-          for (let j = i + 1; j < tailRisk.strategies.length; j++) {
-            const valAB = tailRisk.jointTailRiskMatrix[i]?.[j];
-            const valBA = tailRisk.jointTailRiskMatrix[j]?.[i];
-            if (
-              valAB !== undefined &&
-              valBA !== undefined &&
-              !Number.isNaN(valAB) &&
-              !Number.isNaN(valBA)
-            ) {
-              const avgTail = (valAB + valBA) / 2;
-              // Look up per-pair sample size from correlation matrix
-              const corrI = corrStrategyIndex.get(tailRisk.strategies[i]);
-              const corrJ = corrStrategyIndex.get(tailRisk.strategies[j]);
-              const pairSampleSize =
-                corrI !== undefined && corrJ !== undefined
-                  ? correlationMatrix.sampleSizes[corrI][corrJ]
-                  : null;
-              if (avgTail > tailThreshold && pairSampleSize !== null && pairSampleSize >= 10) {
-                highTailPairs.push(
-                  `${tailRisk.strategies[i]} & ${tailRisk.strategies[j]} (${avgTail.toFixed(2)}${pairSampleSize !== null ? `, n=${pairSampleSize}` : ""})`
+          // High correlation pairs
+          const highCorrPairs: string[] = [];
+          for (let i = 0; i < correlationMatrix.strategies.length; i++) {
+            for (let j = i + 1; j < correlationMatrix.strategies.length; j++) {
+              const val = correlationMatrix.correlationData[i][j];
+              const sampleSize = correlationMatrix.sampleSizes[i][j];
+              if (!Number.isNaN(val) && Math.abs(val) > corrThreshold && sampleSize >= 10) {
+                highCorrPairs.push(
+                  `${correlationMatrix.strategies[i]} & ${correlationMatrix.strategies[j]} (${val.toFixed(2)}, n=${sampleSize})`,
                 );
               }
             }
           }
-        }
-        if (highTailPairs.length > 0) {
-          flags.push({
-            type: "warning",
-            dimension: "tailRisk",
-            message: `High tail dependence pairs (>${tailThreshold}): ${highTailPairs.join(", ")}`,
-          });
-        } else {
-          flags.push({
-            type: "pass",
-            dimension: "tailRisk",
-            message: `No tail dependence pairs above ${tailThreshold} threshold`,
-          });
-        }
-
-        // MC profit probability below threshold
-        if (mcStats.probabilityOfProfit < profitThreshold) {
-          flags.push({
-            type: "warning",
-            dimension: "consistency",
-            message: `Monte Carlo profit probability (${formatPercent(mcStats.probabilityOfProfit * 100)}) below ${formatPercent(profitThreshold * 100)} threshold`,
-          });
-        } else {
-          flags.push({
-            type: "pass",
-            dimension: "consistency",
-            message: `Monte Carlo profit probability (${formatPercent(mcStats.probabilityOfProfit * 100)}) meets ${formatPercent(profitThreshold * 100)} threshold`,
-          });
-        }
-
-        // MC median MDD vs historical MDD multiplier
-        // mcStats.medianMaxDrawdown is a decimal (0.12 = 12%)
-        // stats.maxDrawdown is a percentage (12 = 12%)
-        // Convert stats.maxDrawdown to decimal for comparison
-        const historicalMddDecimal = stats.maxDrawdown / 100;
-        const mcMddMultiplier =
-          historicalMddDecimal > 0
-            ? mcStats.medianMaxDrawdown / historicalMddDecimal
-            : null;
-        const mcPctMddMultiplier =
-          historicalMddDecimal > 0
-            ? mcPctStats.medianMaxDrawdown / historicalMddDecimal
-            : null;
-
-        // Detect position sizing inflation: dollar-mode MDD much higher than percentage-mode
-        const sizingInflated =
-          mcMddMultiplier !== null &&
-          mcPctMddMultiplier !== null &&
-          mcMddMultiplier > 2 * mcPctMddMultiplier;
-
-        if (sizingInflated) {
-          // Dollar-mode MDD is inflated by position sizing growth — report both
-          const pctExceeds = mcPctMddMultiplier! > mddMultThresh;
-          flags.push({
-            type: pctExceeds ? "warning" : "info",
-            dimension: "consistency",
-            message: `Monte Carlo MDD: dollar-mode ${formatPercent(mcStats.medianMaxDrawdown * 100)} (${mcMddMultiplier!.toFixed(1)}x historical) is inflated by position sizing growth. Percentage-mode ${formatPercent(mcPctStats.medianMaxDrawdown * 100)} (${mcPctMddMultiplier!.toFixed(1)}x historical) is more representative for % scaling portfolios`,
-          });
-        } else if (mcMddMultiplier !== null && mcMddMultiplier > mddMultThresh) {
-          flags.push({
-            type: "warning",
-            dimension: "consistency",
-            message: `Monte Carlo median MDD (${formatPercent(mcStats.medianMaxDrawdown * 100)}) is ${mcMddMultiplier.toFixed(1)}x historical MDD (${formatPercent(stats.maxDrawdown)}) - exceeds ${mddMultThresh}x threshold`,
-          });
-        } else if (mcMddMultiplier !== null) {
-          flags.push({
-            type: "pass",
-            dimension: "consistency",
-            message: `Monte Carlo median MDD (${formatPercent(mcStats.medianMaxDrawdown * 100)}) is ${mcMddMultiplier.toFixed(1)}x historical MDD - within ${mddMultThresh}x threshold`,
-          });
-        }
-
-        // WFE below threshold (only if WFA ran)
-        if (!wfaSkipped && wfeResult !== null) {
-          const normNote = useNormalization ? " (1-lot normalized)" : "";
-          if (wfeResult < wfeThresh) {
+          if (highCorrPairs.length > 0) {
             flags.push({
               type: "warning",
-              dimension: "robustness",
-              message: `Walk-forward efficiency${normNote} (${formatPercent(wfeResult * 100)}) below ${formatPercent(wfeThresh * 100)} threshold`,
+              dimension: "diversification",
+              message: `High correlation pairs (>${corrThreshold}): ${highCorrPairs.join(", ")}`,
             });
           } else {
             flags.push({
               type: "pass",
-              dimension: "robustness",
-              message: `Walk-forward efficiency${normNote} (${formatPercent(wfeResult * 100)}) meets ${formatPercent(wfeThresh * 100)} threshold`,
+              dimension: "diversification",
+              message: `No correlation pairs above ${corrThreshold} threshold`,
             });
           }
-          if (useNormalization) {
+
+          // High tail dependence pairs
+          // Build strategy-to-correlation-index map for per-pair sample sizes
+          const corrStrategyIndex = new Map<string, number>();
+          correlationMatrix.strategies.forEach((s, i) => corrStrategyIndex.set(s, i));
+
+          const highTailPairs: string[] = [];
+          for (let i = 0; i < tailRisk.strategies.length; i++) {
+            for (let j = i + 1; j < tailRisk.strategies.length; j++) {
+              const valAB = tailRisk.jointTailRiskMatrix[i]?.[j];
+              const valBA = tailRisk.jointTailRiskMatrix[j]?.[i];
+              if (
+                valAB !== undefined &&
+                valBA !== undefined &&
+                !Number.isNaN(valAB) &&
+                !Number.isNaN(valBA)
+              ) {
+                const avgTail = (valAB + valBA) / 2;
+                // Look up per-pair sample size from correlation matrix
+                const corrI = corrStrategyIndex.get(tailRisk.strategies[i]);
+                const corrJ = corrStrategyIndex.get(tailRisk.strategies[j]);
+                const pairSampleSize =
+                  corrI !== undefined && corrJ !== undefined
+                    ? correlationMatrix.sampleSizes[corrI][corrJ]
+                    : null;
+                if (avgTail > tailThreshold && pairSampleSize !== null && pairSampleSize >= 10) {
+                  highTailPairs.push(
+                    `${tailRisk.strategies[i]} & ${tailRisk.strategies[j]} (${avgTail.toFixed(2)}${pairSampleSize !== null ? `, n=${pairSampleSize}` : ""})`,
+                  );
+                }
+              }
+            }
+          }
+          if (highTailPairs.length > 0) {
             flags.push({
-              type: "info",
-              dimension: "robustness",
-              message: `WFE trades normalized to 1-lot (detected pct_of_portfolio sizing in strategy profiles) to remove position sizing growth bias`,
+              type: "warning",
+              dimension: "tailRisk",
+              message: `High tail dependence pairs (>${tailThreshold}): ${highTailPairs.join(", ")}`,
+            });
+          } else {
+            flags.push({
+              type: "pass",
+              dimension: "tailRisk",
+              message: `No tail dependence pairs above ${tailThreshold} threshold`,
             });
           }
-        }
 
-        // =====================================================================
-        // NEW: Profile-aware dimensions (5 sections)
-        // =====================================================================
+          // MC profit probability below threshold
+          if (mcStats.probabilityOfProfit < profitThreshold) {
+            flags.push({
+              type: "warning",
+              dimension: "consistency",
+              message: `Monte Carlo profit probability (${formatPercent(mcStats.probabilityOfProfit * 100)}) below ${formatPercent(profitThreshold * 100)} threshold`,
+            });
+          } else {
+            flags.push({
+              type: "pass",
+              dimension: "consistency",
+              message: `Monte Carlo profit probability (${formatPercent(mcStats.probabilityOfProfit * 100)}) meets ${formatPercent(profitThreshold * 100)} threshold`,
+            });
+          }
 
-        // Initialize new grades as null
-        let regimeCoverageGrade: Grade | null = null;
-        let dayCoverageGrade: Grade | null = null;
-        let concentrationGrade: Grade | null = null;
-        let correlationRiskGrade: Grade | null = null;
-        let scalingAlignmentGrade: Grade | null = null;
+          // MC median MDD vs historical MDD multiplier
+          // mcStats.medianMaxDrawdown is a decimal (0.12 = 12%)
+          // stats.maxDrawdown is a percentage (12 = 12%)
+          // Convert stats.maxDrawdown to decimal for comparison
+          const historicalMddDecimal = stats.maxDrawdown / 100;
+          const mcMddMultiplier =
+            historicalMddDecimal > 0 ? mcStats.medianMaxDrawdown / historicalMddDecimal : null;
+          const mcPctMddMultiplier =
+            historicalMddDecimal > 0 ? mcPctStats.medianMaxDrawdown / historicalMddDecimal : null;
 
-        // Additional data from profile sections
-        let profileSectionData: Record<string, unknown> = {};
-        let profileKeyNumbers: Record<string, unknown> = {};
+          // Detect position sizing inflation: dollar-mode MDD much higher than percentage-mode
+          const sizingInflated =
+            mcMddMultiplier !== null &&
+            mcPctMddMultiplier !== null &&
+            mcMddMultiplier > 2 * mcPctMddMultiplier;
 
-        const profiledStrategies = profiles.length;
-        const unprofiled = strategies.length - profiles.length;
+          if (sizingInflated) {
+            // Dollar-mode MDD is inflated by position sizing growth — report both
+            const pctExceeds = mcPctMddMultiplier! > mddMultThresh;
+            flags.push({
+              type: pctExceeds ? "warning" : "info",
+              dimension: "consistency",
+              message: `Monte Carlo MDD: dollar-mode ${formatPercent(mcStats.medianMaxDrawdown * 100)} (${mcMddMultiplier!.toFixed(1)}x historical) is inflated by position sizing growth. Percentage-mode ${formatPercent(mcPctStats.medianMaxDrawdown * 100)} (${mcPctMddMultiplier!.toFixed(1)}x historical) is more representative for % scaling portfolios`,
+            });
+          } else if (mcMddMultiplier !== null && mcMddMultiplier > mddMultThresh) {
+            flags.push({
+              type: "warning",
+              dimension: "consistency",
+              message: `Monte Carlo median MDD (${formatPercent(mcStats.medianMaxDrawdown * 100)}) is ${mcMddMultiplier.toFixed(1)}x historical MDD (${formatPercent(stats.maxDrawdown)}) - exceeds ${mddMultThresh}x threshold`,
+            });
+          } else if (mcMddMultiplier !== null) {
+            flags.push({
+              type: "pass",
+              dimension: "consistency",
+              message: `Monte Carlo median MDD (${formatPercent(mcStats.medianMaxDrawdown * 100)}) is ${mcMddMultiplier.toFixed(1)}x historical MDD - within ${mddMultThresh}x threshold`,
+            });
+          }
 
-        if (profiles.length === 0) {
-          flags.push({
-            type: "info",
-            dimension: "regimeCoverage",
-            message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
-          });
-          flags.push({
-            type: "info",
-            dimension: "dayCoverage",
-            message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
-          });
-          flags.push({
-            type: "info",
-            dimension: "concentrationRisk",
-            message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
-          });
-          flags.push({
-            type: "info",
-            dimension: "correlationRisk",
-            message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
-          });
-          flags.push({
-            type: "info",
-            dimension: "scalingAlignment",
-            message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
-          });
-        } else {
-          // Section 1: Regime Coverage Matrix
-          try {
-            const regime = await buildRegimeCoverageSection(profiles, trades, baseDir);
-            regimeCoverageGrade = regime.grade;
-            flags.push(...regime.flags);
-            profileSectionData = { ...profileSectionData, ...regime.data };
-            profileKeyNumbers = { ...profileKeyNumbers, ...regime.keyNumbers };
-          } catch {
+          // WFE below threshold (only if WFA ran)
+          if (!wfaSkipped && wfeResult !== null) {
+            const normNote = useNormalization ? " (1-lot normalized)" : "";
+            if (wfeResult < wfeThresh) {
+              flags.push({
+                type: "warning",
+                dimension: "robustness",
+                message: `Walk-forward efficiency${normNote} (${formatPercent(wfeResult * 100)}) below ${formatPercent(wfeThresh * 100)} threshold`,
+              });
+            } else {
+              flags.push({
+                type: "pass",
+                dimension: "robustness",
+                message: `Walk-forward efficiency${normNote} (${formatPercent(wfeResult * 100)}) meets ${formatPercent(wfeThresh * 100)} threshold`,
+              });
+            }
+            if (useNormalization) {
+              flags.push({
+                type: "info",
+                dimension: "robustness",
+                message: `WFE trades normalized to 1-lot (detected pct_of_portfolio sizing in strategy profiles) to remove position sizing growth bias`,
+              });
+            }
+          }
+
+          // =====================================================================
+          // NEW: Profile-aware dimensions (5 sections)
+          // =====================================================================
+
+          // Initialize new grades as null
+          let regimeCoverageGrade: Grade | null = null;
+          let dayCoverageGrade: Grade | null = null;
+          let concentrationGrade: Grade | null = null;
+          let correlationRiskGrade: Grade | null = null;
+          let scalingAlignmentGrade: Grade | null = null;
+
+          // Additional data from profile sections
+          let profileSectionData: Record<string, unknown> = {};
+          let profileKeyNumbers: Record<string, unknown> = {};
+
+          const profiledStrategies = profiles.length;
+          const unprofiled = strategies.length - profiles.length;
+
+          if (profiles.length === 0) {
             flags.push({
               type: "info",
               dimension: "regimeCoverage",
-              message: "Skipped: error computing regime coverage matrix",
+              message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
             });
-          }
-
-          // Section 2: Day-of-Week Coverage Heatmap
-          try {
-            const day = buildDayCoverageSection(profiles);
-            dayCoverageGrade = day.grade;
-            flags.push(...day.flags);
-            profileSectionData = { ...profileSectionData, ...day.data };
-            profileKeyNumbers = { ...profileKeyNumbers, ...day.keyNumbers };
-          } catch {
             flags.push({
               type: "info",
               dimension: "dayCoverage",
-              message: "Skipped: error computing day-of-week coverage",
+              message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
             });
-          }
-
-          // Section 3: Allocation Concentration
-          try {
-            const conc = buildConcentrationSection(profiles);
-            concentrationGrade = conc.grade;
-            flags.push(...conc.flags);
-            profileSectionData = { ...profileSectionData, ...conc.data };
-          } catch {
             flags.push({
               type: "info",
               dimension: "concentrationRisk",
-              message: "Skipped: error computing allocation concentration",
+              message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
             });
-          }
-
-          // Section 4: Correlation Risk Flags
-          try {
-            const corrRisk = buildCorrelationRiskSection(profiles);
-            correlationRiskGrade = corrRisk.grade;
-            flags.push(...corrRisk.flags);
-            profileSectionData = { ...profileSectionData, ...corrRisk.data };
-          } catch {
             flags.push({
               type: "info",
               dimension: "correlationRisk",
-              message: "Skipped: error computing correlation risk flags",
+              message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
             });
-          }
-
-          // Section 5: Backtest-to-Live Scaling Ratios
-          try {
-            const scaling = await buildScalingSection(profiles, trades, baseDir, blockId);
-            scalingAlignmentGrade = scaling.grade;
-            flags.push(...scaling.flags);
-            profileSectionData = { ...profileSectionData, ...scaling.data };
-          } catch {
             flags.push({
               type: "info",
               dimension: "scalingAlignment",
-              message: "Skipped: error computing scaling ratios",
+              message: "Skipped: no strategy profiles found. Use profile_strategy to enable.",
             });
+          } else {
+            // Section 1: Regime Coverage Matrix
+            try {
+              const regime = await buildRegimeCoverageSection(profiles, trades, baseDir);
+              regimeCoverageGrade = regime.grade;
+              flags.push(...regime.flags);
+              profileSectionData = { ...profileSectionData, ...regime.data };
+              profileKeyNumbers = { ...profileKeyNumbers, ...regime.keyNumbers };
+            } catch {
+              flags.push({
+                type: "info",
+                dimension: "regimeCoverage",
+                message: "Skipped: error computing regime coverage matrix",
+              });
+            }
+
+            // Section 2: Day-of-Week Coverage Heatmap
+            try {
+              const day = buildDayCoverageSection(profiles);
+              dayCoverageGrade = day.grade;
+              flags.push(...day.flags);
+              profileSectionData = { ...profileSectionData, ...day.data };
+              profileKeyNumbers = { ...profileKeyNumbers, ...day.keyNumbers };
+            } catch {
+              flags.push({
+                type: "info",
+                dimension: "dayCoverage",
+                message: "Skipped: error computing day-of-week coverage",
+              });
+            }
+
+            // Section 3: Allocation Concentration
+            try {
+              const conc = buildConcentrationSection(profiles);
+              concentrationGrade = conc.grade;
+              flags.push(...conc.flags);
+              profileSectionData = { ...profileSectionData, ...conc.data };
+            } catch {
+              flags.push({
+                type: "info",
+                dimension: "concentrationRisk",
+                message: "Skipped: error computing allocation concentration",
+              });
+            }
+
+            // Section 4: Correlation Risk Flags
+            try {
+              const corrRisk = buildCorrelationRiskSection(profiles);
+              correlationRiskGrade = corrRisk.grade;
+              flags.push(...corrRisk.flags);
+              profileSectionData = { ...profileSectionData, ...corrRisk.data };
+            } catch {
+              flags.push({
+                type: "info",
+                dimension: "correlationRisk",
+                message: "Skipped: error computing correlation risk flags",
+              });
+            }
+
+            // Section 5: Backtest-to-Live Scaling Ratios
+            try {
+              const scaling = await buildScalingSection(profiles, trades, baseDir, blockId);
+              scalingAlignmentGrade = scaling.grade;
+              flags.push(...scaling.flags);
+              profileSectionData = { ...profileSectionData, ...scaling.data };
+            } catch {
+              flags.push({
+                type: "info",
+                dimension: "scalingAlignment",
+                message: "Skipped: error computing scaling ratios",
+              });
+            }
           }
-        }
 
-        // Build grades
-        type GradeType = "A" | "B" | "C" | "F";
+          // Build grades
+          type GradeType = "A" | "B" | "C" | "F";
 
-        // Diversification grade based on avg correlation (A: <0.2, B: <0.4, C: <0.6, F: >=0.6)
-        let diversificationGrade: GradeType;
-        if (avgCorrelation < 0.2) diversificationGrade = "A";
-        else if (avgCorrelation < 0.4) diversificationGrade = "B";
-        else if (avgCorrelation < 0.6) diversificationGrade = "C";
-        else diversificationGrade = "F";
+          // Diversification grade based on avg correlation (A: <0.2, B: <0.4, C: <0.6, F: >=0.6)
+          let diversificationGrade: GradeType;
+          if (avgCorrelation < 0.2) diversificationGrade = "A";
+          else if (avgCorrelation < 0.4) diversificationGrade = "B";
+          else if (avgCorrelation < 0.6) diversificationGrade = "C";
+          else diversificationGrade = "F";
 
-        // Tail risk grade based on avg joint tail risk (A: <0.3, B: <0.5, C: <0.7, F: >=0.7)
-        let tailRiskGrade: GradeType;
-        if (avgTailDependence < 0.3) tailRiskGrade = "A";
-        else if (avgTailDependence < 0.5) tailRiskGrade = "B";
-        else if (avgTailDependence < 0.7) tailRiskGrade = "C";
-        else tailRiskGrade = "F";
+          // Tail risk grade based on avg joint tail risk (A: <0.3, B: <0.5, C: <0.7, F: >=0.7)
+          let tailRiskGrade: GradeType;
+          if (avgTailDependence < 0.3) tailRiskGrade = "A";
+          else if (avgTailDependence < 0.5) tailRiskGrade = "B";
+          else if (avgTailDependence < 0.7) tailRiskGrade = "C";
+          else tailRiskGrade = "F";
 
-        // Robustness grade based on WFE (A: >0, B: >-0.1, C: >-0.2, F: <=-0.2), null if WFA skipped
-        let robustnessGrade: GradeType | null;
-        if (wfaSkipped || wfeResult === null) {
-          robustnessGrade = null;
-        } else if (wfeResult > 0) {
-          robustnessGrade = "A";
-        } else if (wfeResult > -0.1) {
-          robustnessGrade = "B";
-        } else if (wfeResult > -0.2) {
-          robustnessGrade = "C";
-        } else {
-          robustnessGrade = "F";
-        }
+          // Robustness grade based on WFE (A: >0, B: >-0.1, C: >-0.2, F: <=-0.2), null if WFA skipped
+          let robustnessGrade: GradeType | null;
+          if (wfaSkipped || wfeResult === null) {
+            robustnessGrade = null;
+          } else if (wfeResult > 0) {
+            robustnessGrade = "A";
+          } else if (wfeResult > -0.1) {
+            robustnessGrade = "B";
+          } else if (wfeResult > -0.2) {
+            robustnessGrade = "C";
+          } else {
+            robustnessGrade = "F";
+          }
 
-        // Consistency grade based on MC profit probability (A: >=0.98, B: >=0.90, C: >=0.70, F: <0.70)
-        let consistencyGrade: GradeType;
-        if (mcStats.probabilityOfProfit >= 0.98) consistencyGrade = "A";
-        else if (mcStats.probabilityOfProfit >= 0.9) consistencyGrade = "B";
-        else if (mcStats.probabilityOfProfit >= 0.7) consistencyGrade = "C";
-        else consistencyGrade = "F";
+          // Consistency grade based on MC profit probability (A: >=0.98, B: >=0.90, C: >=0.70, F: <0.70)
+          let consistencyGrade: GradeType;
+          if (mcStats.probabilityOfProfit >= 0.98) consistencyGrade = "A";
+          else if (mcStats.probabilityOfProfit >= 0.9) consistencyGrade = "B";
+          else if (mcStats.probabilityOfProfit >= 0.7) consistencyGrade = "C";
+          else consistencyGrade = "F";
 
-        // Build verdict
-        const warningFlags = flags.filter((f) => f.type === "warning");
-        const flagCount = warningFlags.length;
-        let verdict: "HEALTHY" | "MODERATE_CONCERNS" | "ISSUES_DETECTED";
-        let oneLineSummary: string;
+          // Build verdict
+          const warningFlags = flags.filter((f) => f.type === "warning");
+          const flagCount = warningFlags.length;
+          let verdict: "HEALTHY" | "MODERATE_CONCERNS" | "ISSUES_DETECTED";
+          let oneLineSummary: string;
 
-        if (flagCount === 0) {
-          verdict = "HEALTHY";
-          oneLineSummary =
-            "Portfolio shows strong diversification, controlled tail risk, and consistent Monte Carlo outcomes.";
-        } else if (flagCount <= 2) {
-          verdict = "MODERATE_CONCERNS";
-          const concernDimensions = [
-            ...new Set(warningFlags.map((f) => f.dimension)),
-          ];
-          oneLineSummary = `Portfolio has ${flagCount} warning(s) in ${concernDimensions.join(", ")} - review flagged items.`;
-        } else {
-          verdict = "ISSUES_DETECTED";
-          const concernDimensions = [
-            ...new Set(warningFlags.map((f) => f.dimension)),
-          ];
-          oneLineSummary = `Portfolio has ${flagCount} warnings across ${concernDimensions.join(", ")} - significant review recommended.`;
-        }
+          if (flagCount === 0) {
+            verdict = "HEALTHY";
+            oneLineSummary =
+              "Portfolio shows strong diversification, controlled tail risk, and consistent Monte Carlo outcomes.";
+          } else if (flagCount <= 2) {
+            verdict = "MODERATE_CONCERNS";
+            const concernDimensions = [...new Set(warningFlags.map((f) => f.dimension))];
+            oneLineSummary = `Portfolio has ${flagCount} warning(s) in ${concernDimensions.join(", ")} - review flagged items.`;
+          } else {
+            verdict = "ISSUES_DETECTED";
+            const concernDimensions = [...new Set(warningFlags.map((f) => f.dimension))];
+            oneLineSummary = `Portfolio has ${flagCount} warnings across ${concernDimensions.join(", ")} - significant review recommended.`;
+          }
 
-        // Build key numbers
-        // Note: stats.maxDrawdown is already in percentage form (e.g., 5.66 = 5.66%)
-        const keyNumbers = {
-          strategies: strategies.length,
-          trades: trades.length,
-          sharpe: stats.sharpeRatio,
-          sortino: stats.sortinoRatio,
-          maxDrawdownPct: stats.maxDrawdown, // Already a percentage
-          netPl: stats.netPl,
-          avgCorrelation,
-          avgTailDependence,
-          mcProbabilityOfProfit: mcStats.probabilityOfProfit,
-          mcMedianMdd: mcStats.medianMaxDrawdown,
-          mcMddMultiplier,
-          mcPctMedianMdd: mcPctStats.medianMaxDrawdown,
-          mcPctMddMultiplier,
-          mcSizingInflated: sizingInflated,
-          wfe: wfeResult,
-          wfeNormalized: useNormalization,
-          // NEW profile-aware key numbers
-          profiledStrategies,
-          unprofiled,
-          ...profileKeyNumbers,
-        };
+          // Build key numbers
+          // Note: stats.maxDrawdown is already in percentage form (e.g., 5.66 = 5.66%)
+          const keyNumbers = {
+            strategies: strategies.length,
+            trades: trades.length,
+            sharpe: stats.sharpeRatio,
+            sortino: stats.sortinoRatio,
+            maxDrawdownPct: stats.maxDrawdown, // Already a percentage
+            netPl: stats.netPl,
+            avgCorrelation,
+            avgTailDependence,
+            mcProbabilityOfProfit: mcStats.probabilityOfProfit,
+            mcMedianMdd: mcStats.medianMaxDrawdown,
+            mcMddMultiplier,
+            mcPctMedianMdd: mcPctStats.medianMaxDrawdown,
+            mcPctMddMultiplier,
+            mcSizingInflated: sizingInflated,
+            wfe: wfeResult,
+            wfeNormalized: useNormalization,
+            // NEW profile-aware key numbers
+            profiledStrategies,
+            unprofiled,
+            ...profileKeyNumbers,
+          };
 
-        // Build grades object
-        const grades = {
-          diversification: diversificationGrade,
-          tailRisk: tailRiskGrade,
-          robustness: robustnessGrade,
-          consistency: consistencyGrade,
-          // NEW profile-aware grades
-          regimeCoverage: regimeCoverageGrade,
-          dayCoverage: dayCoverageGrade,
-          concentrationRisk: concentrationGrade,
-          correlationRisk: correlationRiskGrade,
-          scalingAlignment: scalingAlignmentGrade,
-        };
+          // Build grades object
+          const grades = {
+            diversification: diversificationGrade,
+            tailRisk: tailRiskGrade,
+            robustness: robustnessGrade,
+            consistency: consistencyGrade,
+            // NEW profile-aware grades
+            regimeCoverage: regimeCoverageGrade,
+            dayCoverage: dayCoverageGrade,
+            concentrationRisk: concentrationGrade,
+            correlationRisk: correlationRiskGrade,
+            scalingAlignment: scalingAlignmentGrade,
+          };
 
-        // Brief summary for user display
-        const summary = `Health Check: ${blockId} | ${verdict} | ${flagCount} flags | Sharpe: ${formatRatio(stats.sharpeRatio)} | ${profiledStrategies} profiled`;
+          // Brief summary for user display
+          const summary = `Health Check: ${blockId} | ${verdict} | ${flagCount} flags | Sharpe: ${formatRatio(stats.sharpeRatio)} | ${profiledStrategies} profiled`;
 
-        // Build structured data
-        const structuredData = {
-          blockId,
-          thresholds: {
-            correlationThreshold: corrThreshold,
-            tailDependenceThreshold: tailThreshold,
-            profitProbabilityThreshold: profitThreshold,
-            wfeThreshold: wfeThresh,
-            mddMultiplierThreshold: mddMultThresh,
-          },
-          verdict: {
-            status: verdict,
-            oneLineSummary,
-            flagCount,
-          },
-          grades,
-          flags,
-          keyNumbers,
-          // NEW profile-aware section data
-          ...profileSectionData,
-        };
+          // Build structured data
+          const structuredData = {
+            blockId,
+            thresholds: {
+              correlationThreshold: corrThreshold,
+              tailDependenceThreshold: tailThreshold,
+              profitProbabilityThreshold: profitThreshold,
+              wfeThreshold: wfeThresh,
+              mddMultiplierThreshold: mddMultThresh,
+            },
+            verdict: {
+              status: verdict,
+              oneLineSummary,
+              flagCount,
+            },
+            grades,
+            flags,
+            keyNumbers,
+            // NEW profile-aware section data
+            ...profileSectionData,
+          };
 
           return createToolOutput(summary, structuredData);
         } catch (error) {
@@ -1427,7 +1435,7 @@ export function registerHealthBlockTools(
             isError: true as const,
           };
         }
-      }
-    )
+      },
+    ),
   );
 }

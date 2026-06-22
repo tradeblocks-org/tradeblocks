@@ -26,7 +26,8 @@ function encodeRows(headers: string[], dataTable: Array<{ values: unknown[] }>) 
 function fakeClient(chunks: unknown[]) {
   return {
     queryInfo: () => ({ authToken: { sessionUuid: "session-123" } }),
-    callStream: jest.fn<(_method: string, _request: unknown) => Promise<unknown[]>>()
+    callStream: jest
+      .fn<(_method: string, _request: unknown) => Promise<unknown[]>>()
       .mockResolvedValue(chunks),
   };
 }
@@ -36,14 +37,16 @@ describe("ThetaData MDDS open-interest wrapper", () => {
     // The live gRPC OI stream names the report-date column `timestamp` and
     // carries a "YYYY-MM-DD HH:MM" ET value (validated against the live
     // terminal 2026-06-02). normalizeThetaDate strips the leading calendar date.
-    expect(normalizeThetaOpenInterestRow({
-      symbol: "spxw",
-      expiration: "2024-08-05",
-      strike: 5725,
-      right: "CALL",
-      timestamp: "2024-07-15 06:30",
-      open_interest: 1234,
-    })).toEqual({
+    expect(
+      normalizeThetaOpenInterestRow({
+        symbol: "spxw",
+        expiration: "2024-08-05",
+        strike: 5725,
+        right: "CALL",
+        timestamp: "2024-07-15 06:30",
+        open_interest: 1234,
+      }),
+    ).toEqual({
       ticker: "SPXW240805C05725000",
       symbol: "SPXW",
       expiration: "2024-08-05",
@@ -55,66 +58,78 @@ describe("ThetaData MDDS open-interest wrapper", () => {
   });
 
   it("falls back to a `date` column when a provider variant supplies one", () => {
-    expect(normalizeThetaOpenInterestRow({
-      symbol: "SPXW",
-      expiration: "2024-08-05",
-      strike: 5725,
-      right: "CALL",
-      date: "20240715",
-      open_interest: 1234,
-    }).date).toBe("2024-07-15");
+    expect(
+      normalizeThetaOpenInterestRow({
+        symbol: "SPXW",
+        expiration: "2024-08-05",
+        strike: 5725,
+        right: "CALL",
+        date: "20240715",
+        open_interest: 1234,
+      }).date,
+    ).toBe("2024-07-15");
   });
 
   it("rejects malformed required open-interest identity fields", () => {
-    expect(() => normalizeThetaOpenInterestRow({
-      symbol: "",
-      expiration: "2024-08-05",
-      strike: 5725,
-      right: "CALL",
-      date: "20240715",
-      open_interest: 100,
-    })).toThrow("ThetaData open-interest row missing symbol");
-    expect(() => normalizeThetaOpenInterestRow({
-      symbol: "SPXW",
-      expiration: "2024-08-05",
-      strike: 5725,
-      right: "CALL",
-      date: "20240715",
-      open_interest: null,
-    })).toThrow("ThetaData open-interest row invalid open_interest");
+    expect(() =>
+      normalizeThetaOpenInterestRow({
+        symbol: "",
+        expiration: "2024-08-05",
+        strike: 5725,
+        right: "CALL",
+        date: "20240715",
+        open_interest: 100,
+      }),
+    ).toThrow("ThetaData open-interest row missing symbol");
+    expect(() =>
+      normalizeThetaOpenInterestRow({
+        symbol: "SPXW",
+        expiration: "2024-08-05",
+        strike: 5725,
+        right: "CALL",
+        date: "20240715",
+        open_interest: null,
+      }),
+    ).toThrow("ThetaData open-interest row invalid open_interest");
   });
 
   it("fetches daily open interest with the date-range request shape and wildcard contract spec", async () => {
     const chunk = encodeRows(
       ["symbol", "expiration", "strike", "right", "timestamp", "open_interest"],
-      [{
-        values: [
-          { text: "SPXW" },
-          { text: "2024-08-05" },
-          { number: 5725 },
-          { text: "CALL" },
-          { text: "2024-07-15 06:30" },
-          { number: 4096 },
-        ],
-      }],
+      [
+        {
+          values: [
+            { text: "SPXW" },
+            { text: "2024-08-05" },
+            { number: 5725 },
+            { text: "CALL" },
+            { text: "2024-07-15 06:30" },
+            { number: 4096 },
+          ],
+        },
+      ],
     );
     const client = fakeClient([chunk]);
 
-    await expect(optionHistoryOpenInterest(client as never, {
-      symbol: "SPXW",
-      expiration: "*",
-      startDate: "2024-07-15",
-      endDate: "2024-07-16",
-      strikeRange: 10,
-    })).resolves.toEqual([{
-      ticker: "SPXW240805C05725000",
-      symbol: "SPXW",
-      expiration: "2024-08-05",
-      strike: 5725,
-      right: "call",
-      date: "2024-07-15",
-      openInterest: 4096,
-    }]);
+    await expect(
+      optionHistoryOpenInterest(client as never, {
+        symbol: "SPXW",
+        expiration: "*",
+        startDate: "2024-07-15",
+        endDate: "2024-07-16",
+        strikeRange: 10,
+      }),
+    ).resolves.toEqual([
+      {
+        ticker: "SPXW240805C05725000",
+        symbol: "SPXW",
+        expiration: "2024-08-05",
+        strike: 5725,
+        right: "call",
+        date: "2024-07-15",
+        openInterest: 4096,
+      },
+    ]);
 
     expect(client.callStream).toHaveBeenCalledWith("GetOptionHistoryOpenInterest", {
       queryInfo: { authToken: { sessionUuid: "session-123" } },
@@ -154,12 +169,14 @@ describe("ThetaData MDDS open-interest wrapper", () => {
   it("rejects invalid wrapper request dates before calling MDDS", async () => {
     const client = fakeClient([]);
 
-    await expect(optionHistoryOpenInterest(client as never, {
-      symbol: "SPXW",
-      expiration: "2024-08-05",
-      startDate: "20240715",
-      endDate: "2024-07-16",
-    })).rejects.toThrow("ThetaData date must use YYYY-MM-DD");
+    await expect(
+      optionHistoryOpenInterest(client as never, {
+        symbol: "SPXW",
+        expiration: "2024-08-05",
+        startDate: "20240715",
+        endDate: "2024-07-16",
+      }),
+    ).rejects.toThrow("ThetaData date must use YYYY-MM-DD");
     expect(client.callStream).not.toHaveBeenCalled();
   });
 });

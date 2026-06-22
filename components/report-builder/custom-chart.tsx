@@ -7,15 +7,8 @@
  */
 
 import { ChartWrapper } from "@/components/performance-charts/chart-wrapper";
-import {
-  EnrichedTrade,
-  getEnrichedTradeValue,
-} from "@tradeblocks/lib";
-import {
-  ChartAxisConfig,
-  ChartType,
-  getFieldInfo,
-} from "@tradeblocks/lib";
+import { EnrichedTrade, getEnrichedTradeValue } from "@tradeblocks/lib";
+import { ChartAxisConfig, ChartType, getFieldInfo } from "@tradeblocks/lib";
 import {
   formatMinutesToTime,
   generateTimeAxisTicksFromData,
@@ -106,7 +99,7 @@ function buildCategoricalScatterTraces(
   xAxis: ChartAxisConfig,
   yAxis: ChartAxisConfig,
   colorBy: ChartAxisConfig,
-  sizeBy?: ChartAxisConfig
+  sizeBy?: ChartAxisConfig,
 ): Partial<PlotData>[] {
   // Separate trades into winners and losers
   const winners: { x: number; y: number; size: number; hover: string }[] = [];
@@ -123,8 +116,7 @@ function buildCategoricalScatterTraces(
       if (s !== null) allSizeValues.push(Math.abs(s));
     }
   }
-  const maxSizeValue =
-    allSizeValues.length > 0 ? Math.max(...allSizeValues) : 1;
+  const maxSizeValue = allSizeValues.length > 0 ? Math.max(...allSizeValues) : 1;
 
   for (const trade of trades) {
     const x = getTradeValue(trade, xAxis.field);
@@ -137,17 +129,11 @@ function buildCategoricalScatterTraces(
     let size = 8;
     if (sizeBy && sizeBy.field !== "none") {
       const s = getTradeValue(trade, sizeBy.field);
-      size = Math.min(
-        30,
-        Math.max(6, (Math.abs(s ?? 0) / (maxSizeValue || 1)) * 25 + 5)
-      );
+      size = Math.min(30, Math.max(6, (Math.abs(s ?? 0) / (maxSizeValue || 1)) * 25 + 5));
     }
 
     const hover =
-      `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(
-        x,
-        xAxis.field
-      )}<br>` +
+      `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(x, xAxis.field)}<br>` +
       `${yInfo?.label ?? yAxis.field}: ${formatValueForHover(y, yAxis.field)}`;
 
     if (isWinner === 1) {
@@ -202,7 +188,7 @@ function buildScatterTraces(
   xAxis: ChartAxisConfig,
   yAxis: ChartAxisConfig,
   colorBy?: ChartAxisConfig,
-  sizeBy?: ChartAxisConfig
+  sizeBy?: ChartAxisConfig,
 ): Partial<PlotData>[] {
   // Use categorical coloring for binary fields
   if (colorBy && colorBy.field !== "none" && isBinaryField(colorBy.field)) {
@@ -239,11 +225,8 @@ function buildScatterTraces(
 
     // Build hover text
     hoverTexts.push(
-      `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(
-        x,
-        xAxis.field
-      )}<br>` +
-        `${yInfo?.label ?? yAxis.field}: ${formatValueForHover(y, yAxis.field)}`
+      `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(x, xAxis.field)}<br>` +
+        `${yInfo?.label ?? yAxis.field}: ${formatValueForHover(y, yAxis.field)}`,
     );
   }
 
@@ -251,9 +234,7 @@ function buildScatterTraces(
   let markerSize: number | number[] = 8;
   if (sizeValues.length > 0) {
     const maxSize = Math.max(...sizeValues);
-    markerSize = sizeValues.map((s) =>
-      Math.min(30, Math.max(6, (s / (maxSize || 1)) * 25 + 5))
-    );
+    markerSize = sizeValues.map((s) => Math.min(30, Math.max(6, (s / (maxSize || 1)) * 25 + 5)));
   }
 
   // Calculate color scale bounds for symmetry around zero
@@ -295,7 +276,7 @@ function buildScatterTraces(
  */
 function buildHistogramTraces(
   trades: EnrichedTrade[],
-  xAxis: ChartAxisConfig
+  xAxis: ChartAxisConfig,
 ): Partial<PlotData>[] {
   const values: number[] = [];
 
@@ -324,7 +305,7 @@ function buildHistogramTraces(
 function buildBarTraces(
   trades: EnrichedTrade[],
   xAxis: ChartAxisConfig,
-  yAxis: ChartAxisConfig
+  yAxis: ChartAxisConfig,
 ): Partial<PlotData>[] {
   // Group trades by X value buckets
   const buckets = new Map<string, number[]>();
@@ -358,7 +339,7 @@ function buildBarTraces(
   const yInfo = getFieldInfo(yAxis.field);
 
   const sortedBuckets = Array.from(buckets.entries()).sort(
-    (a, b) => parseFloat(a[0]) - parseFloat(b[0])
+    (a, b) => parseFloat(a[0]) - parseFloat(b[0]),
   );
 
   for (const [bucket, values] of sortedBuckets) {
@@ -377,16 +358,12 @@ function buildBarTraces(
       y: yAvgs,
       type: "bar",
       marker: {
-        color: yAvgs.map((v) =>
-          v >= 0 ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)"
-        ),
+        color: yAvgs.map((v) => (v >= 0 ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)")),
       },
       hovertemplate: xLabels.map(
         (label, i) =>
           `${xInfo?.label ?? xAxis.field}: ${label}<br>` +
-          `Avg ${yInfo?.label ?? yAxis.field}: ${yAvgs[i].toFixed(
-            2
-          )}<extra></extra>`
+          `Avg ${yInfo?.label ?? yAxis.field}: ${yAvgs[i].toFixed(2)}<extra></extra>`,
       ),
       name: `Avg ${yInfo?.label ?? yAxis.field}`,
     },
@@ -399,7 +376,7 @@ function buildBarTraces(
 function buildLineTraces(
   trades: EnrichedTrade[],
   xAxis: ChartAxisConfig,
-  yAxis: ChartAxisConfig
+  yAxis: ChartAxisConfig,
 ): Partial<PlotData>[] {
   const points: { x: number; y: number }[] = [];
 
@@ -434,14 +411,8 @@ function buildLineTraces(
       },
       hovertemplate: points.map(
         (p) =>
-          `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(
-            p.x,
-            xAxis.field
-          )}<br>` +
-          `${yInfo?.label ?? yAxis.field}: ${formatValueForHover(
-            p.y,
-            yAxis.field
-          )}<extra></extra>`
+          `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(p.x, xAxis.field)}<br>` +
+          `${yInfo?.label ?? yAxis.field}: ${formatValueForHover(p.y, yAxis.field)}<extra></extra>`,
       ),
       name: yInfo?.label ?? yAxis.field,
     },
@@ -455,7 +426,7 @@ function buildBoxTraces(
   trades: EnrichedTrade[],
   xAxis: ChartAxisConfig,
   yAxis: ChartAxisConfig,
-  bucketCount: number = 4
+  bucketCount: number = 4,
 ): Partial<PlotData>[] {
   // For box plots, we'll create N buckets of X and show Y distribution
   const xValues: number[] = [];
@@ -554,7 +525,7 @@ function buildAdditionalAxisTraces(
   xAxis: ChartAxisConfig,
   yAxis2?: ChartAxisConfig,
   yAxis3?: ChartAxisConfig,
-  chartType?: ChartType
+  chartType?: ChartType,
 ): Partial<PlotData>[] {
   const traces: Partial<PlotData>[] = [];
   const isLine = chartType === "line";
@@ -598,14 +569,11 @@ function buildAdditionalAxisTraces(
         name: y2Info?.label ?? yAxis2.field,
         hovertemplate: points.map(
           (p) =>
-            `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(
-              p.x,
-              xAxis.field
-            )}<br>` +
+            `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(p.x, xAxis.field)}<br>` +
             `${y2Info?.label ?? yAxis2.field}: ${formatValueForHover(
               p.y,
-              yAxis2.field
-            )}<extra></extra>`
+              yAxis2.field,
+            )}<extra></extra>`,
         ),
       });
     }
@@ -649,14 +617,11 @@ function buildAdditionalAxisTraces(
         name: y3Info?.label ?? yAxis3.field,
         hovertemplate: points.map(
           (p) =>
-            `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(
-              p.x,
-              xAxis.field
-            )}<br>` +
+            `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(p.x, xAxis.field)}<br>` +
             `${y3Info?.label ?? yAxis3.field}: ${formatValueForHover(
               p.y,
-              yAxis3.field
-            )}<extra></extra>`
+              yAxis3.field,
+            )}<extra></extra>`,
         ),
       });
     }
@@ -698,8 +663,7 @@ export function CustomChart({
     // Check if we're using multi-axis (only for scatter/line)
     const hasMultiAxis =
       (chartType === "scatter" || chartType === "line") &&
-      ((yAxis2 && yAxis2.field !== "none") ||
-        (yAxis3 && yAxis3.field !== "none"));
+      ((yAxis2 && yAxis2.field !== "none") || (yAxis3 && yAxis3.field !== "none"));
 
     switch (chartType) {
       case "scatter":
@@ -729,25 +693,16 @@ export function CustomChart({
               name: yInfo?.label ?? yAxis.field,
               hovertemplate: points.map(
                 (p) =>
-                  `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(
-                    p.x,
-                    xAxis.field
-                  )}<br>` +
+                  `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(p.x, xAxis.field)}<br>` +
                   `${yInfo?.label ?? yAxis.field}: ${formatValueForHover(
                     p.y,
-                    yAxis.field
-                  )}<extra></extra>`
+                    yAxis.field,
+                  )}<extra></extra>`,
               ),
             },
           ];
         } else {
-          chartTraces = buildScatterTraces(
-            trades,
-            xAxis,
-            yAxis,
-            colorBy,
-            sizeBy
-          );
+          chartTraces = buildScatterTraces(trades, xAxis, yAxis, colorBy, sizeBy);
         }
         break;
       case "line":
@@ -775,14 +730,11 @@ export function CustomChart({
               name: yInfo?.label ?? yAxis.field,
               hovertemplate: points.map(
                 (p) =>
-                  `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(
-                    p.x,
-                    xAxis.field
-                  )}<br>` +
+                  `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(p.x, xAxis.field)}<br>` +
                   `${yInfo?.label ?? yAxis.field}: ${formatValueForHover(
                     p.y,
-                    yAxis.field
-                  )}<extra></extra>`
+                    yAxis.field,
+                  )}<extra></extra>`,
               ),
             },
           ];
@@ -803,13 +755,7 @@ export function CustomChart({
 
     // Add additional Y-axis traces for scatter/line
     if (hasMultiAxis) {
-      const additionalTraces = buildAdditionalAxisTraces(
-        trades,
-        xAxis,
-        yAxis2,
-        yAxis3,
-        chartType
-      );
+      const additionalTraces = buildAdditionalAxisTraces(trades, xAxis, yAxis2, yAxis3, chartType);
       chartTraces = [...chartTraces, ...additionalTraces];
     }
 
@@ -817,8 +763,7 @@ export function CustomChart({
     const yInfo = getFieldInfo(yAxis.field);
 
     // Show legend for categorical color fields OR when using multi-axis
-    const useCategoricalColor =
-      colorBy && colorBy.field !== "none" && isBinaryField(colorBy.field);
+    const useCategoricalColor = colorBy && colorBy.field !== "none" && isBinaryField(colorBy.field);
     const showLegend = useCategoricalColor || hasMultiAxis;
 
     // Use date axis type for date fields
@@ -834,24 +779,18 @@ export function CustomChart({
     // generate numeric tickvals. Mixing numeric tickvals with string category
     // labels would cause a mismatch, so we only apply time tick formatting to
     // non-bar/non-box charts.
-    const isXTimeField =
-      xAxis.field === "timeOfDayMinutes" && chartType !== "bar" && !isBoxPlot;
-    const isYTimeField =
-      yAxis.field === "timeOfDayMinutes" && chartType !== "bar";
+    const isXTimeField = xAxis.field === "timeOfDayMinutes" && chartType !== "bar" && !isBoxPlot;
+    const isYTimeField = yAxis.field === "timeOfDayMinutes" && chartType !== "bar";
 
     // Generate time axis ticks using shared helper
     const xTimeTicks = isXTimeField
       ? generateTimeAxisTicksFromData(
-          trades
-            .map((t) => getTradeValue(t, xAxis.field))
-            .filter((v): v is number => v !== null)
+          trades.map((t) => getTradeValue(t, xAxis.field)).filter((v): v is number => v !== null),
         )
       : null;
     const yTimeTicks = isYTimeField
       ? generateTimeAxisTicksFromData(
-          trades
-            .map((t) => getTradeValue(t, yAxis.field))
-            .filter((v): v is number => v !== null)
+          trades.map((t) => getTradeValue(t, yAxis.field)).filter((v): v is number => v !== null),
         )
       : null;
 
@@ -883,8 +822,7 @@ export function CustomChart({
       },
       yaxis: {
         title: {
-          text:
-            chartType === "histogram" ? "Count" : yInfo?.label ?? yAxis.field,
+          text: chartType === "histogram" ? "Count" : (yInfo?.label ?? yAxis.field),
         },
         zeroline: true,
         zerolinewidth: 1,
@@ -956,17 +894,7 @@ export function CustomChart({
     }
 
     return { traces: chartTraces, layout: chartLayout };
-  }, [
-    trades,
-    chartType,
-    xAxis,
-    yAxis,
-    yAxis2,
-    yAxis3,
-    colorBy,
-    sizeBy,
-    boxBucketCount,
-  ]);
+  }, [trades, chartType, xAxis, yAxis, yAxis2, yAxis3, colorBy, sizeBy, boxBucketCount]);
 
   if (trades.length === 0) {
     return (

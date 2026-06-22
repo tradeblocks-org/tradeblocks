@@ -41,9 +41,11 @@ export function buildThetaQueryInfo(sessionId: string, env: NodeJS.ProcessEnv = 
 }
 
 export function isRetryableGrpcCode(code: number | undefined): boolean {
-  return code === grpc.status.UNAVAILABLE
-    || code === grpc.status.DEADLINE_EXCEEDED
-    || code === grpc.status.RESOURCE_EXHAUSTED;
+  return (
+    code === grpc.status.UNAVAILABLE ||
+    code === grpc.status.DEADLINE_EXCEEDED ||
+    code === grpc.status.RESOURCE_EXHAUSTED
+  );
 }
 
 interface MddsStreamCall<T = unknown> {
@@ -104,7 +106,7 @@ export class ThetaMddsClient {
     const credentials = resolveThetaCredentials(this.env);
     const auth = await authenticateThetaData(credentials, this.fetchImpl);
     const config = getThetaMddsConfig(this.env);
-    const pkg = await this.loadGrpcPackage() as {
+    const pkg = (await this.loadGrpcPackage()) as {
       BetaEndpoints?: {
         BetaThetaTerminal?: new (
           target: string,
@@ -124,7 +126,8 @@ export class ThetaMddsClient {
       throw new Error("ThetaMddsClient connection was closed before it completed");
     }
     this.sessionId = auth.sessionId;
-    this.concurrencyLimit = config.maxConcurrency ?? thetaConcurrencyForTier(auth.optionsSubscription);
+    this.concurrencyLimit =
+      config.maxConcurrency ?? thetaConcurrencyForTier(auth.optionsSubscription);
     this.stub = stub;
   }
 
@@ -199,9 +202,10 @@ export class ThetaMddsClient {
         });
       } catch (error) {
         lastError = error;
-        const code = typeof error === "object" && error && "code" in error
-          ? Number((error as { code: unknown }).code)
-          : undefined;
+        const code =
+          typeof error === "object" && error && "code" in error
+            ? Number((error as { code: unknown }).code)
+            : undefined;
         if (!isRetryableGrpcCode(code) || attempt === config.maxAttempts) throw error;
         this.release();
         releasePermit = false;

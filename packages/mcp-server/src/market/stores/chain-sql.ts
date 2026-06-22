@@ -21,10 +21,7 @@ function lit(value: string): string {
  * date partition. Results are ordered by `ticker` so consumer iteration is
  * deterministic across backends.
  */
-export function buildReadChainSQL(
-  underlying: string,
-  date: string,
-): BuiltSQL {
+export function buildReadChainSQL(underlying: string, date: string): BuiltSQL {
   return {
     sql: `SELECT underlying, date, ticker, contract_type, strike, expiration, dte, exercise_style
           FROM market.option_chain
@@ -43,10 +40,7 @@ export function buildReadChainSQL(
  *
  * Throws when `dates` is empty (prevents `IN ()` which DuckDB rejects).
  */
-export function buildReadChainDatesSQL(
-  underlying: string,
-  dates: string[],
-): BuiltSQL {
+export function buildReadChainDatesSQL(underlying: string, dates: string[]): BuiltSQL {
   if (dates.length === 0) {
     throw new Error("buildReadChainDatesSQL: dates must not be empty");
   }

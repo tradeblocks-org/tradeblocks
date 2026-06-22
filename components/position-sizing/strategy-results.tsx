@@ -5,11 +5,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Separator } from "@/components/ui/separator";
 import { KellyMetrics } from "@tradeblocks/lib";
 import { AlertTriangle, HelpCircle, Info } from "lucide-react";
@@ -30,24 +26,17 @@ interface StrategyResultsProps {
   startingCapital: number;
 }
 
-export function StrategyResults({
-  strategies,
-  startingCapital,
-}: StrategyResultsProps) {
+export function StrategyResults({ strategies, startingCapital }: StrategyResultsProps) {
   if (strategies.length === 0) {
     return (
       <Card className="p-8 text-center">
-        <p className="text-muted-foreground">
-          No strategies available for analysis.
-        </p>
+        <p className="text-muted-foreground">No strategies available for analysis.</p>
       </Card>
     );
   }
 
   // Check if any strategy has unrealistic values
-  const hasAnyUnrealisticValues = strategies.some(
-    (s) => s.kellyMetrics.hasUnrealisticValues
-  );
+  const hasAnyUnrealisticValues = strategies.some((s) => s.kellyMetrics.hasUnrealisticValues);
 
   return (
     <div className="space-y-4">
@@ -63,14 +52,13 @@ export function StrategyResults({
           </AlertTitle>
           <AlertDescription className="text-amber-800 dark:text-amber-200 [&>span]:block [&>span]:mt-2">
             <span>
-              Your backtest data shows extremely large P&L values (likely from
-              unlimited compounding backtests). We automatically use{" "}
-              <strong>Normalized Kelly</strong> calculations for more realistic
-              position sizing.
+              Your backtest data shows extremely large P&L values (likely from unlimited compounding
+              backtests). We automatically use <strong>Normalized Kelly</strong> calculations for
+              more realistic position sizing.
             </span>
             <span className="font-medium">
-              ✓ <strong>Normalized Kelly</strong> uses percentage returns on
-              margin (ROI %) instead of absolute dollars.
+              ✓ <strong>Normalized Kelly</strong> uses percentage returns on margin (ROI %) instead
+              of absolute dollars.
             </span>
             <span className="text-sm">
               Focus on the <strong>Normalized Kelly %</strong> and{" "}
@@ -84,13 +72,10 @@ export function StrategyResults({
         {strategies.map((strategy) => {
           const hasValidKelly = strategy.kellyMetrics.hasValidKelly;
           const hasOnlyWins =
-            strategy.kellyMetrics.avgWin > 0 &&
-            strategy.kellyMetrics.avgLoss === 0;
+            strategy.kellyMetrics.avgWin > 0 && strategy.kellyMetrics.avgLoss === 0;
           const hasOnlyLosses =
-            strategy.kellyMetrics.avgWin === 0 &&
-            strategy.kellyMetrics.avgLoss > 0;
-          const hasNormalizedKelly =
-            strategy.kellyMetrics.normalizedKellyPct !== undefined;
+            strategy.kellyMetrics.avgWin === 0 && strategy.kellyMetrics.avgLoss > 0;
+          const hasNormalizedKelly = strategy.kellyMetrics.normalizedKellyPct !== undefined;
           const isUnrealistic = strategy.kellyMetrics.hasUnrealisticValues;
 
           // Always use normalized metrics when available (more reliable for position sizing)
@@ -101,31 +86,28 @@ export function StrategyResults({
           const useNormalizedDisplay = hasNormalizedKelly;
 
           const payoffDisplay =
-            isFinite(strategy.kellyMetrics.payoffRatio) &&
-            strategy.kellyMetrics.payoffRatio > 0
+            isFinite(strategy.kellyMetrics.payoffRatio) && strategy.kellyMetrics.payoffRatio > 0
               ? `${strategy.kellyMetrics.payoffRatio.toFixed(2)}x`
               : "--";
 
           // Always show percentage returns when normalized Kelly is available
           const avgWinDisplay =
-            useNormalizedDisplay &&
-            strategy.kellyMetrics.avgWinPct !== undefined
+            useNormalizedDisplay && strategy.kellyMetrics.avgWinPct !== undefined
               ? `${strategy.kellyMetrics.avgWinPct.toFixed(1)}% ROI`
               : strategy.kellyMetrics.avgWin > 0
-              ? `$${strategy.kellyMetrics.avgWin.toLocaleString(undefined, {
-                  maximumFractionDigits: 0,
-                })}`
-              : "--";
+                ? `$${strategy.kellyMetrics.avgWin.toLocaleString(undefined, {
+                    maximumFractionDigits: 0,
+                  })}`
+                : "--";
 
           const avgLossDisplay =
-            useNormalizedDisplay &&
-            strategy.kellyMetrics.avgLossPct !== undefined
+            useNormalizedDisplay && strategy.kellyMetrics.avgLossPct !== undefined
               ? `${strategy.kellyMetrics.avgLossPct.toFixed(1)}% ROI`
               : strategy.kellyMetrics.avgLoss > 0
-              ? `-$${strategy.kellyMetrics.avgLoss.toLocaleString(undefined, {
-                  maximumFractionDigits: 0,
-                })}`
-              : "--";
+                ? `-$${strategy.kellyMetrics.avgLoss.toLocaleString(undefined, {
+                    maximumFractionDigits: 0,
+                  })}`
+                : "--";
 
           // Calculate applied capital based on display mode
           const appliedCapitalDollars = useNormalizedDisplay
@@ -150,8 +132,7 @@ export function StrategyResults({
                   </h3>
                   <div className="flex flex-wrap gap-2 sm:flex-col sm:items-end">
                     <Badge variant="secondary">
-                      {strategy.tradeCount}{" "}
-                      {strategy.tradeCount === 1 ? "trade" : "trades"}
+                      {strategy.tradeCount} {strategy.tradeCount === 1 ? "trade" : "trades"}
                     </Badge>
                     {!hasValidKelly && hasOnlyWins && (
                       <Badge variant="outline">Kelly N/A - Only wins</Badge>
@@ -221,10 +202,9 @@ export function StrategyResults({
                                     : "Calculated using percentage returns on margin requirement."}
                                 </p>
                                 <p className="text-xs text-muted-foreground leading-relaxed">
-                                  Normalized Kelly uses ROI % (P&L / Margin)
-                                  instead of absolute dollars, making it more
-                                  appropriate for position sizing with varying
-                                  position sizes.
+                                  Normalized Kelly uses ROI % (P&L / Margin) instead of absolute
+                                  dollars, making it more appropriate for position sizing with
+                                  varying position sizes.
                                 </p>
                               </div>
                             </div>
@@ -234,17 +214,12 @@ export function StrategyResults({
                     </div>
                     {hasValidKelly &&
                       hasNormalizedKelly &&
-                      Math.abs(
-                        strategy.kellyMetrics.percent - displayKellyPct
-                      ) > 0.1 && (
+                      Math.abs(strategy.kellyMetrics.percent - displayKellyPct) > 0.1 && (
                         <div className="flex items-center gap-1">
                           <p className="text-xs text-muted-foreground">
-                            Full Kelly (absolute):{" "}
-                            {strategy.kellyMetrics.percent.toFixed(1)}%
+                            Full Kelly (absolute): {strategy.kellyMetrics.percent.toFixed(1)}%
                           </p>
-                          {Math.abs(
-                            strategy.kellyMetrics.percent - displayKellyPct
-                          ) >
+                          {Math.abs(strategy.kellyMetrics.percent - displayKellyPct) >
                             displayKellyPct * 0.2 && (
                             <HoverCard>
                               <HoverCardTrigger asChild>
@@ -259,15 +234,13 @@ export function StrategyResults({
                                   </div>
                                   <div className="px-4 pb-4 space-y-3">
                                     <p className="text-sm text-foreground leading-relaxed">
-                                      Normalized Kelly may use a different
-                                      sample of trades (only those with margin
-                                      data).
+                                      Normalized Kelly may use a different sample of trades (only
+                                      those with margin data).
                                     </p>
                                     <p className="text-xs text-muted-foreground leading-relaxed">
                                       For compounding backtests, use the{" "}
-                                      <strong>Normalized Kelly</strong> value as
-                                      it&apos;s calculated from percentage
-                                      returns rather than absolute P&L.
+                                      <strong>Normalized Kelly</strong> value as it&apos;s
+                                      calculated from percentage returns rather than absolute P&L.
                                     </p>
                                   </div>
                                 </div>
@@ -293,9 +266,7 @@ export function StrategyResults({
                     </p>
                   </div>
                   <div className="space-y-1 text-right">
-                    <p className="text-xs text-muted-foreground">
-                      Win/Loss Ratio
-                    </p>
+                    <p className="text-xs text-muted-foreground">Win/Loss Ratio</p>
                     <p className="text-sm font-semibold">{payoffDisplay}</p>
                   </div>
                 </div>
@@ -304,25 +275,19 @@ export function StrategyResults({
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">
-                      {useNormalizedDisplay &&
-                      strategy.kellyMetrics.avgWinPct !== undefined
+                      {useNormalizedDisplay && strategy.kellyMetrics.avgWinPct !== undefined
                         ? "Avg Win (on margin)"
                         : "Average Win"}
                     </p>
-                    <p className="text-sm font-semibold text-green-600">
-                      {avgWinDisplay}
-                    </p>
+                    <p className="text-sm font-semibold text-green-600">{avgWinDisplay}</p>
                   </div>
                   <div className="space-y-1 text-right">
                     <p className="text-xs text-muted-foreground">
-                      {useNormalizedDisplay &&
-                      strategy.kellyMetrics.avgLossPct !== undefined
+                      {useNormalizedDisplay && strategy.kellyMetrics.avgLossPct !== undefined
                         ? "Avg Loss (on margin)"
                         : "Average Loss"}
                     </p>
-                    <p className="text-sm font-semibold text-red-600">
-                      {avgLossDisplay}
-                    </p>
+                    <p className="text-sm font-semibold text-red-600">{avgLossDisplay}</p>
                   </div>
                 </div>
 
@@ -332,9 +297,7 @@ export function StrategyResults({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1">
-                      <p className="text-xs text-muted-foreground">
-                        Max margin used
-                      </p>
+                      <p className="text-xs text-muted-foreground">Max margin used</p>
                       <HoverCard>
                         <HoverCardTrigger asChild>
                           <HelpCircle className="h-3 w-3 text-muted-foreground/60 cursor-help" />
@@ -348,31 +311,24 @@ export function StrategyResults({
                             </div>
                             <div className="px-4 pb-4 space-y-3">
                               <p className="text-sm font-medium text-foreground leading-relaxed">
-                                Peak margin requirement observed historically
-                                for this strategy.
+                                Peak margin requirement observed historically for this strategy.
                               </p>
                               <p className="text-xs text-muted-foreground leading-relaxed">
-                                Higher values indicate more capital-intensive
-                                strategies. This represents the maximum
-                                percentage of your starting capital that was
-                                needed at any point to support all open
-                                positions in this strategy.
+                                Higher values indicate more capital-intensive strategies. This
+                                represents the maximum percentage of your starting capital that was
+                                needed at any point to support all open positions in this strategy.
                               </p>
                             </div>
                           </div>
                         </HoverCardContent>
                       </HoverCard>
                     </div>
-                    <p className="text-sm font-semibold">
-                      {strategy.maxMarginPct.toFixed(1)}%
-                    </p>
+                    <p className="text-sm font-semibold">{strategy.maxMarginPct.toFixed(1)}%</p>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1">
-                      <p className="text-xs text-muted-foreground">
-                        Applied capital
-                      </p>
+                      <p className="text-xs text-muted-foreground">Applied capital</p>
                       <HoverCard>
                         <HoverCardTrigger asChild>
                           <HelpCircle className="h-3 w-3 text-muted-foreground/60 cursor-help" />
@@ -386,8 +342,7 @@ export function StrategyResults({
                             </div>
                             <div className="px-4 pb-4 space-y-3">
                               <p className="text-sm font-medium text-foreground leading-relaxed">
-                                Starting capital × this strategy&apos;s applied
-                                % after Kelly.
+                                Starting capital × this strategy&apos;s applied % after Kelly.
                               </p>
                               <p className="text-xs text-muted-foreground leading-relaxed">
                                 {useNormalizedDisplay
@@ -431,17 +386,14 @@ export function StrategyResults({
                               {useNormalizedDisplay ? (
                                 <>
                                   <p className="text-sm font-medium text-foreground leading-relaxed">
-                                    Applied Kelly % (your Normalized Kelly with
-                                    risk multipliers).
+                                    Applied Kelly % (your Normalized Kelly with risk multipliers).
                                   </p>
                                   <p className="text-xs text-muted-foreground leading-relaxed">
                                     <strong>
-                                      Use this value in Option Omega&apos;s
-                                      allocation % field
+                                      Use this value in Option Omega&apos;s allocation % field
                                     </strong>{" "}
-                                    when re-running your backtest. This is your
-                                    Kelly-optimal position size adjusted for
-                                    your risk tolerance.
+                                    when re-running your backtest. This is your Kelly-optimal
+                                    position size adjusted for your risk tolerance.
                                   </p>
                                 </>
                               ) : (
@@ -450,9 +402,8 @@ export function StrategyResults({
                                     Historical max margin × your Kelly %.
                                   </p>
                                   <p className="text-xs text-muted-foreground leading-relaxed">
-                                    Use this percentage as the per-trade margin
-                                    allocation guideline when setting up your
-                                    backtest.
+                                    Use this percentage as the per-trade margin allocation guideline
+                                    when setting up your backtest.
                                   </p>
                                 </>
                               )}
@@ -496,9 +447,8 @@ export function StrategyResults({
                                     Starting capital × recommended allocation %.
                                   </p>
                                   <p className="text-xs text-muted-foreground leading-relaxed">
-                                    The total dollar amount allocated to this
-                                    strategy based on Kelly-optimal sizing and
-                                    your risk tolerance settings.
+                                    The total dollar amount allocated to this strategy based on
+                                    Kelly-optimal sizing and your risk tolerance settings.
                                   </p>
                                 </>
                               ) : (
@@ -507,10 +457,8 @@ export function StrategyResults({
                                     Starting capital × reference allocation %.
                                   </p>
                                   <p className="text-xs text-muted-foreground leading-relaxed">
-                                    Map this dollar amount to your
-                                    backtest&apos;s per-trade allocation limit
-                                    so it mirrors the Kelly-based guidance
-                                    above.
+                                    Map this dollar amount to your backtest&apos;s per-trade
+                                    allocation limit so it mirrors the Kelly-based guidance above.
                                   </p>
                                 </>
                               )}

@@ -26,25 +26,16 @@
  * downstream consumers continue to compile during the rewrite.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import {
-  buildStoreFixture,
-  type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.ts";
+import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
-import {
-  createMarketStores,
-  type MarketStores,
-  type ContractRow,
-} from "../../src/test-exports.ts";
+import { createMarketStores, type MarketStores, type ContractRow } from "../../src/test-exports.ts";
 
 // Direct module import so the absence-of-symbols assertions can inspect
 // the live module shape (faster than a shell grep, runs in CI).
 import * as chainLoader from "../../src/utils/chain-loader.ts";
 import * as quoteEnricher from "../../src/utils/quote-enricher.ts";
 
-function makeContractRow(
-  overrides: Partial<ContractRow> = {},
-): ContractRow {
+function makeContractRow(overrides: Partial<ContractRow> = {}): ContractRow {
   return {
     underlying: "SPX",
     date: "2025-01-02",
@@ -110,10 +101,34 @@ describe("filterChain + deduplicateContracts — pure utilities survive deletion
     // Each row uses a distinct (contract_type, strike, expiration) so the internal
     // deduplicateContracts step preserves all four — we are testing filtering, not dedup.
     const contracts: ContractRow[] = [
-      makeContractRow({ ticker: "A", contract_type: "call", strike: 5000, expiration: "2025-01-12", dte: 10 }),
-      makeContractRow({ ticker: "B", contract_type: "put",  strike: 5100, expiration: "2025-02-01", dte: 30 }),
-      makeContractRow({ ticker: "C", contract_type: "call", strike: 5200, expiration: "2025-02-16", dte: 45 }),
-      makeContractRow({ ticker: "D", contract_type: "call", strike: 5300, expiration: "2025-03-03", dte: 60 }),
+      makeContractRow({
+        ticker: "A",
+        contract_type: "call",
+        strike: 5000,
+        expiration: "2025-01-12",
+        dte: 10,
+      }),
+      makeContractRow({
+        ticker: "B",
+        contract_type: "put",
+        strike: 5100,
+        expiration: "2025-02-01",
+        dte: 30,
+      }),
+      makeContractRow({
+        ticker: "C",
+        contract_type: "call",
+        strike: 5200,
+        expiration: "2025-02-16",
+        dte: 45,
+      }),
+      makeContractRow({
+        ticker: "D",
+        contract_type: "call",
+        strike: 5300,
+        expiration: "2025-03-03",
+        dte: 60,
+      }),
     ];
 
     const callsBetween20And50 = chainLoader.filterChain(contracts, {
@@ -121,10 +136,10 @@ describe("filterChain + deduplicateContracts — pure utilities survive deletion
       dte_min: 20,
       dte_max: 50,
     });
-    expect(callsBetween20And50.map(c => c.ticker)).toEqual(["C"]);
+    expect(callsBetween20And50.map((c) => c.ticker)).toEqual(["C"]);
 
     const allPuts = chainLoader.filterChain(contracts, { contract_type: "put" });
-    expect(allPuts.map(c => c.ticker)).toEqual(["B"]);
+    expect(allPuts.map((c) => c.ticker)).toEqual(["B"]);
 
     const wideOpen = chainLoader.filterChain(contracts, {});
     expect(wideOpen.length).toBe(4);
@@ -134,8 +149,18 @@ describe("filterChain + deduplicateContracts — pure utilities survive deletion
     // Two contracts share (call, 5000, 2025-01-17) — one SPX, one SPXW.
     // filterChain calls deduplicateContracts internally; SPXW must win.
     const contracts: ContractRow[] = [
-      makeContractRow({ ticker: "SPX250117C05000000",  strike: 5000, expiration: "2025-01-17", contract_type: "call" }),
-      makeContractRow({ ticker: "SPXW250117C05000000", strike: 5000, expiration: "2025-01-17", contract_type: "call" }),
+      makeContractRow({
+        ticker: "SPX250117C05000000",
+        strike: 5000,
+        expiration: "2025-01-17",
+        contract_type: "call",
+      }),
+      makeContractRow({
+        ticker: "SPXW250117C05000000",
+        strike: 5000,
+        expiration: "2025-01-17",
+        contract_type: "call",
+      }),
     ];
     const out = chainLoader.filterChain(contracts, { contract_type: "call" });
     expect(out.length).toBe(1);
@@ -155,8 +180,12 @@ describe("chain-loader + quote-enricher — exported API shape after surgical de
     // The three-step cache lifecycle is gone — reads never trigger provider
     // fetches. The SQL builders and partition-source helpers that backed the
     // deleted cache reads are also gone.
-    expect((chainLoader as unknown as Record<string, unknown>).buildCachedChainQuery).toBeUndefined();
-    expect((chainLoader as unknown as Record<string, unknown>).optionChainPartitionSource).toBeUndefined();
+    expect(
+      (chainLoader as unknown as Record<string, unknown>).buildCachedChainQuery,
+    ).toBeUndefined();
+    expect(
+      (chainLoader as unknown as Record<string, unknown>).optionChainPartitionSource,
+    ).toBeUndefined();
     expect((chainLoader as unknown as Record<string, unknown>).chainColumnsSql).toBeUndefined();
     expect((chainLoader as unknown as Record<string, unknown>).chainRowFromSql).toBeUndefined();
   });
@@ -185,7 +214,9 @@ describe("chain-loader + quote-enricher — exported API shape after surgical de
       // Message must point readers at the replacement API.
       expect(String((caught as Error).message)).toContain("stores.chain.readChain");
       // Sanity: the message names the symbol so future grep-walkers can find it.
-      expect(String((caught as Error).message)).toContain(name === "loadChain" ? "loadChain" : "loadChainsBulk");
+      expect(String((caught as Error).message)).toContain(
+        name === "loadChain" ? "loadChain" : "loadChainsBulk",
+      );
     }
   });
 
@@ -233,7 +264,9 @@ describe("chain-loader + quote-enricher — exported API shape after surgical de
 
     // fetchExistingCoverage was a private helper of enrichQuotesForTickers —
     // it should be gone in either case.
-    expect((quoteEnricher as unknown as Record<string, unknown>).fetchExistingCoverage).toBeUndefined();
+    expect(
+      (quoteEnricher as unknown as Record<string, unknown>).fetchExistingCoverage,
+    ).toBeUndefined();
   });
 
   it("buildEnrichmentPlan: pure planner returns deterministic output", () => {

@@ -72,7 +72,12 @@ describe("parseCsvToBars", () => {
         "2025-01-02,16:00,4750,4751,4748,4749,1500\n",
     );
     const bars = await parseCsvToBars(csvPath, "SPX", {
-      date: "date", time: "time", open: "open", high: "high", low: "low", close: "close",
+      date: "date",
+      time: "time",
+      open: "open",
+      high: "high",
+      low: "low",
+      close: "close",
     });
     expect(bars).toHaveLength(3);
     expect(bars[0].ticker).toBe("SPX");
@@ -85,13 +90,13 @@ describe("parseCsvToBars", () => {
   it("auto-extracts time from a Unix-timestamp date column when time is unmapped", async () => {
     const csvPath = path.join(tmpDir, "spx-unix.csv");
     // 1735828200 = 2025-01-02 14:30:00 UTC = 09:30 ET (no DST in early Jan).
-    await fs.writeFile(
-      csvPath,
-      "ts,open,high,low,close\n" +
-        "1735828200,4700,4705,4699,4702\n",
-    );
+    await fs.writeFile(csvPath, "ts,open,high,low,close\n" + "1735828200,4700,4705,4699,4702\n");
     const bars = await parseCsvToBars(csvPath, "SPX", {
-      ts: "date", open: "open", high: "high", low: "low", close: "close",
+      ts: "date",
+      open: "open",
+      high: "high",
+      low: "low",
+      close: "close",
     });
     expect(bars).toHaveLength(1);
     expect(bars[0].date).toBe("2025-01-02");
@@ -102,11 +107,15 @@ describe("parseCsvToBars", () => {
     const csvPath = path.join(tmpDir, "spx-lower.csv");
     await fs.writeFile(
       csvPath,
-      "date,time,open,high,low,close\n" +
-        "2025-01-02,09:30,4700,4705,4699,4702\n",
+      "date,time,open,high,low,close\n" + "2025-01-02,09:30,4700,4705,4699,4702\n",
     );
     const bars = await parseCsvToBars(csvPath, "spx", {
-      date: "date", time: "time", open: "open", high: "high", low: "low", close: "close",
+      date: "date",
+      time: "time",
+      open: "open",
+      high: "high",
+      low: "low",
+      close: "close",
     });
     expect(bars[0].ticker).toBe("SPX");
   });
@@ -122,7 +131,11 @@ describe("parseCsvToBars", () => {
     await fs.writeFile(csvPath, "date,open,high,low,close\n");
     await expect(
       parseCsvToBars(csvPath, "SPX", {
-        date: "date", open: "open", high: "high", low: "low", close: "close",
+        date: "date",
+        open: "open",
+        high: "high",
+        low: "low",
+        close: "close",
       }),
     ).rejects.toThrow(/no data rows/);
   });
@@ -131,11 +144,15 @@ describe("parseCsvToBars", () => {
     const csvPath = path.join(tmpDir, "bad-dates.csv");
     await fs.writeFile(
       csvPath,
-      "date,time,open,high,low,close\n" +
-        "not-a-date,09:30,4700,4705,4699,4702\n",
+      "date,time,open,high,low,close\n" + "not-a-date,09:30,4700,4705,4699,4702\n",
     );
     const bars = await parseCsvToBars(csvPath, "SPX", {
-      date: "date", time: "time", open: "open", high: "high", low: "low", close: "close",
+      date: "date",
+      time: "time",
+      open: "open",
+      high: "high",
+      low: "low",
+      close: "close",
     });
     expect(bars).toEqual([]);
   });
@@ -148,14 +165,30 @@ describe("parseCsvToBars", () => {
 describe("parseDatabaseRowsToBars", () => {
   it("parses pre-fetched DuckDB rows into BarRow[] with ticker injection", () => {
     const rows = [
-      { trade_date: "2025-01-02", trade_time: "09:30",
-        spx_open: "4700", spx_high: "4705", spx_low: "4699", spx_close: "4702" },
-      { trade_date: "2025-01-02", trade_time: "09:31",
-        spx_open: "4702", spx_high: "4706", spx_low: "4701", spx_close: "4704" },
+      {
+        trade_date: "2025-01-02",
+        trade_time: "09:30",
+        spx_open: "4700",
+        spx_high: "4705",
+        spx_low: "4699",
+        spx_close: "4702",
+      },
+      {
+        trade_date: "2025-01-02",
+        trade_time: "09:31",
+        spx_open: "4702",
+        spx_high: "4706",
+        spx_low: "4701",
+        spx_close: "4704",
+      },
     ];
     const bars = parseDatabaseRowsToBars(rows, "SPX", {
-      trade_date: "date", trade_time: "time",
-      spx_open: "open", spx_high: "high", spx_low: "low", spx_close: "close",
+      trade_date: "date",
+      trade_time: "time",
+      spx_open: "open",
+      spx_high: "high",
+      spx_low: "low",
+      spx_close: "close",
     });
     expect(bars).toHaveLength(2);
     expect(bars[0].ticker).toBe("SPX");
@@ -175,7 +208,12 @@ describe("parseDatabaseRowsToBars", () => {
       { d: "2025-01-02", t: "09:30", o: "100", h: "100", l: "100", c: "100" },
     ];
     const bars = parseDatabaseRowsToBars(rows, "AAPL", {
-      d: "date", t: "time", o: "open", h: "high", l: "low", c: "close",
+      d: "date",
+      t: "time",
+      o: "open",
+      h: "high",
+      l: "low",
+      c: "close",
     });
     expect(bars).toHaveLength(1);
     expect(bars[0].date).toBe("2025-01-02");

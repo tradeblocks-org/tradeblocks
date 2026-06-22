@@ -25,14 +25,8 @@ import { DuckDBInstance } from "@duckdb/node-api";
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 
 import { registerMarketImportTools } from "../../src/tools/market-imports.ts";
-import {
-  closeConnection,
-  createMarketStores,
-} from "../../src/test-exports.ts";
-import {
-  buildStoreFixture,
-  type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.ts";
+import { closeConnection, createMarketStores } from "../../src/test-exports.ts";
+import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import type { MarketStores } from "../../src/market/stores/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -75,7 +69,11 @@ function parseToolJson(output: Awaited<ReturnType<ToolHandler>>) {
     // Fall back to text — auto-enrich tools may use plain text + isError
     const text = output.content.find((item) => item.type === "text");
     if (text && text.type === "text") {
-      try { return JSON.parse(text.text); } catch { return { text: text.text }; }
+      try {
+        return JSON.parse(text.text);
+      } catch {
+        return { text: text.text };
+      }
     }
     throw new Error("Expected JSON resource payload");
   }
@@ -88,8 +86,7 @@ function shapeOf(captured: CapturedTool): Record<string, unknown> {
     _def?: { shape?: () => Record<string, unknown> };
   };
   const shape =
-    schema?.shape ??
-    (typeof schema?._def?.shape === "function" ? schema._def.shape() : undefined);
+    schema?.shape ?? (typeof schema?._def?.shape === "function" ? schema._def.shape() : undefined);
   if (!shape) throw new Error("Could not extract Zod schema shape");
   return shape;
 }
@@ -154,11 +151,7 @@ describe("import_market_csv", () => {
     }
     expect(out.isError).toBeFalsy();
 
-    const coverage = await stores.spot.getCoverage(
-      "SPX",
-      "2025-01-02",
-      "2025-01-02",
-    );
+    const coverage = await stores.spot.getCoverage("SPX", "2025-01-02", "2025-01-02");
     expect(coverage.totalDates).toBe(1);
     expect(coverage.earliest).toBe("2025-01-02");
     expect(coverage.latest).toBe("2025-01-02");
@@ -184,11 +177,7 @@ describe("import_market_csv", () => {
     }
     expect(out.isError).toBeFalsy();
 
-    const coverage = await stores.spot.getCoverage(
-      "SPX",
-      "2025-01-02",
-      "2025-01-02",
-    );
+    const coverage = await stores.spot.getCoverage("SPX", "2025-01-02", "2025-01-02");
     expect(coverage.totalDates).toBe(1);
 
     const data = parseToolJson(out);
@@ -262,7 +251,6 @@ describe("import tools reject target_table", () => {
     expect(captured).toBeDefined();
     expect(Object.keys(shapeOf(captured!))).not.toContain("target_table");
   });
-
 });
 
 // ---------------------------------------------------------------------------
@@ -329,11 +317,7 @@ describe("import_from_database", () => {
     }
     expect(out.isError).toBeFalsy();
 
-    const coverage = await stores.spot.getCoverage(
-      "SPX",
-      "2025-01-02",
-      "2025-01-02",
-    );
+    const coverage = await stores.spot.getCoverage("SPX", "2025-01-02", "2025-01-02");
     expect(coverage.totalDates).toBe(1);
   });
 
@@ -408,11 +392,7 @@ describe("dry_run preserves behavior", () => {
     }
     expect(out.isError).toBeFalsy();
 
-    const coverage = await stores.spot.getCoverage(
-      "SPX",
-      "2025-01-02",
-      "2025-01-02",
-    );
+    const coverage = await stores.spot.getCoverage("SPX", "2025-01-02", "2025-01-02");
     expect(coverage.totalDates).toBe(0);
     expect(coverage.earliest).toBeNull();
     expect(coverage.latest).toBeNull();

@@ -29,44 +29,54 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
   });
 
   it("projects wall time from request count, average latency, and concurrency", () => {
-    expect(projectBackfillWallTimeHours({
-      requestCount: 196_892,
-      avgLatencyMs: 3000,
-      concurrency: 4,
-    })).toBeCloseTo(41.02, 2);
+    expect(
+      projectBackfillWallTimeHours({
+        requestCount: 196_892,
+        avgLatencyMs: 3000,
+        concurrency: 4,
+      }),
+    ).toBeCloseTo(41.02, 2);
   });
 
   it("clamps non-positive concurrency to one when projecting wall time", () => {
-    expect(projectBackfillWallTimeHours({
-      requestCount: 10,
-      avgLatencyMs: 3600,
-      concurrency: 0,
-    })).toBe(0.01);
+    expect(
+      projectBackfillWallTimeHours({
+        requestCount: 10,
+        avgLatencyMs: 3600,
+        concurrency: 0,
+      }),
+    ).toBe(0.01);
 
-    expect(projectBackfillWallTimeHours({
-      requestCount: 10,
-      avgLatencyMs: 3600,
-      concurrency: -2,
-    })).toBe(0.01);
+    expect(
+      projectBackfillWallTimeHours({
+        requestCount: 10,
+        avgLatencyMs: 3600,
+        concurrency: -2,
+      }),
+    ).toBe(0.01);
   });
 
   it("creates a sanitized audit manifest entry", () => {
-    expect(makeBackfillManifestEntry({
+    expect(
+      makeBackfillManifestEntry({
+        status: "committed",
+        partitionPath:
+          "/data/market/option_quote_minutes/underlying=spx/date=2024-07-15/data.parquet",
+        underlying: "spx",
+        date: "2024-07-15",
+        rowCountBefore: 100,
+        rowCountAfter: 100,
+        providerFirstOrderRows: 90,
+        computedFallbackRows: 8,
+        nullGreekRows: 2,
+        endpointErrors: ["  GetOptionHistoryGreeksFirstOrder failed  "],
+        startedAt: "2026-05-05T10:00:00.000Z",
+        completedAt: "2026-05-05T10:01:00.000Z",
+      }),
+    ).toEqual({
       status: "committed",
-      partitionPath: "/data/market/option_quote_minutes/underlying=spx/date=2024-07-15/data.parquet",
-      underlying: "spx",
-      date: "2024-07-15",
-      rowCountBefore: 100,
-      rowCountAfter: 100,
-      providerFirstOrderRows: 90,
-      computedFallbackRows: 8,
-      nullGreekRows: 2,
-      endpointErrors: ["  GetOptionHistoryGreeksFirstOrder failed  "],
-      startedAt: "2026-05-05T10:00:00.000Z",
-      completedAt: "2026-05-05T10:01:00.000Z",
-    })).toEqual({
-      status: "committed",
-      partitionPath: "/data/market/option_quote_minutes/underlying=spx/date=2024-07-15/data.parquet",
+      partitionPath:
+        "/data/market/option_quote_minutes/underlying=spx/date=2024-07-15/data.parquet",
       underlying: "SPX",
       date: "2024-07-15",
       rowCountBefore: 100,
@@ -81,20 +91,23 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
   });
 
   it("formats manifest entries as one ndjson line", () => {
-    const line = formatBackfillManifestLine(makeBackfillManifestEntry({
-      status: "prepared",
-      partitionPath: "/data/market/option_quote_minutes/underlying=SPX/date=2024-07-15/data.parquet",
-      underlying: "SPX",
-      date: "2024-07-15",
-      rowCountBefore: 1,
-      rowCountAfter: 1,
-      providerFirstOrderRows: 1,
-      computedFallbackRows: 0,
-      nullGreekRows: 0,
-      endpointErrors: [],
-      startedAt: "2026-05-05T10:00:00.000Z",
-      completedAt: "2026-05-05T10:00:01.000Z",
-    }));
+    const line = formatBackfillManifestLine(
+      makeBackfillManifestEntry({
+        status: "prepared",
+        partitionPath:
+          "/data/market/option_quote_minutes/underlying=SPX/date=2024-07-15/data.parquet",
+        underlying: "SPX",
+        date: "2024-07-15",
+        rowCountBefore: 1,
+        rowCountAfter: 1,
+        providerFirstOrderRows: 1,
+        computedFallbackRows: 0,
+        nullGreekRows: 0,
+        endpointErrors: [],
+        startedAt: "2026-05-05T10:00:00.000Z",
+        completedAt: "2026-05-05T10:00:01.000Z",
+      }),
+    );
 
     expect(line.endsWith("\n")).toBe(true);
     expect(JSON.parse(line)).toMatchObject({
@@ -107,20 +120,23 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
   });
 
   it("formats post-rename manifest append failures without labeling replacement failed", () => {
-    const line = formatBackfillManifestLine(makeBackfillManifestEntry({
-      status: "committed_manifest_failed",
-      partitionPath: "/data/market/option_quote_minutes/underlying=SPX/date=2024-07-15/data.parquet",
-      underlying: "SPX",
-      date: "2024-07-15",
-      rowCountBefore: 1,
-      rowCountAfter: 1,
-      providerFirstOrderRows: 1,
-      computedFallbackRows: 0,
-      nullGreekRows: 0,
-      endpointErrors: ["manifest append failed after live rename"],
-      startedAt: "2026-05-05T10:00:00.000Z",
-      completedAt: "2026-05-05T10:00:01.000Z",
-    }));
+    const line = formatBackfillManifestLine(
+      makeBackfillManifestEntry({
+        status: "committed_manifest_failed",
+        partitionPath:
+          "/data/market/option_quote_minutes/underlying=SPX/date=2024-07-15/data.parquet",
+        underlying: "SPX",
+        date: "2024-07-15",
+        rowCountBefore: 1,
+        rowCountAfter: 1,
+        providerFirstOrderRows: 1,
+        computedFallbackRows: 0,
+        nullGreekRows: 0,
+        endpointErrors: ["manifest append failed after live rename"],
+        startedAt: "2026-05-05T10:00:00.000Z",
+        completedAt: "2026-05-05T10:00:01.000Z",
+      }),
+    );
 
     expect(JSON.parse(line)).toMatchObject({
       status: "committed_manifest_failed",
@@ -152,33 +168,42 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
   });
 
   it("projects request count from discovered contracts and partitions", () => {
-    expect(estimateBackfillRequestCount({
-      partitionCount: 2,
-      contractCount: 275,
-    })).toBe(550);
+    expect(
+      estimateBackfillRequestCount({
+        partitionCount: 2,
+        contractCount: 275,
+      }),
+    ).toBe(550);
   });
 
   it("groups existing partition tickers into reusable first-order greeks bands", () => {
-    expect(groupBackfillTickersByGreekBand([
-      "SPXW240805C05725000",
-      "SPXW240805P05725000",
-      "SPXW240816C05730000",
-      "SPX240816C05730000",
-      "SPXW240805C05725000",
-    ], "2024-07-15")).toEqual([
+    expect(
+      groupBackfillTickersByGreekBand(
+        [
+          "SPXW240805C05725000",
+          "SPXW240805P05725000",
+          "SPXW240816C05730000",
+          "SPX240816C05730000",
+          "SPXW240805C05725000",
+        ],
+        "2024-07-15",
+      ),
+    ).toEqual([
       {
         key: "SPX|2024-08-16|2024-07-15",
         symbol: "SPX",
         expiration: "2024-08-16",
         date: "2024-07-15",
-        contracts: [{
-          ticker: "SPX240816C05730000",
-          symbol: "SPX",
-          expiration: "2024-08-16",
-          right: "call",
-          strike: 5730,
-          strikeText: "5730.000",
-        }],
+        contracts: [
+          {
+            ticker: "SPX240816C05730000",
+            symbol: "SPX",
+            expiration: "2024-08-16",
+            right: "call",
+            strike: 5730,
+            strikeText: "5730.000",
+          },
+        ],
       },
       {
         key: "SPXW|2024-08-05|2024-07-15",
@@ -209,14 +234,16 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
         symbol: "SPXW",
         expiration: "2024-08-16",
         date: "2024-07-15",
-        contracts: [{
-          ticker: "SPXW240816C05730000",
-          symbol: "SPXW",
-          expiration: "2024-08-16",
-          right: "call",
-          strike: 5730,
-          strikeText: "5730.000",
-        }],
+        contracts: [
+          {
+            ticker: "SPXW240816C05730000",
+            symbol: "SPXW",
+            expiration: "2024-08-16",
+            right: "call",
+            strike: 5730,
+            strikeText: "5730.000",
+          },
+        ],
       },
     ]);
   });
@@ -233,17 +260,19 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
   });
 
   it("estimates band-first backfill requests from band groups plus fallback contracts", () => {
-    expect(estimateBackfillBandRequestCount({
-      bandGroupCount: 42,
-      fallbackContractCount: 3,
-    })).toBe(45);
+    expect(
+      estimateBackfillBandRequestCount({
+        bandGroupCount: 42,
+        fallbackContractCount: 3,
+      }),
+    ).toBe(45);
   });
 
   it("chooses concrete fallback only for partial missing minutes on band-covered contracts", () => {
-    const [group] = groupBackfillTickersByGreekBand([
-      "SPXW240805C05725000",
-      "SPXW240805P05725000",
-    ], "2024-07-15");
+    const [group] = groupBackfillTickersByGreekBand(
+      ["SPXW240805C05725000", "SPXW240805P05725000"],
+      "2024-07-15",
+    );
 
     const fallbacks = collectBackfillConcreteFallbacks({
       group,
@@ -251,9 +280,7 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
         ["SPXW240805C05725000", new Set(["09:30", "09:31"])],
         ["SPXW240805P05725000", new Set(["09:30"])],
       ]),
-      stagedRows: [
-        { ticker: "SPXW240805C05725000", timestamp: "2024-07-15 09:30" },
-      ],
+      stagedRows: [{ ticker: "SPXW240805C05725000", timestamp: "2024-07-15 09:30" }],
     });
 
     expect(fallbacks).toEqual([
@@ -272,10 +299,10 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
   });
 
   it("can opt into concrete fallback for contracts absent from the band", () => {
-    const [group] = groupBackfillTickersByGreekBand([
-      "SPXW240805C05725000",
-      "SPXW240805P05725000",
-    ], "2024-07-15");
+    const [group] = groupBackfillTickersByGreekBand(
+      ["SPXW240805C05725000", "SPXW240805P05725000"],
+      "2024-07-15",
+    );
 
     const fallbacks = collectBackfillConcreteFallbacks({
       group,
@@ -284,9 +311,7 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
         ["SPXW240805C05725000", new Set(["09:30", "09:31"])],
         ["SPXW240805P05725000", new Set(["09:30"])],
       ]),
-      stagedRows: [
-        { ticker: "SPXW240805C05725000", timestamp: "2024-07-15 09:30" },
-      ],
+      stagedRows: [{ ticker: "SPXW240805C05725000", timestamp: "2024-07-15 09:30" }],
     });
 
     expect(fallbacks).toEqual([
@@ -316,9 +341,7 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
   });
 
   it("builds deterministic filesystem-safe run ids", () => {
-    expect(makeBackfillRunId(new Date("2026-05-05T10:01:02.003Z"))).toBe(
-      "20260505T100102003Z",
-    );
+    expect(makeBackfillRunId(new Date("2026-05-05T10:01:02.003Z"))).toBe("20260505T100102003Z");
   });
 
   it("casts canonical string columns in rewrite SQL to preserve parquet physical schema", () => {
@@ -341,11 +364,11 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
     const dir = await mkdtemp(join(tmpdir(), "tb-backfill-manifest-"));
     const manifestPath = join(dir, "manifest.ndjson");
     try {
-      await appendBackfillManifestLineDurable(manifestPath, "{\"status\":\"prepared\"}\n");
-      await appendBackfillManifestLineDurable(manifestPath, "{\"status\":\"committed\"}\n");
+      await appendBackfillManifestLineDurable(manifestPath, '{"status":"prepared"}\n');
+      await appendBackfillManifestLineDurable(manifestPath, '{"status":"committed"}\n');
 
       await expect(readFile(manifestPath, "utf8")).resolves.toBe(
-        "{\"status\":\"prepared\"}\n{\"status\":\"committed\"}\n",
+        '{"status":"prepared"}\n{"status":"committed"}\n',
       );
     } finally {
       await rm(dir, { recursive: true, force: true });

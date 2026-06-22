@@ -46,10 +46,7 @@ export function groupTickersByUnderlying(
  * a row-level column. sourceGlob is interpolated raw; caller must pass a
  * trusted, migrator-composed path.
  */
-export function buildOptionChainSelectQuery(
-  sourceGlob: string,
-  underlying: string,
-): string {
+export function buildOptionChainSelectQuery(sourceGlob: string, underlying: string): string {
   return `SELECT * EXCLUDE (underlying)
               FROM read_parquet('${sourceGlob}')
               WHERE underlying = '${underlying}'`;
@@ -59,10 +56,7 @@ export function buildOptionChainSelectQuery(
  * Build the SELECT for option_quote_minutes rewrite. NO EXCLUDE — the body
  * has no `underlying` column. Filters by root via regexp_extract.
  */
-export function buildOptionQuoteSelectQuery(
-  sourceGlob: string,
-  roots: string[],
-): string {
+export function buildOptionQuoteSelectQuery(sourceGlob: string, roots: string[]): string {
   if (roots.length === 0) {
     throw new Error("buildOptionQuoteSelectQuery: roots must not be empty");
   }

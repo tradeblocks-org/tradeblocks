@@ -244,11 +244,7 @@ export function scaleTradeToOneLot(trade: Trade): number {
  * @param seed - Optional random seed for reproducibility
  * @returns Array of resampled values
  */
-function resampleWithReplacement<T>(
-  data: T[],
-  sampleSize: number,
-  seed?: number
-): T[] {
+function resampleWithReplacement<T>(data: T[], sampleSize: number, seed?: number): T[] {
   const rng = seed !== undefined ? createSeededRandom(seed) : Math.random;
   const result: T[] = [];
 
@@ -294,7 +290,7 @@ export function createSyntheticMaxLossTrades(
   trades: Trade[],
   percentage: number,
   simulationLength: number,
-  basedOn: "simulation" | "historical" = "simulation"
+  basedOn: "simulation" | "historical" = "simulation",
 ): Trade[] {
   if (percentage <= 0 || trades.length === 0 || simulationLength <= 0) {
     return [];
@@ -315,10 +311,7 @@ export function createSyntheticMaxLossTrades(
   }
 
   const requestedBudget = Math.ceil((simulationLength * percentage) / 100);
-  const cappedBudget = Math.min(
-    simulationLength,
-    Math.max(1, requestedBudget)
-  );
+  const cappedBudget = Math.min(simulationLength, Math.max(1, requestedBudget));
 
   if (cappedBudget <= 0) {
     return [];
@@ -326,7 +319,7 @@ export function createSyntheticMaxLossTrades(
 
   const strategyEntries = Array.from(strategiesMap.entries());
   const weights = strategyEntries.map(([, strategyTrades]) =>
-    basedOn === "historical" ? strategyTrades.length : 1
+    basedOn === "historical" ? strategyTrades.length : 1,
   );
   const allocations = allocateSyntheticCounts(weights, cappedBudget);
 
@@ -400,14 +393,11 @@ export function createSyntheticMaxLossTrades(
         : null;
 
     const avgContracts =
-      validContractCount > 0
-        ? Math.max(1, Math.round(totalContracts / validContractCount))
-        : 1;
+      validContractCount > 0 ? Math.max(1, Math.round(totalContracts / validContractCount)) : 1;
 
     const earliestDate = strategyTrades.reduce(
-      (earliest, trade) =>
-        trade.dateOpened < earliest ? trade.dateOpened : earliest,
-      strategyTrades[0].dateOpened
+      (earliest, trade) => (trade.dateOpened < earliest ? trade.dateOpened : earliest),
+      strategyTrades[0].dateOpened,
     );
 
     const reasonForClose =
@@ -442,8 +432,7 @@ export function createSyntheticMaxLossTrades(
         movement: 0,
         maxProfit: 0,
         maxLoss: -maxAbsoluteLoss,
-        syntheticCapitalRatio:
-          maxRelativeLoss > 0 ? maxRelativeLoss : undefined,
+        syntheticCapitalRatio: maxRelativeLoss > 0 ? maxRelativeLoss : undefined,
       };
 
       syntheticTrades.push(syntheticTrade);
@@ -481,7 +470,7 @@ function allocateSyntheticCounts(weights: number[], budget: number): number[] {
   }
 
   const rawAllocations = positiveWeights.map((weight) =>
-    weight === 0 ? 0 : (weight / totalWeight) * budget
+    weight === 0 ? 0 : (weight / totalWeight) * budget,
   );
   const allocations = rawAllocations.map((value) => Math.floor(value));
   let remainder = budget - allocations.reduce((sum, value) => sum + value, 0);
@@ -535,7 +524,7 @@ function allocateSyntheticCounts(weights: number[], budget: number): number[] {
 export function getTradeResamplePool(
   trades: Trade[],
   resampleWindow?: number,
-  strategy?: string
+  strategy?: string,
 ): Trade[] {
   // Filter by strategy if specified
   let filteredTrades = trades;
@@ -545,7 +534,7 @@ export function getTradeResamplePool(
 
   // Sort by date to ensure consistent ordering
   const sortedTrades = [...filteredTrades].sort(
-    (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime()
+    (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime(),
   );
 
   // Apply resample window if specified
@@ -565,11 +554,7 @@ export function getTradeResamplePool(
  * @param seed - Optional random seed
  * @returns Array of resampled P&L values
  */
-export function resampleTradePLs(
-  trades: Trade[],
-  sampleSize: number,
-  seed?: number
-): number[] {
+export function resampleTradePLs(trades: Trade[], sampleSize: number, seed?: number): number[] {
   const pls = trades.map((t) => t.pl);
   return resampleWithReplacement(pls, sampleSize, seed);
 }
@@ -584,7 +569,7 @@ export function resampleTradePLs(
  */
 export function calculateDailyReturns(
   trades: Trade[],
-  normalizeTo1Lot?: boolean
+  normalizeTo1Lot?: boolean,
 ): Array<{ date: string; dailyPL: number }> {
   // Group trades by date
   const dailyPLMap = new Map<string, number>();
@@ -614,16 +599,13 @@ export function calculateDailyReturns(
  */
 export function getDailyResamplePool(
   dailyReturns: Array<{ date: string; dailyPL: number }>,
-  resampleWindow?: number
+  resampleWindow?: number,
 ): number[] {
   // Already sorted by date from calculateDailyReturns
   let poolReturns = dailyReturns;
 
   // Apply resample window if specified
-  if (
-    resampleWindow !== undefined &&
-    resampleWindow < dailyReturns.length
-  ) {
+  if (resampleWindow !== undefined && resampleWindow < dailyReturns.length) {
     // Take the most recent N days
     poolReturns = dailyReturns.slice(-resampleWindow);
   }
@@ -646,16 +628,14 @@ export function getDailyResamplePool(
 export function calculatePercentageReturns(
   trades: Trade[],
   normalizeTo1Lot?: boolean,
-  initialCapital?: number
+  initialCapital?: number,
 ): number[] {
   if (trades.length === 0) {
     return [];
   }
 
   // Sort trades by date to ensure proper chronological order
-  const sortedTrades = [...trades].sort(
-    (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime()
-  );
+  const sortedTrades = [...trades].sort((a, b) => a.dateOpened.getTime() - b.dateOpened.getTime());
 
   const percentageReturns: number[] = [];
 
@@ -710,9 +690,7 @@ export function calculateMarginReturns(trades: Trade[]): number[] {
   }
 
   // Sort trades by date to ensure proper chronological order
-  const sortedTrades = [...trades].sort(
-    (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime()
-  );
+  const sortedTrades = [...trades].sort((a, b) => a.dateOpened.getTime() - b.dateOpened.getTime());
 
   const returns: number[] = [];
 
@@ -736,12 +714,9 @@ export function calculateMarginReturns(trades: Trade[]): number[] {
  */
 export function getPercentageResamplePool(
   percentageReturns: number[],
-  resampleWindow?: number
+  resampleWindow?: number,
 ): number[] {
-  if (
-    resampleWindow !== undefined &&
-    resampleWindow < percentageReturns.length
-  ) {
+  if (resampleWindow !== undefined && resampleWindow < percentageReturns.length) {
     // Take the most recent N returns
     return percentageReturns.slice(-resampleWindow);
   }
@@ -757,11 +732,7 @@ export function getPercentageResamplePool(
  * @param seed - Optional random seed
  * @returns Array of resampled daily P&L values
  */
-export function resampleDailyPLs(
-  dailyPLs: number[],
-  sampleSize: number,
-  seed?: number
-): number[] {
+export function resampleDailyPLs(dailyPLs: number[], sampleSize: number, seed?: number): number[] {
   return resampleWithReplacement(dailyPLs, sampleSize, seed);
 }
 
@@ -782,7 +753,7 @@ function runSingleSimulation(
   resampledValues: number[],
   initialCapital: number,
   tradesPerYear: number,
-  isPercentageMode: boolean = false
+  isPercentageMode: boolean = false,
 ): SimulationPath {
   // Track capital over time
   let capital = initialCapital;
@@ -823,9 +794,7 @@ function runSingleSimulation(
   const numTrades = resampledValues.length;
   const yearsElapsed = numTrades / tradesPerYear;
   const annualizedReturn =
-    yearsElapsed > 0
-      ? Math.pow(1 + totalReturn, 1 / yearsElapsed) - 1
-      : totalReturn;
+    yearsElapsed > 0 ? Math.pow(1 + totalReturn, 1 / yearsElapsed) - 1 : totalReturn;
 
   // Maximum drawdown
   const maxDrawdown = calculateMaxDrawdown(equityCurve);
@@ -866,7 +835,8 @@ function calculateMaxDrawdown(equityCurve: number[]): number {
     //          = (1 + peak - 1 - cumulativeReturn) / (1 + peak)
     //          = (peak - cumulativeReturn) / (1 + peak)
 
-    if (peak > -1) { // Avoid division by zero if portfolio goes to zero
+    if (peak > -1) {
+      // Avoid division by zero if portfolio goes to zero
       const drawdown = (peak - cumulativeReturn) / (1 + peak);
       if (drawdown > maxDrawdown) {
         maxDrawdown = drawdown;
@@ -884,22 +854,17 @@ function calculateMaxDrawdown(equityCurve: number[]): number {
  * @param periodsPerYear - Number of trading periods per year
  * @returns Sharpe ratio (annualized)
  */
-function calculateSharpeRatio(
-  returns: number[],
-  periodsPerYear: number
-): number {
+function calculateSharpeRatio(returns: number[], periodsPerYear: number): number {
   if (returns.length < 2) {
     return 0;
   }
 
   // Mean return
-  const meanReturn =
-    returns.reduce((sum, r) => sum + r, 0) / returns.length;
+  const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
 
   // Standard deviation (sample std dev with N-1)
   const variance =
-    returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) /
-    (returns.length - 1);
+    returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / (returns.length - 1);
   const stdDev = Math.sqrt(variance);
 
   if (stdDev === 0) {
@@ -921,12 +886,12 @@ function calculateSharpeRatio(
  */
 export function runMonteCarloSimulation(
   trades: Trade[],
-  params: MonteCarloParams
+  params: MonteCarloParams,
 ): MonteCarloResult {
   // Validate inputs
   if (trades.length < 10) {
     throw new Error(
-      `Insufficient trades for Monte Carlo simulation. Found ${trades.length} trades, need at least 10.`
+      `Insufficient trades for Monte Carlo simulation. Found ${trades.length} trades, need at least 10.`,
     );
   }
 
@@ -939,16 +904,10 @@ export function runMonteCarloSimulation(
 
   if (params.resampleMethod === "trades") {
     // Individual trade P&L resampling
-    const tradePool = getTradeResamplePool(
-      trades,
-      params.resampleWindow,
-      params.strategy
-    );
+    const tradePool = getTradeResamplePool(trades, params.resampleWindow, params.strategy);
     actualResamplePoolSize = tradePool.length;
     // Extract P&L values, optionally scaling to 1-lot
-    resamplePool = tradePool.map((t) =>
-      params.normalizeTo1Lot ? scaleTradeToOneLot(t) : t.pl
-    );
+    resamplePool = tradePool.map((t) => (params.normalizeTo1Lot ? scaleTradeToOneLot(t) : t.pl));
   } else if (params.resampleMethod === "daily") {
     // Daily returns resampling
     const filteredTrades =
@@ -956,14 +915,8 @@ export function runMonteCarloSimulation(
         ? trades.filter((t) => t.strategy === params.strategy)
         : trades;
 
-    const dailyReturns = calculateDailyReturns(
-      filteredTrades,
-      params.normalizeTo1Lot
-    );
-    const dailyPLs = getDailyResamplePool(
-      dailyReturns,
-      params.resampleWindow
-    );
+    const dailyReturns = calculateDailyReturns(filteredTrades, params.normalizeTo1Lot);
+    const dailyPLs = getDailyResamplePool(dailyReturns, params.resampleWindow);
     actualResamplePoolSize = dailyPLs.length;
     resamplePool = dailyPLs;
   } else {
@@ -972,7 +925,7 @@ export function runMonteCarloSimulation(
       // Use pre-computed returns directly (e.g., margin-based returns)
       const precomputedPool = getPercentageResamplePool(
         params.precomputedReturns,
-        params.resampleWindow
+        params.resampleWindow,
       );
       actualResamplePoolSize = precomputedPool.length;
       resamplePool = precomputedPool;
@@ -985,12 +938,9 @@ export function runMonteCarloSimulation(
       const percentageReturns = calculatePercentageReturns(
         filteredTrades,
         params.normalizeTo1Lot,
-        params.historicalInitialCapital // Use historical capital (if provided) to reconstruct trajectory
+        params.historicalInitialCapital, // Use historical capital (if provided) to reconstruct trajectory
       );
-      const percentagePool = getPercentageResamplePool(
-        percentageReturns,
-        params.resampleWindow
-      );
+      const percentagePool = getPercentageResamplePool(percentageReturns, params.resampleWindow);
       actualResamplePoolSize = percentagePool.length;
       resamplePool = percentagePool;
     }
@@ -999,7 +949,7 @@ export function runMonteCarloSimulation(
   // Validate resample pool size
   if (actualResamplePoolSize < 5) {
     throw new Error(
-      `Insufficient data in resample pool. Found ${actualResamplePoolSize} samples, need at least 5.`
+      `Insufficient data in resample pool. Found ${actualResamplePoolSize} samples, need at least 5.`,
     );
   }
 
@@ -1011,13 +961,12 @@ export function runMonteCarloSimulation(
       trades,
       params.worstCasePercentage,
       params.simulationLength,
-      params.worstCaseBasedOn || "simulation"
+      params.worstCaseBasedOn || "simulation",
     );
 
     // Convert synthetic trades to P&L values based on resample method
     const requestedLossSizing = params.worstCaseSizing || "relative";
-    const capitalBasisRaw =
-      params.historicalInitialCapital || params.initialCapital || 0;
+    const capitalBasisRaw = params.historicalInitialCapital || params.initialCapital || 0;
     const canUseRelative = requestedLossSizing === "relative" && capitalBasisRaw > 0;
     const lossSizing = canUseRelative ? "relative" : "absolute";
     const capitalBasis = capitalBasisRaw > 0 ? capitalBasisRaw : 1;
@@ -1041,7 +990,7 @@ export function runMonteCarloSimulation(
           if (ratio && ratio > 0) {
             return -Math.abs(ratio) * capitalBasis;
           }
-          return (params.normalizeTo1Lot ? scaleTradeToOneLot(t) : t.pl);
+          return params.normalizeTo1Lot ? scaleTradeToOneLot(t) : t.pl;
         }
         return params.normalizeTo1Lot ? scaleTradeToOneLot(t) : t.pl;
       });
@@ -1054,13 +1003,8 @@ export function runMonteCarloSimulation(
   }
 
   const enforcedGuaranteeTrades =
-    params.worstCaseEnabled &&
-    params.worstCaseMode === "guarantee" &&
-    params.simulationLength > 0
-      ? worstCaseTrades.slice(
-          0,
-          Math.min(worstCaseTrades.length, params.simulationLength)
-        )
+    params.worstCaseEnabled && params.worstCaseMode === "guarantee" && params.simulationLength > 0
+      ? worstCaseTrades.slice(0, Math.min(worstCaseTrades.length, params.simulationLength))
       : [];
 
   // Run all simulations
@@ -1076,11 +1020,7 @@ export function runMonteCarloSimulation(
       ? Math.max(0, params.simulationLength - enforcedGuaranteeTrades.length)
       : params.simulationLength;
 
-    let resampledPLs = resampleWithReplacement(
-      resamplePool,
-      baselineSampleSize,
-      seed
-    );
+    let resampledPLs = resampleWithReplacement(resamplePool, baselineSampleSize, seed);
 
     if (guaranteeActive) {
       const combined = [...resampledPLs];
@@ -1103,7 +1043,7 @@ export function runMonteCarloSimulation(
       resampledPLs,
       params.initialCapital,
       params.tradesPerYear,
-      isPercentageMode
+      isPercentageMode,
     );
 
     simulations.push(simulation);
@@ -1131,9 +1071,7 @@ export function runMonteCarloSimulation(
  * @param simulations - Array of simulation paths
  * @returns PercentileData with P5, P25, P50, P75, P95 curves
  */
-function calculatePercentiles(
-  simulations: SimulationPath[]
-): PercentileData {
+function calculatePercentiles(simulations: SimulationPath[]): PercentileData {
   if (simulations.length === 0) {
     throw new Error("No simulations to calculate percentiles from");
   }
@@ -1205,45 +1143,36 @@ function calculateStatistics(simulations: SimulationPath[]): SimulationStatistic
   const sortedTotalReturns = [...totalReturns].sort((a, b) => a - b);
 
   // Mean and median calculations
-  const meanFinalValue =
-    finalValues.reduce((sum, v) => sum + v, 0) / finalValues.length;
+  const meanFinalValue = finalValues.reduce((sum, v) => sum + v, 0) / finalValues.length;
   const medianFinalValue = percentile(sortedFinalValues, 50);
 
-  const meanTotalReturn =
-    totalReturns.reduce((sum, r) => sum + r, 0) / totalReturns.length;
+  const meanTotalReturn = totalReturns.reduce((sum, r) => sum + r, 0) / totalReturns.length;
   const medianTotalReturn = percentile(sortedTotalReturns, 50);
 
   const meanAnnualizedReturn =
-    annualizedReturns.reduce((sum, r) => sum + r, 0) /
-    annualizedReturns.length;
+    annualizedReturns.reduce((sum, r) => sum + r, 0) / annualizedReturns.length;
   const medianAnnualizedReturn = percentile(
     [...annualizedReturns].sort((a, b) => a - b),
-    50
+    50,
   );
 
-  const meanMaxDrawdown =
-    maxDrawdowns.reduce((sum, d) => sum + d, 0) / maxDrawdowns.length;
+  const meanMaxDrawdown = maxDrawdowns.reduce((sum, d) => sum + d, 0) / maxDrawdowns.length;
   const medianMaxDrawdown = percentile(
     [...maxDrawdowns].sort((a, b) => a - b),
-    50
+    50,
   );
 
-  const meanSharpeRatio =
-    sharpeRatios.reduce((sum, s) => sum + s, 0) / sharpeRatios.length;
+  const meanSharpeRatio = sharpeRatios.reduce((sum, s) => sum + s, 0) / sharpeRatios.length;
 
   // Standard deviation of final values
   const variance =
-    finalValues.reduce(
-      (sum, v) => sum + Math.pow(v - meanFinalValue, 2),
-      0
-    ) /
+    finalValues.reduce((sum, v) => sum + Math.pow(v - meanFinalValue, 2), 0) /
     (finalValues.length - 1);
   const stdFinalValue = Math.sqrt(variance);
 
   // Probability of profit
   const profitableSimulations = totalReturns.filter((r) => r > 0).length;
-  const probabilityOfProfit =
-    profitableSimulations / totalReturns.length;
+  const probabilityOfProfit = profitableSimulations / totalReturns.length;
 
   // Value at Risk
   const valueAtRisk = {
