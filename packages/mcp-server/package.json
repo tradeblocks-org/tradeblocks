@@ -1,6 +1,6 @@
 {
   "name": "tradeblocks-mcp",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "MCP server for options trade analysis",
   "author": "David Romeo <davidmromeo@gmail.com>",
   "type": "module",
@@ -123,8 +123,9 @@
     }
   },
   "scripts": {
-    "build": "tsup && node scripts/copy-provider-assets.mjs && npm run build:http-server && npm run fix-http-import",
+    "build": "tsup && node scripts/copy-provider-assets.mjs && npm run build:http-server && npm run build:iv-worker && npm run fix-http-import",
     "build:http-server": "esbuild src/http-server.ts --bundle --outfile=server/http-server.js --format=esm --platform=node --target=node18 --packages=external",
+    "build:iv-worker": "esbuild src/utils/iv-solver-worker.ts --bundle --outfile=server/iv-solver-worker.js --format=esm --platform=node --target=node18 --packages=external && esbuild src/utils/iv-solver-worker.ts --bundle --outfile=dist/iv-solver-worker.js --format=esm --platform=node --target=node18 --packages=external",
     "fix-http-import": "node -e \"const fs=require('fs');const f='server/index.js';let c=fs.readFileSync(f,'utf8');c=c.replace(/\\.\\/http-server-[A-Z0-9]+\\.js/g,'./http-server.js');fs.writeFileSync(f,c);\" && rm -f server/http-server-*.js server/http-server-*.map",
     "dev": "tsup --watch",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
@@ -151,6 +152,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^25.9.3",
     "archiver": "^7.0.1",
+    "esbuild": "^0.27.2",
     "jest": "^30.3.0",
     "ts-jest": "^29.4.9",
     "tsup": "^8.4.0",

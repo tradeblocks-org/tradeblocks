@@ -20,7 +20,7 @@ import type {
   BulkProgressReporter,
 } from "./types.ts";
 import type { OiDailyRow, QuoteRow } from "../stores/types.ts";
-import { applyQuoteGreeks, type QuoteGreeksStats } from "../../utils/option-quote-greeks.ts";
+import { applyQuoteGreeksParallel, type QuoteGreeksStats } from "../../utils/option-quote-greeks.ts";
 
 export interface MarketIngestorDeps {
   stores: MarketStores;
@@ -441,7 +441,7 @@ export class MarketIngestor {
       }
     }
 
-    const stats = applyQuoteGreeks({
+    const stats = await applyQuoteGreeksParallel({
       rows,
       getDate: (row) => row.timestamp.slice(0, 10),
       getTime: (row) => row.timestamp.slice(11, 16),

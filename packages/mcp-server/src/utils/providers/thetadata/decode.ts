@@ -38,6 +38,21 @@ const PRICE_TYPE_FACTORS = [
 
 const ET_MINUTE_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
 
+// Constructing an Intl.DateTimeFormat is expensive (it builds an ICU formatter)
+// and the options are constant. Build it once at module load instead of per
+// call — this function runs once per decoded quote row, so a per-row construct
+// dominated the decode cost on dense chains.
+const ET_MINUTE_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  hourCycle: "h23",
+});
+
 export function thetaPriceToNumber(price: ThetaPriceLike): number {
   return price.type === 0 ? Number.NaN : price.value * PRICE_TYPE_FACTORS[price.type];
 }
@@ -45,16 +60,7 @@ export function thetaPriceToNumber(price: ThetaPriceLike): number {
 export function thetaTimestampToEtMinute(value: string | number | Date): string {
   if (typeof value === "string" && ET_MINUTE_PATTERN.test(value)) return value;
   const date = value instanceof Date ? value : new Date(value);
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    hourCycle: "h23",
-  }).formatToParts(date);
+  const parts = ET_MINUTE_FORMAT.formatToParts(date);
   const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}`;
 }

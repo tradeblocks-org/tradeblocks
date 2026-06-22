@@ -16,3 +16,8 @@ scripts/reports/latest.json
 
 # Local DuckDB files (data lives in ~/tradeblocks-data/)
 data/*.duckdb
+
+# Transient worker bundle built beside its source by the Jest globalSetup
+# (tests/global-setup.mjs) so the worker pool can spawn it under ts-jest.
+src/utils/iv-solver-worker.js
+src/utils/iv-solver-worker.js.map

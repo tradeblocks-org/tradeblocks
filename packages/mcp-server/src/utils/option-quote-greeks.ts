@@ -2,6 +2,11 @@ import { getSofrRateByKey } from "@tradeblocks/lib";
 import type { ContractRow } from "./chain-loader.ts";
 import { computeLegGreeks } from "./black-scholes.ts";
 import { computeFractionalDte } from "./option-time.ts";
+import {
+  getSharedIvSolverPool,
+  type IvSolveColumns,
+  type IvSolverPool,
+} from "./iv-solver-pool.ts";
 
 export type QuoteGreeksSource = "massive" | "thetadata" | "computed";
 export type QuoteGreeksMode = "auto" | "provider" | "compute";
@@ -56,6 +61,21 @@ export const OPTION_QUOTE_GREEKS_DIVIDEND_YIELD = 0;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+// `getSofrRateByKey` does a binary search over the rate table on every call,
+// but within a quote-ingest batch the date is constant (one partition = one
+// trading day) and across batches a date repeats for every row of that day.
+// Memoize the lookup by date key — the function is a pure deterministic map
+// from key → rate, so the cached value is identical to a fresh lookup.
+const sofrRateByDateKey = new Map<string, number>();
+
+function memoizedSofrRate(dateKey: string): number {
+  const cached = sofrRateByDateKey.get(dateKey);
+  if (cached !== undefined) return cached;
+  const rate = getSofrRateByKey(dateKey);
+  sofrRateByDateKey.set(dateKey, rate);
+  return rate;
 }
 
 export function hasQuoteGreeks(row: QuoteGreekFields): boolean {
@@ -123,7 +143,7 @@ export function computeQuoteGreeks(params: {
   if (!(optionPrice > 0) || !(underlyingPrice > 0) || !(strike > 0)) return null;
   const dte = computeFractionalDte(date, time.slice(0, 5), expiration);
   if (!(dte >= 0)) return null;
-  const riskFreeRate = getSofrRateByKey(date) / 100;
+  const riskFreeRate = memoizedSofrRate(date) / 100;
   const result = computeLegGreeks(
     optionPrice,
     underlyingPrice,
@@ -152,7 +172,7 @@ export function buildUnderlyingPriceKey(date: string, time: string): string {
   return `${date}|${time.slice(0, 5)}`;
 }
 
-export function applyQuoteGreeks<T extends QuoteGreekFields>(params: {
+export interface ApplyQuoteGreeksParams<T extends QuoteGreekFields> {
   rows: T[];
   getDate: (row: T) => string;
   getTime: (row: T) => string;
@@ -161,19 +181,10 @@ export function applyQuoteGreeks<T extends QuoteGreekFields>(params: {
   getUnderlyingPrice: (date: string, time: string) => number | undefined;
   mode?: QuoteGreeksMode;
   defaultProviderSource?: Exclude<QuoteGreeksSource, "computed">;
-}): QuoteGreeksStats {
-  const {
-    rows,
-    getDate,
-    getTime,
-    getMid,
-    getContractMeta,
-    getUnderlyingPrice,
-    mode = "auto",
-    defaultProviderSource,
-  } = params;
+}
 
-  const stats: QuoteGreeksStats = {
+function emptyStats(): QuoteGreeksStats {
+  return {
     rowsVisited: 0,
     existingGreeksRows: 0,
     computedRows: 0,
@@ -182,61 +193,245 @@ export function applyQuoteGreeks<T extends QuoteGreekFields>(params: {
     mathFailedRows: 0,
     unresolvedRows: 0,
   };
+}
+
+/**
+ * Outcome of resolving a single row up to (but not including) the IV solve.
+ * Skip kinds are fully accounted in stats and never solved. `kind: "compute"`
+ * carries the flat solve inputs directly (no nested object — kept flat so the
+ * parallel path can write them straight into typed-array columns). This is the
+ * single source of truth for resolution, shared by the inline and parallel
+ * apply functions so they cannot diverge.
+ *
+ * `type` is 0 = call ("C"), 1 = put ("P") — the same encoding the worker uses.
+ */
+type RowResolution =
+  | { kind: "existing" }
+  | { kind: "missingContract" }
+  | { kind: "providerUnresolved" }
+  | { kind: "missingUnderlying" }
+  | { kind: "mathFailed" }
+  | {
+      kind: "compute";
+      optionPrice: number;
+      underlyingPrice: number;
+      strike: number;
+      dte: number;
+      type: 0 | 1;
+      riskFreeRate: number;
+    };
+
+function resolveQuoteGreeksRow<T extends QuoteGreekFields>(
+  row: T,
+  params: ApplyQuoteGreeksParams<T>,
+  defaultProviderSource: Exclude<QuoteGreeksSource, "computed"> | undefined,
+  mode: QuoteGreeksMode,
+): RowResolution {
+  if (mode !== "compute" && hasExistingQuoteGreeks(row)) {
+    normalizeExistingQuoteGreeks(row, defaultProviderSource);
+    return { kind: "existing" };
+  }
+
+  const meta = params.getContractMeta(row);
+  if (!meta) return { kind: "missingContract" };
+
+  if (mode === "provider") return { kind: "providerUnresolved" };
+
+  const date = params.getDate(row);
+  const time = params.getTime(row).slice(0, 5);
+  const underlyingPrice = params.getUnderlyingPrice(date, time);
+  if (!(underlyingPrice != null && underlyingPrice > 0)) {
+    return { kind: "missingUnderlying" };
+  }
+
+  // Same guards and rate convention as computeQuoteGreeks — kept in lockstep
+  // so the solve inputs are identical whether solved inline or on a worker.
+  const optionPrice = params.getMid(row);
+  if (!(optionPrice > 0) || !(meta.strike > 0)) return { kind: "mathFailed" };
+  const dte = computeFractionalDte(date, time, meta.expiration);
+  if (!(dte >= 0)) return { kind: "mathFailed" };
+  const riskFreeRate = memoizedSofrRate(date) / 100;
+
+  return {
+    kind: "compute",
+    optionPrice,
+    underlyingPrice,
+    strike: meta.strike,
+    dte,
+    type: meta.contract_type === "call" ? 0 : 1,
+    riskFreeRate,
+  };
+}
+
+function writeComputedGreeks<T extends QuoteGreekFields>(
+  row: T,
+  greeks: { delta: number; gamma: number; theta: number; vega: number; iv: number },
+  riskFreeRate: number,
+): void {
+  row.delta = greeks.delta;
+  row.gamma = greeks.gamma;
+  row.theta = greeks.theta;
+  row.vega = greeks.vega;
+  row.iv = greeks.iv;
+  row.greeks_source = "computed";
+  row.greeks_revision = OPTION_QUOTE_GREEKS_REVISION;
+  row.rate_type = OPTION_QUOTE_GREEKS_RATE_TYPE;
+  row.rate_value = riskFreeRate;
+  row.gamma_source = OPTION_QUOTE_GREEKS_GAMMA_SOURCE;
+}
+
+function tallySkip(stats: QuoteGreeksStats, kind: RowResolution["kind"]): void {
+  switch (kind) {
+    case "existing":
+      stats.existingGreeksRows++;
+      return;
+    case "missingContract":
+      stats.missingContractRows++;
+      stats.unresolvedRows++;
+      return;
+    case "providerUnresolved":
+      stats.unresolvedRows++;
+      return;
+    case "missingUnderlying":
+      stats.missingUnderlyingRows++;
+      stats.unresolvedRows++;
+      return;
+    case "mathFailed":
+      stats.mathFailedRows++;
+      stats.unresolvedRows++;
+      return;
+    case "compute":
+      return;
+  }
+}
+
+export function applyQuoteGreeks<T extends QuoteGreekFields>(
+  params: ApplyQuoteGreeksParams<T>,
+): QuoteGreeksStats {
+  const { rows, mode = "auto", defaultProviderSource } = params;
+  const stats = emptyStats();
 
   for (const row of rows) {
     stats.rowsVisited++;
-    if (mode !== "compute" && hasExistingQuoteGreeks(row)) {
-      normalizeExistingQuoteGreeks(row, defaultProviderSource);
-      stats.existingGreeksRows++;
+    const resolution = resolveQuoteGreeksRow(row, params, defaultProviderSource, mode);
+    if (resolution.kind !== "compute") {
+      tallySkip(stats, resolution.kind);
       continue;
     }
 
-    const meta = getContractMeta(row);
-    if (!meta) {
-      stats.missingContractRows++;
-      stats.unresolvedRows++;
-      continue;
-    }
-
-    if (mode === "provider") {
-      stats.unresolvedRows++;
-      continue;
-    }
-
-    const date = getDate(row);
-    const time = getTime(row).slice(0, 5);
-    const underlyingPrice = getUnderlyingPrice(date, time);
-    if (!(underlyingPrice != null && underlyingPrice > 0)) {
-      stats.missingUnderlyingRows++;
-      stats.unresolvedRows++;
-      continue;
-    }
-
-    const greeks = computeQuoteGreeks({
-      optionPrice: getMid(row),
-      underlyingPrice,
-      strike: meta.strike,
-      date,
-      time,
-      expiration: meta.expiration,
-      contractType: meta.contract_type,
-    });
-    if (!greeks) {
+    const result = computeLegGreeks(
+      resolution.optionPrice,
+      resolution.underlyingPrice,
+      resolution.strike,
+      resolution.dte,
+      resolution.type === 0 ? "C" : "P",
+      resolution.riskFreeRate,
+      OPTION_QUOTE_GREEKS_DIVIDEND_YIELD,
+    );
+    if (!hasQuoteGreeks(result)) {
       stats.mathFailedRows++;
       stats.unresolvedRows++;
       continue;
     }
+    writeComputedGreeks(
+      row,
+      {
+        delta: result.delta as number,
+        gamma: result.gamma as number,
+        theta: result.theta as number,
+        vega: result.vega as number,
+        iv: result.iv as number,
+      },
+      resolution.riskFreeRate,
+    );
+    stats.computedRows++;
+  }
 
-    row.delta = greeks.delta;
-    row.gamma = greeks.gamma;
-    row.theta = greeks.theta;
-    row.vega = greeks.vega;
-    row.iv = greeks.iv;
-    row.greeks_source = greeks.greeks_source;
-    row.greeks_revision = greeks.greeks_revision;
-    row.rate_type = greeks.rate_type;
-    row.rate_value = greeks.rate_value;
-    row.gamma_source = greeks.gamma_source;
+  return stats;
+}
+
+/**
+ * Parallel sibling of `applyQuoteGreeks`. Resolves every row on the calling
+ * thread using the exact same `resolveQuoteGreeksRow` logic, then fans the
+ * CPU-bound IV solve out across a worker pool. Greeks and provenance written
+ * back are bit-identical to the inline path (the pool runs the same
+ * `computeLegGreeks`); only the location of the solve loop changes.
+ *
+ * The pool degrades to inline automatically for small batches / single-core
+ * hosts (see iv-solver-pool.ts), so this is safe to call unconditionally.
+ */
+export async function applyQuoteGreeksParallel<T extends QuoteGreekFields>(
+  params: ApplyQuoteGreeksParams<T> & { pool?: IvSolverPool },
+): Promise<QuoteGreeksStats> {
+  const { rows, mode = "auto", defaultProviderSource } = params;
+  const stats = emptyStats();
+  const pool = params.pool ?? getSharedIvSolverPool();
+  const n = rows.length;
+
+  // Resolve directly into the solve columns — no intermediate object array.
+  // Sized to the row count (the compute subset is <= n); the unused tail is
+  // dropped via `count` before dispatch.
+  const optionPrice = new Float64Array(n);
+  const underlyingPrice = new Float64Array(n);
+  const strike = new Float64Array(n);
+  const dte = new Float64Array(n);
+  const riskFreeRate = new Float64Array(n);
+  const dividendYield = new Float64Array(n);
+  const type = new Uint8Array(n);
+  // Maps the j-th compute job back to its source row index, so results land on
+  // the right row.
+  const jobRowIndex = new Int32Array(n);
+
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    stats.rowsVisited++;
+    const resolution = resolveQuoteGreeksRow(rows[i], params, defaultProviderSource, mode);
+    if (resolution.kind !== "compute") {
+      tallySkip(stats, resolution.kind);
+      continue;
+    }
+    optionPrice[count] = resolution.optionPrice;
+    underlyingPrice[count] = resolution.underlyingPrice;
+    strike[count] = resolution.strike;
+    dte[count] = resolution.dte;
+    riskFreeRate[count] = resolution.riskFreeRate;
+    dividendYield[count] = OPTION_QUOTE_GREEKS_DIVIDEND_YIELD;
+    type[count] = resolution.type;
+    jobRowIndex[count] = i;
+    count++;
+  }
+
+  if (count === 0) return stats;
+
+  const columns: IvSolveColumns = {
+    count,
+    optionPrice: optionPrice.subarray(0, count),
+    underlyingPrice: underlyingPrice.subarray(0, count),
+    strike: strike.subarray(0, count),
+    dte: dte.subarray(0, count),
+    riskFreeRate: riskFreeRate.subarray(0, count),
+    dividendYield: dividendYield.subarray(0, count),
+    type: type.subarray(0, count),
+  };
+
+  const result = await pool.solveColumns(columns);
+  for (let j = 0; j < count; j++) {
+    if (result.ok[j] !== 1) {
+      stats.mathFailedRows++;
+      stats.unresolvedRows++;
+      continue;
+    }
+    writeComputedGreeks(
+      rows[jobRowIndex[j]],
+      {
+        delta: result.delta[j],
+        gamma: result.gamma[j],
+        theta: result.theta[j],
+        vega: result.vega[j],
+        iv: result.iv[j],
+      },
+      riskFreeRate[j],
+    );
     stats.computedRows++;
   }
 
