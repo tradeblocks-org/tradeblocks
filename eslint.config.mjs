@@ -2,6 +2,7 @@ import nextPlugin from "@next/eslint-plugin-next";
 import reactPlugin from "eslint-plugin-react";
 import hooksPlugin from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
+import eslintConfigPrettier from "eslint-config-prettier";
 
 export default tseslint.config(
   {
@@ -83,4 +84,7 @@ export default tseslint.config(
       ],
     },
   },
+  // Must be last: turns off ESLint stylistic rules that conflict with Prettier
+  // (Prettier owns formatting). See ADR 0037 (enterprise).
+  eslintConfigPrettier,
 );

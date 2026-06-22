@@ -1,0 +1,18 @@
+# Build output & deps (Prettier ignores node_modules by default; listed for clarity)
+.next/
+out/
+build/
+coverage/
+node_modules/
+dist/
+packages/*/dist/
+packages/*/server/
+
+# Generated / vendored
+next-env.d.ts
+*.tsbuildinfo
+public/
+gpt/
+
+# Lockfile
+package-lock.json

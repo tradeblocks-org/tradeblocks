@@ -11,6 +11,12 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "audit": "npm audit --audit-level=high",
+    "verify": "npm run typecheck && npm run lint && npm run format:check",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -22,6 +28,15 @@
     "gpt:context": "repomix --style markdown --compress --output gpt/codebase-context.md",
     "build:mcp": "npm run build --workspace=tradeblocks-mcp",
     "test:mcp": "npm run test --workspace=tradeblocks-mcp"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -84,10 +99,13 @@
     "@types/react-plotly.js": "^2.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "eslint-config-prettier": "10.1.8",
     "fake-indexeddb": "^6.2.2",
     "husky": "^9.1.7",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.4.1",
+    "lint-staged": "17.0.8",
+    "prettier": "3.8.4",
     "repomix": "^1.13.1",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.9",
