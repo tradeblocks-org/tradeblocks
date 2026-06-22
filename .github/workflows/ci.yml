@@ -35,6 +35,29 @@ jobs:
       - name: Verify mcp-server exports surface
         run: node packages/mcp-server/scripts/verify-exports-surface.mjs
 
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Blocks on high/critical advisories only. Moderate-and-below are not
+      # gated here (pre-existing transitive debt; Dependabot tracks those).
+      # The `hono` high (transitive via the repomix devDependency) is held at
+      # a patched version by the `overrides` pin in package.json.
+      - name: Audit (high+)
+        run: npm run audit
+
   frontend:
     name: Frontend (Next.js)
     runs-on: ubuntu-latest
