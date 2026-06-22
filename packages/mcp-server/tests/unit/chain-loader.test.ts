@@ -20,11 +20,7 @@ import { filterChain, type ContractRow } from "../../src/test-exports.ts";
 // ContractRow builder
 // ---------------------------------------------------------------------------
 
-function makeRow(
-  dte: number,
-  type: "call" | "put" = "put",
-  strike = 4500,
-): ContractRow {
+function makeRow(dte: number, type: "call" | "put" = "put", strike = 4500): ContractRow {
   return {
     underlying: "SPX",
     date: "2025-01-07",

@@ -36,9 +36,7 @@ function userOverridePath(dataDir: string): string {
  *   - Malformed user JSON throws a clear "Malformed {path}: ..." error — NO silent
  *     fallback (D-08, T-1-03 mitigation).
  */
-export async function loadRegistry(args: {
-  dataDir: string;
-}): Promise<TickerRegistry> {
+export async function loadRegistry(args: { dataDir: string }): Promise<TickerRegistry> {
   const overridePath = userOverridePath(args.dataDir);
   // readJsonFile returns null on ENOENT (json-store.ts:51-61) and throws on JSON
   // parse errors. We treat both Zod rejections AND parse errors as "Malformed"
@@ -65,10 +63,7 @@ export async function loadRegistry(args: {
  * Persist user + user-override entries to {dataRoot}/market/underlyings.json.
  * Atomic tmp-then-rename via writeJsonFile (json-store.ts:36-41).
  */
-export async function saveUserOverride(
-  dataDir: string,
-  registry: TickerRegistry,
-): Promise<void> {
+export async function saveUserOverride(dataDir: string, registry: TickerRegistry): Promise<void> {
   const overridePath = userOverridePath(dataDir);
   await writeJsonFile(overridePath, registry.toJSON());
 }

@@ -44,7 +44,7 @@ export abstract class SpotStore {
       if (existsSync(p)) paths.push(p);
     }
     if (paths.length === 0) return null;
-    const fileList = paths.map(p => `'${escapeSqlLiteral(p)}'`).join(", ");
+    const fileList = paths.map((p) => `'${escapeSqlLiteral(p)}'`).join(", ");
     const tickerLit = `'${escapeSqlLiteral(ticker)}'`;
     if (opts?.dailyAgg) {
       return {

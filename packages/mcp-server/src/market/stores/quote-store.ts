@@ -45,11 +45,7 @@ export abstract class QuoteStore {
     return this.ctx.tickers;
   }
 
-  abstract writeQuotes(
-    underlying: string,
-    date: string,
-    quotes: QuoteRow[],
-  ): Promise<void>;
+  abstract writeQuotes(underlying: string, date: string, quotes: QuoteRow[]): Promise<void>;
 
   /**
    * Write quotes for a single (underlying, date) partition from a user-supplied SELECT.
@@ -152,11 +148,7 @@ export abstract class QuoteStore {
     return out;
   }
 
-  abstract getCoverage(
-    underlying: string,
-    from: string,
-    to: string,
-  ): Promise<CoverageReport>;
+  abstract getCoverage(underlying: string, from: string, to: string): Promise<CoverageReport>;
 
   /**
    * Read every option-quote row in the leg-envelope union over a time window.

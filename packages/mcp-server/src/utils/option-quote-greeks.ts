@@ -2,11 +2,7 @@ import { getSofrRateByKey } from "@tradeblocks/lib";
 import type { ContractRow } from "./chain-loader.ts";
 import { computeLegGreeks } from "./black-scholes.ts";
 import { computeFractionalDte } from "./option-time.ts";
-import {
-  getSharedIvSolverPool,
-  type IvSolveColumns,
-  type IvSolverPool,
-} from "./iv-solver-pool.ts";
+import { getSharedIvSolverPool, type IvSolveColumns, type IvSolverPool } from "./iv-solver-pool.ts";
 
 export type QuoteGreeksSource = "massive" | "thetadata" | "computed";
 export type QuoteGreeksMode = "auto" | "provider" | "compute";
@@ -79,20 +75,24 @@ function memoizedSofrRate(dateKey: string): number {
 }
 
 export function hasQuoteGreeks(row: QuoteGreekFields): boolean {
-  return isFiniteNumber(row.delta ?? null)
-    && isFiniteNumber(row.gamma ?? null)
-    && isFiniteNumber(row.theta ?? null)
-    && isFiniteNumber(row.vega ?? null)
-    && isFiniteNumber(row.iv ?? null);
+  return (
+    isFiniteNumber(row.delta ?? null) &&
+    isFiniteNumber(row.gamma ?? null) &&
+    isFiniteNumber(row.theta ?? null) &&
+    isFiniteNumber(row.vega ?? null) &&
+    isFiniteNumber(row.iv ?? null)
+  );
 }
 
 function hasProviderFirstOrderGreeks(row: QuoteGreekFields): boolean {
-  return row.greeks_source === "thetadata"
-    && isFiniteNumber(row.delta ?? null)
-    && (row.gamma == null || isFiniteNumber(row.gamma))
-    && isFiniteNumber(row.theta ?? null)
-    && isFiniteNumber(row.vega ?? null)
-    && isFiniteNumber(row.iv ?? null);
+  return (
+    row.greeks_source === "thetadata" &&
+    isFiniteNumber(row.delta ?? null) &&
+    (row.gamma == null || isFiniteNumber(row.gamma)) &&
+    isFiniteNumber(row.theta ?? null) &&
+    isFiniteNumber(row.vega ?? null) &&
+    isFiniteNumber(row.iv ?? null)
+  );
 }
 
 function hasExistingQuoteGreeks(row: QuoteGreekFields): boolean {
@@ -100,9 +100,11 @@ function hasExistingQuoteGreeks(row: QuoteGreekFields): boolean {
 }
 
 function hasQuoteGreekProvenanceFields(row: QuoteGreekFields): boolean {
-  return row.rate_type === OPTION_QUOTE_GREEKS_RATE_TYPE
-    && isFiniteNumber(row.rate_value ?? null)
-    && row.gamma_source === OPTION_QUOTE_GREEKS_GAMMA_SOURCE;
+  return (
+    row.rate_type === OPTION_QUOTE_GREEKS_RATE_TYPE &&
+    isFiniteNumber(row.rate_value ?? null) &&
+    row.gamma_source === OPTION_QUOTE_GREEKS_GAMMA_SOURCE
+  );
 }
 
 export function normalizeExistingQuoteGreeks(
@@ -114,9 +116,9 @@ export function normalizeExistingQuoteGreeks(
     row.greeks_source = defaultSource;
   }
   if (
-    row.greeks_source === "computed"
-    && row.greeks_revision == null
-    && hasQuoteGreekProvenanceFields(row)
+    row.greeks_source === "computed" &&
+    row.greeks_revision == null &&
+    hasQuoteGreekProvenanceFields(row)
   ) {
     row.greeks_revision = OPTION_QUOTE_GREEKS_REVISION;
   }
@@ -131,15 +133,7 @@ export function computeQuoteGreeks(params: {
   expiration: string;
   contractType: ContractRow["contract_type"];
 }): QuoteGreekFields | null {
-  const {
-    optionPrice,
-    underlyingPrice,
-    strike,
-    date,
-    time,
-    expiration,
-    contractType,
-  } = params;
+  const { optionPrice, underlyingPrice, strike, date, time, expiration, contractType } = params;
   if (!(optionPrice > 0) || !(underlyingPrice > 0) || !(strike > 0)) return null;
   const dte = computeFractionalDte(date, time.slice(0, 5), expiration);
   if (!(dte >= 0)) return null;

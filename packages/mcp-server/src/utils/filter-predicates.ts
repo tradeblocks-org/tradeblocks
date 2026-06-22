@@ -28,11 +28,18 @@ export interface FilterPredicate {
  * Day-of-week name to number mapping (market data uses 1=Mon to 5=Fri).
  */
 const DAY_NAME_TO_NUM: Record<string, number> = {
-  monday: 1, mon: 1,
-  tuesday: 2, tue: 2, tues: 2,
-  wednesday: 3, wed: 3,
-  thursday: 4, thu: 4, thurs: 4,
-  friday: 5, fri: 5,
+  monday: 1,
+  mon: 1,
+  tuesday: 2,
+  tue: 2,
+  tues: 2,
+  wednesday: 3,
+  wed: 3,
+  thursday: 4,
+  thu: 4,
+  thurs: 4,
+  friday: 5,
+  fri: 5,
 };
 
 /**
@@ -80,10 +87,7 @@ function isCrossFieldRef(value: unknown): value is string {
  * if the bare field name (without prev_ prefix) is close-derived, try
  * the prev_ prefixed version.
  */
-function resolveFieldRef(
-  refName: string,
-  market: Record<string, unknown>
-): number {
+function resolveFieldRef(refName: string, market: Record<string, unknown>): number {
   // Direct lookup first (handles cases like "prev_VIX_Close" spelled out)
   if (refName in market) {
     return getNum(market, refName);

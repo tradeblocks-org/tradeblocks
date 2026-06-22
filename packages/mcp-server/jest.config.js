@@ -1,25 +1,28 @@
 /** @type {import('jest').Config} */
 export default {
-  preset: 'ts-jest/presets/default-esm',
-  testEnvironment: 'node',
-  extensionsToTreatAsEsm: ['.ts'],
+  preset: "ts-jest/presets/default-esm",
+  testEnvironment: "node",
+  extensionsToTreatAsEsm: [".ts"],
   moduleNameMapper: {
     // Map to the built server output which has all dependencies bundled
-    '^(\\.{1,2}/.*)\\.js$': '$1'
+    "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
-      useESM: true,
-      isolatedModules: true
-    }]
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        useESM: true,
+        isolatedModules: true,
+      },
+    ],
   },
-  testMatch: ['**/tests/**/*.test.ts'],
-  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts'],
+  testMatch: ["**/tests/**/*.test.ts"],
+  collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts"],
   // Builds src/utils/iv-solver-worker.js before any test runs so the
   // worker pool can spawn a plain-Node-loadable bundle under ts-jest. See
   // tests/global-setup.mjs for why this is needed (CI's Node 20 rejects the
   // .ts worker fallback that resolveWorkerUrl uses when the .js is absent).
-  globalSetup: '<rootDir>/tests/global-setup.mjs',
+  globalSetup: "<rootDir>/tests/global-setup.mjs",
   // --------------------------------------------------------------------------
   // Worker recycling — see .planning/debug/ci-jest-oom.md for the full writeup.
   //
@@ -34,6 +37,6 @@ export default {
   // cleanly, independent of per-test hygiene. `maxWorkers: '50%'` is an
   // explicit cap so CI (4-core ubuntu-latest) consistently runs 2 workers.
   // --------------------------------------------------------------------------
-  workerIdleMemoryLimit: '512MB',
-  maxWorkers: '50%'
+  workerIdleMemoryLimit: "512MB",
+  maxWorkers: "50%",
 };

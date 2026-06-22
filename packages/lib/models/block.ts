@@ -1,8 +1,4 @@
-import type {
-  PerformanceMetrics,
-  PortfolioStats,
-  StrategyStats
-} from "./portfolio-stats.ts";
+import type { PerformanceMetrics, PortfolioStats, StrategyStats } from "./portfolio-stats.ts";
 import type { StrategyAlignment } from "./strategy-alignment.ts";
 // import { Trade } from './trade.ts'
 // import { DailyLog } from './daily-log.ts'

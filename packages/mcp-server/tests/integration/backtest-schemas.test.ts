@@ -12,7 +12,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 // @ts-expect-error - importing from src (not bundled output)
-import { attachBacktestsDb, ensureBacktestsTables, detachBacktestsDb, TEMPLATE_BLOCK_ID } from "../../src/db/backtest-schemas.ts";
+import {
+  attachBacktestsDb,
+  ensureBacktestsTables,
+  detachBacktestsDb,
+  TEMPLATE_BLOCK_ID,
+} from "../../src/db/backtest-schemas.ts";
 // @ts-expect-error - importing from src (not bundled output)
 import { ensureSyncTables, ensureTradeDataTable } from "../../src/db/schemas.ts";
 
@@ -98,9 +103,7 @@ describe("backtest-schemas integration", () => {
     await detachBacktestsDb(conn);
 
     // After detach, querying backtests should fail
-    await expect(
-      conn.runAndReadAll("SELECT 1 FROM backtests.strategies")
-    ).rejects.toThrow();
+    await expect(conn.runAndReadAll("SELECT 1 FROM backtests.strategies")).rejects.toThrow();
 
     conn.closeSync();
     inst3.closeSync();
@@ -129,7 +132,7 @@ describe("backtest-schemas integration", () => {
     `);
 
     const result = await conn.runAndReadAll(
-      "SELECT block_id FROM backtests.run_metadata WHERE run_id = 'run-001'"
+      "SELECT block_id FROM backtests.run_metadata WHERE run_id = 'run-001'",
     );
     expect(String(result.getRows()[0][0])).toBe("_template");
 

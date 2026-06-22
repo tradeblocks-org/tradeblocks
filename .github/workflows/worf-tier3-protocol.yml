@@ -6,7 +6,17 @@ name: Worf Tier 3 protocol gate
 
 on:
   pull_request:
-    types: [opened, synchronize, edited, reopened, labeled, unlabeled, review_requested, review_request_removed]
+    types:
+      [
+        opened,
+        synchronize,
+        edited,
+        reopened,
+        labeled,
+        unlabeled,
+        review_requested,
+        review_request_removed,
+      ]
 
 permissions:
   contents: read

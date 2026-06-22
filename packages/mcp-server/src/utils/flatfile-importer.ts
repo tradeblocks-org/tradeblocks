@@ -37,8 +37,8 @@ const TMP_DIR = "/tmp/massive-flat";
 
 export interface ParsedBar {
   ticker: string; // O: prefix stripped
-  date: string;   // YYYY-MM-DD in ET
-  time: string;   // HH:MM in ET
+  date: string; // YYYY-MM-DD in ET
+  time: string; // HH:MM in ET
   open: number;
   high: number;
   low: number;
@@ -70,10 +70,10 @@ export interface ImportFlatFilesResult {
  * We use a fast approximation: March 8-31 through November 1 = EDT.
  */
 function isEDT(utcMonth: number, utcDay: number): boolean {
-  if (utcMonth > 3 && utcMonth < 11) return true;  // Apr-Oct always EDT
-  if (utcMonth === 3) return utcDay >= 8;           // March: after ~2nd Sunday
-  if (utcMonth === 11) return utcDay < 7;           // Nov: before ~1st Sunday
-  return false;                                      // Dec-Feb always EST
+  if (utcMonth > 3 && utcMonth < 11) return true; // Apr-Oct always EDT
+  if (utcMonth === 3) return utcDay >= 8; // March: after ~2nd Sunday
+  if (utcMonth === 11) return utcDay < 7; // Nov: before ~1st Sunday
+  return false; // Dec-Feb always EST
 }
 
 /**
@@ -115,7 +115,7 @@ export function parseFlatFileLine(line: string, underlyingPrefix: string): Parse
 
   const rawTicker = parts[0];
   // Index tickers: "I:VIX" → "VIX", option tickers: "O:SPXW..." → "SPXW..."
-  const ticker = rawTicker.includes(':') ? rawTicker.slice(rawTicker.indexOf(':') + 1) : rawTicker;
+  const ticker = rawTicker.includes(":") ? rawTicker.slice(rawTicker.indexOf(":") + 1) : rawTicker;
 
   let open: number, close: number, high: number, low: number, windowStart: string, volume: number;
 
@@ -178,10 +178,7 @@ export function tradingDays(from: string, to: string): string[] {
  * one writeBars call per (ticker, date) so we group first, then write
  * serially — DuckDB is single-writer (Pitfall 9).
  */
-async function writeRowsThroughStore(
-  stores: MarketStores,
-  rows: ParsedBar[],
-): Promise<void> {
+async function writeRowsThroughStore(stores: MarketStores, rows: ParsedBar[]): Promise<void> {
   if (rows.length === 0) return;
 
   const byTickerDate = new Map<string, Map<string, MarketStoreBarRow[]>>();
@@ -236,17 +233,17 @@ export async function importFlatFileDay(
   dateStr: string,
   underlying: string,
   stores: MarketStores,
-  assetClass: 'option' | 'index' = 'option',
+  assetClass: "option" | "index" = "option",
 ): Promise<ImportDayResult> {
   // Index flat files go to a separate tmp path to avoid colliding with option files
-  const tmpSubdir = assetClass === 'index' ? '/tmp/massive-flat-index' : TMP_DIR;
+  const tmpSubdir = assetClass === "index" ? "/tmp/massive-flat-index" : TMP_DIR;
   const localPath = resolve(tmpSubdir, `${dateStr}.csv.gz`);
 
   // Skip-check via the spot store. For options the underlying itself rarely
   // has spot bars (those go through a separate index import), so we use
   // store coverage as a best-effort signal — duplicate ingest is idempotent
   // at the store layer (writeBars overwrites the partition).
-  if (assetClass === 'index') {
+  if (assetClass === "index") {
     const cov = await stores.spot.getCoverage(underlying, dateStr, dateStr);
     if (cov.totalDates > 0) {
       return { date: dateStr, imported: 0, skipped: true };
@@ -256,15 +253,15 @@ export async function importFlatFileDay(
   // Download via provider (provider-agnostic)
   if (!existsSync(localPath)) {
     mkdirSync(tmpSubdir, { recursive: true });
-    const { getProvider } = await import('./market-provider.ts');
+    const { getProvider } = await import("./market-provider.ts");
     const provider = getProvider();
     if (provider.downloadFlatFile) {
       const downloaded = await provider.downloadFlatFile(dateStr, assetClass);
       if (!downloaded) {
-        return { date: dateStr, imported: 0, skipped: false, error: 'download_failed' };
+        return { date: dateStr, imported: 0, skipped: false, error: "download_failed" };
       }
     } else {
-      return { date: dateStr, imported: 0, skipped: false, error: 'provider_no_flat_files' };
+      return { date: dateStr, imported: 0, skipped: false, error: "provider_no_flat_files" };
     }
   }
 
@@ -274,7 +271,8 @@ export async function importFlatFileDay(
 
   // Stream-parse: filter to underlying tickers, convert timestamps, collect rows
   // Index tickers use "I:" prefix, option tickers use "O:" prefix
-  const tickerPrefix = assetClass === 'index' ? `I:${underlying}` : (underlying === "SPX" ? "O:SPX" : `O:${underlying}`);
+  const tickerPrefix =
+    assetClass === "index" ? `I:${underlying}` : underlying === "SPX" ? "O:SPX" : `O:${underlying}`;
 
   const rows: ParsedBar[] = [];
   await new Promise<void>((resolveP, reject) => {
@@ -318,39 +316,43 @@ export async function importFlatFileDay(
 async function downloadAndParse(
   dateStr: string,
   underlying: string,
-  assetClass: 'option' | 'index',
+  assetClass: "option" | "index",
 ): Promise<{ date: string; rows: ParsedBar[]; skipped?: boolean; error?: string }> {
-  const tmpSubdir = assetClass === 'index' ? '/tmp/massive-flat-index' : TMP_DIR;
+  const tmpSubdir = assetClass === "index" ? "/tmp/massive-flat-index" : TMP_DIR;
   const localPath = resolve(tmpSubdir, `${dateStr}.csv.gz`);
 
   // Download via provider
   if (!existsSync(localPath)) {
     mkdirSync(tmpSubdir, { recursive: true });
-    const { getProvider } = await import('./market-provider.ts');
+    const { getProvider } = await import("./market-provider.ts");
     const provider = getProvider();
     if (provider.downloadFlatFile) {
       const downloaded = await provider.downloadFlatFile(dateStr, assetClass);
       if (!downloaded) {
-        return { date: dateStr, rows: [], error: 'download_failed' };
+        return { date: dateStr, rows: [], error: "download_failed" };
       }
     } else {
-      return { date: dateStr, rows: [], error: 'provider_no_flat_files' };
+      return { date: dateStr, rows: [], error: "provider_no_flat_files" };
     }
   }
 
   if (!existsSync(localPath)) {
-    return { date: dateStr, rows: [], error: 'not_found' };
+    return { date: dateStr, rows: [], error: "not_found" };
   }
 
   // Stream-parse: filter to underlying tickers, convert timestamps
-  const tickerPrefix = assetClass === 'index' ? `I:${underlying}` : (underlying === "SPX" ? "O:SPX" : `O:${underlying}`);
+  const tickerPrefix =
+    assetClass === "index" ? `I:${underlying}` : underlying === "SPX" ? "O:SPX" : `O:${underlying}`;
   const rows: ParsedBar[] = [];
   await new Promise<void>((resolveP, reject) => {
     const gunzip = createGunzip();
     const rl = createInterface({ input: createReadStream(localPath).pipe(gunzip) });
     let isHeader = true;
     rl.on("line", (line: string) => {
-      if (isHeader) { isHeader = false; return; }
+      if (isHeader) {
+        isHeader = false;
+        return;
+      }
       const parsed = parseFlatFileLine(line, tickerPrefix);
       if (parsed) rows.push(parsed);
     });
@@ -360,7 +362,11 @@ async function downloadAndParse(
   });
 
   // Clean up downloaded file
-  try { unlinkSync(localPath); } catch { /* best-effort */ }
+  try {
+    unlinkSync(localPath);
+  } catch {
+    /* best-effort */
+  }
 
   return { date: dateStr, rows };
 }
@@ -383,9 +389,9 @@ export async function importFlatFiles(
   underlying: string,
   stores: MarketStores,
   dataDir: string,
-  assetClass: 'option' | 'index' = 'option',
+  assetClass: "option" | "index" = "option",
 ): Promise<ImportFlatFilesResult> {
-  const tmpDir = assetClass === 'index' ? '/tmp/massive-flat-index' : TMP_DIR;
+  const tmpDir = assetClass === "index" ? "/tmp/massive-flat-index" : TMP_DIR;
   mkdirSync(tmpDir, { recursive: true });
 
   const days = tradingDays(from, to);
@@ -399,8 +405,8 @@ export async function importFlatFiles(
   // from per-ticker API fetches.
   const importedDates = await getFlatImportLogJson(assetClass, underlying, from, to, dataDir);
 
-  const daysToImport = days.filter(d => !importedDates.has(d));
-  const skippedDays = days.filter(d => importedDates.has(d));
+  const daysToImport = days.filter((d) => !importedDates.has(d));
+  const skippedDays = days.filter((d) => importedDates.has(d));
   for (const d of skippedDays) {
     results.push({ date: d, imported: 0, skipped: true });
     totalSkipped++;
@@ -409,7 +415,9 @@ export async function importFlatFiles(
   if (daysToImport.length === 0) {
     console.log(`  [importFlatFiles] all ${days.length} days already imported — nothing to do`);
   } else {
-    console.log(`  [importFlatFiles] ${daysToImport.length} days to import, ${skippedDays.length} already imported (${assetClass} ${underlying})`);
+    console.log(
+      `  [importFlatFiles] ${daysToImport.length} days to import, ${skippedDays.length} already imported (${assetClass} ${underlying})`,
+    );
   }
 
   // Process in batches: parallel download+parse, serial spot-store writes
@@ -417,11 +425,13 @@ export async function importFlatFiles(
     const batch = daysToImport.slice(i, i + IMPORT_CONCURRENCY);
     const batchNum = Math.floor(i / IMPORT_CONCURRENCY) + 1;
     const totalBatches = Math.ceil(daysToImport.length / IMPORT_CONCURRENCY);
-    console.log(`  [importFlatFiles] batch ${batchNum}/${totalBatches}: ${batch[0]}..${batch[batch.length - 1]} (${Math.round((Date.now() - t0) / 1000)}s)`);
+    console.log(
+      `  [importFlatFiles] batch ${batchNum}/${totalBatches}: ${batch[0]}..${batch[batch.length - 1]} (${Math.round((Date.now() - t0) / 1000)}s)`,
+    );
 
     // Parallel download + parse
     const parsed = await Promise.all(
-      batch.map(day => downloadAndParse(day, underlying, assetClass))
+      batch.map((day) => downloadAndParse(day, underlying, assetClass)),
     );
 
     // Serial writes through the spot store (DuckDB single-writer)
@@ -439,17 +449,24 @@ export async function importFlatFiles(
       totalImported += p.rows.length;
       // Record successful import in JSON metadata log
       try {
-        await upsertFlatImportLogJson({
-          date: p.date,
-          asset_class: assetClass,
-          underlying,
-          imported_at: new Date().toISOString(),
-          bar_count: p.rows.length,
-        }, dataDir);
-      } catch { /* best-effort metadata tracking */ }
+        await upsertFlatImportLogJson(
+          {
+            date: p.date,
+            asset_class: assetClass,
+            underlying,
+            imported_at: new Date().toISOString(),
+            bar_count: p.rows.length,
+          },
+          dataDir,
+        );
+      } catch {
+        /* best-effort metadata tracking */
+      }
     }
   }
-  console.log(`  [importFlatFiles] done: ${totalImported} bars imported, ${totalSkipped} days skipped (${Math.round((Date.now() - t0) / 1000)}s)`);
+  console.log(
+    `  [importFlatFiles] done: ${totalImported} bars imported, ${totalSkipped} days skipped (${Math.round((Date.now() - t0) / 1000)}s)`,
+  );
 
   return {
     totalImported,
@@ -471,25 +488,25 @@ async function downloadAndParseMulti(
   dateStr: string,
   tickers: string[],
 ): Promise<{ date: string; rows: ParsedBar[]; error?: string }> {
-  const tmpDir = '/tmp/massive-flat-index';
+  const tmpDir = "/tmp/massive-flat-index";
   const localPath = resolve(tmpDir, `${dateStr}.csv.gz`);
 
   if (!existsSync(localPath)) {
     mkdirSync(tmpDir, { recursive: true });
-    const { getProvider } = await import('./market-provider.ts');
+    const { getProvider } = await import("./market-provider.ts");
     const provider = getProvider();
     if (provider.downloadFlatFile) {
-      const downloaded = await provider.downloadFlatFile(dateStr, 'index');
-      if (!downloaded) return { date: dateStr, rows: [], error: 'download_failed' };
+      const downloaded = await provider.downloadFlatFile(dateStr, "index");
+      if (!downloaded) return { date: dateStr, rows: [], error: "download_failed" };
     } else {
-      return { date: dateStr, rows: [], error: 'provider_no_flat_files' };
+      return { date: dateStr, rows: [], error: "provider_no_flat_files" };
     }
   }
 
-  if (!existsSync(localPath)) return { date: dateStr, rows: [], error: 'not_found' };
+  if (!existsSync(localPath)) return { date: dateStr, rows: [], error: "not_found" };
 
   // Build prefix set for fast matching: "I:VIX,", "I:VIX9D,", "I:SPX,"
-  const prefixes = tickers.map(t => `I:${t},`);
+  const prefixes = tickers.map((t) => `I:${t},`);
 
   const rows: ParsedBar[] = [];
   await new Promise<void>((resolveP, reject) => {
@@ -497,7 +514,10 @@ async function downloadAndParseMulti(
     const rl = createInterface({ input: createReadStream(localPath).pipe(gunzip) });
     let isHeader = true;
     rl.on("line", (line: string) => {
-      if (isHeader) { isHeader = false; return; }
+      if (isHeader) {
+        isHeader = false;
+        return;
+      }
       for (const prefix of prefixes) {
         if (line.startsWith(prefix)) {
           const parsed = parseFlatFileLine(line, prefix.slice(0, -1)); // strip trailing comma
@@ -511,7 +531,11 @@ async function downloadAndParseMulti(
     gunzip.on("error", reject);
   });
 
-  try { unlinkSync(localPath); } catch { /* best-effort */ }
+  try {
+    unlinkSync(localPath);
+  } catch {
+    /* best-effort */
+  }
   return { date: dateStr, rows };
 }
 
@@ -529,7 +553,7 @@ export async function importIndexBars(
   tickers: string[],
   stores: MarketStores,
 ): Promise<ImportFlatFilesResult> {
-  mkdirSync('/tmp/massive-flat-index', { recursive: true });
+  mkdirSync("/tmp/massive-flat-index", { recursive: true });
 
   const days = tradingDays(from, to);
   const results: ImportDayResult[] = [];
@@ -554,8 +578,8 @@ export async function importIndexBars(
         // For per-day skip we only need a contains check, not a precise
         // missing-date list.
         const dates = new Set<string>();
-        const start = new Date(cov.earliest + 'T00:00:00Z');
-        const end = new Date(cov.latest + 'T00:00:00Z');
+        const start = new Date(cov.earliest + "T00:00:00Z");
+        const end = new Date(cov.latest + "T00:00:00Z");
         const cur = new Date(start);
         while (cur <= end) {
           dates.add(cur.toISOString().slice(0, 10));
@@ -580,16 +604,20 @@ export async function importIndexBars(
     }
   }
 
-  const daysToImport = days.filter(d => !skipDays.has(d));
-  for (const d of days.filter(d => skipDays.has(d))) {
+  const daysToImport = days.filter((d) => !skipDays.has(d));
+  for (const d of days.filter((d) => skipDays.has(d))) {
     results.push({ date: d, imported: 0, skipped: true });
     totalSkipped++;
   }
 
   if (daysToImport.length === 0) {
-    console.log(`  [importIndexBars] all ${days.length} days have data for ${tickers.join(',')} — nothing to import`);
+    console.log(
+      `  [importIndexBars] all ${days.length} days have data for ${tickers.join(",")} — nothing to import`,
+    );
   } else {
-    console.log(`  [importIndexBars] ${daysToImport.length} days to import for ${tickers.join(',')}, ${skipDays.size} skipped`);
+    console.log(
+      `  [importIndexBars] ${daysToImport.length} days to import for ${tickers.join(",")}, ${skipDays.size} skipped`,
+    );
   }
 
   // Parallel download+parse, serial store writes
@@ -597,11 +625,11 @@ export async function importIndexBars(
     const batch = daysToImport.slice(i, i + INDEX_CONCURRENCY);
     const batchNum = Math.floor(i / INDEX_CONCURRENCY) + 1;
     const totalBatches = Math.ceil(daysToImport.length / INDEX_CONCURRENCY);
-    console.log(`  [importIndexBars] batch ${batchNum}/${totalBatches}: ${batch[0]}..${batch[batch.length - 1]} (${Math.round((Date.now() - t0) / 1000)}s)`);
-
-    const parsed = await Promise.all(
-      batch.map(day => downloadAndParseMulti(day, tickers))
+    console.log(
+      `  [importIndexBars] batch ${batchNum}/${totalBatches}: ${batch[0]}..${batch[batch.length - 1]} (${Math.round((Date.now() - t0) / 1000)}s)`,
     );
+
+    const parsed = await Promise.all(batch.map((day) => downloadAndParseMulti(day, tickers)));
 
     for (const p of parsed) {
       if (p.error) {
@@ -617,7 +645,9 @@ export async function importIndexBars(
       totalImported += p.rows.length;
     }
   }
-  console.log(`  [importIndexBars] done: ${totalImported} bars imported, ${totalSkipped} days skipped (${Math.round((Date.now() - t0) / 1000)}s)`);
+  console.log(
+    `  [importIndexBars] done: ${totalImported} bars imported, ${totalSkipped} days skipped (${Math.round((Date.now() - t0) / 1000)}s)`,
+  );
 
   return {
     totalImported,

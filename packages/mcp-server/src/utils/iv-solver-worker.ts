@@ -74,11 +74,11 @@ export function solveIvBatch(req: IvSolveBatchRequest): IvSolveBatchReply {
       req.dividendYield[i],
     );
     if (
-      isFiniteNumber(result.delta)
-      && isFiniteNumber(result.gamma)
-      && isFiniteNumber(result.theta)
-      && isFiniteNumber(result.vega)
-      && isFiniteNumber(result.iv)
+      isFiniteNumber(result.delta) &&
+      isFiniteNumber(result.gamma) &&
+      isFiniteNumber(result.theta) &&
+      isFiniteNumber(result.vega) &&
+      isFiniteNumber(result.iv)
     ) {
       delta[i] = result.delta;
       gamma[i] = result.gamma;

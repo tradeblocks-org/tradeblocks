@@ -59,12 +59,13 @@ export function FilterConditionRow({
   staticDatasets,
 }: FilterConditionRowProps) {
   const [valueInput, setValueInput] = useState(condition.value.toString());
-  const [value2Input, setValue2Input] = useState(
-    condition.value2?.toString() ?? ""
-  );
+  const [value2Input, setValue2Input] = useState(condition.value2?.toString() ?? "");
   const [fieldDropdownOpen, setFieldDropdownOpen] = useState(false);
 
-  const fieldsByCategory = useMemo(() => getFieldsByCategoryWithAll(trades, staticDatasets), [trades, staticDatasets]);
+  const fieldsByCategory = useMemo(
+    () => getFieldsByCategoryWithAll(trades, staticDatasets),
+    [trades, staticDatasets],
+  );
   const allCategoryLabels = getAllCategoryLabels();
 
   // Get the display label for the current field
@@ -121,10 +122,7 @@ export function FilterConditionRow({
           className="data-[state=checked]:bg-primary shrink-0"
         />
 
-        <DropdownMenu
-          open={fieldDropdownOpen}
-          onOpenChange={setFieldDropdownOpen}
-        >
+        <DropdownMenu open={fieldDropdownOpen} onOpenChange={setFieldDropdownOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
@@ -136,42 +134,34 @@ export function FilterConditionRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            {Array.from(fieldsByCategory.entries()).map(
-              ([category, fields]) => {
-                if (fields.length === 0) return null;
-                // Use category label from known categories, or the category name itself (for static datasets)
-                const categoryLabel = allCategoryLabels[category as FieldCategory | CustomFieldCategory] ?? category;
-                return (
-                  <DropdownMenuSub key={category}>
-                    <DropdownMenuSubTrigger>
-                      {categoryLabel}
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-52">
-                      {fields.map((field) => (
-                        <DropdownMenuItem
-                          key={field.field}
-                          onClick={() => {
-                            handleFieldChange(field.field);
-                            setFieldDropdownOpen(false);
-                          }}
-                        >
-                          {field.label}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                );
-              }
-            )}
+            {Array.from(fieldsByCategory.entries()).map(([category, fields]) => {
+              if (fields.length === 0) return null;
+              // Use category label from known categories, or the category name itself (for static datasets)
+              const categoryLabel =
+                allCategoryLabels[category as FieldCategory | CustomFieldCategory] ?? category;
+              return (
+                <DropdownMenuSub key={category}>
+                  <DropdownMenuSubTrigger>{categoryLabel}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-52">
+                    {fields.map((field) => (
+                      <DropdownMenuItem
+                        key={field.field}
+                        onClick={() => {
+                          handleFieldChange(field.field);
+                          setFieldDropdownOpen(false);
+                        }}
+                      >
+                        {field.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={onRemove}
-        >
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onRemove}>
           <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
         </Button>
       </div>

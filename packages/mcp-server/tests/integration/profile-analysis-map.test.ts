@@ -30,7 +30,7 @@ let tempDir: string;
 async function createBlockWithTrades(
   baseDir: string,
   blockId: string,
-  trades: Array<{ date: string; strategy: string; pl: number }>
+  trades: Array<{ date: string; strategy: string; pl: number }>,
 ): Promise<void> {
   const blockPath = path.join(baseDir, blockId);
   await fs.mkdir(blockPath, { recursive: true });
@@ -39,7 +39,7 @@ async function createBlockWithTrades(
     "Date Opened,Time Opened,Opening Price,Legs,Premium,Closing Price,Date Closed,Time Closed,Avg. Closing Cost,Reason For Close,P/L,No. of Contracts,Funds at Close,Margin Req.,Strategy,Opening Commissions + Fees,Closing Commissions + Fees";
   const rows = trades.map(
     (t) =>
-      `${t.date},09:31:00,1.50,SPX Put Spread,1.50,0.50,${t.date},15:00:00,0.50,Profit Target,${t.pl},1,10000,5000,${t.strategy},0,0`
+      `${t.date},09:31:00,1.50,SPX Put Spread,1.50,0.50,${t.date},15:00:00,0.50,Profit Target,${t.pl},1,10000,5000,${t.strategy},0,0`,
   );
   const csv = [header, ...rows].join("\n");
   await fs.writeFile(path.join(blockPath, "tradelog.csv"), csv);
@@ -56,7 +56,7 @@ async function insertMarketData(
     date: string;
     volRegime: number;
     trendDirection: string | null;
-  }>
+  }>,
 ): Promise<void> {
   const c = conn as {
     run: (sql: string) => Promise<void>;
@@ -66,35 +66,34 @@ async function insertMarketData(
     // market.enriched (SPX) — computed indicators (no OHLCV).
     await c.run(
       `INSERT OR IGNORE INTO market.enriched (ticker, date, Prior_Close, Gap_Pct)
-       VALUES ('SPX', '${row.date}', 4490, 0.1)`
+       VALUES ('SPX', '${row.date}', 4490, 0.1)`,
     );
 
     // market.spot (SPX minute bars) — two bars so spot_daily VIEW aggregates.
     await c.run(
       `INSERT OR IGNORE INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
        VALUES ('SPX', '${row.date}', '09:30', 4500, 4520, 4480, 4505, 4499, 4501),
-              ('SPX', '${row.date}', '16:00', 4505, 4520, 4480, 4510, 4509, 4511)`
+              ('SPX', '${row.date}', '16:00', 4505, 4520, 4480, 4510, 4509, 4511)`,
     );
 
     // market.enriched (VIX) — VIX-family IVR/IVP post-Phase-6.
     await c.run(
       `INSERT OR IGNORE INTO market.enriched (ticker, date, ivr, ivp)
-       VALUES ('VIX', '${row.date}', 50, 50)`
+       VALUES ('VIX', '${row.date}', 50, 50)`,
     );
 
     // market.spot (VIX minute bars) — source for spot_daily VIX OHLCV.
     await c.run(
       `INSERT OR IGNORE INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
        VALUES ('VIX', '${row.date}', '09:30', 18.0, 18.5, 17.5, 18.0, 17.9, 18.1),
-              ('VIX', '${row.date}', '16:00', 18.0, 18.5, 17.5, 17.5, 17.4, 17.6)`
+              ('VIX', '${row.date}', '16:00', 18.0, 18.5, 17.5, 17.5, 17.4, 17.6)`,
     );
 
     // market.enriched_context — cross-ticker Vol_Regime + Trend_Direction.
-    const trendVal =
-      row.trendDirection === null ? "NULL" : `'${row.trendDirection}'`;
+    const trendVal = row.trendDirection === null ? "NULL" : `'${row.trendDirection}'`;
     await c.run(
       `INSERT OR IGNORE INTO market.enriched_context (date, Vol_Regime, Trend_Direction)
-       VALUES ('${row.date}', ${row.volRegime}, ${trendVal})`
+       VALUES ('${row.date}', ${row.volRegime}, ${trendVal})`,
     );
   }
 }
@@ -106,7 +105,7 @@ async function createProfile(
   conn: unknown,
   blockId: string,
   strategyName: string,
-  overrides: Record<string, unknown> = {}
+  overrides: Record<string, unknown> = {},
 ): Promise<void> {
   const c = conn as {
     run: (sql: string) => Promise<void>;
@@ -135,15 +134,11 @@ function parseToolData(result: {
     resource?: { text: string };
   }>;
 }): Record<string, unknown> {
-  const resource = result.content.find(
-    (c: { type: string }) => c.type === "resource"
-  );
+  const resource = result.content.find((c: { type: string }) => c.type === "resource");
   if (!resource || !("resource" in resource)) {
     throw new Error("No resource content in tool output");
   }
-  return JSON.parse(
-    (resource as { resource: { text: string } }).resource.text
-  );
+  return JSON.parse((resource as { resource: { text: string } }).resource.text);
 }
 
 beforeEach(async () => {
@@ -242,17 +237,13 @@ describe("portfolio_structure_map", () => {
       structureType: "iron_condor",
       greeksBias: "theta_positive",
       expectedRegimes: ["low_vol"],
-      entryFilters: [
-        { field: "VIX_Close", operator: "<", value: 20 },
-      ],
+      entryFilters: [{ field: "VIX_Close", operator: "<", value: 20 }],
     });
     await createProfile(conn, "block-b", "Calendar Spread", {
       structureType: "calendar_spread",
       greeksBias: "vega_positive",
       expectedRegimes: ["high_vol"],
-      entryFilters: [
-        { field: "Vol_Regime", operator: ">=", value: 4 },
-      ],
+      entryFilters: [{ field: "Vol_Regime", operator: ">=", value: 4 }],
     });
   }
 
@@ -264,14 +255,7 @@ describe("portfolio_structure_map", () => {
     const matrix = data.matrix as Record<string, Record<string, unknown>>;
 
     // Should have 6 regime levels
-    const regimeLabels = [
-      "very_low",
-      "low",
-      "below_avg",
-      "above_avg",
-      "high",
-      "extreme",
-    ];
+    const regimeLabels = ["very_low", "low", "below_avg", "above_avg", "high", "extreme"];
     for (const label of regimeLabels) {
       expect(matrix[label]).toBeDefined();
     }
@@ -297,9 +281,7 @@ describe("portfolio_structure_map", () => {
     }>;
 
     // With overlapping dates, at least one cell should have both strategies
-    const multiStrategyOverlaps = overlaps.filter(
-      (o) => o.strategies.length >= 2
-    );
+    const multiStrategyOverlaps = overlaps.filter((o) => o.strategies.length >= 2);
     // We should have some overlap since both strategies trade on the first 3 dates
     expect(multiStrategyOverlaps.length).toBeGreaterThanOrEqual(1);
 
@@ -327,14 +309,7 @@ describe("portfolio_structure_map", () => {
     expect(blindSpots.length).toBeGreaterThan(0);
 
     // Every blind spot should reference valid regime/trend labels
-    const validRegimes = new Set([
-      "very_low",
-      "low",
-      "below_avg",
-      "above_avg",
-      "high",
-      "extreme",
-    ]);
+    const validRegimes = new Set(["very_low", "low", "below_avg", "above_avg", "high", "extreme"]);
     const validTrends = new Set(["up", "down", "flat"]);
     for (const spot of blindSpots) {
       expect(validRegimes.has(spot.regime)).toBe(true);
@@ -386,9 +361,7 @@ describe("portfolio_structure_map", () => {
 
     // Should have warnings about missing Trend_Direction
     const warnings = data.warnings as string[];
-    expect(
-      warnings.some((w) => w.includes("Trend_Direction"))
-    ).toBe(true);
+    expect(warnings.some((w) => w.includes("Trend_Direction"))).toBe(true);
 
     // Should have unknown_trend stats
     expect(data.unknown_trend).toBeDefined();
@@ -397,10 +370,7 @@ describe("portfolio_structure_map", () => {
   it("single block mode filters to that block only", async () => {
     await setupTwoStrategyScenario();
 
-    const result = await handlePortfolioStructureMap(
-      { blockId: "block-a" },
-      tempDir
-    );
+    const result = await handlePortfolioStructureMap({ blockId: "block-a" }, tempDir);
     const data = parseToolData(result);
 
     const strategies = data.strategies as string[];

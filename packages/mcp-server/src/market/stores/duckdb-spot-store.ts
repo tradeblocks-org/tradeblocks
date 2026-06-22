@@ -15,11 +15,7 @@ import type { BarRow, CoverageReport } from "./types.ts";
 import { buildReadBarsSQL, buildReadDailyBarsSQL } from "./spot-sql.ts";
 
 export class DuckdbSpotStore extends SpotStore {
-  async writeBars(
-    ticker: string,
-    date: string,
-    bars: BarRow[],
-  ): Promise<void> {
+  async writeBars(ticker: string, date: string, bars: BarRow[]): Promise<void> {
     if (bars.length === 0) return;
     const placeholders = bars
       .map((_, i) => {
@@ -60,11 +56,7 @@ export class DuckdbSpotStore extends SpotStore {
     return { rowCount: Number(result.rowsChanged) };
   }
 
-  async readBars(
-    ticker: string,
-    from: string,
-    to: string,
-  ): Promise<BarRow[]> {
+  async readBars(ticker: string, from: string, to: string): Promise<BarRow[]> {
     // Builders inline values as SQL literals; the unbound runAndReadAll(sql)
     // path bypasses extract_statements (see spot-sql.ts header).
     const { sql } = buildReadBarsSQL(ticker, from, to);
@@ -83,11 +75,7 @@ export class DuckdbSpotStore extends SpotStore {
     }));
   }
 
-  async readDailyBars(
-    ticker: string,
-    from: string,
-    to: string,
-  ): Promise<BarRow[]> {
+  async readDailyBars(ticker: string, from: string, to: string): Promise<BarRow[]> {
     const { sql } = buildReadDailyBarsSQL(ticker, from, to);
     const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
@@ -104,11 +92,7 @@ export class DuckdbSpotStore extends SpotStore {
     }));
   }
 
-  async getCoverage(
-    ticker: string,
-    from: string,
-    to: string,
-  ): Promise<CoverageReport> {
+  async getCoverage(ticker: string, from: string, to: string): Promise<CoverageReport> {
     // Inline literals — same leak rationale as readBars (spot-sql.ts header).
     const tickerLit = ticker.replace(/'/g, "''");
     const fromLit = from.replace(/'/g, "''");

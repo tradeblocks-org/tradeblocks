@@ -19,7 +19,10 @@ describe("market-fetch integration", () => {
   let conn: Awaited<ReturnType<DuckDBInstance["connect"]>>;
 
   beforeEach(async () => {
-    dataDir = join(tmpdir(), `market-fetch-int-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    dataDir = join(
+      tmpdir(),
+      `market-fetch-int-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     mkdirSync(dataDir, { recursive: true });
     instance = await DuckDBInstance.create(":memory:");
     conn = await instance.connect();
@@ -28,21 +31,46 @@ describe("market-fetch integration", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("ingestBars → readDailyBars round-trip writes and reads back SPX daily data", async () => {
     const bars: BarRow[] = [
-      { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
-      { ticker: "SPX", date: "2026-01-06", open: 4810, high: 4830, low: 4800, close: 4825, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        open: 4800,
+        high: 4820,
+        low: 4790,
+        close: 4810,
+        volume: 0,
+      },
+      {
+        ticker: "SPX",
+        date: "2026-01-06",
+        open: 4810,
+        high: 4830,
+        low: 4800,
+        close: 4825,
+        volume: 0,
+      },
     ];
     const provider: MarketDataProvider = {
       name: "integration",
       capabilities: () => ({
-        tradeBars: true, quotes: false, greeks: false,
-        flatFiles: false, bulkByRoot: false, perTicker: true,
-        minuteBars: true, dailyBars: true,
+        tradeBars: true,
+        quotes: false,
+        greeks: false,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
       }),
       fetchBars: async () => bars,
       fetchOptionSnapshot: async () => ({ contracts: [] }),

@@ -8,7 +8,7 @@
  * Direction is implicit in the slope sign; significance is conveyed via p-value.
  */
 
-import { normalCDF } from './statistical-utils.ts'
+import { normalCDF } from "./statistical-utils.ts";
 
 /**
  * Result of a linear regression on a single metric series.
@@ -18,17 +18,17 @@ import { normalCDF } from './statistical-utils.ts'
  */
 export interface TrendResult {
   /** Raw OLS slope (change per period index) */
-  slope: number
+  slope: number;
   /** Y-intercept */
-  intercept: number
+  intercept: number;
   /** Coefficient of determination (0-1). Higher = better linear fit. */
-  rSquared: number
+  rSquared: number;
   /** Two-tailed p-value for slope significance via normal approximation of t-statistic */
-  pValue: number
+  pValue: number;
   /** Standard error of the slope estimate */
-  stderr: number
+  stderr: number;
   /** Number of data points used in the regression */
-  sampleSize: number
+  sampleSize: number;
 }
 
 /**
@@ -36,7 +36,7 @@ export interface TrendResult {
  * Each key maps to a TrendResult or null (when insufficient data points).
  */
 export interface TrendAnalysis {
-  [metricName: string]: TrendResult | null
+  [metricName: string]: TrendResult | null;
 }
 
 /**
@@ -51,44 +51,41 @@ export interface TrendAnalysis {
  * @returns TrendResult or null if fewer than 2 data points
  */
 export function linearRegression(y: number[]): TrendResult | null {
-  const n = y.length
-  if (n < 2) return null
+  const n = y.length;
+  if (n < 2) return null;
 
   // X values are period indices (0, 1, 2, ...)
-  const x = y.map((_, i) => i)
+  const x = y.map((_, i) => i);
 
   // Calculate means
-  const meanX = x.reduce((a, b) => a + b, 0) / n
-  const meanY = y.reduce((a, b) => a + b, 0) / n
+  const meanX = x.reduce((a, b) => a + b, 0) / n;
+  const meanY = y.reduce((a, b) => a + b, 0) / n;
 
   // OLS: slope = sum((xi-meanX)(yi-meanY)) / sum((xi-meanX)^2)
-  let sumXY = 0
-  let sumX2 = 0
+  let sumXY = 0;
+  let sumX2 = 0;
   for (let i = 0; i < n; i++) {
-    sumXY += (x[i] - meanX) * (y[i] - meanY)
-    sumX2 += (x[i] - meanX) ** 2
+    sumXY += (x[i] - meanX) * (y[i] - meanY);
+    sumX2 += (x[i] - meanX) ** 2;
   }
-  const slope = sumX2 > 0 ? sumXY / sumX2 : 0
-  const intercept = meanY - slope * meanX
+  const slope = sumX2 > 0 ? sumXY / sumX2 : 0;
+  const intercept = meanY - slope * meanX;
 
   // R-squared = 1 - SSres/SStot
-  const predicted = x.map((xi) => slope * xi + intercept)
-  const ssRes = y.reduce(
-    (sum, yi, i) => sum + (yi - predicted[i]) ** 2,
-    0
-  )
-  const ssTot = y.reduce((sum, yi) => sum + (yi - meanY) ** 2, 0)
-  const rSquared = ssTot > 0 ? 1 - ssRes / ssTot : 0
+  const predicted = x.map((xi) => slope * xi + intercept);
+  const ssRes = y.reduce((sum, yi, i) => sum + (yi - predicted[i]) ** 2, 0);
+  const ssTot = y.reduce((sum, yi) => sum + (yi - meanY) ** 2, 0);
+  const rSquared = ssTot > 0 ? 1 - ssRes / ssTot : 0;
 
   // Standard error and t-statistic for p-value
-  const mse = n > 2 ? ssRes / (n - 2) : 0
-  const stderr = sumX2 > 0 ? Math.sqrt(mse / sumX2) : 0
-  const tStat = stderr > 0 ? slope / stderr : 0
+  const mse = n > 2 ? ssRes / (n - 2) : 0;
+  const stderr = sumX2 > 0 ? Math.sqrt(mse / sumX2) : 0;
+  const tStat = stderr > 0 ? slope / stderr : 0;
 
   // Two-tailed p-value using normal approximation
-  const pValue = 2 * (1 - normalCDF(Math.abs(tStat)))
+  const pValue = 2 * (1 - normalCDF(Math.abs(tStat)));
 
-  return { slope, intercept, rSquared, pValue, stderr, sampleSize: n }
+  return { slope, intercept, rSquared, pValue, stderr, sampleSize: n };
 }
 
 /**
@@ -111,9 +108,9 @@ export function linearRegression(y: number[]): TrendResult | null {
  * ```
  */
 export function computeTrends(metricSeries: Record<string, number[]>): TrendAnalysis {
-  const result: TrendAnalysis = {}
+  const result: TrendAnalysis = {};
   for (const [metricName, values] of Object.entries(metricSeries)) {
-    result[metricName] = linearRegression(values)
+    result[metricName] = linearRegression(values);
   }
-  return result
+  return result;
 }

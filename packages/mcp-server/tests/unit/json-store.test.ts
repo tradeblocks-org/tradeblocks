@@ -106,10 +106,7 @@ describe("listJsonFiles", () => {
 
   it("returns array of full file paths for .json files in a directory", async () => {
     const files = await listJsonFiles(listDir);
-    expect(files).toEqual([
-      path.join(listDir, "a.json"),
-      path.join(listDir, "b.json"),
-    ]);
+    expect(files).toEqual([path.join(listDir, "a.json"), path.join(listDir, "b.json")]);
   });
 
   it("returns empty array when directory does not exist (ENOENT, no throw)", async () => {

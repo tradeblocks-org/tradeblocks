@@ -2,17 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -29,12 +21,7 @@ import {
 } from "@tradeblocks/lib/stores";
 import { cn } from "@tradeblocks/lib";
 import { format } from "date-fns";
-import {
-  CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
-  HelpCircle,
-} from "lucide-react";
+import { CalendarIcon, ChevronLeft, ChevronRight, HelpCircle } from "lucide-react";
 
 export function CalendarNavigation() {
   const {
@@ -197,9 +184,7 @@ export function CalendarNavigation() {
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className={cn(
-                    "min-w-[180px] justify-start text-left font-semibold"
-                  )}
+                  className={cn("min-w-[180px] justify-start text-left font-semibold")}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {viewDateLabel}
@@ -252,9 +237,7 @@ export function CalendarNavigation() {
               <HoverCardContent className="w-64 p-0 overflow-hidden">
                 <div className="space-y-3">
                   <div className="bg-primary/5 border-b px-4 py-3">
-                    <h4 className="text-sm font-semibold text-primary">
-                      View Mode
-                    </h4>
+                    <h4 className="text-sm font-semibold text-primary">View Mode</h4>
                   </div>
                   <div className="px-4 pb-4 space-y-3">
                     <p className="text-sm text-foreground leading-relaxed">
@@ -262,12 +245,10 @@ export function CalendarNavigation() {
                     </p>
                     <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
                       <li>
-                        <strong>Week:</strong> 7-day view for detailed daily
-                        analysis
+                        <strong>Week:</strong> 7-day view for detailed daily analysis
                       </li>
                       <li>
-                        <strong>Month:</strong> Full month view with weekly
-                        summaries
+                        <strong>Month:</strong> Full month view with weekly summaries
                       </li>
                     </ul>
                   </div>
@@ -277,9 +258,7 @@ export function CalendarNavigation() {
           </div>
           <Select
             value={calendarViewMode}
-            onValueChange={(value) =>
-              setCalendarViewMode(value as CalendarViewMode)
-            }
+            onValueChange={(value) => setCalendarViewMode(value as CalendarViewMode)}
           >
             <SelectTrigger className="w-[130px]">
               <SelectValue />
@@ -303,9 +282,7 @@ export function CalendarNavigation() {
               <HoverCardContent className="w-64 p-0 overflow-hidden">
                 <div className="space-y-3">
                   <div className="bg-primary/5 border-b px-4 py-3">
-                    <h4 className="text-sm font-semibold text-primary">
-                      Margin Display
-                    </h4>
+                    <h4 className="text-sm font-semibold text-primary">Margin Display</h4>
                   </div>
                   <div className="px-4 pb-4 space-y-3">
                     <p className="text-sm text-foreground leading-relaxed">
@@ -339,9 +316,7 @@ export function CalendarNavigation() {
               <HoverCardContent className="w-64 p-0 overflow-hidden">
                 <div className="space-y-3">
                   <div className="bg-primary/5 border-b px-4 py-3">
-                    <h4 className="text-sm font-semibold text-primary">
-                      Date Display
-                    </h4>
+                    <h4 className="text-sm font-semibold text-primary">Date Display</h4>
                   </div>
                   <div className="px-4 pb-4 space-y-3">
                     <p className="text-sm text-foreground leading-relaxed">
@@ -349,12 +324,10 @@ export function CalendarNavigation() {
                     </p>
                     <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
                       <li>
-                        <strong>Entry Date:</strong> Show trades by when they were
-                        opened
+                        <strong>Entry Date:</strong> Show trades by when they were opened
                       </li>
                       <li>
-                        <strong>Close Date:</strong> Show trades by when they were
-                        closed
+                        <strong>Close Date:</strong> Show trades by when they were closed
                       </li>
                     </ul>
                   </div>
@@ -364,9 +337,7 @@ export function CalendarNavigation() {
           </div>
           <Select
             value={dateDisplayMode}
-            onValueChange={(value) =>
-              setDateDisplayMode(value as DateDisplayMode)
-            }
+            onValueChange={(value) => setDateDisplayMode(value as DateDisplayMode)}
           >
             <SelectTrigger className="w-[150px]">
               <SelectValue />
@@ -391,9 +362,7 @@ export function CalendarNavigation() {
               <HoverCardContent className="w-64 p-0 overflow-hidden">
                 <div className="space-y-3">
                   <div className="bg-primary/5 border-b px-4 py-3">
-                    <h4 className="text-sm font-semibold text-primary">
-                      Data Display
-                    </h4>
+                    <h4 className="text-sm font-semibold text-primary">Data Display</h4>
                   </div>
                   <div className="px-4 pb-4 space-y-3">
                     <p className="text-sm text-foreground leading-relaxed">
@@ -401,16 +370,13 @@ export function CalendarNavigation() {
                     </p>
                     <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
                       <li>
-                        <strong>Backtest:</strong> Show only backtest/reported
-                        data
+                        <strong>Backtest:</strong> Show only backtest/reported data
                       </li>
                       <li>
-                        <strong>Actual:</strong> Show only actual/live trade
-                        data
+                        <strong>Actual:</strong> Show only actual/live trade data
                       </li>
                       <li>
-                        <strong>Both:</strong> Show both data sources side by
-                        side
+                        <strong>Both:</strong> Show both data sources side by side
                       </li>
                     </ul>
                   </div>
@@ -420,9 +386,7 @@ export function CalendarNavigation() {
           </div>
           <Select
             value={dataDisplayMode}
-            onValueChange={(value) =>
-              setDataDisplayMode(value as DataDisplayMode)
-            }
+            onValueChange={(value) => setDataDisplayMode(value as DataDisplayMode)}
           >
             <SelectTrigger className="w-[130px]">
               <SelectValue />

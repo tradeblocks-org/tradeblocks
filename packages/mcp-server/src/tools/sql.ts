@@ -275,7 +275,7 @@ async function executeWithTimeout(
   conn: DuckDBConnection,
   sql: string,
   limit: number,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<QueryResult> {
   // Add LIMIT if not present
   let finalSql = sql.trim();
@@ -291,9 +291,7 @@ async function executeWithTimeout(
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => {
       reject(
-        new Error(
-          "Query exceeded 30s timeout. Consider adding LIMIT or filtering by block_id."
-        )
+        new Error("Query exceeded 30s timeout. Consider adding LIMIT or filtering by block_id."),
       );
     }, timeoutMs);
   });
@@ -404,7 +402,9 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
         confirm: z
           .boolean()
           .default(false)
-          .describe("Required for all mutating operations (DELETE, UPDATE, INSERT, CREATE, ALTER, DROP, TRUNCATE). Without it, returns a preview or prompt."),
+          .describe(
+            "Required for all mutating operations (DELETE, UPDATE, INSERT, CREATE, ALTER, DROP, TRUNCATE). Without it, returns a preview or prompt.",
+          ),
       }),
     },
     withFullSync(baseDir, async ({ query, limit, confirm }) => {
@@ -439,10 +439,11 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
           }
         }
         // For other mutating ops (INSERT, CREATE, ALTER, DROP, TRUNCATE) — no preview, just gate
-        return createToolOutput(
-          `⚠️ ${operation} requires confirm=true to execute.`,
-          { operation, query, preview: true },
-        );
+        return createToolOutput(`⚠️ ${operation} requires confirm=true to execute.`, {
+          operation,
+          query,
+          preview: true,
+        });
       }
 
       try {
@@ -456,10 +457,10 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
             const rwConn = await getConnection(baseDir);
             const result = await rwConn.run(query);
             const changed = Number(result.rowsChanged);
-            return createToolOutput(
-              `${operation} completed: ${changed} row(s) affected.`,
-              { operation, rowsAffected: changed },
-            );
+            return createToolOutput(`${operation} completed: ${changed} row(s) affected.`, {
+              operation,
+              rowsAffected: changed,
+            });
           } finally {
             await downgradeToReadOnly(baseDir);
           }
@@ -490,6 +491,6 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
           isError: true as const,
         };
       }
-    })
+    }),
   );
 }

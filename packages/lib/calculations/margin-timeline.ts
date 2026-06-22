@@ -20,7 +20,7 @@ export type MarginMode = "fixed" | "compounding";
  */
 function getNetLiqFromDailyLog(
   dailyLog: DailyLogEntry[] | undefined,
-  dateStr: string
+  dateStr: string,
 ): number | null {
   if (!dailyLog) return null;
 
@@ -46,7 +46,7 @@ function buildDateToNetLiq(
   trades: Trade[],
   dateKeys: string[],
   startingCapital: number,
-  dailyLog?: DailyLogEntry[]
+  dailyLog?: DailyLogEntry[],
 ): Map<string, number> {
   const dateToNetLiq = new Map<string, number>();
 
@@ -113,13 +113,10 @@ export function buildMarginTimeline(
   strategyNames: string[],
   startingCapital: number,
   marginMode: MarginMode,
-  dailyLog?: DailyLogEntry[]
+  dailyLog?: DailyLogEntry[],
 ): MarginTimeline {
   // Track margin by date and strategy
-  const marginTotals = new Map<
-    string,
-    { total: number; byStrategy: Map<string, number> }
-  >();
+  const marginTotals = new Map<string, { total: number; byStrategy: Map<string, number> }>();
 
   // Build margin requirements for each date
   for (const trade of trades) {
@@ -179,19 +176,15 @@ export function buildMarginTimeline(
 
     // Determine denominator based on mode
     const denominator =
-      marginMode === "compounding"
-        ? dateToNetLiq.get(dateKey) || startingCapital
-        : startingCapital;
+      marginMode === "compounding" ? dateToNetLiq.get(dateKey) || startingCapital : startingCapital;
 
-    const portfolioPct =
-      denominator > 0 ? (totalMargin / denominator) * 100 : 0;
+    const portfolioPct = denominator > 0 ? (totalMargin / denominator) * 100 : 0;
     portfolioMarginPct.push(portfolioPct);
 
     // Calculate per-strategy percentages
     for (const strategy of strategyNames) {
       const strategyMargin = dayData.byStrategy.get(strategy) || 0;
-      const strategyPct =
-        denominator > 0 ? (strategyMargin / denominator) * 100 : 0;
+      const strategyPct = denominator > 0 ? (strategyMargin / denominator) * 100 : 0;
       strategyMarginPctSeries.get(strategy)!.push(strategyPct);
     }
   }
@@ -208,10 +201,7 @@ export function buildMarginTimeline(
 /**
  * Calculate maximum margin percentage used for a strategy
  */
-export function calculateMaxMarginPct(
-  marginTimeline: MarginTimeline,
-  strategy: string
-): number {
+export function calculateMaxMarginPct(marginTimeline: MarginTimeline, strategy: string): number {
   const series = marginTimeline.strategyPct.get(strategy);
   if (!series || series.length === 0) return 0;
   return Math.max(...series);

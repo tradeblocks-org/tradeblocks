@@ -129,8 +129,7 @@ describe("Risk-Free Rate Lookup Utility", () => {
     it("should span at least 10 years of data", () => {
       const range = getRateDataRange();
       const yearsDiff =
-        (range.end.getTime() - range.start.getTime()) /
-        (1000 * 60 * 60 * 24 * 365.25);
+        (range.end.getTime() - range.start.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
       expect(yearsDiff).toBeGreaterThanOrEqual(10);
     });
   });

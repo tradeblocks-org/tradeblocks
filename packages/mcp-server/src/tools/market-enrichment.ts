@@ -61,14 +61,14 @@ export function registerMarketEnrichmentTools(
         ticker: z
           .string()
           .describe(
-            "Ticker symbol to enrich (e.g., 'SPX', 'QQQ'). Must match an existing ticker in market.spot_daily / market.enriched."
+            "Ticker symbol to enrich (e.g., 'SPX', 'QQQ'). Must match an existing ticker in market.spot_daily / market.enriched.",
           ),
         force_full: z
           .boolean()
           .default(false)
           .describe(
             "Currently a no-op against the store-backed compute path. " +
-            "Originally cleared the enriched_through watermark and recomputed all rows from scratch."
+              "Originally cleared the enriched_through watermark and recomputed all rows from scratch.",
           ),
       }),
     },
@@ -115,6 +115,6 @@ export function registerMarketEnrichmentTools(
       } finally {
         await downgradeToReadOnly(baseDir);
       }
-    }
+    },
   );
 }

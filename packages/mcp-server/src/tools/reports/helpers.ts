@@ -52,15 +52,11 @@ function computeDurationHours(trade: Trade): number | undefined {
   if (!trade.dateClosed || !trade.timeClosed) return undefined;
   try {
     const openingDate = new Date(trade.dateOpened);
-    const [openHours, openMinutes, openSeconds] = trade.timeOpened
-      .split(":")
-      .map(Number);
+    const [openHours, openMinutes, openSeconds] = trade.timeOpened.split(":").map(Number);
     openingDate.setHours(openHours, openMinutes, openSeconds || 0, 0);
 
     const closingDate = new Date(trade.dateClosed);
-    const [closeHours, closeMinutes, closeSeconds] = trade.timeClosed
-      .split(":")
-      .map(Number);
+    const [closeHours, closeMinutes, closeSeconds] = trade.timeClosed.split(":").map(Number);
     closingDate.setHours(closeHours, closeMinutes, closeSeconds || 0, 0);
 
     const diffMs = closingDate.getTime() - openingDate.getTime();
@@ -105,9 +101,7 @@ function getISOWeekNumber(date: Date): number {
   const dayNum = d.getDay() || 7;
   d.setDate(d.getDate() + 4 - dayNum);
   const yearStart = new Date(d.getFullYear(), 0, 1);
-  const weekNo = Math.ceil(
-    ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
-  );
+  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   return weekNo;
 }
 
@@ -119,31 +113,22 @@ function getISOWeekNumber(date: Date): number {
 export function enrichTrades(trades: Trade[]): EnrichedTrade[] {
   return trades.map((trade, index) => {
     const dateOpened = new Date(trade.dateOpened);
-    const totalFees =
-      trade.openingCommissionsFees + (trade.closingCommissionsFees ?? 0);
+    const totalFees = trade.openingCommissionsFees + (trade.closingCommissionsFees ?? 0);
     const netPl = trade.pl - totalFees;
 
     // VIX changes
-    const hasVixData =
-      trade.openingVix != null && trade.closingVix != null;
-    const vixChange = hasVixData
-      ? trade.closingVix! - trade.openingVix!
-      : undefined;
+    const hasVixData = trade.openingVix != null && trade.closingVix != null;
+    const vixChange = hasVixData ? trade.closingVix! - trade.openingVix! : undefined;
     const vixChangePct =
       hasVixData && trade.openingVix !== 0
         ? ((trade.closingVix! - trade.openingVix!) / trade.openingVix!) * 100
         : undefined;
 
     // Return metrics
-    const rom =
-      trade.marginReq > 0 ? (trade.pl / trade.marginReq) * 100 : undefined;
+    const rom = trade.marginReq > 0 ? (trade.pl / trade.marginReq) * 100 : undefined;
     const totalPremium = trade.premium * trade.numContracts;
-    const plPct =
-      totalPremium !== 0
-        ? (trade.pl / Math.abs(totalPremium)) * 100
-        : undefined;
-    const netPlPct =
-      totalPremium !== 0 ? (netPl / Math.abs(totalPremium)) * 100 : undefined;
+    const plPct = totalPremium !== 0 ? (trade.pl / Math.abs(totalPremium)) * 100 : undefined;
+    const netPlPct = totalPremium !== 0 ? (netPl / Math.abs(totalPremium)) * 100 : undefined;
 
     // MFE/MAE approximation from maxProfit/maxLoss (if available in trade data)
     let mfePercent: number | undefined;
@@ -158,18 +143,10 @@ export function enrichTrades(trades: Trade[]): EnrichedTrade[] {
     if (trade.maxLoss !== undefined && totalPremium !== 0) {
       maePercent = (Math.abs(trade.maxLoss) / Math.abs(totalPremium)) * 100;
     }
-    if (
-      mfePercent !== undefined &&
-      trade.maxProfit &&
-      trade.maxProfit > 0
-    ) {
+    if (mfePercent !== undefined && trade.maxProfit && trade.maxProfit > 0) {
       profitCapturePercent = (trade.pl / trade.maxProfit) * 100;
     }
-    if (
-      mfePercent !== undefined &&
-      maePercent !== undefined &&
-      maePercent > 0
-    ) {
+    if (mfePercent !== undefined && maePercent !== undefined && maePercent > 0) {
       excursionRatio = mfePercent / maePercent;
     }
     if (trade.maxLoss !== undefined && Math.abs(trade.maxLoss) > 0) {
@@ -214,10 +191,7 @@ export function enrichTrades(trades: Trade[]): EnrichedTrade[] {
  * Get the value of a field from an enriched trade
  * Returns null if the field doesn't exist or has no value
  */
-export function getTradeFieldValue(
-  trade: EnrichedTrade,
-  field: string
-): number | null {
+export function getTradeFieldValue(trade: EnrichedTrade, field: string): number | null {
   // Guard against undefined or non-string field
   if (typeof field !== "string") {
     return null;
@@ -260,7 +234,7 @@ export function evaluateOperator(
   value: number,
   operator: FilterOperator,
   compareValue: number,
-  compareValue2?: number
+  compareValue2?: number,
 ): boolean {
   switch (operator) {
     case "eq":
@@ -299,7 +273,7 @@ export interface FilterCondition {
 export function applyFilterConditions(
   trades: EnrichedTrade[],
   conditions: FilterCondition[],
-  logic: "and" | "or"
+  logic: "and" | "or",
 ): EnrichedTrade[] {
   if (conditions.length === 0) {
     return trades;
@@ -340,8 +314,7 @@ export function percentile(sorted: number[], p: number): number {
 export function stdDev(values: number[], avg: number): number {
   if (values.length < 2) return 0;
   const squaredDiffs = values.map((v) => Math.pow(v - avg, 2));
-  const variance =
-    squaredDiffs.reduce((a, b) => a + b, 0) / (values.length - 1);
+  const variance = squaredDiffs.reduce((a, b) => a + b, 0) / (values.length - 1);
   return Math.sqrt(variance);
 }
 
@@ -350,7 +323,7 @@ export function stdDev(values: number[], avg: number): number {
  */
 export function generateHistogram(
   values: number[],
-  bucketCount: number = 10
+  bucketCount: number = 10,
 ): Array<{ min: number; max: number; count: number }> {
   if (values.length === 0) return [];
 
@@ -362,16 +335,12 @@ export function generateHistogram(
   const buckets: Array<{ min: number; max: number; count: number }> = [];
   for (let i = 0; i < bucketCount; i++) {
     const bucketMin = min + i * bucketSize;
-    const bucketMax =
-      i === bucketCount - 1 ? max + 0.001 : min + (i + 1) * bucketSize;
+    const bucketMax = i === bucketCount - 1 ? max + 0.001 : min + (i + 1) * bucketSize;
     buckets.push({ min: bucketMin, max: bucketMax, count: 0 });
   }
 
   for (const value of values) {
-    const bucketIndex = Math.min(
-      Math.floor((value - min) / bucketSize),
-      bucketCount - 1
-    );
+    const bucketIndex = Math.min(Math.floor((value - min) / bucketSize), bucketCount - 1);
     if (bucketIndex >= 0 && bucketIndex < buckets.length) {
       buckets[bucketIndex].count++;
     }

@@ -57,63 +57,72 @@ export interface MarketLookupKey {
  *     `e`-prefixed alias {evix, evix9d, evix3m}.
  */
 interface VixFieldMapping {
-  alias: string;       // Column name in query output (e.g., "VIX_Close")
-  tableAlias: string;  // SQL table alias (e.g., "vix" for OHLCV, "evix" for enriched)
-  sourceCol: string;   // Source column (e.g., "close" in spot_daily, "ivr" in enriched)
-  ticker: string;      // Ticker to join on (e.g., "VIX")
-  timing: 'open' | 'close';
+  alias: string; // Column name in query output (e.g., "VIX_Close")
+  tableAlias: string; // SQL table alias (e.g., "vix" for OHLCV, "evix" for enriched)
+  sourceCol: string; // Source column (e.g., "close" in spot_daily, "ivr" in enriched)
+  ticker: string; // Ticker to join on (e.g., "VIX")
+  timing: "open" | "close";
 }
 
 // OHLCV-sourced VIX columns — come from market.spot_daily, aliased as vix/vix9d/vix3m
 const VIX_OHLCV_MAPPINGS: VixFieldMapping[] = [
   // VIX
-  { alias: "VIX_Open",  tableAlias: "vix",  sourceCol: "open",  ticker: "VIX",  timing: "open" },
-  { alias: "VIX_Close", tableAlias: "vix",  sourceCol: "close", ticker: "VIX",  timing: "close" },
-  { alias: "VIX_High",  tableAlias: "vix",  sourceCol: "high",  ticker: "VIX",  timing: "close" },
-  { alias: "VIX_Low",   tableAlias: "vix",  sourceCol: "low",   ticker: "VIX",  timing: "close" },
+  { alias: "VIX_Open", tableAlias: "vix", sourceCol: "open", ticker: "VIX", timing: "open" },
+  { alias: "VIX_Close", tableAlias: "vix", sourceCol: "close", ticker: "VIX", timing: "close" },
+  { alias: "VIX_High", tableAlias: "vix", sourceCol: "high", ticker: "VIX", timing: "close" },
+  { alias: "VIX_Low", tableAlias: "vix", sourceCol: "low", ticker: "VIX", timing: "close" },
   // VIX9D
-  { alias: "VIX9D_Open",  tableAlias: "vix9d", sourceCol: "open",  ticker: "VIX9D", timing: "open" },
-  { alias: "VIX9D_Close", tableAlias: "vix9d", sourceCol: "close", ticker: "VIX9D", timing: "close" },
+  { alias: "VIX9D_Open", tableAlias: "vix9d", sourceCol: "open", ticker: "VIX9D", timing: "open" },
+  {
+    alias: "VIX9D_Close",
+    tableAlias: "vix9d",
+    sourceCol: "close",
+    ticker: "VIX9D",
+    timing: "close",
+  },
   // VIX3M
-  { alias: "VIX3M_Open",  tableAlias: "vix3m", sourceCol: "open",  ticker: "VIX3M", timing: "open" },
-  { alias: "VIX3M_Close", tableAlias: "vix3m", sourceCol: "close", ticker: "VIX3M", timing: "close" },
+  { alias: "VIX3M_Open", tableAlias: "vix3m", sourceCol: "open", ticker: "VIX3M", timing: "open" },
+  {
+    alias: "VIX3M_Close",
+    tableAlias: "vix3m",
+    sourceCol: "close",
+    ticker: "VIX3M",
+    timing: "close",
+  },
 ];
 
 // Enrichment-sourced VIX columns — come from market.enriched, aliased as evix/evix9d/evix3m
 const VIX_ENRICHED_MAPPINGS: VixFieldMapping[] = [
-  { alias: "VIX_IVR",    tableAlias: "evix",   sourceCol: "ivr", ticker: "VIX",   timing: "close" },
-  { alias: "VIX_IVP",    tableAlias: "evix",   sourceCol: "ivp", ticker: "VIX",   timing: "close" },
-  { alias: "VIX9D_IVR",  tableAlias: "evix9d", sourceCol: "ivr", ticker: "VIX9D", timing: "close" },
-  { alias: "VIX9D_IVP",  tableAlias: "evix9d", sourceCol: "ivp", ticker: "VIX9D", timing: "close" },
-  { alias: "VIX3M_IVR",  tableAlias: "evix3m", sourceCol: "ivr", ticker: "VIX3M", timing: "close" },
-  { alias: "VIX3M_IVP",  tableAlias: "evix3m", sourceCol: "ivp", ticker: "VIX3M", timing: "close" },
+  { alias: "VIX_IVR", tableAlias: "evix", sourceCol: "ivr", ticker: "VIX", timing: "close" },
+  { alias: "VIX_IVP", tableAlias: "evix", sourceCol: "ivp", ticker: "VIX", timing: "close" },
+  { alias: "VIX9D_IVR", tableAlias: "evix9d", sourceCol: "ivr", ticker: "VIX9D", timing: "close" },
+  { alias: "VIX9D_IVP", tableAlias: "evix9d", sourceCol: "ivp", ticker: "VIX9D", timing: "close" },
+  { alias: "VIX3M_IVR", tableAlias: "evix3m", sourceCol: "ivr", ticker: "VIX3M", timing: "close" },
+  { alias: "VIX3M_IVP", tableAlias: "evix3m", sourceCol: "ivp", ticker: "VIX3M", timing: "close" },
 ];
 
 // Union of all VIX mappings (order preserved: OHLCV first, then enrichment) — used for
 // SELECT column emission and open/close field-set derivation downstream.
-const VIX_ALL_MAPPINGS: VixFieldMapping[] = [
-  ...VIX_OHLCV_MAPPINGS,
-  ...VIX_ENRICHED_MAPPINGS,
-];
+const VIX_ALL_MAPPINGS: VixFieldMapping[] = [...VIX_OHLCV_MAPPINGS, ...VIX_ENRICHED_MAPPINGS];
 
 // Unique OHLCV table aliases needed for the JOIN clause (used by buildVixJoinClause)
-const VIX_TICKER_ALIASES = [...new Set(VIX_OHLCV_MAPPINGS.map(m => m.tableAlias))];
+const VIX_TICKER_ALIASES = [...new Set(VIX_OHLCV_MAPPINGS.map((m) => m.tableAlias))];
 const VIX_TICKER_FOR_ALIAS: Record<string, string> = Object.fromEntries([
-  ...VIX_OHLCV_MAPPINGS.map(m => [m.tableAlias, m.ticker] as const),
-  ...VIX_ENRICHED_MAPPINGS.map(m => [m.tableAlias, m.ticker] as const),
+  ...VIX_OHLCV_MAPPINGS.map((m) => [m.tableAlias, m.ticker] as const),
+  ...VIX_ENRICHED_MAPPINGS.map((m) => [m.tableAlias, m.ticker] as const),
 ]);
 
 // Derived fields from date_context
 const DERIVED_OPEN_FIELDS: ReadonlySet<string> = new Set(
   Object.entries(derivedColumns)
-    .filter(([, desc]) => desc.timing === 'open')
-    .map(([name]) => name)
+    .filter(([, desc]) => desc.timing === "open")
+    .map(([name]) => name),
 );
 
 const DERIVED_CLOSE_FIELDS: ReadonlySet<string> = new Set(
   Object.entries(derivedColumns)
-    .filter(([, desc]) => desc.timing === 'close')
-    .map(([name]) => name)
+    .filter(([, desc]) => desc.timing === "close")
+    .map(([name]) => name),
 );
 
 // ============================================================================
@@ -128,8 +137,8 @@ const DERIVED_CLOSE_FIELDS: ReadonlySet<string> = new Set(
  */
 export const DAILY_OPEN_FIELDS: ReadonlySet<string> = new Set(
   Object.entries(dailyColumns)
-    .filter(([, desc]) => desc.timing === 'open')
-    .map(([name]) => name)
+    .filter(([, desc]) => desc.timing === "open")
+    .map(([name]) => name),
 );
 
 /**
@@ -138,8 +147,8 @@ export const DAILY_OPEN_FIELDS: ReadonlySet<string> = new Set(
  */
 export const DAILY_CLOSE_FIELDS: ReadonlySet<string> = new Set(
   Object.entries(dailyColumns)
-    .filter(([, desc]) => desc.timing === 'close')
-    .map(([name]) => name)
+    .filter(([, desc]) => desc.timing === "close")
+    .map(([name]) => name),
 );
 
 /**
@@ -147,15 +156,15 @@ export const DAILY_CLOSE_FIELDS: ReadonlySet<string> = new Set(
  */
 export const DAILY_STATIC_FIELDS: ReadonlySet<string> = new Set(
   Object.entries(dailyColumns)
-    .filter(([, desc]) => desc.timing === 'static')
-    .map(([name]) => name)
+    .filter(([, desc]) => desc.timing === "static")
+    .map(([name]) => name),
 );
 
 /**
  * Open-known fields from VIX tickers + enriched_context
  */
 export const CONTEXT_OPEN_FIELDS: ReadonlySet<string> = new Set([
-  ...VIX_ALL_MAPPINGS.filter(m => m.timing === 'open').map(m => m.alias),
+  ...VIX_ALL_MAPPINGS.filter((m) => m.timing === "open").map((m) => m.alias),
   ...DERIVED_OPEN_FIELDS,
 ]);
 
@@ -163,7 +172,7 @@ export const CONTEXT_OPEN_FIELDS: ReadonlySet<string> = new Set([
  * Close-derived fields from VIX tickers + enriched_context
  */
 export const CONTEXT_CLOSE_FIELDS: ReadonlySet<string> = new Set([
-  ...VIX_ALL_MAPPINGS.filter(m => m.timing === 'close').map(m => m.alias),
+  ...VIX_ALL_MAPPINGS.filter((m) => m.timing === "close").map((m) => m.alias),
   ...DERIVED_CLOSE_FIELDS,
 ]);
 
@@ -198,9 +207,7 @@ export const CLOSE_KNOWN_FIELDS: ReadonlySet<string> = new Set([
  * Only from market.enriched (context has no static fields).
  * Safe to use as same-day values in trade-entry queries.
  */
-export const STATIC_FIELDS: ReadonlySet<string> = new Set([
-  ...DAILY_STATIC_FIELDS,
-]);
+export const STATIC_FIELDS: ReadonlySet<string> = new Set([...DAILY_STATIC_FIELDS]);
 
 // ============================================================================
 // Query Builders
@@ -221,12 +228,9 @@ export const STATIC_FIELDS: ReadonlySet<string> = new Set([
  * @param baseAlias      alias of the main table the joins attach to (default 'd')
  * @returns SQL fragment string with \n + 6-space indent between JOINs
  */
-export function buildVixJoinClause(
-  tickerAliases: string[],
-  baseAlias: string = "d",
-): string {
+export function buildVixJoinClause(tickerAliases: string[], baseAlias: string = "d"): string {
   return tickerAliases
-    .flatMap(alias => {
+    .flatMap((alias) => {
       const ticker = VIX_TICKER_FOR_ALIAS[alias];
       return [
         `LEFT JOIN market.spot_daily ${alias} ON ${alias}.date = ${baseAlias}.date AND ${alias}.ticker = '${ticker}'`,
@@ -239,14 +243,12 @@ export function buildVixJoinClause(
 // SELECT columns from VIX OHLCV + enrichment mappings, e.g. vix."close" AS "VIX_Close",
 // evix."ivr" AS "VIX_IVR", ...
 function buildVixSelectCols(): string {
-  return VIX_ALL_MAPPINGS
-    .map(m => `${m.tableAlias}."${m.sourceCol}" AS "${m.alias}"`)
-    .join(", ");
+  return VIX_ALL_MAPPINGS.map((m) => `${m.tableAlias}."${m.sourceCol}" AS "${m.alias}"`).join(", ");
 }
 
 // SELECT columns from enriched_context: cd."Vol_Regime", ...
 function buildDerivedSelectCols(): string {
-  return [...DERIVED_OPEN_FIELDS, ...DERIVED_CLOSE_FIELDS].map(f => `cd."${f}"`).join(", ");
+  return [...DERIVED_OPEN_FIELDS, ...DERIVED_CLOSE_FIELDS].map((f) => `cd."${f}"`).join(", ");
 }
 
 /**
@@ -280,19 +282,29 @@ function buildDerivedSelectCols(): string {
  * @returns Object with `sql` (the query string) and `params` (the parameter values)
  */
 export function buildLookaheadFreeQuery(tradeDates: string[]): { sql: string; params: string[] };
-export function buildLookaheadFreeQuery(tradeKeys: MarketLookupKey[]): { sql: string; params: string[] };
-export function buildLookaheadFreeQuery(
-  tradeDatesOrKeys: string[] | MarketLookupKey[]
-): { sql: string; params: string[] } {
+export function buildLookaheadFreeQuery(tradeKeys: MarketLookupKey[]): {
+  sql: string;
+  params: string[];
+};
+export function buildLookaheadFreeQuery(tradeDatesOrKeys: string[] | MarketLookupKey[]): {
+  sql: string;
+  params: string[];
+} {
   if (tradeDatesOrKeys.length === 0) {
     return { sql: `SELECT * FROM market.enriched WHERE 1=0`, params: [] };
   }
 
   // Build field lists for the joined CTE. OHLCV columns project from alias `s`
   // (market.spot_daily); enrichment columns project from alias `d` (market.enriched).
-  const dailyOpenCols = [...DAILY_OPEN_FIELDS].map((f) => `${aliasForDailyCol(f)}."${f}"`).join(", ");
-  const dailyStaticCols = [...DAILY_STATIC_FIELDS].map((f) => `${aliasForDailyCol(f)}."${f}"`).join(", ");
-  const dailyCloseCols = [...DAILY_CLOSE_FIELDS].map((f) => `${aliasForDailyCol(f)}."${f}"`).join(", ");
+  const dailyOpenCols = [...DAILY_OPEN_FIELDS]
+    .map((f) => `${aliasForDailyCol(f)}."${f}"`)
+    .join(", ");
+  const dailyStaticCols = [...DAILY_STATIC_FIELDS]
+    .map((f) => `${aliasForDailyCol(f)}."${f}"`)
+    .join(", ");
+  const dailyCloseCols = [...DAILY_CLOSE_FIELDS]
+    .map((f) => `${aliasForDailyCol(f)}."${f}"`)
+    .join(", ");
   const vixSelectCols = buildVixSelectCols();
   const derivedSelectCols = buildDerivedSelectCols();
   const vixJoins = buildVixJoinClause(VIX_TICKER_ALIASES, "d");
@@ -301,22 +313,20 @@ export function buildLookaheadFreeQuery(
   const dailyLagCols = [...DAILY_CLOSE_FIELDS]
     .map((field) => `LAG("${field}") OVER (PARTITION BY ticker ORDER BY date) AS "prev_${field}"`)
     .join(",\n        ");
-  const vixLagCols = VIX_ALL_MAPPINGS
-    .filter(m => m.timing === 'close')
-    .map(m => `LAG("${m.alias}") OVER (PARTITION BY ticker ORDER BY date) AS "prev_${m.alias}"`)
+  const vixLagCols = VIX_ALL_MAPPINGS.filter((m) => m.timing === "close")
+    .map((m) => `LAG("${m.alias}") OVER (PARTITION BY ticker ORDER BY date) AS "prev_${m.alias}"`)
     .join(",\n        ");
   const derivedLagCols = [...DERIVED_CLOSE_FIELDS]
-    .map(f => `LAG("${f}") OVER (PARTITION BY ticker ORDER BY date) AS "prev_${f}"`)
+    .map((f) => `LAG("${f}") OVER (PARTITION BY ticker ORDER BY date) AS "prev_${f}"`)
     .join(",\n        ");
 
   // Pass-through columns for the lagged CTE (unaliased, from joined CTE output)
   const dailyOpenPassthrough = [...DAILY_OPEN_FIELDS].map((f) => `"${f}"`).join(", ");
   const dailyStaticPassthrough = [...DAILY_STATIC_FIELDS].map((f) => `"${f}"`).join(", ");
-  const vixOpenPassthrough = VIX_ALL_MAPPINGS
-    .filter(m => m.timing === 'open')
-    .map(m => `"${m.alias}"`)
+  const vixOpenPassthrough = VIX_ALL_MAPPINGS.filter((m) => m.timing === "open")
+    .map((m) => `"${m.alias}"`)
     .join(", ");
-  const derivedOpenPassthrough = [...DERIVED_OPEN_FIELDS].map(f => `"${f}"`).join(", ");
+  const derivedOpenPassthrough = [...DERIVED_OPEN_FIELDS].map((f) => `"${f}"`).join(", ");
 
   // Legacy path for existing date-only callers (single ticker = DEFAULT_MARKET_TICKER)
   if (typeof tradeDatesOrKeys[0] === "string") {
@@ -423,40 +433,43 @@ export function buildLookaheadFreeQuery(
  */
 export function buildOutcomeQuery(tradeDates: string[]): { sql: string; params: string[] };
 export function buildOutcomeQuery(tradeKeys: MarketLookupKey[]): { sql: string; params: string[] };
-export function buildOutcomeQuery(
-  tradeDatesOrKeys: string[] | MarketLookupKey[]
-): { sql: string; params: string[] } {
+export function buildOutcomeQuery(tradeDatesOrKeys: string[] | MarketLookupKey[]): {
+  sql: string;
+  params: string[];
+} {
   if (tradeDatesOrKeys.length === 0) {
     return { sql: `SELECT * FROM market.enriched WHERE 1=0`, params: [] };
   }
 
-  const vixCloseCols = VIX_ALL_MAPPINGS
-    .filter(m => m.timing === 'close')
-    .map(m => `${m.tableAlias}."${m.sourceCol}" AS "${m.alias}"`)
+  const vixCloseCols = VIX_ALL_MAPPINGS.filter((m) => m.timing === "close")
+    .map((m) => `${m.tableAlias}."${m.sourceCol}" AS "${m.alias}"`)
     .join(", ");
-  const derivedCloseCols = [...DERIVED_CLOSE_FIELDS].map(f => `cd."${f}"`).join(", ");
+  const derivedCloseCols = [...DERIVED_CLOSE_FIELDS].map((f) => `cd."${f}"`).join(", ");
 
   if (typeof tradeDatesOrKeys[0] === "string") {
     return buildOutcomeQueryForDates(tradeDatesOrKeys as string[], vixCloseCols, derivedCloseCols);
   }
 
-  return buildOutcomeQueryForKeys(tradeDatesOrKeys as MarketLookupKey[], vixCloseCols, derivedCloseCols);
+  return buildOutcomeQueryForKeys(
+    tradeDatesOrKeys as MarketLookupKey[],
+    vixCloseCols,
+    derivedCloseCols,
+  );
 }
 
 // Emit OHLCV-aware projection for the target-ticker close columns. Columns in
 // OHLCV_COLS come from the spot_daily alias `sAlias`; other enrichment-close
 // columns come from the enriched alias `eAlias`.
-function buildTargetCloseCols(
-  eAlias: string,
-  sAlias: string,
-): string {
+function buildTargetCloseCols(eAlias: string, sAlias: string): string {
   return [...DAILY_CLOSE_FIELDS]
     .map((f) => `${OHLCV_COLS.has(f) ? sAlias : eAlias}."${f}"`)
     .join(", ");
 }
 
 function buildOutcomeQueryForDates(
-  tradeDates: string[], vixCloseCols: string, derivedCloseCols: string
+  tradeDates: string[],
+  vixCloseCols: string,
+  derivedCloseCols: string,
 ): { sql: string; params: string[] } {
   const eAlias = "d";
   const sAlias = "s";
@@ -473,7 +486,9 @@ function buildOutcomeQueryForDates(
 }
 
 function buildOutcomeQueryForKeys(
-  tradeKeys: MarketLookupKey[], vixCloseCols: string, derivedCloseCols: string
+  tradeKeys: MarketLookupKey[],
+  vixCloseCols: string,
+  derivedCloseCols: string,
 ): { sql: string; params: string[] } {
   const eAlias = "m";
   const sAlias = "ms";

@@ -12,17 +12,8 @@
  *   - getCoverage reports written dates per underlying
  *   - Backend parity: Parquet and DuckDB return identical Maps
  */
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-} from "@jest/globals";
-import {
-  ParquetQuoteStore,
-  DuckdbQuoteStore,
-} from "../../../../src/test-exports.ts";
+import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { ParquetQuoteStore, DuckdbQuoteStore } from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
@@ -86,19 +77,13 @@ describe.each([
     ]);
     await refreshViews(fixture);
 
-    const result = await store.readQuotes(
-      [SPX_CALL, SPX_PUT],
-      "2025-01-06",
-      "2025-01-06",
-    );
+    const result = await store.readQuotes([SPX_CALL, SPX_PUT], "2025-01-06", "2025-01-06");
     expect(result.size).toBe(2);
     expect(result.get(SPX_CALL)?.length).toBe(3);
     expect(result.get(SPX_PUT)?.length).toBe(3);
 
     // Timestamp-sorted within each series — values follow "YYYY-MM-DD HH:MM"
-    const callTimes = result
-      .get(SPX_CALL)!
-      .map((q) => q.timestamp.split(" ")[1]);
+    const callTimes = result.get(SPX_CALL)!.map((q) => q.timestamp.split(" ")[1]);
     expect(callTimes).toEqual(["09:30", "10:30", "15:45"]);
 
     // Bid/ask values round-trip
@@ -109,11 +94,7 @@ describe.each([
 
   it("readQuotes with empty occTickers returns empty Map", async () => {
     await refreshViews(fixture);
-    const result = await store.readQuotes(
-      [],
-      "2025-01-01",
-      "2025-01-31",
-    );
+    const result = await store.readQuotes([], "2025-01-01", "2025-01-31");
     expect(result.size).toBe(0);
     expect(result).toBeInstanceOf(Map);
   });
@@ -137,32 +118,16 @@ describe.each([
   it("readQuotes resolves underlying via ctx.tickers.resolve(extractRoot(...)) — SPXW root → SPX underlying", async () => {
     // Write into partition labelled "SPX"; OCC ticker root is "SPXW" which
     // the seeded registry maps to "SPX". Round-trip should succeed.
-    await store.writeQuotes(
-      "SPX",
-      "2025-01-06",
-      makeQuotes(SPX_CALL, "2025-01-06"),
-    );
+    await store.writeQuotes("SPX", "2025-01-06", makeQuotes(SPX_CALL, "2025-01-06"));
     await refreshViews(fixture);
 
-    const result = await store.readQuotes(
-      [SPX_CALL],
-      "2025-01-06",
-      "2025-01-06",
-    );
+    const result = await store.readQuotes([SPX_CALL], "2025-01-06", "2025-01-06");
     expect(result.get(SPX_CALL)?.length).toBe(3);
   });
 
   it("getCoverage reports written dates per underlying", async () => {
-    await store.writeQuotes(
-      "SPX",
-      "2025-01-06",
-      makeQuotes(SPX_CALL, "2025-01-06"),
-    );
-    await store.writeQuotes(
-      "SPX",
-      "2025-01-07",
-      makeQuotes(SPX_CALL, "2025-01-07"),
-    );
+    await store.writeQuotes("SPX", "2025-01-06", makeQuotes(SPX_CALL, "2025-01-06"));
+    await store.writeQuotes("SPX", "2025-01-07", makeQuotes(SPX_CALL, "2025-01-07"));
     await refreshViews(fixture);
 
     const cov = await store.getCoverage("SPX", "2025-01-01", "2025-01-31");
@@ -209,19 +174,9 @@ describe("QuoteStore backend parity", () => {
       await d.store.writeQuotes("SPX", "2025-01-06", quotes);
       await createMarketParquetViews(p.fixture.ctx.conn, p.fixture.ctx.dataDir);
 
-      const fromP = await p.store.readQuotes(
-        [SPX_CALL],
-        "2025-01-06",
-        "2025-01-06",
-      );
-      const fromD = await d.store.readQuotes(
-        [SPX_CALL],
-        "2025-01-06",
-        "2025-01-06",
-      );
-      expect(Array.from(fromP.keys()).sort()).toEqual(
-        Array.from(fromD.keys()).sort(),
-      );
+      const fromP = await p.store.readQuotes([SPX_CALL], "2025-01-06", "2025-01-06");
+      const fromD = await d.store.readQuotes([SPX_CALL], "2025-01-06", "2025-01-06");
+      expect(Array.from(fromP.keys()).sort()).toEqual(Array.from(fromD.keys()).sort());
       expect(fromP.get(SPX_CALL)).toEqual(fromD.get(SPX_CALL));
     } finally {
       p.fixture.cleanup();

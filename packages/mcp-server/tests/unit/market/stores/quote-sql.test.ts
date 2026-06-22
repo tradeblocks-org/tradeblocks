@@ -10,12 +10,7 @@ import { buildReadQuotesSQL } from "../../../../src/test-exports.ts";
 
 describe("buildReadQuotesSQL", () => {
   it("queries market.option_quote_minutes with inlined underlying + date range", () => {
-    const { sql } = buildReadQuotesSQL(
-      "SPX",
-      ["SPXW251219C05000000"],
-      "2025-01-01",
-      "2025-01-02",
-    );
+    const { sql } = buildReadQuotesSQL("SPX", ["SPXW251219C05000000"], "2025-01-01", "2025-01-02");
     expect(sql).toContain("FROM market.option_quote_minutes");
     expect(sql).toContain("underlying = 'SPX'");
     expect(sql).toContain("date >= '2025-01-01'");
@@ -81,17 +76,13 @@ describe("buildReadQuotesSQL", () => {
   });
 
   it("inlines an optional time-window filter when timeStart/timeEnd are supplied", () => {
-    const { sql } = buildReadQuotesSQL(
-      "SPX",
-      ["SPXW251219C05000000"],
-      "2025-01-01",
-      "2025-01-02",
-      { timeStart: "09:30", timeEnd: "09:35" },
-    );
+    const { sql } = buildReadQuotesSQL("SPX", ["SPXW251219C05000000"], "2025-01-01", "2025-01-02", {
+      timeStart: "09:30",
+      timeEnd: "09:35",
+    });
     expect(sql).toContain("time >= '09:30'");
     expect(sql).toContain("time <= '09:35'");
   });
-
 
   it("throws when occTickers is empty (avoids emitting invalid `ticker IN ()`)", () => {
     expect(() => buildReadQuotesSQL("SPX", [], "2025-01-01", "2025-01-02")).toThrow(

@@ -5,7 +5,7 @@
  * Supports numeric thresholds, time of day, and day of week filtering.
  */
 
-import type { Trade } from '../models/trade.ts'
+import type { Trade } from "../models/trade.ts";
 import type {
   RegimeDefinition,
   RegimeBucket,
@@ -14,20 +14,20 @@ import type {
   DayOfWeekBucket,
   RegimeFilterConfig,
   RegimeFilterCriterion,
-  RegimeSourceField
-} from '../models/regime.ts'
+  RegimeSourceField,
+} from "../models/regime.ts";
 
 /**
  * Derived fields that can be computed from a trade
  */
 export interface DerivedTradeFields {
-  durationHours?: number
-  mfePercent?: number
-  maePercent?: number
-  profitCapturePercent?: number
-  excursionRatio?: number
-  dayOfWeek: number  // 0-6, Sunday-Saturday
-  timeMinutes: number  // Minutes since midnight (0-1439)
+  durationHours?: number;
+  mfePercent?: number;
+  maePercent?: number;
+  profitCapturePercent?: number;
+  excursionRatio?: number;
+  dayOfWeek: number; // 0-6, Sunday-Saturday
+  timeMinutes: number; // Minutes since midnight (0-1439)
 }
 
 /**
@@ -36,32 +36,34 @@ export interface DerivedTradeFields {
 export function computeDerivedFields(trade: Trade): DerivedTradeFields {
   // The date in the CSV is stored as Eastern Time date, parsed as UTC midnight
   // Use getUTCDay() to get the correct day without timezone shift
-  const dateOpened = new Date(trade.dateOpened)
-  const dayOfWeek = dateOpened.getUTCDay()
+  const dateOpened = new Date(trade.dateOpened);
+  const dayOfWeek = dateOpened.getUTCDay();
 
   // Parse time from HH:mm:ss format
-  let timeMinutes = 0
+  let timeMinutes = 0;
   if (trade.timeOpened) {
-    const [hours, minutes] = trade.timeOpened.split(':').map(Number)
-    timeMinutes = (hours || 0) * 60 + (minutes || 0)
+    const [hours, minutes] = trade.timeOpened.split(":").map(Number);
+    timeMinutes = (hours || 0) * 60 + (minutes || 0);
   }
 
   // Calculate duration if closed
-  let durationHours: number | undefined
+  let durationHours: number | undefined;
   if (trade.dateClosed) {
-    const openDate = new Date(trade.dateOpened)
-    const closeDate = new Date(trade.dateClosed)
-    durationHours = (closeDate.getTime() - openDate.getTime()) / (1000 * 60 * 60)
+    const openDate = new Date(trade.dateOpened);
+    const closeDate = new Date(trade.dateClosed);
+    durationHours = (closeDate.getTime() - openDate.getTime()) / (1000 * 60 * 60);
   }
 
   // Pull through MFE/MAE-derived fields when present (e.g., EnrichedTrade)
   const maybeNumber = (val: unknown) =>
-    typeof val === 'number' && isFinite(val) ? val : undefined
+    typeof val === "number" && isFinite(val) ? val : undefined;
 
-  const mfePercent = maybeNumber((trade as unknown as Record<string, unknown>).mfePercent)
-  const maePercent = maybeNumber((trade as unknown as Record<string, unknown>).maePercent)
-  const profitCapturePercent = maybeNumber((trade as unknown as Record<string, unknown>).profitCapturePercent)
-  const excursionRatio = maybeNumber((trade as unknown as Record<string, unknown>).excursionRatio)
+  const mfePercent = maybeNumber((trade as unknown as Record<string, unknown>).mfePercent);
+  const maePercent = maybeNumber((trade as unknown as Record<string, unknown>).maePercent);
+  const profitCapturePercent = maybeNumber(
+    (trade as unknown as Record<string, unknown>).profitCapturePercent,
+  );
+  const excursionRatio = maybeNumber((trade as unknown as Record<string, unknown>).excursionRatio);
 
   return {
     dayOfWeek,
@@ -70,8 +72,8 @@ export function computeDerivedFields(trade: Trade): DerivedTradeFields {
     mfePercent,
     maePercent,
     profitCapturePercent,
-    excursionRatio
-  }
+    excursionRatio,
+  };
 }
 
 /**
@@ -80,37 +82,37 @@ export function computeDerivedFields(trade: Trade): DerivedTradeFields {
 export function getTradeFieldValue(
   trade: Trade,
   field: RegimeSourceField,
-  derived: DerivedTradeFields
+  derived: DerivedTradeFields,
 ): number | undefined {
   switch (field) {
-    case 'openingVix':
-      return trade.openingVix
-    case 'closingVix':
-      return trade.closingVix
-    case 'openingShortLongRatio':
-      return trade.openingShortLongRatio
-    case 'closingShortLongRatio':
-      return trade.closingShortLongRatio
-    case 'gap':
-      return trade.gap
-    case 'movement':
-      return trade.movement
-    case 'timeOpened':
-      return derived.timeMinutes
-    case 'dayOfWeek':
-      return derived.dayOfWeek
-    case 'durationHours':
-      return derived.durationHours
-    case 'mfePercent':
-      return derived.mfePercent
-    case 'maePercent':
-      return derived.maePercent
-    case 'profitCapturePercent':
-      return derived.profitCapturePercent
-    case 'excursionRatio':
-      return derived.excursionRatio
+    case "openingVix":
+      return trade.openingVix;
+    case "closingVix":
+      return trade.closingVix;
+    case "openingShortLongRatio":
+      return trade.openingShortLongRatio;
+    case "closingShortLongRatio":
+      return trade.closingShortLongRatio;
+    case "gap":
+      return trade.gap;
+    case "movement":
+      return trade.movement;
+    case "timeOpened":
+      return derived.timeMinutes;
+    case "dayOfWeek":
+      return derived.dayOfWeek;
+    case "durationHours":
+      return derived.durationHours;
+    case "mfePercent":
+      return derived.mfePercent;
+    case "maePercent":
+      return derived.maePercent;
+    case "profitCapturePercent":
+      return derived.profitCapturePercent;
+    case "excursionRatio":
+      return derived.excursionRatio;
     default:
-      return undefined
+      return undefined;
   }
 }
 
@@ -118,20 +120,20 @@ export function getTradeFieldValue(
  * Check if a value matches a numeric threshold bucket
  */
 function matchesNumericBucket(value: number, bucket: NumericThresholdBucket): boolean {
-  const min = bucket.min ?? -Infinity
-  const max = bucket.max ?? Infinity
+  const min = bucket.min ?? -Infinity;
+  const max = bucket.max ?? Infinity;
 
   // For buckets with both bounds, use >= min and < max
   // For open-ended buckets, include the boundary
   if (bucket.min === null) {
     // Open at bottom: value <= max
-    return value <= max
+    return value <= max;
   } else if (bucket.max === null) {
     // Open at top: value >= min
-    return value >= min
+    return value >= min;
   } else {
     // Bounded: min <= value < max (exclusive upper bound to avoid overlaps)
-    return value >= min && value < max
+    return value >= min && value < max;
   }
 }
 
@@ -139,20 +141,20 @@ function matchesNumericBucket(value: number, bucket: NumericThresholdBucket): bo
  * Check if a time value (minutes since midnight) matches a time of day bucket
  */
 function matchesTimeOfDayBucket(timeMinutes: number, bucket: TimeOfDayBucket): boolean {
-  const [startH, startM] = bucket.startTime.split(':').map(Number)
-  const [endH, endM] = bucket.endTime.split(':').map(Number)
+  const [startH, startM] = bucket.startTime.split(":").map(Number);
+  const [endH, endM] = bucket.endTime.split(":").map(Number);
 
-  const startMinutes = startH * 60 + startM
-  const endMinutes = endH * 60 + endM
+  const startMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
 
-  return timeMinutes >= startMinutes && timeMinutes < endMinutes
+  return timeMinutes >= startMinutes && timeMinutes < endMinutes;
 }
 
 /**
  * Check if a day of week value matches a day of week bucket
  */
 function matchesDayOfWeekBucket(dayOfWeek: number, bucket: DayOfWeekBucket): boolean {
-  return bucket.days.includes(dayOfWeek)
+  return bucket.days.includes(dayOfWeek);
 }
 
 /**
@@ -162,23 +164,23 @@ export function tradeMatchesBucket(
   trade: Trade,
   bucket: RegimeBucket,
   derived: DerivedTradeFields,
-  sourceField: RegimeSourceField
+  sourceField: RegimeSourceField,
 ): boolean {
-  const value = getTradeFieldValue(trade, sourceField, derived)
+  const value = getTradeFieldValue(trade, sourceField, derived);
 
   if (value === undefined || !isFinite(value)) {
-    return false
+    return false;
   }
 
   switch (bucket.type) {
-    case 'numeric_threshold':
-      return matchesNumericBucket(value, bucket)
-    case 'time_of_day':
-      return matchesTimeOfDayBucket(value, bucket)
-    case 'day_of_week':
-      return matchesDayOfWeekBucket(value, bucket)
+    case "numeric_threshold":
+      return matchesNumericBucket(value, bucket);
+    case "time_of_day":
+      return matchesTimeOfDayBucket(value, bucket);
+    case "day_of_week":
+      return matchesDayOfWeekBucket(value, bucket);
     default:
-      return false
+      return false;
   }
 }
 
@@ -189,17 +191,17 @@ export function tradeMatchesBucket(
 export function assignTradeToBucket(
   trade: Trade,
   regime: RegimeDefinition,
-  derived?: DerivedTradeFields
+  derived?: DerivedTradeFields,
 ): string | null {
-  const derivedFields = derived ?? computeDerivedFields(trade)
+  const derivedFields = derived ?? computeDerivedFields(trade);
 
   for (const bucket of regime.buckets) {
     if (tradeMatchesBucket(trade, bucket, derivedFields, regime.sourceField)) {
-      return bucket.id
+      return bucket.id;
     }
   }
 
-  return null
+  return null;
 }
 
 /**
@@ -214,23 +216,23 @@ export function tradeMatchesCriterion(
   trade: Trade,
   criterion: RegimeFilterCriterion,
   regime: RegimeDefinition,
-  derived?: DerivedTradeFields
+  derived?: DerivedTradeFields,
 ): boolean {
   // Disabled criteria always match
   if (!criterion.enabled) {
-    return true
+    return true;
   }
 
   // No specific buckets selected = any bucket matches
   if (criterion.selectedBucketIds.length === 0) {
-    return true
+    return true;
   }
 
-  const derivedFields = derived ?? computeDerivedFields(trade)
-  const matchedBucketId = assignTradeToBucket(trade, regime, derivedFields)
+  const derivedFields = derived ?? computeDerivedFields(trade);
+  const matchedBucketId = assignTradeToBucket(trade, regime, derivedFields);
 
   // Trade matches if it falls into one of the selected buckets
-  return matchedBucketId !== null && criterion.selectedBucketIds.includes(matchedBucketId)
+  return matchedBucketId !== null && criterion.selectedBucketIds.includes(matchedBucketId);
 }
 
 /**
@@ -248,37 +250,37 @@ export function tradeMatchesCriterion(
 export function filterTradesByRegime(
   trades: Trade[],
   config: RegimeFilterConfig,
-  regimes: Map<string, RegimeDefinition>
+  regimes: Map<string, RegimeDefinition>,
 ): Trade[] {
-  const enabledCriteria = config.criteria.filter(c => c.enabled)
+  const enabledCriteria = config.criteria.filter((c) => c.enabled);
 
   // No enabled filters = return all trades
   if (enabledCriteria.length === 0) {
-    return trades
+    return trades;
   }
 
-  return trades.filter(trade => {
-    const derived = computeDerivedFields(trade)
+  return trades.filter((trade) => {
+    const derived = computeDerivedFields(trade);
 
     // ALL enabled criteria must match (AND logic)
-    return enabledCriteria.every(criterion => {
-      const regime = regimes.get(criterion.regimeId)
-      if (!regime) return true // Unknown regime = no filter
+    return enabledCriteria.every((criterion) => {
+      const regime = regimes.get(criterion.regimeId);
+      if (!regime) return true; // Unknown regime = no filter
 
-      return tradeMatchesCriterion(trade, criterion, regime, derived)
-    })
-  })
+      return tradeMatchesCriterion(trade, criterion, regime, derived);
+    });
+  });
 }
 
 /**
  * Result of filtering with additional metadata
  */
 export interface FilterResult {
-  filteredTrades: Trade[]
-  excludedTrades: Trade[]
-  matchCount: number
-  totalCount: number
-  matchPercent: number
+  filteredTrades: Trade[];
+  excludedTrades: Trade[];
+  matchCount: number;
+  totalCount: number;
+  matchPercent: number;
 }
 
 /**
@@ -287,9 +289,9 @@ export interface FilterResult {
 export function filterTradesWithResult(
   trades: Trade[],
   config: RegimeFilterConfig,
-  regimes: Map<string, RegimeDefinition>
+  regimes: Map<string, RegimeDefinition>,
 ): FilterResult {
-  const enabledCriteria = config.criteria.filter(c => c.enabled)
+  const enabledCriteria = config.criteria.filter((c) => c.enabled);
 
   // No enabled filters = all trades match
   if (enabledCriteria.length === 0) {
@@ -298,39 +300,37 @@ export function filterTradesWithResult(
       excludedTrades: [],
       matchCount: trades.length,
       totalCount: trades.length,
-      matchPercent: 100
-    }
+      matchPercent: 100,
+    };
   }
 
-  const filteredTrades: Trade[] = []
-  const excludedTrades: Trade[] = []
+  const filteredTrades: Trade[] = [];
+  const excludedTrades: Trade[] = [];
 
-  trades.forEach(trade => {
-    const derived = computeDerivedFields(trade)
+  trades.forEach((trade) => {
+    const derived = computeDerivedFields(trade);
 
-    const matches = enabledCriteria.every(criterion => {
-      const regime = regimes.get(criterion.regimeId)
-      if (!regime) return true
+    const matches = enabledCriteria.every((criterion) => {
+      const regime = regimes.get(criterion.regimeId);
+      if (!regime) return true;
 
-      return tradeMatchesCriterion(trade, criterion, regime, derived)
-    })
+      return tradeMatchesCriterion(trade, criterion, regime, derived);
+    });
 
     if (matches) {
-      filteredTrades.push(trade)
+      filteredTrades.push(trade);
     } else {
-      excludedTrades.push(trade)
+      excludedTrades.push(trade);
     }
-  })
+  });
 
   return {
     filteredTrades,
     excludedTrades,
     matchCount: filteredTrades.length,
     totalCount: trades.length,
-    matchPercent: trades.length > 0
-      ? (filteredTrades.length / trades.length) * 100
-      : 0
-  }
+    matchPercent: trades.length > 0 ? (filteredTrades.length / trades.length) * 100 : 0,
+  };
 }
 
 /**
@@ -339,30 +339,30 @@ export function filterTradesWithResult(
  */
 export function groupTradesByBucket(
   trades: Trade[],
-  regime: RegimeDefinition
+  regime: RegimeDefinition,
 ): Map<string, Trade[]> {
-  const groups = new Map<string, Trade[]>()
+  const groups = new Map<string, Trade[]>();
 
   // Initialize all buckets with empty arrays
-  regime.buckets.forEach(bucket => {
-    groups.set(bucket.id, [])
-  })
+  regime.buckets.forEach((bucket) => {
+    groups.set(bucket.id, []);
+  });
 
   // Also track unmatched trades
-  groups.set('_unmatched', [])
+  groups.set("_unmatched", []);
 
-  trades.forEach(trade => {
-    const derived = computeDerivedFields(trade)
-    const bucketId = assignTradeToBucket(trade, regime, derived)
+  trades.forEach((trade) => {
+    const derived = computeDerivedFields(trade);
+    const bucketId = assignTradeToBucket(trade, regime, derived);
 
     if (bucketId && groups.has(bucketId)) {
-      groups.get(bucketId)!.push(trade)
+      groups.get(bucketId)!.push(trade);
     } else {
-      groups.get('_unmatched')!.push(trade)
+      groups.get("_unmatched")!.push(trade);
     }
-  })
+  });
 
-  return groups
+  return groups;
 }
 
 /**
@@ -371,23 +371,23 @@ export function groupTradesByBucket(
  */
 export function countTradesPerBucket(
   trades: Trade[],
-  regime: RegimeDefinition
+  regime: RegimeDefinition,
 ): Map<string, number> {
-  const counts = new Map<string, number>()
+  const counts = new Map<string, number>();
 
   // Initialize all buckets with zero
-  regime.buckets.forEach(bucket => {
-    counts.set(bucket.id, 0)
-  })
+  regime.buckets.forEach((bucket) => {
+    counts.set(bucket.id, 0);
+  });
 
-  trades.forEach(trade => {
-    const derived = computeDerivedFields(trade)
-    const bucketId = assignTradeToBucket(trade, regime, derived)
+  trades.forEach((trade) => {
+    const derived = computeDerivedFields(trade);
+    const bucketId = assignTradeToBucket(trade, regime, derived);
 
     if (bucketId && counts.has(bucketId)) {
-      counts.set(bucketId, counts.get(bucketId)! + 1)
+      counts.set(bucketId, counts.get(bucketId)! + 1);
     }
-  })
+  });
 
-  return counts
+  return counts;
 }

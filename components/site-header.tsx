@@ -8,10 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
-const routeMeta: Record<
-  string,
-  { title: string; description: string; badge?: string }
-> = {
+const routeMeta: Record<string, { title: string; description: string; badge?: string }> = {
   "/blocks": {
     title: "Block Management",
     description: "Manage your trading data blocks and switch between datasets.",
@@ -30,8 +27,7 @@ const routeMeta: Record<
   },
   "/position-sizing": {
     title: "Position Sizing",
-    description:
-      "Dial in optimal size with Kelly, volatility caps, and constraints.",
+    description: "Dial in optimal size with Kelly, volatility caps, and constraints.",
   },
   "/correlation-matrix": {
     title: "Correlation Matrix",
@@ -39,8 +35,7 @@ const routeMeta: Record<
   },
   "/tail-risk-analysis": {
     title: "Tail Risk Analysis",
-    description:
-      "Measure how strategies blow up together during market stress.",
+    description: "Measure how strategies blow up together during market stress.",
   },
   "/trading-calendar": {
     title: "Trading Calendar",
@@ -48,18 +43,15 @@ const routeMeta: Record<
   },
   "/walk-forward": {
     title: "Walk-Forward Analysis",
-    description:
-      "Validate performance across shifting regimes with rolling IS/OOS windows.",
+    description: "Validate performance across shifting regimes with rolling IS/OOS windows.",
   },
   "/static-datasets": {
     title: "Static Datasets",
-    description:
-      "Upload and manage time-series data to match against your trades.",
+    description: "Upload and manage time-series data to match against your trades.",
   },
   "/settings": {
     title: "Settings",
-    description:
-      "Configure account defaults, risk tolerances, and integrations.",
+    description: "Configure account defaults, risk tolerances, and integrations.",
   },
 };
 
@@ -79,18 +71,14 @@ export function SiteHeader() {
         <Separator orientation="vertical" className="h-6" />
         <div className="flex flex-1 flex-col gap-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-base font-semibold leading-tight md:text-lg">
-              {meta.title}
-            </h1>
+            <h1 className="text-base font-semibold leading-tight md:text-lg">{meta.title}</h1>
             {meta.badge && (
               <Badge variant="secondary" className="text-[0.65rem] uppercase">
                 {meta.badge}
               </Badge>
             )}
           </div>
-          <p className="hidden text-sm text-muted-foreground sm:block">
-            {meta.description}
-          </p>
+          <p className="hidden text-sm text-muted-foreground sm:block">{meta.description}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <ModeToggle />

@@ -24,10 +24,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { ParquetSpotStore } from "../../src/test-exports.ts";
-import {
-  buildStoreFixture,
-  type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.ts";
+import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import type { BarRow } from "../../src/market/stores/types.ts";
 
@@ -74,9 +71,7 @@ describe("ParquetSpotStore writeBars zero/weekend guard", () => {
 
   it("skips silently when every bar is all-zero (no throw, no rows written)", async () => {
     const bars = ["09:30", "10:30", "15:45"].map(zeroBar);
-    await expect(
-      store.writeBars("SPX", "2025-01-06", bars),
-    ).resolves.toBeUndefined();
+    await expect(store.writeBars("SPX", "2025-01-06", bars)).resolves.toBeUndefined();
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
     const read = await store.readBars("SPX", "2025-01-06", "2025-01-06");
     expect(read).toEqual([]);
@@ -87,9 +82,7 @@ describe("ParquetSpotStore writeBars zero/weekend guard", () => {
     // 3 rows through; new behavior drops the zero row to prevent it from
     // contaminating spot_daily aggregates (min(low) → 0).
     const bars = [zeroBar("09:30"), validBar("10:30", 105), validBar("15:45", 99)];
-    await expect(
-      store.writeBars("SPX", "2025-01-06", bars),
-    ).resolves.toBeUndefined();
+    await expect(store.writeBars("SPX", "2025-01-06", bars)).resolves.toBeUndefined();
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
     const read = await store.readBars("SPX", "2025-01-06", "2025-01-06");
     expect(read.length).toBe(2);
@@ -109,9 +102,7 @@ describe("ParquetSpotStore writeBars zero/weekend guard", () => {
       ...b,
       date: "2025-01-04",
     }));
-    await expect(
-      store.writeBars("SPX", "2025-01-04", bars),
-    ).resolves.toBeUndefined();
+    await expect(store.writeBars("SPX", "2025-01-04", bars)).resolves.toBeUndefined();
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
     const read = await store.readBars("SPX", "2025-01-04", "2025-01-04");
     expect(read).toEqual([]);
@@ -122,32 +113,22 @@ describe("ParquetSpotStore writeBars zero/weekend guard", () => {
       ...b,
       date: "2025-01-05",
     }));
-    await expect(
-      store.writeBars("SPX", "2025-01-05", bars),
-    ).resolves.toBeUndefined();
+    await expect(store.writeBars("SPX", "2025-01-05", bars)).resolves.toBeUndefined();
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
     const read = await store.readBars("SPX", "2025-01-05", "2025-01-05");
     expect(read).toEqual([]);
   });
 
   it("preserves the empty-array early-return contract (no error, no write)", async () => {
-    await expect(
-      store.writeBars("SPX", "2025-01-06", []),
-    ).resolves.toBeUndefined();
+    await expect(store.writeBars("SPX", "2025-01-06", [])).resolves.toBeUndefined();
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
     const read = await store.readBars("SPX", "2025-01-06", "2025-01-06");
     expect(read).toEqual([]);
   });
 
   it("happy path: all non-zero OHLC rows succeed (no regression)", async () => {
-    const bars = [
-      validBar("09:30", 100),
-      validBar("10:30", 105),
-      validBar("15:45", 99),
-    ];
-    await expect(
-      store.writeBars("SPX", "2025-01-06", bars),
-    ).resolves.toBeUndefined();
+    const bars = [validBar("09:30", 100), validBar("10:30", 105), validBar("15:45", 99)];
+    await expect(store.writeBars("SPX", "2025-01-06", bars)).resolves.toBeUndefined();
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
     const read = await store.readBars("SPX", "2025-01-06", "2025-01-06");
     expect(read.length).toBe(3);

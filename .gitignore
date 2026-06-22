@@ -72,3 +72,6 @@ walk-forward-summary (2).json
 # Editor / tooling noise
 .windsurf/
 AGENTS.md
+
+# claude local settings (per-machine)
+.claude/settings.local.json

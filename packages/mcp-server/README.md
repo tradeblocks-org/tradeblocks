@@ -58,11 +58,11 @@ For detailed usage examples, see [../../docs/usage.md](../../docs/usage.md).
 
 ### Claude Desktop
 
-| Platform | Config Location |
-|----------|-----------------|
-| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Linux | `~/.config/Claude/claude_desktop_config.json` |
+| Platform | Config Location                                                   |
+| -------- | ----------------------------------------------------------------- |
+| macOS    | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows  | `%APPDATA%\Claude\claude_desktop_config.json`                     |
+| Linux    | `~/.config/Claude/claude_desktop_config.json`                     |
 
 ```json
 {
@@ -135,10 +135,10 @@ See [Web Platforms Guide](../../docs/web-platforms.md) for platform-specific set
 
 ## Transport Modes
 
-| Mode | Flag | Use Case | Platforms |
-|------|------|----------|-----------|
-| stdio | (default) | Local CLI tools | Claude Desktop, Claude Code, Codex CLI, Gemini CLI |
-| HTTP | `--http` | Web platforms, remote servers | ChatGPT, Google AI Studio, Julius AI |
+| Mode  | Flag      | Use Case                      | Platforms                                          |
+| ----- | --------- | ----------------------------- | -------------------------------------------------- |
+| stdio | (default) | Local CLI tools               | Claude Desktop, Claude Code, Codex CLI, Gemini CLI |
+| HTTP  | `--http`  | Web platforms, remote servers | ChatGPT, Google AI Studio, Julius AI               |
 
 ```bash
 # stdio mode (default)
@@ -154,21 +154,21 @@ tradeblocks-mcp --directory ./data --blocks-dir ~/backtests
 
 ### Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--http` | Start HTTP server instead of stdio | stdio |
-| `--port <n>` | HTTP server port | 3100 |
-| `--blocks-dir <path>` | Directory containing CSV block folders | same as data directory |
-| `--market-db <path>` | Path to market.duckdb | `<directory>/market.duckdb` |
-| `--no-auth` | Disable authentication (HTTP mode) | auth enabled |
+| Flag                  | Description                            | Default                     |
+| --------------------- | -------------------------------------- | --------------------------- |
+| `--http`              | Start HTTP server instead of stdio     | stdio                       |
+| `--port <n>`          | HTTP server port                       | 3100                        |
+| `--blocks-dir <path>` | Directory containing CSV block folders | same as data directory      |
+| `--market-db <path>`  | Path to market.duckdb                  | `<directory>/market.duckdb` |
+| `--no-auth`           | Disable authentication (HTTP mode)     | auth enabled                |
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `BLOCKS_DIRECTORY` | Default data directory if not specified as argument |
+| Variable                 | Description                                                    |
+| ------------------------ | -------------------------------------------------------------- |
+| `BLOCKS_DIRECTORY`       | Default data directory if not specified as argument            |
 | `TRADEBLOCKS_BLOCKS_DIR` | Directory for CSV block folders (overridden by `--blocks-dir`) |
-| `MARKET_DB_PATH` | Path to market.duckdb (overridden by `--market-db`) |
+| `MARKET_DB_PATH`         | Path to market.duckdb (overridden by `--market-db`)            |
 
 ### ThetaData MDDS Credentials
 
@@ -201,6 +201,7 @@ docker run -d -p 3100:3100 -v ./data:/data --env-file .env romeo345/tradeblocks-
 ```
 
 Or with docker compose, set the image in `docker-compose.yml`:
+
 ```yaml
 services:
   tradeblocks:
@@ -274,6 +275,7 @@ tradeblocks-mcp uninstall-skills
 ```
 
 Skills provide structured prompts for tasks like:
+
 - Strategy health checks
 - Walk-forward analysis interpretation
 - Portfolio addition recommendations
@@ -299,12 +301,14 @@ backtests/
 ### CSV Formats
 
 **tradelog.csv** - Trade records with these key columns:
+
 - Date Opened, Time Opened, Date Closed, Time Closed
 - P/L (gross profit/loss)
 - Strategy, Legs (or Symbol)
 - No. of Contracts, Premium (optional)
 
 **dailylog.csv** - Daily portfolio values:
+
 - Date
 - Net Liquidity (or Portfolio Value, Equity)
 - P/L, Drawdown % (optional)
@@ -314,68 +318,75 @@ backtests/
 ## Available Tools
 
 ### Core Tools
-| Tool | Description |
-|------|-------------|
-| `list_blocks` | List all available blocks with summary stats |
-| `get_block_info` | Detailed info for a specific block |
-| `get_statistics` | Performance metrics (Sharpe, Sortino, drawdown, etc.) |
-| `get_strategy_comparison` | Compare strategies within a block |
-| `compare_blocks` | Compare statistics across multiple blocks |
+
+| Tool                      | Description                                           |
+| ------------------------- | ----------------------------------------------------- |
+| `list_blocks`             | List all available blocks with summary stats          |
+| `get_block_info`          | Detailed info for a specific block                    |
+| `get_statistics`          | Performance metrics (Sharpe, Sortino, drawdown, etc.) |
+| `get_strategy_comparison` | Compare strategies within a block                     |
+| `compare_blocks`          | Compare statistics across multiple blocks             |
 
 ### Analysis Tools
-| Tool | Description |
-|------|-------------|
-| `run_walk_forward` | Walk-forward analysis with configurable windows |
-| `run_monte_carlo` | Monte Carlo simulation with worst-case scenarios |
+
+| Tool                     | Description                                              |
+| ------------------------ | -------------------------------------------------------- |
+| `run_walk_forward`       | Walk-forward analysis with configurable windows          |
+| `run_monte_carlo`        | Monte Carlo simulation with worst-case scenarios         |
 | `get_correlation_matrix` | Strategy correlation matrix (Kendall, Spearman, Pearson) |
-| `get_tail_risk` | Tail dependence and copula-based risk analysis |
-| `get_position_sizing` | Kelly criterion position sizing |
+| `get_tail_risk`          | Tail dependence and copula-based risk analysis           |
+| `get_position_sizing`    | Kelly criterion position sizing                          |
 
 ### Performance Tools
-| Tool | Description |
-|------|-------------|
-| `get_performance_charts` | 16 chart types (equity, drawdown, distribution) |
-| `get_period_returns` | Returns aggregated by time period |
-| `compare_backtest_to_actual` | Backtest vs live performance comparison |
+
+| Tool                         | Description                                     |
+| ---------------------------- | ----------------------------------------------- |
+| `get_performance_charts`     | 16 chart types (equity, drawdown, distribution) |
+| `get_period_returns`         | Returns aggregated by time period               |
+| `compare_backtest_to_actual` | Backtest vs live performance comparison         |
 
 ### SQL Tools
-| Tool | Description |
-|------|-------------|
-| `run_sql` | Execute SQL queries against trades and market data |
+
+| Tool                | Description                                          |
+| ------------------- | ---------------------------------------------------- |
+| `run_sql`           | Execute SQL queries against trades and market data   |
 | `describe_database` | Schema discovery with table info and example queries |
 
 ### Market Data Tools
-| Tool | Description |
-|------|-------------|
-| `import_market_csv` | Import market data CSV with column mapping |
-| `import_from_database` | Import from external DuckDB databases |
-| `import_flat_file` | Import a local Parquet or CSV flat file for a ticker/timespan |
-| `fetch_bars` | Fetch daily or intraday OHLCV bars from configured provider |
-| `fetch_quotes` | Fetch option minute quotes from configured provider |
-| `fetch_chain` | Fetch option chain snapshot for an underlying on a given date |
-| `compute_vix_context` | Compute cross-ticker VIX regime fields for a date range |
-| `refresh_market_data` | Composite daily refresh: fetch bars, auto-fire VIX context, return coverage report |
-| `enrich_market_data` | Compute ~40 derived indicators from raw OHLCV |
-| `enrich_trades` | Enrich trades with market context (lookahead-free) |
-| `analyze_regime_performance` | Analyze P&L by market regime |
-| `suggest_filters` | Suggest trade filters based on market conditions |
-| `calculate_orb` | Opening range breakout analysis from intraday bars |
+
+| Tool                         | Description                                                                        |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| `import_market_csv`          | Import market data CSV with column mapping                                         |
+| `import_from_database`       | Import from external DuckDB databases                                              |
+| `import_flat_file`           | Import a local Parquet or CSV flat file for a ticker/timespan                      |
+| `fetch_bars`                 | Fetch daily or intraday OHLCV bars from configured provider                        |
+| `fetch_quotes`               | Fetch option minute quotes from configured provider                                |
+| `fetch_chain`                | Fetch option chain snapshot for an underlying on a given date                      |
+| `compute_vix_context`        | Compute cross-ticker VIX regime fields for a date range                            |
+| `refresh_market_data`        | Composite daily refresh: fetch bars, auto-fire VIX context, return coverage report |
+| `enrich_market_data`         | Compute ~40 derived indicators from raw OHLCV                                      |
+| `enrich_trades`              | Enrich trades with market context (lookahead-free)                                 |
+| `analyze_regime_performance` | Analyze P&L by market regime                                                       |
+| `suggest_filters`            | Suggest trade filters based on market conditions                                   |
+| `calculate_orb`              | Opening range breakout analysis from intraday bars                                 |
 
 ### Strategy Profile Tools
-| Tool | Description |
-|------|-------------|
-| `profile_strategy` | Create or update a strategy profile with structured metadata |
-| `get_strategy_profile` | Retrieve a stored strategy profile |
-| `list_profiles` | List all strategy profiles (optionally filtered by block) |
-| `delete_profile` | Delete a strategy profile |
-| `analyze_structure_fit` | Analyze strategy performance by regime/condition dimensions |
-| `validate_entry_filters` | Test each entry filter's contribution to edge |
-| `portfolio_structure_map` | Regime x structure coverage matrix across strategies |
+
+| Tool                      | Description                                                  |
+| ------------------------- | ------------------------------------------------------------ |
+| `profile_strategy`        | Create or update a strategy profile with structured metadata |
+| `get_strategy_profile`    | Retrieve a stored strategy profile                           |
+| `list_profiles`           | List all strategy profiles (optionally filtered by block)    |
+| `delete_profile`          | Delete a strategy profile                                    |
+| `analyze_structure_fit`   | Analyze strategy performance by regime/condition dimensions  |
+| `validate_entry_filters`  | Test each entry filter's contribution to edge                |
+| `portfolio_structure_map` | Regime x structure coverage matrix across strategies         |
 
 ### Import Tools
-| Tool | Description |
-|------|-------------|
-| `import_csv` | Import a CSV file as a new block *(CLI only - not available in Claude Desktop)* |
+
+| Tool         | Description                                                                     |
+| ------------ | ------------------------------------------------------------------------------- |
+| `import_csv` | Import a CSV file as a new block _(CLI only - not available in Claude Desktop)_ |
 
 ## Development
 
@@ -398,11 +409,13 @@ npm run mcpb:pack
 For market context (VIX regimes, intraday timing, gap analysis), import market data using MCP tools:
 
 **From a data provider (Massive.com default, or ThetaData):**
+
 1. **Fetch bars** via `fetch_bars { tickers, timespan, from, to }` — writes directly to Parquet
 2. **Fetch VIX context** via `fetch_bars` for VIX/VIX9D/VIX3M then `compute_vix_context`
 3. **Or use** `refresh_market_data` for a combined daily refresh in one call
 
 **From TradingView CSV exports:**
+
 1. **Export** from TradingView (any chart: SPX daily, VIX daily, SPX 5-min, etc.)
 2. **Import** via `import_market_csv` with a column mapping or `import_flat_file` for Parquet
 3. **Enrich** via `enrich_market_data` to compute ~40 derived indicators
@@ -410,6 +423,7 @@ For market context (VIX regimes, intraday timing, gap analysis), import market d
 No Pine Scripts needed — TradingView exports raw OHLCV natively.
 
 Market data lives in a separate `market.duckdb` (configurable via `MARKET_DB_PATH` or `--market-db`). Canonical v3.0 datasets:
+
 - `market.spot` — Raw per-minute OHLCV bars, ticker-first layout (keyed by `ticker, date, time`)
 - `market.spot_daily` — RTH-aggregated daily OHLCV view derived from `market.spot` (keyed by `ticker, date`)
 - `market.enriched` — Per-ticker computed enrichment indicators and calendar fields; OHLCV is NOT stored here (join `market.spot_daily` for OHLCV — keyed by `ticker, date`)

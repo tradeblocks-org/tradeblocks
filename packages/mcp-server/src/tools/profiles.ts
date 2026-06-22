@@ -14,12 +14,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
-import {
-  upsertProfile,
-  getProfile,
-  listProfiles,
-  deleteProfile,
-} from "../db/profile-schemas.ts";
+import { upsertProfile, getProfile, listProfiles, deleteProfile } from "../db/profile-schemas.ts";
 import { createToolOutput } from "../utils/output-formatter.ts";
 import { withSyncedBlock } from "./middleware/sync-middleware.ts";
 
@@ -34,13 +29,13 @@ export const profileStrategySchema = z.object({
     .string()
     .describe(
       "Option structure type: iron_condor, calendar_spread, double_calendar, vertical_spread, " +
-        "butterfly, reverse_iron_condor, short_put_spread, short_call_spread, straddle, strangle, etc."
+        "butterfly, reverse_iron_condor, short_put_spread, short_call_spread, straddle, strangle, etc.",
     ),
   greeksBias: z
     .string()
     .describe(
       "Primary greeks exposure: theta_positive, vega_negative, delta_neutral, delta_positive, " +
-        "delta_negative, gamma_scalp, etc."
+        "delta_negative, gamma_scalp, etc.",
     ),
   thesis: z.string().default("").describe("Free-text description of the strategy thesis"),
   legs: z
@@ -50,9 +45,12 @@ export const profileStrategySchema = z.object({
         strike: z.string().describe("Strike selection: ATM, 5-delta, 30-delta, etc."),
         expiry: z.string().describe("Expiry selection: same-day, weekly, 45-DTE, etc."),
         quantity: z.number().describe("Quantity (positive=long, negative=short)"),
-        strikeMethod: z.enum(['delta', 'dollar_price', 'offset', 'percentage']).optional().describe("How strike is selected"),
+        strikeMethod: z
+          .enum(["delta", "dollar_price", "offset", "percentage"])
+          .optional()
+          .describe("How strike is selected"),
         strikeValue: z.number().optional().describe("Numeric strike value (e.g., 25 for 25-delta)"),
-      })
+      }),
     )
     .default([])
     .describe("Structured leg descriptions"),
@@ -65,32 +63,52 @@ export const profileStrategySchema = z.object({
           .union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))])
           .describe("Filter value or array for between/in operators"),
         description: z.string().optional().describe("Human-readable description of this filter"),
-        source: z.enum(["market", "execution"]).optional().describe("Filter source: 'market' = testable against market data columns, 'execution' = platform-level (time windows, leg ratios). Defaults to 'market'. Execution filters are documented but skipped during validate_entry_filters analysis."),
-      })
+        source: z
+          .enum(["market", "execution"])
+          .optional()
+          .describe(
+            "Filter source: 'market' = testable against market data columns, 'execution' = platform-level (time windows, leg ratios). Defaults to 'market'. Execution filters are documented but skipped during validate_entry_filters analysis.",
+          ),
+      }),
     )
     .default([])
-    .describe("Entry condition filters. Tag each with source: 'market' (testable in analysis) or 'execution' (OO/platform-level, skipped in analysis)."),
+    .describe(
+      "Entry condition filters. Tag each with source: 'market' (testable in analysis) or 'execution' (OO/platform-level, skipped in analysis).",
+    ),
   exitRules: z
     .array(
       z.object({
         type: z.string().describe("Rule type: stop_loss, profit_target, time_exit, conditional"),
-        trigger: z.string().describe("Trigger condition: '200% of credit', '50% of max profit', '15:00 ET'"),
+        trigger: z
+          .string()
+          .describe("Trigger condition: '200% of credit', '50% of max profit', '15:00 ET'"),
         description: z.string().optional().describe("Human-readable description"),
-        stopLossType: z.enum(['percentage', 'dollar', 'sl_ratio', 'debit_percentage']).optional().describe("Stop loss calculation method"),
+        stopLossType: z
+          .enum(["percentage", "dollar", "sl_ratio", "debit_percentage"])
+          .optional()
+          .describe("Stop loss calculation method"),
         stopLossValue: z.number().optional().describe("Stop loss numeric value"),
-        monitoring: z.object({
-          granularity: z.enum(['intra_minute', 'candle_close', 'end_of_bar']).optional().describe("Price check frequency"),
-          priceSource: z.enum(['nbbo', 'mid', 'last']).optional().describe("Which price to use"),
-        }).optional().describe("Monitoring configuration for this rule"),
+        monitoring: z
+          .object({
+            granularity: z
+              .enum(["intra_minute", "candle_close", "end_of_bar"])
+              .optional()
+              .describe("Price check frequency"),
+            priceSource: z.enum(["nbbo", "mid", "last"]).optional().describe("Which price to use"),
+          })
+          .optional()
+          .describe("Monitoring configuration for this rule"),
         slippage: z.number().optional().describe("Per-rule slippage override"),
-      })
+      }),
     )
     .default([])
     .describe("Exit rules and triggers"),
   expectedRegimes: z
     .array(z.enum(["very_low", "low", "below_avg", "above_avg", "high", "extreme"]))
     .default([])
-    .describe("VIX-based vol regimes this strategy targets. very_low=VIX<13, low=13-16, below_avg=16-20, above_avg=20-25, high=25-30, extreme=30+"),
+    .describe(
+      "VIX-based vol regimes this strategy targets. very_low=VIX<13, low=13-16, below_avg=16-20, above_avg=20-25, high=25-30, extreme=30+",
+    ),
   keyMetrics: z
     .object({
       expectedWinRate: z.number().optional().describe("Expected win rate (0-1)"),
@@ -103,24 +121,37 @@ export const profileStrategySchema = z.object({
     .describe("Performance benchmarks and strategy-specific metrics"),
   positionSizing: z
     .object({
-      method: z.string().describe("Sizing method: pct_of_portfolio, fixed_contracts, fixed_dollar, discretionary"),
-      allocationPct: z.number().optional().describe("Portfolio allocation percentage (e.g., 2 for 2%)"),
+      method: z
+        .string()
+        .describe("Sizing method: pct_of_portfolio, fixed_contracts, fixed_dollar, discretionary"),
+      allocationPct: z
+        .number()
+        .optional()
+        .describe("Portfolio allocation percentage (e.g., 2 for 2%)"),
       maxContracts: z.number().optional().describe("Maximum contracts per trade"),
       maxAllocationDollar: z.number().optional().describe("Maximum dollar allocation per trade"),
       maxOpenPositions: z.number().optional().describe("Maximum concurrent open positions"),
       description: z.string().optional().describe("Free-text sizing notes"),
       backtestAllocationPct: z.number().optional().describe("Allocation % used in backtest"),
       liveAllocationPct: z.number().optional().describe("Allocation % used in live portfolio"),
-      maxContractsPerTrade: z.number().optional().describe("Per-entry contract cap (distinct from maxContracts hard cap)"),
+      maxContractsPerTrade: z
+        .number()
+        .optional()
+        .describe("Per-entry contract cap (distinct from maxContracts hard cap)"),
     })
     .optional()
-    .describe("Position sizing rules. Per-block — same strategy in backtest vs portfolio may have different sizing."),
+    .describe(
+      "Position sizing rules. Per-block — same strategy in backtest vs portfolio may have different sizing.",
+    ),
   underlying: z.string().optional().describe("Underlying symbol: SPX, QQQ, etc."),
   reEntry: z.boolean().optional().describe("Strategy supports re-entry on same day"),
   capProfits: z.boolean().optional().describe("Profits are capped by structure"),
   capLosses: z.boolean().optional().describe("Losses are capped by structure"),
   requireTwoPricesPT: z.boolean().optional().describe("Profit target requires two prices"),
-  closeOnCompletion: z.boolean().optional().describe("Close entire position when any leg hits target"),
+  closeOnCompletion: z
+    .boolean()
+    .optional()
+    .describe("Close entire position when any leg hits target"),
   ignoreMarginReq: z.boolean().optional().describe("Strategy ignores standard margin requirements"),
 });
 
@@ -130,7 +161,10 @@ export const getStrategyProfileSchema = z.object({
 });
 
 export const listProfilesSchema = z.object({
-  blockId: z.string().optional().describe("Optional block ID filter. Omit to list all profiles across all blocks."),
+  blockId: z
+    .string()
+    .optional()
+    .describe("Optional block ID filter. Omit to list all profiles across all blocks."),
 });
 
 export const deleteProfileSchema = z.object({
@@ -147,35 +181,38 @@ export const deleteProfileSchema = z.object({
  */
 export async function handleProfileStrategy(
   input: z.infer<typeof profileStrategySchema>,
-  baseDir: string
+  baseDir: string,
 ): Promise<ReturnType<typeof createToolOutput>> {
   await upgradeToReadWrite(baseDir);
   try {
     const conn = await getConnection(baseDir);
-    const stored = await upsertProfile(conn, {
-      blockId: input.blockId,
-      strategyName: input.strategyName,
-      structureType: input.structureType,
-      greeksBias: input.greeksBias,
-      thesis: input.thesis,
-      legs: input.legs,
-      entryFilters: input.entryFilters,
-      exitRules: input.exitRules,
-      expectedRegimes: input.expectedRegimes,
-      keyMetrics: input.keyMetrics,
-      positionSizing: input.positionSizing,
-      underlying: input.underlying,
-      reEntry: input.reEntry,
-      capProfits: input.capProfits,
-      capLosses: input.capLosses,
-      requireTwoPricesPT: input.requireTwoPricesPT,
-      closeOnCompletion: input.closeOnCompletion,
-      ignoreMarginReq: input.ignoreMarginReq,
-    }, baseDir);
-    return createToolOutput(
-      `Profile saved: ${input.strategyName} for block ${input.blockId}`,
-      { profile: stored }
+    const stored = await upsertProfile(
+      conn,
+      {
+        blockId: input.blockId,
+        strategyName: input.strategyName,
+        structureType: input.structureType,
+        greeksBias: input.greeksBias,
+        thesis: input.thesis,
+        legs: input.legs,
+        entryFilters: input.entryFilters,
+        exitRules: input.exitRules,
+        expectedRegimes: input.expectedRegimes,
+        keyMetrics: input.keyMetrics,
+        positionSizing: input.positionSizing,
+        underlying: input.underlying,
+        reEntry: input.reEntry,
+        capProfits: input.capProfits,
+        capLosses: input.capLosses,
+        requireTwoPricesPT: input.requireTwoPricesPT,
+        closeOnCompletion: input.closeOnCompletion,
+        ignoreMarginReq: input.ignoreMarginReq,
+      },
+      baseDir,
     );
+    return createToolOutput(`Profile saved: ${input.strategyName} for block ${input.blockId}`, {
+      profile: stored,
+    });
   } finally {
     await downgradeToReadOnly(baseDir);
   }
@@ -186,20 +223,17 @@ export async function handleProfileStrategy(
  */
 export async function handleGetStrategyProfile(
   input: z.infer<typeof getStrategyProfileSchema>,
-  baseDir: string
+  baseDir: string,
 ): Promise<ReturnType<typeof createToolOutput>> {
   const conn = await getConnection(baseDir);
   const profile = await getProfile(conn, input.blockId, input.strategyName, baseDir);
   if (!profile) {
     return createToolOutput(
       `No profile found for strategy '${input.strategyName}' in block '${input.blockId}'`,
-      { profile: null }
+      { profile: null },
     );
   }
-  return createToolOutput(
-    `Profile: ${input.strategyName} in block ${input.blockId}`,
-    { profile }
-  );
+  return createToolOutput(`Profile: ${input.strategyName} in block ${input.blockId}`, { profile });
 }
 
 /**
@@ -207,7 +241,7 @@ export async function handleGetStrategyProfile(
  */
 export async function handleListProfiles(
   input: z.infer<typeof listProfilesSchema>,
-  baseDir: string
+  baseDir: string,
 ): Promise<ReturnType<typeof createToolOutput>> {
   const conn = await getConnection(baseDir);
   const profiles = await listProfiles(conn, input.blockId, baseDir);
@@ -222,7 +256,7 @@ export async function handleListProfiles(
   }));
   return createToolOutput(
     `Found ${profiles.length} profile(s)${input.blockId ? ` for block ${input.blockId}` : ""}`,
-    { count: profiles.length, profiles: summaryRows }
+    { count: profiles.length, profiles: summaryRows },
   );
 }
 
@@ -231,7 +265,7 @@ export async function handleListProfiles(
  */
 export async function handleDeleteProfile(
   input: z.infer<typeof deleteProfileSchema>,
-  baseDir: string
+  baseDir: string,
 ): Promise<ReturnType<typeof createToolOutput>> {
   await upgradeToReadWrite(baseDir);
   try {
@@ -240,12 +274,12 @@ export async function handleDeleteProfile(
     if (deleted) {
       return createToolOutput(
         `Deleted profile: ${input.strategyName} from block ${input.blockId}`,
-        { deleted: true }
+        { deleted: true },
       );
     }
     return createToolOutput(
       `No profile found for strategy '${input.strategyName}' in block '${input.blockId}' — nothing to delete`,
-      { deleted: false }
+      { deleted: false },
     );
   } finally {
     await downgradeToReadOnly(baseDir);
@@ -280,7 +314,7 @@ export function registerProfileTools(server: McpServer, baseDir: string): void {
     },
     withSyncedBlock(baseDir, async (input, ctx) => {
       return handleProfileStrategy(input, ctx.baseDir);
-    })
+    }),
   );
 
   // -------------------------------------------------------------------------
@@ -296,7 +330,7 @@ export function registerProfileTools(server: McpServer, baseDir: string): void {
     },
     withSyncedBlock(baseDir, async (input, ctx) => {
       return handleGetStrategyProfile(input, ctx.baseDir);
-    })
+    }),
   );
 
   // -------------------------------------------------------------------------
@@ -315,13 +349,16 @@ export function registerProfileTools(server: McpServer, baseDir: string): void {
       // list_profiles has optional blockId — when provided, sync the block first;
       // when omitted, query directly without sync (no block to validate).
       if (input.blockId) {
-        const syncedHandler = withSyncedBlock(baseDir, async (syncInput: { blockId: string }, ctx) => {
-          return handleListProfiles({ blockId: syncInput.blockId }, ctx.baseDir);
-        });
+        const syncedHandler = withSyncedBlock(
+          baseDir,
+          async (syncInput: { blockId: string }, ctx) => {
+            return handleListProfiles({ blockId: syncInput.blockId }, ctx.baseDir);
+          },
+        );
         return syncedHandler({ blockId: input.blockId });
       }
       return handleListProfiles(input, baseDir);
-    }
+    },
   );
 
   // -------------------------------------------------------------------------
@@ -337,6 +374,6 @@ export function registerProfileTools(server: McpServer, baseDir: string): void {
     },
     withSyncedBlock(baseDir, async (input, ctx) => {
       return handleDeleteProfile(input, ctx.baseDir);
-    })
+    }),
   );
 }

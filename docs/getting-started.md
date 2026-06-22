@@ -31,12 +31,12 @@ docker run -v ~/Trading/backtests:/data ghcr.io/tradeblocks-org/tradeblocks-mcp 
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `MASSIVE_API_KEY` | No | Massive.com API key for automated market data import and trade replay bar fetching. All tools work without it using locally cached data or CSV imports. |
-| `MARKET_DB_PATH` | No | Override market database file path (default: `<backtests-folder>/market.duckdb`) |
-| `DUCKDB_THREADS` | No | Limit DuckDB thread count for resource-constrained environments |
-| `DUCKDB_MEMORY_LIMIT` | No | Limit DuckDB memory usage (e.g., `512MB`) |
+| Variable              | Required | Description                                                                                                                                             |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MASSIVE_API_KEY`     | No       | Massive.com API key for automated market data import and trade replay bar fetching. All tools work without it using locally cached data or CSV imports. |
+| `MARKET_DB_PATH`      | No       | Override market database file path (default: `<backtests-folder>/market.duckdb`)                                                                        |
+| `DUCKDB_THREADS`      | No       | Limit DuckDB thread count for resource-constrained environments                                                                                         |
+| `DUCKDB_MEMORY_LIMIT` | No       | Limit DuckDB memory usage (e.g., `512MB`)                                                                                                               |
 
 ### Massive.com API (Optional)
 
@@ -97,9 +97,9 @@ Open [http://localhost:3000](http://localhost:3000) to access the dashboard.
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `TRADEBLOCKS_DATA_DIR` | No | Override default data directory (default: `~/Trading/backtests`) |
+| Variable               | Required | Description                                                      |
+| ---------------------- | -------- | ---------------------------------------------------------------- |
+| `TRADEBLOCKS_DATA_DIR` | No       | Override default data directory (default: `~/Trading/backtests`) |
 
 ---
 

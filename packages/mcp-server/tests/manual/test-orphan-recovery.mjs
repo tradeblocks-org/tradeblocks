@@ -28,7 +28,9 @@ if (!fs.existsSync(realDataDir)) {
   process.exit(1);
 }
 
-const dataDir = fs.mkdtempSync(path.join(fs.realpathSync(import.meta.dirname || __dirname), ".test-orphan-"));
+const dataDir = fs.mkdtempSync(
+  path.join(fs.realpathSync(import.meta.dirname || __dirname), ".test-orphan-"),
+);
 const dbPath = path.join(dataDir, "analytics.duckdb");
 
 // Copy the DB file so the lock holder and recovery test work on a fresh copy
@@ -53,7 +55,12 @@ function sleep(ms) {
 
 function getPpid(pid) {
   try {
-    return parseInt(execFileSync("ps", ["-p", String(pid), "-o", "ppid="]).toString().trim(), 10);
+    return parseInt(
+      execFileSync("ps", ["-p", String(pid), "-o", "ppid="])
+        .toString()
+        .trim(),
+      10,
+    );
   } catch {
     return null;
   }
@@ -61,7 +68,9 @@ function getPpid(pid) {
 
 function getCommand(pid) {
   try {
-    return execFileSync("ps", ["-p", String(pid), "-o", "command="]).toString().trim();
+    return execFileSync("ps", ["-p", String(pid), "-o", "command="])
+      .toString()
+      .trim();
   } catch {
     return null;
   }
@@ -90,7 +99,11 @@ async function main() {
   const pidFile = path.join(dataDir, ".test-orphan-pid");
 
   // Middle child: spawns the lock holder detached, writes its PID, then exits.
-  const middle = spawn("node", ["-e", `
+  const middle = spawn(
+    "node",
+    [
+      "-e",
+      `
     const { spawn } = require("child_process");
     const fs = require("fs");
     const child = spawn("node", [${JSON.stringify(LOCK_HOLDER_SCRIPT)}, ${JSON.stringify(dbPath)}], {
@@ -100,7 +113,10 @@ async function main() {
     child.unref();
     fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
     process.exit(0);
-  `], { stdio: "ignore" });
+  `,
+    ],
+    { stdio: "ignore" },
+  );
 
   await new Promise((resolve) => middle.on("exit", resolve));
   await sleep(2000); // Let the lock holder open DuckDB
@@ -132,7 +148,9 @@ async function main() {
   console.log(`  Lock holder command: ${cmd}`);
 
   if (ppid !== 1) {
-    console.error(`  WARNING: PPID is ${ppid}, not 1. Orphaning may not work on this macOS version.`);
+    console.error(
+      `  WARNING: PPID is ${ppid}, not 1. Orphaning may not work on this macOS version.`,
+    );
   }
 
   // ── Step 2: Import and call getConnection — should detect orphan and recover ──
@@ -147,14 +165,15 @@ async function main() {
   let exitCode;
 
   try {
-    const result = spawn("node", [
-      path.join(MCP_ROOT, "server", "index.js"),
-      "--call", "list_blocks", "{}",
-    ], {
-      env: { ...process.env, TRADEBLOCKS_DATA_DIR: dataDir },
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 15000,
-    });
+    const result = spawn(
+      "node",
+      [path.join(MCP_ROOT, "server", "index.js"), "--call", "list_blocks", "{}"],
+      {
+        env: { ...process.env, TRADEBLOCKS_DATA_DIR: dataDir },
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 15000,
+      },
+    );
 
     const stderrChunks = [];
     const stdoutChunks = [];
@@ -163,7 +182,10 @@ async function main() {
 
     exitCode = await new Promise((resolve) => {
       result.on("exit", resolve);
-      setTimeout(() => { result.kill(); resolve(-1); }, 15000);
+      setTimeout(() => {
+        result.kill();
+        resolve(-1);
+      }, 15000);
     });
 
     stderr = Buffer.concat(stderrChunks).toString();
@@ -180,7 +202,8 @@ async function main() {
 
   // ── Step 3: Verify results ──
   const orphanRecovered = stderr.includes("Recovered DuckDB lock") && stderr.includes("orphaned");
-  const forceRecovered = stderr.includes("Recovered DuckDB lock") && stderr.includes("force-recovery");
+  const forceRecovered =
+    stderr.includes("Recovered DuckDB lock") && stderr.includes("force-recovery");
   const readOnlyFallback = stderr.includes("READ_ONLY fallback");
   const lockHolderDead = !isAlive(lockHolderPid);
 
@@ -215,7 +238,9 @@ async function main() {
 function cleanup(pid) {
   if (pid && isAlive(pid)) {
     console.log(`  Cleaning up lock holder PID ${pid}...`);
-    try { process.kill(pid, "SIGTERM"); } catch {}
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {}
   }
 }
 

@@ -11,9 +11,7 @@ interface MarginalContributionChartProps {
   result: TailRiskAnalysisResult;
 }
 
-export function MarginalContributionChart({
-  result,
-}: MarginalContributionChartProps) {
+export function MarginalContributionChart({ result }: MarginalContributionChartProps) {
   const { theme } = useTheme();
 
   const { plotData, layout } = useMemo(() => {
@@ -23,14 +21,10 @@ export function MarginalContributionChart({
     // Already sorted by contribution descending
     const topContributors = marginalContributions.slice(0, 15);
 
-    const truncatedNames = topContributors.map((c) =>
-      truncateStrategyName(c.strategy, 35)
-    );
+    const truncatedNames = topContributors.map((c) => truncateStrategyName(c.strategy, 35));
 
     // Color gradient based on contribution
-    const maxContribution = Math.max(
-      ...topContributors.map((c) => c.tailRiskContribution)
-    );
+    const maxContribution = Math.max(...topContributors.map((c) => c.tailRiskContribution));
     const colors = topContributors.map((c) => {
       const intensity = c.tailRiskContribution / maxContribution;
       if (isDark) {
@@ -57,11 +51,7 @@ export function MarginalContributionChart({
         color: colors.reverse(),
       },
       customdata: topContributors
-        .map((c) => [
-          c.strategy,
-          c.concentrationScore * 100,
-          c.avgTailDependence,
-        ])
+        .map((c) => [c.strategy, c.concentrationScore * 100, c.avgTailDependence])
         .reverse(),
       hovertemplate:
         "<b>%{customdata[0]}</b><br>" +
@@ -98,8 +88,7 @@ export function MarginalContributionChart({
       title="Marginal Contribution to Tail Risk"
       description="Which strategies contribute most to portfolio tail risk"
       tooltip={{
-        flavor:
-          "Shows how much each strategy contributes to portfolio-wide tail risk.",
+        flavor: "Shows how much each strategy contributes to portfolio-wide tail risk.",
         detailed:
           "Strategies with higher contribution scores are more aligned with the dominant sources of portfolio tail risk. This combines (1) how much the strategy loads on the first principal factor and (2) its average tail dependence with other strategies. Removing high-contribution strategies would most reduce portfolio tail risk.",
       }}

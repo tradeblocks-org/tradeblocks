@@ -1,12 +1,7 @@
 import { performTailRiskAnalysis, Trade } from "@tradeblocks/lib";
 
 // Helper to create test trades
-function createTrade(
-  dateOpened: string,
-  strategy: string,
-  pl: number,
-  marginReq?: number
-): Trade {
+function createTrade(dateOpened: string, strategy: string, pl: number, marginReq?: number): Trade {
   return {
     dateOpened: new Date(dateOpened),
     timeOpened: "10:00:00",
@@ -31,7 +26,7 @@ function generateCorrelatedTrades(
   startDate: string,
   numDays: number,
   strategies: string[],
-  correlationMatrix: number[][]
+  correlationMatrix: number[][],
 ): Trade[] {
   const trades: Trade[] = [];
   const baseDate = new Date(startDate);
@@ -148,7 +143,7 @@ describe("Tail Risk Analysis", () => {
           [1, 0.5, 0.3],
           [0.5, 1, 0.4],
           [0.3, 0.4, 1],
-        ]
+        ],
       );
 
       const result = performTailRiskAnalysis(trades);
@@ -172,7 +167,7 @@ describe("Tail Risk Analysis", () => {
           [0.5, 1, 0.4, 0.3],
           [0.3, 0.4, 1, 0.5],
           [0.2, 0.3, 0.5, 1],
-        ]
+        ],
       );
 
       const result = performTailRiskAnalysis(trades);
@@ -195,16 +190,13 @@ describe("Tail Risk Analysis", () => {
           [0.3, 0.4, 1, 0.5, 0.3],
           [0.2, 0.3, 0.5, 1, 0.4],
           [0.1, 0.2, 0.3, 0.4, 1],
-        ]
+        ],
       );
 
       const result = performTailRiskAnalysis(trades);
 
       // Sum of eigenvalues should equal trace of correlation matrix = n
-      const sumEigenvalues = result.eigenvalues.reduce(
-        (sum, val) => sum + val,
-        0
-      );
+      const sumEigenvalues = result.eigenvalues.reduce((sum, val) => sum + val, 0);
       expect(sumEigenvalues).toBeCloseTo(result.strategies.length, 1);
     });
 
@@ -218,16 +210,14 @@ describe("Tail Risk Analysis", () => {
           [0.5, 1, 0.4, 0.3],
           [0.3, 0.4, 1, 0.5],
           [0.2, 0.3, 0.5, 1],
-        ]
+        ],
       );
 
       const result = performTailRiskAnalysis(trades);
 
       // Check descending order
       for (let i = 1; i < result.eigenvalues.length; i++) {
-        expect(result.eigenvalues[i - 1]).toBeGreaterThanOrEqual(
-          result.eigenvalues[i]
-        );
+        expect(result.eigenvalues[i - 1]).toBeGreaterThanOrEqual(result.eigenvalues[i]);
       }
     });
 
@@ -240,21 +230,18 @@ describe("Tail Risk Analysis", () => {
           [1, 0.5, 0.3],
           [0.5, 1, 0.4],
           [0.3, 0.4, 1],
-        ]
+        ],
       );
 
       const result = performTailRiskAnalysis(trades);
 
       // Last value should be ~1 (100% variance explained)
-      const lastExplained =
-        result.explainedVariance[result.explainedVariance.length - 1];
+      const lastExplained = result.explainedVariance[result.explainedVariance.length - 1];
       expect(lastExplained).toBeCloseTo(1, 2);
 
       // Values should be increasing
       for (let i = 1; i < result.explainedVariance.length; i++) {
-        expect(result.explainedVariance[i]).toBeGreaterThanOrEqual(
-          result.explainedVariance[i - 1]
-        );
+        expect(result.explainedVariance[i]).toBeGreaterThanOrEqual(result.explainedVariance[i - 1]);
       }
     });
 
@@ -269,17 +256,15 @@ describe("Tail Risk Analysis", () => {
           [0.3, 0.4, 1, 0.5, 0.3],
           [0.2, 0.3, 0.5, 1, 0.4],
           [0.1, 0.2, 0.3, 0.4, 1],
-        ]
+        ],
       );
 
       const result = performTailRiskAnalysis(trades);
 
       // Check sorted descending
       for (let i = 1; i < result.marginalContributions.length; i++) {
-        expect(
-          result.marginalContributions[i - 1].tailRiskContribution
-        ).toBeGreaterThanOrEqual(
-          result.marginalContributions[i].tailRiskContribution
+        expect(result.marginalContributions[i - 1].tailRiskContribution).toBeGreaterThanOrEqual(
+          result.marginalContributions[i].tailRiskContribution,
         );
       }
     });
@@ -292,7 +277,7 @@ describe("Tail Risk Analysis", () => {
         [
           [1, 0.5],
           [0.5, 1],
-        ]
+        ],
       );
 
       const result5 = performTailRiskAnalysis(trades, { tailThreshold: 0.05 });
@@ -314,7 +299,7 @@ describe("Tail Risk Analysis", () => {
           [
             [1, 0.5],
             [0.5, 1],
-          ]
+          ],
         ),
         ...generateCorrelatedTrades(
           "2024-01-01",
@@ -323,7 +308,7 @@ describe("Tail Risk Analysis", () => {
           [
             [1, 0.3],
             [0.3, 1],
-          ]
+          ],
         ),
       ];
 
@@ -347,7 +332,7 @@ describe("Tail Risk Analysis", () => {
           [1, 0.7, 0.2],
           [0.7, 1, 0.3],
           [0.2, 0.3, 1],
-        ]
+        ],
       );
 
       const result = performTailRiskAnalysis(trades);
@@ -368,7 +353,7 @@ describe("Tail Risk Analysis", () => {
         [
           [1, 0.5],
           [0.5, 1],
-        ]
+        ],
       );
 
       const result = performTailRiskAnalysis(trades);
@@ -384,16 +369,9 @@ describe("Tail Risk Analysis", () => {
       const strategies = Array.from({ length: 20 }, (_, i) => `Strategy${i}`);
 
       // Create a simple correlation matrix
-      const corrMatrix = strategies.map((_, i) =>
-        strategies.map((_, j) => (i === j ? 1 : 0.3))
-      );
+      const corrMatrix = strategies.map((_, i) => strategies.map((_, j) => (i === j ? 1 : 0.3)));
 
-      const trades = generateCorrelatedTrades(
-        "2022-01-01",
-        500,
-        strategies,
-        corrMatrix
-      );
+      const trades = generateCorrelatedTrades("2022-01-01", 500, strategies, corrMatrix);
 
       const startTime = performance.now();
       const result = performTailRiskAnalysis(trades);

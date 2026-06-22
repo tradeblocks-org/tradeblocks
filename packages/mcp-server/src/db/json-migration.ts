@@ -15,11 +15,7 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as path from "path";
 import { isParquetMode } from "./parquet-writer.ts";
-import {
-  readJsonFile,
-  writeJsonFile,
-  toFileSlug,
-} from "./json-store.ts";
+import { readJsonFile, writeJsonFile, toFileSlug } from "./json-store.ts";
 import {
   listProfilesJson,
   upsertSyncMetadataJson,
@@ -149,12 +145,7 @@ async function migrateProfiles(conn: DuckDBConnection, blocksDir: string): Promi
     };
 
     // Write directly using json-store to preserve original timestamps
-    const filePath = path.join(
-      blocksDir,
-      blockId,
-      "profiles",
-      toFileSlug(strategyName) + ".json"
-    );
+    const filePath = path.join(blocksDir, blockId, "profiles", toFileSlug(strategyName) + ".json");
     await writeJsonFile(filePath, profileJson);
   }
 
@@ -202,7 +193,10 @@ async function migrateSyncMetadata(conn: DuckDBConnection, blocksDir: string): P
  * Migrate market import metadata from DuckDB to JSON.
  * @returns Count of migrated entries
  */
-async function migrateMarketImportMetadata(conn: DuckDBConnection, dataDir: string): Promise<number> {
+async function migrateMarketImportMetadata(
+  conn: DuckDBConnection,
+  dataDir: string,
+): Promise<number> {
   // Idempotency: skip if aggregate JSON file already exists
   const existingFile = await readJsonFile(path.join(dataDir, "market-meta", "sync-metadata.json"));
   if (existingFile !== null) return 0;
@@ -240,7 +234,9 @@ async function migrateMarketImportMetadata(conn: DuckDBConnection, dataDir: stri
  */
 async function migrateFlatImportLog(conn: DuckDBConnection, dataDir: string): Promise<number> {
   // Idempotency: skip if aggregate JSON file already exists
-  const existingFile = await readJsonFile(path.join(dataDir, "market-meta", "flat-import-log.json"));
+  const existingFile = await readJsonFile(
+    path.join(dataDir, "market-meta", "flat-import-log.json"),
+  );
   if (existingFile !== null) return 0;
 
   let rows: unknown[][];
@@ -293,7 +289,7 @@ async function migrateFlatImportLog(conn: DuckDBConnection, dataDir: string): Pr
 export async function migrateMetadataToJson(
   conn: DuckDBConnection,
   dataDir: string,
-  blocksDir: string
+  blocksDir: string,
 ): Promise<MigrationResult> {
   // Guard: only run in Parquet mode
   if (!isParquetMode()) {
@@ -310,7 +306,7 @@ export async function migrateMetadataToJson(
   if (migrated) {
     console.log(
       `[json-migration] Migrated: ${profiles} profiles, ${syncMeta} sync metadata, ` +
-      `${marketMeta} market import records, ${flatLog} flat import records`
+        `${marketMeta} market import records, ${flatLog} flat import records`,
     );
   }
 

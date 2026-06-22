@@ -193,7 +193,7 @@ describe("get_greeks_attribution integration", () => {
       conn,
     );
 
-    const summary = await handleGetGreeksAttribution(
+    const summary = (await handleGetGreeksAttribution(
       {
         block_id: "test-block",
         mode: "summary",
@@ -202,7 +202,7 @@ describe("get_greeks_attribution integration", () => {
       "/tmp/test-greeks-attribution",
       stores,
       conn,
-    ) as AttributionSummaryResult;
+    )) as AttributionSummaryResult;
 
     const expected = collapseFactors(decomp.factors, false);
     const actualByFactor = new Map(summary.attribution.map((entry) => [entry.factor, entry.pnl]));
@@ -248,7 +248,7 @@ describe("get_greeks_attribution integration", () => {
       conn,
     );
 
-    const summary = await handleGetGreeksAttribution(
+    const summary = (await handleGetGreeksAttribution(
       {
         block_id: "test-block",
         mode: "summary",
@@ -258,7 +258,7 @@ describe("get_greeks_attribution integration", () => {
       "/tmp/test-greeks-attribution",
       stores,
       conn,
-    ) as AttributionSummaryResult;
+    )) as AttributionSummaryResult;
 
     expect(summary.trades_total).toBe(1);
     expect(summary.total_pnl).toBe(-80);

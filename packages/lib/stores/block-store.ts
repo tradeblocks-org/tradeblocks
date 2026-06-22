@@ -10,7 +10,10 @@ import {
   updateBlockStats,
   storePerformanceSnapshotCache,
 } from "../db/index.ts";
-import { buildPerformanceSnapshot, type SnapshotProgress } from "../services/performance-snapshot.ts";
+import {
+  buildPerformanceSnapshot,
+  type SnapshotProgress,
+} from "../services/performance-snapshot.ts";
 import type { ProcessedBlock } from "../models/block.ts";
 import type { StrategyAlignment } from "../models/strategy-alignment.ts";
 
@@ -66,16 +69,14 @@ interface BlockStore {
   loadBlocks: () => Promise<void>;
   setActiveBlock: (blockId: string) => void;
   clearActiveBlock: () => void;
-  addBlock: (
-    block: Omit<Block, "created"> | Omit<Block, "id" | "created">
-  ) => Promise<void>;
+  addBlock: (block: Omit<Block, "created"> | Omit<Block, "id" | "created">) => Promise<void>;
   updateBlock: (id: string, updates: Partial<Block>) => Promise<void>;
   deleteBlock: (id: string) => Promise<void>;
   refreshBlock: (id: string) => Promise<void>;
   recalculateBlock: (
     id: string,
     onProgress?: (progress: SnapshotProgress) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ) => Promise<void>;
   clearAllData: () => Promise<void>;
 }
@@ -87,7 +88,7 @@ function convertProcessedBlockToBlock(
   processedBlock: ProcessedBlock,
   tradeCount: number,
   dailyLogCount: number,
-  reportingLogCount: number
+  reportingLogCount: number,
 ): Block {
   return {
     id: processedBlock.id,
@@ -169,9 +170,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
     // Main loading logic wrapped in a promise for racing
     const loadingPromise = (async () => {
       // Restore active block ID from localStorage
-      const savedActiveBlockId = localStorage.getItem(
-        "tradeblocks-active-block-id"
-      );
+      const savedActiveBlockId = localStorage.getItem("tradeblocks-active-block-id");
 
       const processedBlocks = await getAllBlocks();
       const blocks: Block[] = [];
@@ -196,22 +195,16 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
             trades.length > 0
               ? {
                   totalPnL: trades.reduce((sum, trade) => sum + trade.pl, 0),
-                  winRate:
-                    (trades.filter((t) => t.pl > 0).length / trades.length) *
-                    100,
+                  winRate: (trades.filter((t) => t.pl > 0).length / trades.length) * 100,
                   totalTrades: trades.length,
                   avgWin:
                     trades.filter((t) => t.pl > 0).length > 0
-                      ? trades
-                          .filter((t) => t.pl > 0)
-                          .reduce((sum, t) => sum + t.pl, 0) /
+                      ? trades.filter((t) => t.pl > 0).reduce((sum, t) => sum + t.pl, 0) /
                         trades.filter((t) => t.pl > 0).length
                       : 0,
                   avgLoss:
                     trades.filter((t) => t.pl < 0).length > 0
-                      ? trades
-                          .filter((t) => t.pl < 0)
-                          .reduce((sum, t) => sum + t.pl, 0) /
+                      ? trades.filter((t) => t.pl < 0).reduce((sum, t) => sum + t.pl, 0) /
                         trades.filter((t) => t.pl < 0).length
                       : 0,
                 }
@@ -227,7 +220,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
             processedBlock,
             trades.length,
             dailyLogs.length,
-            reportingTrades.length
+            reportingTrades.length,
           );
           block.stats = stats;
 
@@ -236,10 +229,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
 
           blocks.push(block);
         } catch (blockError) {
-          console.error(
-            `Failed to load block ${processedBlock.id}:`,
-            blockError
-          );
+          console.error(`Failed to load block ${processedBlock.id}:`, blockError);
           // Continue loading other blocks instead of failing completely
         }
       }
@@ -327,10 +317,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
           localStorage.setItem("tradeblocks-active-block-id", newBlock.id);
           console.log("Set active block in localStorage:", newBlock.id);
           return {
-            blocks: [
-              ...state.blocks.map((b) => ({ ...b, isActive: false })),
-              newBlock,
-            ],
+            blocks: [...state.blocks.map((b) => ({ ...b, isActive: false })), newBlock],
             activeBlockId: newBlock.id,
           };
         } else {
@@ -374,15 +361,12 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
       // Update local state
       set((state) => ({
         blocks: state.blocks.map((block) =>
-          block.id === id
-            ? { ...block, ...updates, lastModified: new Date() }
-            : block
+          block.id === id ? { ...block, ...updates, lastModified: new Date() } : block,
         ),
       }));
     } catch (error) {
       set({
-        error:
-          error instanceof Error ? error.message : "Failed to update block",
+        error: error instanceof Error ? error.message : "Failed to update block",
       });
     }
   },
@@ -410,8 +394,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
       });
     } catch (error) {
       set({
-        error:
-          error instanceof Error ? error.message : "Failed to delete block",
+        error: error instanceof Error ? error.message : "Failed to delete block",
       });
     }
   },
@@ -436,21 +419,16 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
         trades.length > 0
           ? {
               totalPnL: trades.reduce((sum, trade) => sum + trade.pl, 0),
-              winRate:
-                (trades.filter((t) => t.pl > 0).length / trades.length) * 100,
+              winRate: (trades.filter((t) => t.pl > 0).length / trades.length) * 100,
               totalTrades: trades.length,
               avgWin:
                 trades.filter((t) => t.pl > 0).length > 0
-                  ? trades
-                      .filter((t) => t.pl > 0)
-                      .reduce((sum, t) => sum + t.pl, 0) /
+                  ? trades.filter((t) => t.pl > 0).reduce((sum, t) => sum + t.pl, 0) /
                     trades.filter((t) => t.pl > 0).length
                   : 0,
               avgLoss:
                 trades.filter((t) => t.pl < 0).length > 0
-                  ? trades
-                      .filter((t) => t.pl < 0)
-                      .reduce((sum, t) => sum + t.pl, 0) /
+                  ? trades.filter((t) => t.pl < 0).reduce((sum, t) => sum + t.pl, 0) /
                     trades.filter((t) => t.pl < 0).length
                   : 0,
             }
@@ -466,22 +444,19 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
         processedBlock,
         trades.length,
         dailyLogs.length,
-        reportingTrades.length
+        reportingTrades.length,
       );
       updatedBlock.stats = stats;
 
       // Update in store
       set((state) => ({
         blocks: state.blocks.map((block) =>
-          block.id === id
-            ? { ...updatedBlock, isActive: block.isActive }
-            : block
+          block.id === id ? { ...updatedBlock, isActive: block.isActive } : block,
         ),
       }));
     } catch (error) {
       set({
-        error:
-          error instanceof Error ? error.message : "Failed to refresh block",
+        error: error instanceof Error ? error.message : "Failed to refresh block",
       });
     }
   },
@@ -489,7 +464,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
   recalculateBlock: async (
     id: string,
     onProgress?: (progress: SnapshotProgress) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ) => {
     try {
       console.log("Recalculating block:", id);
@@ -512,16 +487,13 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
       ]);
 
       console.log(
-        `Recalculating stats for ${trades.length} trades and ${dailyLogs.length} daily logs`
+        `Recalculating stats for ${trades.length} trades and ${dailyLogs.length} daily logs`,
       );
 
       // Recalculate all stats using the current calculation engine
       const calculator = new PortfolioStatsCalculator();
 
-      const portfolioStats = calculator.calculatePortfolioStats(
-        trades,
-        dailyLogs
-      );
+      const portfolioStats = calculator.calculatePortfolioStats(trades, dailyLogs);
       const strategyStats = calculator.calculateStrategyStats(trades);
 
       // Update ProcessedBlock stats in database
@@ -556,7 +528,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
         processedBlock,
         trades.length,
         dailyLogs.length,
-        reportingTrades.length
+        reportingTrades.length,
       );
       updatedBlock.stats = basicStats;
       updatedBlock.lastModified = new Date();
@@ -564,23 +536,18 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
       // Update in store
       set((state) => ({
         blocks: state.blocks.map((block) =>
-          block.id === id
-            ? { ...updatedBlock, isActive: block.isActive }
-            : block
+          block.id === id ? { ...updatedBlock, isActive: block.isActive } : block,
         ),
       }));
 
       console.log(
         "Block recalculation completed successfully. Initial capital:",
-        portfolioStats.initialCapital
+        portfolioStats.initialCapital,
       );
     } catch (error) {
       console.error("Failed to recalculate block:", error);
       set({
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to recalculate block",
+        error: error instanceof Error ? error.message : "Failed to recalculate block",
       });
     }
   },
@@ -596,9 +563,18 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
         }, timeoutMs);
 
         const req = indexedDB.deleteDatabase(dbName);
-        req.onsuccess = () => { clearTimeout(timeout); resolve(); };
-        req.onerror = () => { clearTimeout(timeout); resolve(); }; // Don't block on error
-        req.onblocked = () => { clearTimeout(timeout); resolve(); }; // Will complete after reload
+        req.onsuccess = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        req.onerror = () => {
+          clearTimeout(timeout);
+          resolve();
+        }; // Don't block on error
+        req.onblocked = () => {
+          clearTimeout(timeout);
+          resolve();
+        }; // Will complete after reload
       });
     };
 
@@ -607,19 +583,20 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && (
-          key.startsWith("tradeblocks-") ||
-          key.startsWith("block-stats:") ||
-          key.startsWith("comparison:") ||
-          key.startsWith("performance:") ||
-          key.startsWith("current-") ||
-          key.startsWith("daily-log-") ||
-          key.startsWith("portfolio-")
-        )) {
+        if (
+          key &&
+          (key.startsWith("tradeblocks-") ||
+            key.startsWith("block-stats:") ||
+            key.startsWith("comparison:") ||
+            key.startsWith("performance:") ||
+            key.startsWith("current-") ||
+            key.startsWith("daily-log-") ||
+            key.startsWith("portfolio-"))
+        ) {
           keysToRemove.push(key);
         }
       }
-      keysToRemove.forEach(key => localStorage.removeItem(key));
+      keysToRemove.forEach((key) => localStorage.removeItem(key));
 
       // Also clear sessionStorage
       sessionStorage.clear();

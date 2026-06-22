@@ -1,17 +1,17 @@
-"use client"
+"use client";
 
-import { format } from "date-fns"
-import { ChevronDown, ChevronRight, Download, History, MoreHorizontal, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { format } from "date-fns";
+import { ChevronDown, ChevronRight, Download, History, MoreHorizontal, Trash2 } from "lucide-react";
+import { useState } from "react";
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -19,16 +19,16 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { cn } from "@tradeblocks/lib"
-import type { WalkForwardAnalysis, WalkForwardOptimizationTarget } from "@tradeblocks/lib"
+} from "@/components/ui/table";
+import { cn } from "@tradeblocks/lib";
+import type { WalkForwardAnalysis, WalkForwardOptimizationTarget } from "@tradeblocks/lib";
 
 interface RunSwitcherProps {
-  history: WalkForwardAnalysis[]
-  currentId: string | null
-  onSelect: (id: string) => void
-  onDelete: (id: string) => Promise<void>
-  onExport?: () => void
+  history: WalkForwardAnalysis[];
+  currentId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  onExport?: () => void;
 }
 
 const TARGET_LABELS: Record<WalkForwardOptimizationTarget, string> = {
@@ -43,24 +43,30 @@ const TARGET_LABELS: Record<WalkForwardOptimizationTarget, string> = {
   minAvgCorrelation: "Min Correlation",
   minTailRisk: "Min Tail Risk",
   maxEffectiveFactors: "Max Eff Factors",
-}
+};
 
-export function RunSwitcher({ history, currentId, onSelect, onDelete, onExport }: RunSwitcherProps) {
-  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
+export function RunSwitcher({
+  history,
+  currentId,
+  onSelect,
+  onDelete,
+  onExport,
+}: RunSwitcherProps) {
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
-  if (!history || history.length === 0) return null
+  if (!history || history.length === 0) return null;
 
   const toggleRow = (id: string) => {
     setExpandedRows((prev) => ({
       ...prev,
       [id]: !prev[id],
-    }))
-  }
+    }));
+  };
 
   const handleDelete = async (id: string) => {
-    const ok = window.confirm("Delete this run? This cannot be undone.")
-    if (ok) await onDelete(id)
-  }
+    const ok = window.confirm("Delete this run? This cannot be undone.");
+    if (ok) await onDelete(id);
+  };
 
   return (
     <div className="rounded-lg border bg-card/70">
@@ -86,11 +92,13 @@ export function RunSwitcher({ history, currentId, onSelect, onDelete, onExport }
           </TableHeader>
           <TableBody>
             {history.map((analysis) => {
-              const isActive = analysis.id === currentId
-              const isExpanded = Boolean(expandedRows[analysis.id])
-              const efficiency = (analysis.results.summary.degradationFactor * 100).toFixed(1)
-              const robustness = (analysis.results.summary.robustnessScore * 100).toFixed(1)
-              const targetLabel = TARGET_LABELS[analysis.config.optimizationTarget] || analysis.config.optimizationTarget
+              const isActive = analysis.id === currentId;
+              const isExpanded = Boolean(expandedRows[analysis.id]);
+              const efficiency = (analysis.results.summary.degradationFactor * 100).toFixed(1);
+              const robustness = (analysis.results.summary.robustnessScore * 100).toFixed(1);
+              const targetLabel =
+                TARGET_LABELS[analysis.config.optimizationTarget] ||
+                analysis.config.optimizationTarget;
 
               return (
                 <TableRowWithDetails
@@ -106,26 +114,26 @@ export function RunSwitcher({ history, currentId, onSelect, onDelete, onExport }
                   onDelete={() => handleDelete(analysis.id)}
                   onExport={isActive ? onExport : undefined}
                 />
-              )
+              );
             })}
           </TableBody>
         </Table>
       </div>
     </div>
-  )
+  );
 }
 
 interface TableRowWithDetailsProps {
-  analysis: WalkForwardAnalysis
-  isActive: boolean
-  isExpanded: boolean
-  efficiency: string
-  robustness: string
-  targetLabel: string
-  onToggle: () => void
-  onSelect: () => void
-  onDelete: () => void
-  onExport?: () => void
+  analysis: WalkForwardAnalysis;
+  isActive: boolean;
+  isExpanded: boolean;
+  efficiency: string;
+  robustness: string;
+  targetLabel: string;
+  onToggle: () => void;
+  onSelect: () => void;
+  onDelete: () => void;
+  onExport?: () => void;
 }
 
 function TableRowWithDetails({
@@ -140,16 +148,17 @@ function TableRowWithDetails({
   onDelete,
   onExport,
 }: TableRowWithDetailsProps) {
-  const config = analysis.config
+  const config = analysis.config;
 
   // Build configuration summary badges
-  const configBadges: Array<{ label: string; variant: "default" | "outline"; className?: string }> = []
+  const configBadges: Array<{ label: string; variant: "default" | "outline"; className?: string }> =
+    [];
 
   // Window configuration
   configBadges.push({
     label: `${config.inSampleDays}d IS / ${config.outOfSampleDays}d OOS`,
     variant: "outline",
-  })
+  });
 
   // 1-Lot normalization
   if (config.normalizeTo1Lot) {
@@ -157,7 +166,7 @@ function TableRowWithDetails({
       label: "1-Lot Normalized",
       variant: "outline",
       className: "bg-amber-50 dark:bg-amber-950/30",
-    })
+    });
   }
 
   // Strategy filter
@@ -166,7 +175,7 @@ function TableRowWithDetails({
       label: `${config.selectedStrategies.length} Strategies`,
       variant: "outline",
       className: "bg-blue-50 dark:bg-blue-950/30",
-    })
+    });
   }
 
   // Diversification constraints
@@ -175,23 +184,23 @@ function TableRowWithDetails({
       label: `Corr ≤ ${config.diversificationConfig.maxCorrelationThreshold.toFixed(2)}`,
       variant: "outline",
       className: "bg-violet-50 dark:bg-violet-950/30",
-    })
+    });
   }
   if (config.diversificationConfig?.enableTailRiskConstraint) {
     configBadges.push({
       label: `Tail ≤ ${config.diversificationConfig.maxTailDependenceThreshold.toFixed(2)}`,
       variant: "outline",
       className: "bg-violet-50 dark:bg-violet-950/30",
-    })
+    });
   }
 
   // Strategy weight sweep
-  if (config.strategyWeightSweep && config.strategyWeightSweep.configs.some(c => c.enabled)) {
+  if (config.strategyWeightSweep && config.strategyWeightSweep.configs.some((c) => c.enabled)) {
     configBadges.push({
       label: `Weight Sweep (${config.strategyWeightSweep.mode})`,
       variant: "outline",
       className: "bg-green-50 dark:bg-green-950/30",
-    })
+    });
   }
 
   // Performance floor
@@ -200,18 +209,18 @@ function TableRowWithDetails({
       label: `Min Sharpe: ${config.performanceFloor.minSharpeRatio.toFixed(2)}`,
       variant: "outline",
       className: "bg-orange-50 dark:bg-orange-950/30",
-    })
+    });
   }
   if (config.performanceFloor?.enableMinProfitFactor) {
     configBadges.push({
       label: `Min PF: ${config.performanceFloor.minProfitFactor.toFixed(2)}`,
       variant: "outline",
       className: "bg-orange-50 dark:bg-orange-950/30",
-    })
+    });
   }
 
   // Parameter ranges summary - config uses legacy 3-element ranges, all are enabled
-  const enabledParams = Object.entries(config.parameterRanges || {})
+  const enabledParams = Object.entries(config.parameterRanges || {});
 
   return (
     <>
@@ -246,34 +255,37 @@ function TableRowWithDetails({
             {targetLabel}
           </Badge>
         </TableCell>
+        <TableCell className="text-right">{analysis.results.periods.length}</TableCell>
         <TableCell className="text-right">
-          {analysis.results.periods.length}
-        </TableCell>
-        <TableCell className="text-right">
-          <span className={cn(
-            parseFloat(efficiency) >= 70 ? "text-emerald-600" :
-            parseFloat(efficiency) >= 50 ? "text-amber-600" : "text-rose-600"
-          )}>
+          <span
+            className={cn(
+              parseFloat(efficiency) >= 70
+                ? "text-emerald-600"
+                : parseFloat(efficiency) >= 50
+                  ? "text-amber-600"
+                  : "text-rose-600",
+            )}
+          >
             {efficiency}%
           </span>
         </TableCell>
         <TableCell className="text-right">
-          <span className={cn(
-            parseFloat(robustness) >= 60 ? "text-emerald-600" :
-            parseFloat(robustness) >= 40 ? "text-amber-600" : "text-rose-600"
-          )}>
+          <span
+            className={cn(
+              parseFloat(robustness) >= 60
+                ? "text-emerald-600"
+                : parseFloat(robustness) >= 40
+                  ? "text-amber-600"
+                  : "text-rose-600",
+            )}
+          >
             {robustness}%
           </span>
         </TableCell>
         <TableCell>
           <div className="flex items-center justify-end gap-2">
             {!isActive && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={onSelect}
-              >
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onSelect}>
                 Load Results
               </Button>
             )}
@@ -331,38 +343,42 @@ function TableRowWithDetails({
                     {enabledParams.map(([key, range]) => {
                       const prettyKey = (() => {
                         switch (key) {
-                          case "kellyMultiplier": return "Kelly"
-                          case "fixedFractionPct": return "Fixed %"
-                          case "maxDrawdownPct": return "Max DD"
-                          case "maxDailyLossPct": return "Daily Loss"
-                          case "consecutiveLossLimit": return "Consec Loss"
-                          default: return key
+                          case "kellyMultiplier":
+                            return "Kelly";
+                          case "fixedFractionPct":
+                            return "Fixed %";
+                          case "maxDrawdownPct":
+                            return "Max DD";
+                          case "maxDailyLossPct":
+                            return "Daily Loss";
+                          case "consecutiveLossLimit":
+                            return "Consec Loss";
+                          default:
+                            return key;
                         }
-                      })()
-                      const [min, max, step] = range
+                      })();
+                      const [min, max, step] = range;
                       return (
-                        <Badge
-                          key={key}
-                          variant="outline"
-                          className="text-[10px] bg-muted"
-                        >
+                        <Badge key={key} variant="outline" className="text-[10px] bg-muted">
                           {prettyKey}: {min}–{max} (step {step})
                         </Badge>
-                      )
+                      );
                     })}
                   </div>
                 </div>
               )}
 
               {/* Strategy Weight Configs */}
-              {config.strategyWeightSweep?.configs?.some(c => c.enabled) && (
+              {config.strategyWeightSweep?.configs?.some((c) => c.enabled) && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Strategy Weight Sweeps</p>
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Strategy Weight Sweeps
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {config.strategyWeightSweep.configs
-                      .filter(c => c.enabled)
+                      .filter((c) => c.enabled)
                       .map((stratConfig) => {
-                        const [min, max, step] = stratConfig.range
+                        const [min, max, step] = stratConfig.range;
                         return (
                           <Badge
                             key={stratConfig.strategy}
@@ -371,7 +387,7 @@ function TableRowWithDetails({
                           >
                             {stratConfig.strategy}: {min}–{max}x (step {step})
                           </Badge>
-                        )
+                        );
                       })}
                   </div>
                 </div>
@@ -380,13 +396,22 @@ function TableRowWithDetails({
               {/* Run Stats */}
               <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pt-2 border-t border-border/30">
                 <span>
-                  <strong className="text-foreground">{analysis.results.stats.totalParameterTests.toLocaleString()}</strong> combinations tested
+                  <strong className="text-foreground">
+                    {analysis.results.stats.totalParameterTests.toLocaleString()}
+                  </strong>{" "}
+                  combinations tested
                 </span>
                 <span>
-                  <strong className="text-foreground">{analysis.results.stats.analyzedTrades.toLocaleString()}</strong> trades analyzed
+                  <strong className="text-foreground">
+                    {analysis.results.stats.analyzedTrades.toLocaleString()}
+                  </strong>{" "}
+                  trades analyzed
                 </span>
                 <span>
-                  <strong className="text-foreground">{(analysis.results.stats.durationMs / 1000).toFixed(1)}s</strong> duration
+                  <strong className="text-foreground">
+                    {(analysis.results.stats.durationMs / 1000).toFixed(1)}s
+                  </strong>{" "}
+                  duration
                 </span>
               </div>
             </div>
@@ -394,5 +419,5 @@ function TableRowWithDetails({
         </TableRow>
       )}
     </>
-  )
+  );
 }

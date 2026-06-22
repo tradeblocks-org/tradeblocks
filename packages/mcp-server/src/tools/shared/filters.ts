@@ -11,9 +11,7 @@ import type { Trade, DailyLogEntry } from "@tradeblocks/lib";
  */
 export function filterByStrategy(trades: Trade[], strategy?: string): Trade[] {
   if (!strategy) return trades;
-  return trades.filter(
-    (t) => t.strategy.toLowerCase() === strategy.toLowerCase()
-  );
+  return trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
 }
 
 /**
@@ -49,11 +47,7 @@ function toCalendarDateStr(date: Date | string): string {
  * Avoids timezone bugs from mixing UTC Date parsing with local time setHours.
  * Malformed date inputs (not YYYY-MM-DD) are silently ignored.
  */
-export function filterByDateRange(
-  trades: Trade[],
-  startDate?: string,
-  endDate?: string
-): Trade[] {
+export function filterByDateRange(trades: Trade[], startDate?: string, endDate?: string): Trade[] {
   const start = validateDateParam(startDate);
   const end = validateDateParam(endDate);
   let filtered = trades;
@@ -77,7 +71,7 @@ export function filterByDateRange(
 export function filterDailyLogsByDateRange(
   dailyLogs: DailyLogEntry[],
   startDate?: string,
-  endDate?: string
+  endDate?: string,
 ): DailyLogEntry[] {
   const start = validateDateParam(startDate);
   const end = validateDateParam(endDate);

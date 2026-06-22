@@ -17,11 +17,7 @@
 import { ChartWrapper } from "@/components/performance-charts/chart-wrapper";
 import { calculateThresholdAnalysis } from "@tradeblocks/lib";
 import { EnrichedTrade } from "@tradeblocks/lib";
-import {
-  ChartAxisConfig,
-  ThresholdMetric,
-  getFieldInfo,
-} from "@tradeblocks/lib";
+import { ChartAxisConfig, ThresholdMetric, getFieldInfo } from "@tradeblocks/lib";
 import { generateTimeAxisTicksWithInterval } from "@tradeblocks/lib";
 import type { Layout, PlotData } from "plotly.js";
 import { useMemo } from "react";
@@ -73,7 +69,7 @@ export function ThresholdChart({
         (d) =>
           `${fieldLabel}: ${d.xValue.toFixed(2)}<br>` +
           `Trades ≤ threshold: ${d.cumulativeTradesPct.toFixed(1)}%<br>` +
-          `(${d.tradesBelow} of ${analysis.totalTrades} trades)<extra></extra>`
+          `(${d.tradesBelow} of ${analysis.totalTrades} trades)<extra></extra>`,
       ),
       yaxis: "y",
     };
@@ -92,7 +88,7 @@ export function ThresholdChart({
       hovertemplate: analysis.dataPoints.map(
         (d) =>
           `${fieldLabel}: ${d.xValue.toFixed(2)}<br>` +
-          `P/L ≤ threshold: ${d.cumulativePlPct.toFixed(1)}%<extra></extra>`
+          `P/L ≤ threshold: ${d.cumulativePlPct.toFixed(1)}%<extra></extra>`,
       ),
       yaxis: "y",
     };
@@ -129,7 +125,7 @@ export function ThresholdChart({
     };
 
     // Create a short field name for legend (e.g., "VIX" from "Opening VIX")
-    const shortFieldName = fieldLabel.replace(/^(Opening|Closing|Avg)\s+/i, '');
+    const shortFieldName = fieldLabel.replace(/^(Opening|Closing|Avg)\s+/i, "");
 
     // Trace 3: Avg metric above threshold (secondary Y-axis)
     const avgAboveTrace: Partial<PlotData> = {
@@ -145,10 +141,8 @@ export function ThresholdChart({
       hovertemplate: analysis.dataPoints.map(
         (d) =>
           `${fieldLabel}: ${d.xValue.toFixed(2)}<br>` +
-          `Avg ${metricLabel} (>${d.xValue.toFixed(2)}): ${formatValue(
-            getAboveValue(d)
-          )}<br>` +
-          `Trades: ${d.tradesAbove}<extra></extra>`
+          `Avg ${metricLabel} (>${d.xValue.toFixed(2)}): ${formatValue(getAboveValue(d))}<br>` +
+          `Trades: ${d.tradesAbove}<extra></extra>`,
       ),
       yaxis: "y2",
     };
@@ -167,29 +161,20 @@ export function ThresholdChart({
       hovertemplate: analysis.dataPoints.map(
         (d) =>
           `${fieldLabel}: ${d.xValue.toFixed(2)}<br>` +
-          `Avg ${metricLabel} (≤${d.xValue.toFixed(2)}): ${formatValue(
-            getBelowValue(d)
-          )}<br>` +
-          `Trades: ${d.tradesBelow}<extra></extra>`
+          `Avg ${metricLabel} (≤${d.xValue.toFixed(2)}): ${formatValue(getBelowValue(d))}<br>` +
+          `Trades: ${d.tradesBelow}<extra></extra>`,
       ),
       yaxis: "y2",
     };
 
-    const chartTraces = [
-      cumulativeTradesTrace,
-      cumulativePlTrace,
-      avgAboveTrace,
-      avgBelowTrace,
-    ];
+    const chartTraces = [cumulativeTradesTrace, cumulativePlTrace, avgAboveTrace, avgBelowTrace];
 
     // Calculate range for secondary axis (with padding)
     const allMetricValues = analysis.dataPoints
       .flatMap((d) => [getAboveValue(d), getBelowValue(d)])
       .filter((v): v is number => v !== null);
-    const minMetric =
-      allMetricValues.length > 0 ? Math.min(...allMetricValues) : 0;
-    const maxMetric =
-      allMetricValues.length > 0 ? Math.max(...allMetricValues) : 100;
+    const minMetric = allMetricValues.length > 0 ? Math.min(...allMetricValues) : 0;
+    const maxMetric = allMetricValues.length > 0 ? Math.max(...allMetricValues) : 100;
     const metricPadding = (maxMetric - minMetric) * 0.1;
 
     // Calculate range for primary axis (cumulative %)
@@ -209,7 +194,7 @@ export function ThresholdChart({
           Math.min(...xValues),
           Math.max(...xValues),
           THRESHOLD_CHART_TICK_INTERVAL_HOURS,
-          false // No timezone suffix for compact display
+          false, // No timezone suffix for compact display
         )
       : null;
 
@@ -224,10 +209,7 @@ export function ThresholdChart({
       },
       yaxis: {
         title: { text: "Cumulative %" },
-        range: [
-          minCumulative - cumulativePadding,
-          maxCumulative + cumulativePadding,
-        ],
+        range: [minCumulative - cumulativePadding, maxCumulative + cumulativePadding],
         zeroline: true,
         zerolinewidth: 1,
         zerolinecolor: "#94a3b8",
@@ -284,11 +266,7 @@ export function ThresholdChart({
       />
 
       {/* What-If Explorer - uses shared component */}
-      <WhatIfExplorer
-        trades={trades}
-        xAxisField={xAxis.field}
-        metric={metric}
-      />
+      <WhatIfExplorer trades={trades} xAxisField={xAxis.field} metric={metric} />
     </div>
   );
 }

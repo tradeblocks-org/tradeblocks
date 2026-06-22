@@ -107,12 +107,12 @@ describe("Risk Simulator Parameter Flow", () => {
       const allTrades = createMockTrades(300); // 100 of each strategy
 
       // Filter for Strategy A
-      const strategyATrades = allTrades.filter(t => t.strategy === "Strategy A");
+      const strategyATrades = allTrades.filter((t) => t.strategy === "Strategy A");
       expect(strategyATrades.length).toBe(100);
 
       // Filter for multiple strategies
-      const multiStrategyTrades = allTrades.filter(t =>
-        ["Strategy A", "Strategy B"].includes(t.strategy || '')
+      const multiStrategyTrades = allTrades.filter((t) =>
+        ["Strategy A", "Strategy B"].includes(t.strategy || ""),
       );
       expect(multiStrategyTrades.length).toBe(200);
 
@@ -125,9 +125,10 @@ describe("Risk Simulator Parameter Flow", () => {
       const selectedStrategies = ["Strategy A"];
 
       // Filter trades
-      const filteredTrades = selectedStrategies.length > 0
-        ? allTrades.filter(t => selectedStrategies.includes(t.strategy || ''))
-        : allTrades;
+      const filteredTrades =
+        selectedStrategies.length > 0
+          ? allTrades.filter((t) => selectedStrategies.includes(t.strategy || ""))
+          : allTrades;
 
       expect(filteredTrades.length).toBe(100);
 
@@ -151,7 +152,11 @@ describe("Risk Simulator Parameter Flow", () => {
       const initialCapital = 100000;
 
       // Convert user inputs
-      const simulationLength = timeToTrades(simulationPeriodValue, simulationPeriodUnit, tradesPerYear);
+      const simulationLength = timeToTrades(
+        simulationPeriodValue,
+        simulationPeriodUnit,
+        tradesPerYear,
+      );
       const resampleWindow = percentageToTrades(resamplePercentage, trades.length);
 
       // Create params
@@ -187,7 +192,11 @@ describe("Risk Simulator Parameter Flow", () => {
       const resamplePercentage = 25; // Use recent 25%
 
       // Convert
-      const simulationLength = timeToTrades(simulationPeriodValue, simulationPeriodUnit, tradesPerYear);
+      const simulationLength = timeToTrades(
+        simulationPeriodValue,
+        simulationPeriodUnit,
+        tradesPerYear,
+      );
       const resampleWindow = percentageToTrades(resamplePercentage, trades.length);
 
       expect(simulationLength).toBe(2500); // 3 months = 2500 trades at this frequency
@@ -270,9 +279,10 @@ describe("Risk Simulator Parameter Flow", () => {
       const selectedStrategies: string[] = [];
 
       // Empty array means all strategies
-      const filteredTrades = selectedStrategies.length > 0
-        ? trades.filter(t => selectedStrategies.includes(t.strategy || ''))
-        : trades;
+      const filteredTrades =
+        selectedStrategies.length > 0
+          ? trades.filter((t) => selectedStrategies.includes(t.strategy || ""))
+          : trades;
 
       expect(filteredTrades.length).toBe(100);
     });
@@ -281,9 +291,7 @@ describe("Risk Simulator Parameter Flow", () => {
       const trades = createMockTrades(100);
       const selectedStrategies = ["NonExistentStrategy"];
 
-      const filteredTrades = trades.filter(t =>
-        selectedStrategies.includes(t.strategy || '')
-      );
+      const filteredTrades = trades.filter((t) => selectedStrategies.includes(t.strategy || ""));
 
       expect(filteredTrades.length).toBe(0);
       // In real app, this should show an error

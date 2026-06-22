@@ -58,10 +58,7 @@ export abstract class ChainStore {
    * with identical columns. Use this instead of N per-date `readChain` calls —
    * per-call glob-expansion / planning overhead dominates for view reads.
    */
-  async readChainDates(
-    underlying: string,
-    dates: string[],
-  ): Promise<ContractRow[]> {
+  async readChainDates(underlying: string, dates: string[]): Promise<ContractRow[]> {
     if (dates.length === 0) return [];
     // Builder inlines values; unbound runAndReadAll(sql) bypasses extract_statements.
     const { sql } = buildReadChainDatesSQL(underlying, dates);

@@ -31,16 +31,13 @@ function validate(underlying: string, roots: string[]): void {
   }
   for (const r of roots) {
     if (!TICKER_RE.test(r)) {
-      throw new Error(
-        `TickerRegistry: invalid root "${r}" — must match ${TICKER_RE.source}`,
-      );
+      throw new Error(`TickerRegistry: invalid root "${r}" — must match ${TICKER_RE.source}`);
     }
   }
 }
 
 export class TickerRegistry {
-  private rootMap: Map<string, { underlying: string; source: EntrySource }> =
-    new Map();
+  private rootMap: Map<string, { underlying: string; source: EntrySource }> = new Map();
   private entries: Map<string, TickerEntry> = new Map();
   // Preserved so unregister('user-override') can revert to the bundled default.
   private readonly bundledDefaults: ReadonlyMap<string, ReadonlyArray<string>>;
@@ -65,9 +62,7 @@ export class TickerRegistry {
     this.bundledDefaults = bundled;
     for (const e of userOverrides) {
       validate(e.underlying, e.roots);
-      const source: EntrySource = bundled.has(e.underlying)
-        ? "user-override"
-        : "user";
+      const source: EntrySource = bundled.has(e.underlying) ? "user-override" : "user";
       // Clear stale root mappings that previously pointed at this underlying.
       for (const [r, v] of [...this.rootMap]) {
         if (v.underlying === e.underlying) this.rootMap.delete(r);
@@ -129,9 +124,7 @@ export class TickerRegistry {
   unregister(underlying: string): void {
     const entry = this.entries.get(underlying);
     if (!entry) {
-      throw new Error(
-        `TickerRegistry.unregister: unknown underlying "${underlying}"`,
-      );
+      throw new Error(`TickerRegistry.unregister: unknown underlying "${underlying}"`);
     }
     if (entry.source === "default") {
       throw new Error(
@@ -139,10 +132,7 @@ export class TickerRegistry {
       );
     }
     // If it was a user-override of a default, revert to the bundled default.
-    if (
-      entry.source === "user-override" &&
-      this.bundledDefaults.has(underlying)
-    ) {
+    if (entry.source === "user-override" && this.bundledDefaults.has(underlying)) {
       const defaultRoots = [...(this.bundledDefaults.get(underlying) ?? [])];
       for (const [r, v] of [...this.rootMap]) {
         if (v.underlying === underlying) this.rootMap.delete(r);

@@ -71,10 +71,12 @@ interface MockStoresHandle {
   enrichedComputeContext: jest.Mock;
 }
 
-function makeMockStores(opts: {
-  writeBarsRejects?: Error;
-  computeRejects?: Error;
-} = {}): MockStoresHandle {
+function makeMockStores(
+  opts: {
+    writeBarsRejects?: Error;
+    computeRejects?: Error;
+  } = {},
+): MockStoresHandle {
   const calls: string[] = [];
   const spotWriteBars = jest.fn(async (ticker: string, date: string, bars: BarRow[]) => {
     calls.push(`spot.writeBars(${ticker},${date},${bars.length})`);

@@ -7,28 +7,28 @@
  * Provides the computational heart of the `analyze_exit_triggers` tool.
  */
 
-import type { PnlPoint, ReplayLeg } from './trade-replay.ts';
+import type { PnlPoint, ReplayLeg } from "./trade-replay.ts";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export type TriggerType =
-  | 'profitTarget'
-  | 'stopLoss'
-  | 'trailingStop'
-  | 'profitAction'
-  | 'dteExit'
-  | 'ditExit'
-  | 'clockTimeExit'
-  | 'underlyingPriceMove'
-  | 'positionDelta'
-  | 'perLegDelta'
-  | 'vixMove'
-  | 'vix9dMove'
-  | 'vix9dVixRatio'
-  | 'slRatioThreshold'
-  | 'slRatioMove';
+  | "profitTarget"
+  | "stopLoss"
+  | "trailingStop"
+  | "profitAction"
+  | "dteExit"
+  | "ditExit"
+  | "clockTimeExit"
+  | "underlyingPriceMove"
+  | "positionDelta"
+  | "perLegDelta"
+  | "vixMove"
+  | "vix9dMove"
+  | "vix9dVixRatio"
+  | "slRatioThreshold"
+  | "slRatioMove";
 
 export interface PartialClose {
   index: number;
@@ -40,49 +40,49 @@ export interface PartialClose {
 export interface ExitTriggerConfig {
   type: TriggerType;
   threshold: number;
-  unit?: 'percent' | 'dollar';                  // D-07: default 'dollar', backwards compatible
+  unit?: "percent" | "dollar"; // D-07: default 'dollar', backwards compatible
   steps?: Array<{ armAt: number; stopAt: number; closeAllocationPct?: number }>;
   // Context-specific optional fields:
-  expiry?: string;                              // YYYY-MM-DD for dteExit
-  openDate?: string;                            // YYYY-MM-DD for ditExit
-  clockTime?: string;                           // "HH:MM" for clockTimeExit (threshold ignored)
-  trailAmount?: number;                         // Dollar trail for trailingStop
+  expiry?: string; // YYYY-MM-DD for dteExit
+  openDate?: string; // YYYY-MM-DD for ditExit
+  clockTime?: string; // "HH:MM" for clockTimeExit (threshold ignored)
+  trailAmount?: number; // Dollar trail for trailingStop
   // Directional delta fields (per-leg directional exits):
-  legIndex?: number;                            // 0-based leg index for perLegDelta — targets specific leg
-  exitAbove?: number;                           // Fire when value > exitAbove (directional, no abs)
-  exitBelow?: number;                           // Fire when value < exitBelow (directional, no abs)
+  legIndex?: number; // 0-based leg index for perLegDelta — targets specific leg
+  exitAbove?: number; // Fire when value > exitAbove (directional, no abs)
+  exitBelow?: number; // Fire when value < exitBelow (directional, no abs)
   // Data maps for triggers needing external prices:
-  underlyingPrices?: Map<string, number>;        // timestamp -> price
-  vixPrices?: Map<string, number>;               // timestamp -> VIX price
-  vix9dPrices?: Map<string, number>;             // timestamp -> VIX9D price
+  underlyingPrices?: Map<string, number>; // timestamp -> price
+  vixPrices?: Map<string, number>; // timestamp -> VIX price
+  vix9dPrices?: Map<string, number>; // timestamp -> VIX9D price
   // S/L ratio inputs:
-  spreadWidth?: number;                          // Width of spread in dollars
-  contracts?: number;                            // Number of contracts
-  multiplier?: number;                           // Default 100
+  spreadWidth?: number; // Width of spread in dollars
+  contracts?: number; // Number of contracts
+  multiplier?: number; // Default 100
   // profitTarget confirmation: N synchronized-quote bars at-or-above threshold required before firing (default 1 = fire on first cross)
   requiredHits?: number;
   // Internal: set by handler when unit='percent' to compute dollar threshold
-  entryCost?: number;                            // D-11: cost/credit of entry (negative = credit received)
-  entrySLRatio?: number;                         // Runtime-hydrated opening short/long ratio for slRatioMove
+  entryCost?: number; // D-11: cost/credit of entry (negative = credit received)
+  entrySLRatio?: number; // Runtime-hydrated opening short/long ratio for slRatioMove
 }
 
 export interface TriggerFireEvent {
   type: TriggerType;
-  firedAt: string;          // Timestamp when trigger fired
-  pnlAtFire: number;       // Strategy P&L when trigger fired
-  index: number;            // Index into pnlPath
-  detail?: string;          // Human-readable description
+  firedAt: string; // Timestamp when trigger fired
+  pnlAtFire: number; // Strategy P&L when trigger fired
+  index: number; // Index into pnlPath
+  detail?: string; // Human-readable description
 }
 
 export interface ExitTriggerResult {
-  triggers: TriggerFireEvent[];         // All triggers that fired (sorted by fire time)
+  triggers: TriggerFireEvent[]; // All triggers that fired (sorted by fire time)
   firstToFire: TriggerFireEvent | null; // Earliest trigger
   actualExit?: {
     timestamp: string;
     pnl: number;
-    pnlDifference: number;             // firstToFire.pnl - actualExit.pnl
+    pnlDifference: number; // firstToFire.pnl - actualExit.pnl
   };
-  partialCloses?: PartialClose[];       // Partial position closes from profitAction steps
+  partialCloses?: PartialClose[]; // Partial position closes from profitAction steps
   summary: string;
 }
 
@@ -104,7 +104,7 @@ export interface LegGroupResult {
 
 /** Parse "YYYY-MM-DD" to a Date at local midnight. */
 function parseDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
+  const [y, m, d] = dateStr.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
 
@@ -181,13 +181,11 @@ export function evaluateProfitAction(
   if (pnlPath.length === 0 || !trigger.steps?.length) {
     return { fireEvent: null, partialCloses };
   }
-  if (trigger.unit === 'percent' && trigger.entryCost == null) {
+  if (trigger.unit === "percent" && trigger.entryCost == null) {
     return { fireEvent: null, partialCloses };
   }
 
-  const scale = trigger.unit === 'percent'
-    ? Math.abs(trigger.entryCost!)
-    : 1;
+  const scale = trigger.unit === "percent" ? Math.abs(trigger.entryCost!) : 1;
 
   const normalizedSteps = [...trigger.steps]
     .sort((a, b) => a.armAt - b.armAt)
@@ -218,7 +216,7 @@ export function evaluateProfitAction(
           index: i,
           pnlAtFire: pnl * remainingAllocation * step.closeAllocationPct,
           allocation: closeAmt,
-          trigger: 'profitAction',
+          trigger: "profitAction",
         });
         remainingAllocation -= closeAmt;
       }
@@ -237,13 +235,14 @@ export function evaluateProfitAction(
     // Simplifies to: pnl <= activeFloor (when remainingAllocation > 0)
     if (activeFloor > -Infinity && remainingAllocation > 0 && pnl <= activeFloor) {
       const effectivePnl = pnl * remainingAllocation;
-      const detail = trigger.unit === 'percent'
-        ? `Profit action: stop adjusted to ${(activeFloor / scale * 100).toFixed(0)}% ($${activeFloor.toFixed(2)}) at max P&L $${runningMaxPnl.toFixed(2)}, hit at $${pnl.toFixed(2)} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
-        : `Profit action: stop adjusted to $${activeFloor.toFixed(2)} at max P&L $${runningMaxPnl.toFixed(2)}, hit at $${pnl.toFixed(2)} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`;
+      const detail =
+        trigger.unit === "percent"
+          ? `Profit action: stop adjusted to ${((activeFloor / scale) * 100).toFixed(0)}% ($${activeFloor.toFixed(2)}) at max P&L $${runningMaxPnl.toFixed(2)}, hit at $${pnl.toFixed(2)} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
+          : `Profit action: stop adjusted to $${activeFloor.toFixed(2)} at max P&L $${runningMaxPnl.toFixed(2)}, hit at $${pnl.toFixed(2)} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`;
 
       return {
         fireEvent: {
-          type: 'profitAction',
+          type: "profitAction",
           firedAt: point.timestamp,
           pnlAtFire: effectivePnl,
           index: i,
@@ -293,44 +292,44 @@ export function evaluateTrigger(
     let detail: string | undefined;
 
     switch (type) {
-      case 'profitTarget': {
+      case "profitTarget": {
         // unit='percent' requires entryCost; if missing, cannot compute — no fire
-        if (trigger.unit === 'percent' && trigger.entryCost == null) break;
+        if (trigger.unit === "percent" && trigger.entryCost == null) break;
         const requiredHits = trigger.requiredHits ?? 1;
-        const dollarThresholdPT = trigger.unit === 'percent'
-          ? threshold * Math.abs(trigger.entryCost!)
-          : threshold;
+        const dollarThresholdPT =
+          trigger.unit === "percent" ? threshold * Math.abs(trigger.entryCost!) : threshold;
         if (pnl >= dollarThresholdPT) {
           if (point.allLegsSync !== false) profitTargetHits++;
           if (profitTargetHits < requiredHits) break;
           fired = true;
-          detail = trigger.unit === 'percent'
-            ? `P&L $${pnl.toFixed(2)} >= ${(threshold * 100).toFixed(0)}% of $${Math.abs(trigger.entryCost!).toFixed(2)} ($${dollarThresholdPT.toFixed(2)})`
-            : `P&L $${pnl.toFixed(2)} >= target $${dollarThresholdPT.toFixed(2)}`;
+          detail =
+            trigger.unit === "percent"
+              ? `P&L $${pnl.toFixed(2)} >= ${(threshold * 100).toFixed(0)}% of $${Math.abs(trigger.entryCost!).toFixed(2)} ($${dollarThresholdPT.toFixed(2)})`
+              : `P&L $${pnl.toFixed(2)} >= target $${dollarThresholdPT.toFixed(2)}`;
         } else if (point.allLegsSync !== false) {
           profitTargetHits = 0;
         }
         break;
       }
 
-      case 'stopLoss': {
+      case "stopLoss": {
         // Normalize negative threshold — users may pass -2 meaning "stop at $2 loss"
         const absThreshold = Math.abs(threshold);
         // unit='percent' requires entryCost; if missing, cannot compute — no fire
-        if (trigger.unit === 'percent' && trigger.entryCost == null) break;
-        const dollarThresholdSL = trigger.unit === 'percent'
-          ? absThreshold * Math.abs(trigger.entryCost!)
-          : absThreshold;
+        if (trigger.unit === "percent" && trigger.entryCost == null) break;
+        const dollarThresholdSL =
+          trigger.unit === "percent" ? absThreshold * Math.abs(trigger.entryCost!) : absThreshold;
         if (pnl <= -dollarThresholdSL) {
           fired = true;
-          detail = trigger.unit === 'percent'
-            ? `P&L $${pnl.toFixed(2)} <= -${(absThreshold * 100).toFixed(0)}% of $${Math.abs(trigger.entryCost!).toFixed(2)} (-$${dollarThresholdSL.toFixed(2)})`
-            : `P&L $${pnl.toFixed(2)} <= stop -$${dollarThresholdSL.toFixed(2)}`;
+          detail =
+            trigger.unit === "percent"
+              ? `P&L $${pnl.toFixed(2)} <= -${(absThreshold * 100).toFixed(0)}% of $${Math.abs(trigger.entryCost!).toFixed(2)} (-$${dollarThresholdSL.toFixed(2)})`
+              : `P&L $${pnl.toFixed(2)} <= stop -$${dollarThresholdSL.toFixed(2)}`;
         }
         break;
       }
 
-      case 'trailingStop': {
+      case "trailingStop": {
         const trailAmt = trigger.trailAmount ?? threshold;
         const dropdown = runningMaxPnl - pnl;
         if (dropdown >= trailAmt && runningMaxPnl > -Infinity) {
@@ -340,7 +339,7 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'profitAction': {
+      case "profitAction": {
         // Delegate to evaluateProfitAction for the full path evaluation
         // (evaluateTrigger is called point-by-point in the loop, but profitAction
         //  needs full-path context for partial close tracking, so we handle it
@@ -349,7 +348,7 @@ export function evaluateTrigger(
         return paResult.fireEvent;
       }
 
-      case 'dteExit': {
+      case "dteExit": {
         if (!trigger.expiry) break;
         const pointDate = parseDate(extractDate(point.timestamp));
         const expiryDate = parseDate(trigger.expiry);
@@ -362,7 +361,7 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'ditExit': {
+      case "ditExit": {
         if (!trigger.openDate) break;
         const pointDate = parseDate(extractDate(point.timestamp));
         const openDate = parseDate(trigger.openDate);
@@ -374,8 +373,8 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'clockTimeExit': {
-        const clockTime = trigger.clockTime ?? '15:00';
+      case "clockTimeExit": {
+        const clockTime = trigger.clockTime ?? "15:00";
         const pointTime = extractTime(point.timestamp);
         if (pointTime >= clockTime) {
           fired = true;
@@ -384,7 +383,7 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'underlyingPriceMove': {
+      case "underlyingPriceMove": {
         if (!trigger.underlyingPrices) break;
         const price = trigger.underlyingPrices.get(point.timestamp);
         if (price == null) break;
@@ -400,7 +399,7 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'positionDelta': {
+      case "positionDelta": {
         const netDelta = point.netDelta ?? 0;
         if (trigger.exitAbove != null) {
           if (netDelta > trigger.exitAbove) {
@@ -419,7 +418,7 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'perLegDelta': {
+      case "perLegDelta": {
         if (!point.legGreeks) break;
         if (trigger.legIndex != null) {
           // Target a specific leg
@@ -458,7 +457,7 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'vixMove': {
+      case "vixMove": {
         if (!trigger.vixPrices) break;
         const vix = trigger.vixPrices.get(point.timestamp);
         if (vix == null) break;
@@ -474,7 +473,7 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'vix9dMove': {
+      case "vix9dMove": {
         if (!trigger.vix9dPrices) break;
         const vix9d = trigger.vix9dPrices.get(point.timestamp);
         if (vix9d == null) break;
@@ -490,7 +489,7 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'vix9dVixRatio': {
+      case "vix9dVixRatio": {
         if (!trigger.vixPrices || !trigger.vix9dPrices) break;
         const vix = trigger.vixPrices.get(point.timestamp);
         const vix9d = trigger.vix9dPrices.get(point.timestamp);
@@ -506,7 +505,7 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'slRatioThreshold': {
+      case "slRatioThreshold": {
         const sw = trigger.spreadWidth ?? 0;
         const ct = trigger.contracts ?? 1;
         const mp = trigger.multiplier ?? 100;
@@ -519,13 +518,13 @@ export function evaluateTrigger(
         break;
       }
 
-      case 'slRatioMove': {
+      case "slRatioMove": {
         const sw = trigger.spreadWidth ?? 0;
         const ct = trigger.contracts ?? 1;
         const mp = trigger.multiplier ?? 100;
         if (sw === 0) break;
         const slRatio = computeSLRatio(point, legs, sw, ct, mp);
-        if (initialSLRatio === null && typeof trigger.entrySLRatio === 'number') {
+        if (initialSLRatio === null && typeof trigger.entrySLRatio === "number") {
           initialSLRatio = trigger.entrySLRatio;
         }
         if (initialSLRatio === null) {
@@ -563,11 +562,7 @@ export function evaluateTrigger(
  * Compute per-group P&L at each timestamp from leg prices.
  * groupPnl[t] = sum over legIndices of (legPrices[i] - entryPrice[i]) * quantity[i] * multiplier[i]
  */
-function computeGroupPnl(
-  pnlPath: PnlPoint[],
-  legs: ReplayLeg[],
-  legIndices: number[],
-): number[] {
+function computeGroupPnl(pnlPath: PnlPoint[], legs: ReplayLeg[], legIndices: number[]): number[] {
   return pnlPath.map((point) => {
     let groupPnl = 0;
     for (const idx of legIndices) {
@@ -605,7 +600,7 @@ export function analyzeExitTriggers(config: {
   const fireEvents: TriggerFireEvent[] = [];
   let allPartialCloses: PartialClose[] = [];
   for (const trigger of triggers) {
-    if (trigger.type === 'profitAction') {
+    if (trigger.type === "profitAction") {
       // Use the partial-close-aware helper for profitAction
       const paResult = evaluateProfitAction(trigger, pnlPath, legs);
       if (paResult.fireEvent) {
@@ -628,7 +623,7 @@ export function analyzeExitTriggers(config: {
   const firstToFire = fireEvents.length > 0 ? fireEvents[0] : null;
 
   // Actual exit comparison
-  let actualExit: ExitTriggerResult['actualExit'];
+  let actualExit: ExitTriggerResult["actualExit"];
   if (actualExitTimestamp && firstToFire) {
     // Find closest point to actualExitTimestamp
     let closestIdx = 0;
@@ -662,12 +657,14 @@ export function analyzeExitTriggers(config: {
   if (!firstToFire) {
     summary = `No triggers fired across ${pnlPath.length} data points.`;
   } else if (actualExit) {
-    const betterWorse = actualExit.pnlDifference > 0 ? 'better' : 'worse';
-    summary = `${firstToFire.type} fired at ${firstToFire.firedAt} (P&L $${firstToFire.pnlAtFire.toFixed(2)}). ` +
+    const betterWorse = actualExit.pnlDifference > 0 ? "better" : "worse";
+    summary =
+      `${firstToFire.type} fired at ${firstToFire.firedAt} (P&L $${firstToFire.pnlAtFire.toFixed(2)}). ` +
       `Actual exit at ${actualExit.timestamp} (P&L $${actualExit.pnl.toFixed(2)}). ` +
       `Trigger was $${Math.abs(actualExit.pnlDifference).toFixed(2)} ${betterWorse}.`;
   } else {
-    summary = `${firstToFire.type} fired first at ${firstToFire.firedAt} (P&L $${firstToFire.pnlAtFire.toFixed(2)}). ` +
+    summary =
+      `${firstToFire.type} fired first at ${firstToFire.firedAt} (P&L $${firstToFire.pnlAtFire.toFixed(2)}). ` +
       `${fireEvents.length} trigger(s) fired total.`;
   }
 
@@ -691,9 +688,7 @@ export function analyzeExitTriggers(config: {
         strategyPnl: groupPnlArr[idx],
         // Filter legPrices/legGreeks to only this group's legs
         legPrices: group.legIndices.map((li) => point.legPrices[li] ?? 0),
-        legGreeks: point.legGreeks
-          ? group.legIndices.map((li) => point.legGreeks![li])
-          : undefined,
+        legGreeks: point.legGreeks ? group.legIndices.map((li) => point.legGreeks![li]) : undefined,
       }));
 
       // Build group legs subset
@@ -710,7 +705,7 @@ export function analyzeExitTriggers(config: {
       const groupFirstToFire = groupFireEvents.length > 0 ? groupFireEvents[0] : null;
 
       // Actual exit for group
-      let groupActualExit: ExitTriggerResult['actualExit'];
+      let groupActualExit: ExitTriggerResult["actualExit"];
       if (actualExitTimestamp && groupFirstToFire) {
         let closestIdx = pnlPath.length - 1;
         for (let i = 0; i < pnlPath.length; i++) {

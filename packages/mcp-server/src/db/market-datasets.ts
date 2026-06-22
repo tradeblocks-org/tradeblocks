@@ -4,10 +4,7 @@ import { getDataRoot } from "./data-root.ts";
 import { writeParquetAtomic, writeParquetPartition } from "./parquet-writer.ts";
 
 export type CanonicalSingleFileDataset = "daily" | "date_context";
-export type CanonicalPartitionedDataset =
-  | "intraday"
-  | "option_chain"
-  | "option_quote_minutes";
+export type CanonicalPartitionedDataset = "intraday" | "option_chain" | "option_quote_minutes";
 export type CanonicalMarketDataset = CanonicalSingleFileDataset | CanonicalPartitionedDataset;
 
 const SINGLE_FILE_DATASETS: Record<CanonicalSingleFileDataset, string> = {
@@ -81,12 +78,24 @@ export interface DatasetDef {
 }
 
 export const DATASETS_V3: Record<string, DatasetDef> = {
-  spot:                 { subdir: "spot",                 partitionKeys: ["ticker", "date"],     filename: "data.parquet" },
-  enriched:             { subdir: "enriched",             partitionKeys: ["ticker"],             filename: "data.parquet" },
-  enriched_context:     { subdir: "enriched/context",     partitionKeys: [],                     filename: "data.parquet" },
-  option_chain:         { subdir: "option_chain",         partitionKeys: ["underlying", "date"], filename: "data.parquet" },
-  option_quote_minutes: { subdir: "option_quote_minutes", partitionKeys: ["underlying", "date"], filename: "data.parquet" },
-  option_oi_daily:      { subdir: "option_oi_daily",      partitionKeys: ["underlying", "date"], filename: "data.parquet" },
+  spot: { subdir: "spot", partitionKeys: ["ticker", "date"], filename: "data.parquet" },
+  enriched: { subdir: "enriched", partitionKeys: ["ticker"], filename: "data.parquet" },
+  enriched_context: { subdir: "enriched/context", partitionKeys: [], filename: "data.parquet" },
+  option_chain: {
+    subdir: "option_chain",
+    partitionKeys: ["underlying", "date"],
+    filename: "data.parquet",
+  },
+  option_quote_minutes: {
+    subdir: "option_quote_minutes",
+    partitionKeys: ["underlying", "date"],
+    filename: "data.parquet",
+  },
+  option_oi_daily: {
+    subdir: "option_oi_daily",
+    partitionKeys: ["underlying", "date"],
+    filename: "data.parquet",
+  },
 };
 
 // ------ Per-dataset write helpers ------
@@ -102,12 +111,18 @@ export const DATASETS_V3: Record<string, DatasetDef> = {
 
 export async function writeSpotPartition(
   conn: DuckDBConnection,
-  args: { dataDir: string; ticker: string; date: string; selectQuery: string; compression?: string },
+  args: {
+    dataDir: string;
+    ticker: string;
+    date: string;
+    selectQuery: string;
+    compression?: string;
+  },
 ): Promise<{ rowCount: number }> {
   const def = DATASETS_V3.spot;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
-    partitions: { ticker: args.ticker, date: args.date },   // order matches def.partitionKeys
+    partitions: { ticker: args.ticker, date: args.date }, // order matches def.partitionKeys
     selectQuery: args.selectQuery,
     compression: args.compression,
     filename: def.filename,
@@ -116,7 +131,13 @@ export async function writeSpotPartition(
 
 export async function writeChainPartition(
   conn: DuckDBConnection,
-  args: { dataDir: string; underlying: string; date: string; selectQuery: string; compression?: string },
+  args: {
+    dataDir: string;
+    underlying: string;
+    date: string;
+    selectQuery: string;
+    compression?: string;
+  },
 ): Promise<{ rowCount: number }> {
   const def = DATASETS_V3.option_chain;
   return writeParquetPartition(conn, {
@@ -130,7 +151,13 @@ export async function writeChainPartition(
 
 export async function writeQuoteMinutesPartition(
   conn: DuckDBConnection,
-  args: { dataDir: string; underlying: string; date: string; selectQuery: string; compression?: string },
+  args: {
+    dataDir: string;
+    underlying: string;
+    date: string;
+    selectQuery: string;
+    compression?: string;
+  },
 ): Promise<{ rowCount: number }> {
   const def = DATASETS_V3.option_quote_minutes;
   // Sort rows by (ticker, time) before writing so DuckDB row groups in the
@@ -162,7 +189,13 @@ export async function writeQuoteMinutesPartition(
 
 export async function writeOiDailyPartition(
   conn: DuckDBConnection,
-  args: { dataDir: string; underlying: string; date: string; selectQuery: string; compression?: string },
+  args: {
+    dataDir: string;
+    underlying: string;
+    date: string;
+    selectQuery: string;
+    compression?: string;
+  },
 ): Promise<{ rowCount: number }> {
   const def = DATASETS_V3.option_oi_daily;
   // Sort rows by ticker before writing so DuckDB row groups carry tight

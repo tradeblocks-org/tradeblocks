@@ -55,8 +55,8 @@ export interface WhatIfResults2D {
   yRanges: Array<{ min: number; max: number }>;
   totalTrades: number;
   // Stats
-  inRange: QuadrantStats;     // All criteria met (kept)
-  outOfRange: QuadrantStats;  // At least one criterion not met
+  inRange: QuadrantStats; // All criteria met (kept)
+  outOfRange: QuadrantStats; // At least one criterion not met
   // Summary
   keptPct: number;
   allAvg: number;
@@ -88,19 +88,19 @@ interface WhatIfExplorer2DProps {
   onRangeChange?: (xMin: number, xMax: number, yRanges: YAxisRange[]) => void;
 }
 
-function calculateStats(
-  trades: TradeWithData[],
-  metric: ThresholdMetric
-): QuadrantStats {
+function calculateStats(trades: TradeWithData[], metric: ThresholdMetric): QuadrantStats {
   if (trades.length === 0) {
     return { count: 0, avgMetric: 0, winRate: 0, totalPl: 0 };
   }
 
   const getMetricValue = (t: TradeWithData) => {
     switch (metric) {
-      case "rom": return t.rom;
-      case "plPct": return t.plPct;
-      default: return t.pl;
+      case "rom":
+        return t.rom;
+      case "plPct":
+        return t.plPct;
+      default:
+        return t.pl;
     }
   };
 
@@ -177,7 +177,7 @@ export function WhatIfExplorer2D({
 
   // Range slider state for each Y axis
   const [yRangeValues, setYRangeValues] = useState<Array<[number, number]>>(
-    yAxes.map((_, i) => [axisRanges.y[i]?.min ?? 0, axisRanges.y[i]?.max ?? 1])
+    yAxes.map((_, i) => [axisRanges.y[i]?.min ?? 0, axisRanges.y[i]?.max ?? 1]),
   );
 
   // Minimum % of trades to keep for "Best Avg" optimization
@@ -188,10 +188,7 @@ export function WhatIfExplorer2D({
   useEffect(() => {
     if (tradesWithData.length > 0) {
       setXRangeValues([axisRanges.x.min, axisRanges.x.max]);
-      setYRangeValues(yAxes.map((_, i) => [
-        axisRanges.y[i]?.min ?? 0,
-        axisRanges.y[i]?.max ?? 1,
-      ]));
+      setYRangeValues(yAxes.map((_, i) => [axisRanges.y[i]?.min ?? 0, axisRanges.y[i]?.max ?? 1]));
     }
   }, [tradesWithData.length, axisRanges, yAxes]);
 
@@ -214,9 +211,12 @@ export function WhatIfExplorer2D({
 
     const getMetricValue = (t: TradeWithData) => {
       switch (metric) {
-        case "rom": return t.rom;
-        case "plPct": return t.plPct;
-        default: return t.pl;
+        case "rom":
+          return t.rom;
+        case "plPct":
+          return t.plPct;
+        default:
+          return t.pl;
       }
     };
 
@@ -245,7 +245,8 @@ export function WhatIfExplorer2D({
     const outOfRangeStats = calculateStats(outOfRange, metric);
 
     // Overall stats
-    const allAvg = tradesWithData.reduce((sum, t) => sum + getMetricValue(t), 0) / tradesWithData.length;
+    const allAvg =
+      tradesWithData.reduce((sum, t) => sum + getMetricValue(t), 0) / tradesWithData.length;
     const allTotalPl = tradesWithData.reduce((sum, t) => sum + t.pl, 0);
 
     return {
@@ -267,29 +268,35 @@ export function WhatIfExplorer2D({
   const findOptimalRange1D = useCallback(
     (
       axisIndex: number, // -1 for X, 0+ for Y axes
-      strategy: OptimizeStrategy
+      strategy: OptimizeStrategy,
     ): [number, number] | null => {
       if (tradesWithData.length < 3) return null;
 
-      const values = axisIndex === -1
-        ? tradesWithData.map((t) => t.xValue)
-        : tradesWithData.map((t) => t.yValues[axisIndex]);
+      const values =
+        axisIndex === -1
+          ? tradesWithData.map((t) => t.xValue)
+          : tradesWithData.map((t) => t.yValues[axisIndex]);
       const uniqueVals = [...new Set(values)].sort((a, b) => a - b);
 
       if (uniqueVals.length < 2) return null;
 
       const getMetricValue = (t: TradeWithData) => {
         switch (metric) {
-          case "rom": return t.rom;
-          case "plPct": return t.plPct;
-          default: return t.pl;
+          case "rom":
+            return t.rom;
+          case "plPct":
+            return t.plPct;
+          default:
+            return t.pl;
         }
       };
 
       // Sample if too many unique values
       const sampleSize = Math.min(uniqueVals.length, 30);
       const step = Math.max(1, Math.floor(uniqueVals.length / sampleSize));
-      const sampledVals = uniqueVals.filter((_, i) => i % step === 0 || i === uniqueVals.length - 1);
+      const sampledVals = uniqueVals.filter(
+        (_, i) => i % step === 0 || i === uniqueVals.length - 1,
+      );
 
       // Get current ranges for OTHER axes (to constrain filtering)
       const [currentXMin, currentXMax] = xRangeValues;
@@ -362,7 +369,7 @@ export function WhatIfExplorer2D({
 
       return bestRange;
     },
-    [tradesWithData, metric, minKeptPct, xRangeValues, yRangeValues]
+    [tradesWithData, metric, minKeptPct, xRangeValues, yRangeValues],
   );
 
   // Optimization for all axes together using coordinate descent
@@ -373,9 +380,12 @@ export function WhatIfExplorer2D({
 
       const getMetricValue = (t: TradeWithData) => {
         switch (metric) {
-          case "rom": return t.rom;
-          case "plPct": return t.plPct;
-          default: return t.pl;
+          case "rom":
+            return t.rom;
+          case "plPct":
+            return t.plPct;
+          default:
+            return t.pl;
         }
       };
 
@@ -389,22 +399,20 @@ export function WhatIfExplorer2D({
 
       const sampledX = getSampledValues(tradesWithData.map((t) => t.xValue));
       const sampledYs = yAxes.map((_, i) =>
-        getSampledValues(tradesWithData.map((t) => t.yValues[i]))
+        getSampledValues(tradesWithData.map((t) => t.yValues[i])),
       );
 
       if (sampledX.length < 2 || sampledYs.some((s) => s.length < 2)) return null;
 
       // Evaluate a complete set of ranges
-      const evaluateRanges = (
-        xRange: [number, number],
-        yRanges: Array<[number, number]>
-      ) => {
+      const evaluateRanges = (xRange: [number, number], yRanges: Array<[number, number]>) => {
         const kept = tradesWithData.filter((t) => {
           if (t.xValue < xRange[0] || t.xValue > xRange[1]) return false;
           return t.yValues.every((v, i) => v >= yRanges[i][0] && v <= yRanges[i][1]);
         });
 
-        if (kept.length === 0) return { keptCount: 0, keptPct: 0, totalPl: 0, avgMetric: 0, score: -Infinity };
+        if (kept.length === 0)
+          return { keptCount: 0, keptPct: 0, totalPl: 0, avgMetric: 0, score: -Infinity };
 
         const totalPl = kept.reduce((sum, t) => sum + t.pl, 0);
         const avgMetric = kept.reduce((sum, t) => sum + getMetricValue(t), 0) / kept.length;
@@ -429,7 +437,7 @@ export function WhatIfExplorer2D({
       const optimizeAxis = (
         axisIndex: number, // -1 for X, 0+ for Y
         currentX: [number, number],
-        currentYs: Array<[number, number]>
+        currentYs: Array<[number, number]>,
       ): [number, number] => {
         const sampled = axisIndex === -1 ? sampledX : sampledYs[axisIndex];
         let bestRange: [number, number] = axisIndex === -1 ? currentX : currentYs[axisIndex];
@@ -484,7 +492,7 @@ export function WhatIfExplorer2D({
 
       return { x: currentX, y: currentYs };
     },
-    [tradesWithData, yAxes, metric, minKeptPct]
+    [tradesWithData, yAxes, metric, minKeptPct],
   );
 
   // Handle optimize button click
@@ -492,10 +500,9 @@ export function WhatIfExplorer2D({
     (strategy: OptimizeStrategy, target: OptimizeTarget) => {
       if (strategy === "reset") {
         setXRangeValues([axisRanges.x.min, axisRanges.x.max]);
-        setYRangeValues(yAxes.map((_, i) => [
-          axisRanges.y[i]?.min ?? 0,
-          axisRanges.y[i]?.max ?? 1,
-        ]));
+        setYRangeValues(
+          yAxes.map((_, i) => [axisRanges.y[i]?.min ?? 0, axisRanges.y[i]?.max ?? 1]),
+        );
         return;
       }
 
@@ -521,7 +528,7 @@ export function WhatIfExplorer2D({
         }
       }
     },
-    [findOptimalRange1D, findOptimalRangeAll, axisRanges, yAxes]
+    [findOptimalRange1D, findOptimalRangeAll, axisRanges, yAxes],
   );
 
   // Get field info for display
@@ -557,7 +564,9 @@ export function WhatIfExplorer2D({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5">
-          <div className="text-xs text-muted-foreground mb-1.5">Best Avg (keep min % of trades)</div>
+          <div className="text-xs text-muted-foreground mb-1.5">
+            Best Avg (keep min % of trades)
+          </div>
           <div className="flex items-center gap-2">
             <Input
               type="number"
@@ -602,23 +611,25 @@ export function WhatIfExplorer2D({
   );
 
   // Render stats cell
-  const renderStatsCell = (
-    stats: QuadrantStats,
-    label: string,
-    isKept: boolean
-  ) => (
-    <div className={`p-2 rounded ${isKept ? "bg-primary/10 border border-primary/30" : "bg-muted/50"}`}>
+  const renderStatsCell = (stats: QuadrantStats, label: string, isKept: boolean) => (
+    <div
+      className={`p-2 rounded ${isKept ? "bg-primary/10 border border-primary/30" : "bg-muted/50"}`}
+    >
       <div className="flex items-center gap-1 mb-1">
         {isKept && <Check className="h-3 w-3 text-primary" />}
-        <span className="text-xs font-medium">{label} ({stats.count})</span>
+        <span className="text-xs font-medium">
+          {label} ({stats.count})
+        </span>
       </div>
-      <div className={`text-sm font-medium ${stats.avgMetric > 0 ? "text-green-600 dark:text-green-400" : stats.avgMetric < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+      <div
+        className={`text-sm font-medium ${stats.avgMetric > 0 ? "text-green-600 dark:text-green-400" : stats.avgMetric < 0 ? "text-red-600 dark:text-red-400" : ""}`}
+      >
         Avg: {formatMetric(stats.avgMetric)}
       </div>
-      <div className="text-xs text-muted-foreground">
-        Win: {stats.winRate.toFixed(0)}%
-      </div>
-      <div className={`text-xs ${stats.totalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+      <div className="text-xs text-muted-foreground">Win: {stats.winRate.toFixed(0)}%</div>
+      <div
+        className={`text-xs ${stats.totalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+      >
         P/L: {formatPl(stats.totalPl)}
       </div>
     </div>
@@ -648,9 +659,7 @@ export function WhatIfExplorer2D({
         {/* X-Axis Slider */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">
-              X: {xLabel}
-            </Label>
+            <Label className="text-xs text-muted-foreground">X: {xLabel}</Label>
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium">
                 {whatIfResults.xRangeMin.toFixed(2)} - {whatIfResults.xRangeMax.toFixed(2)}
@@ -675,7 +684,7 @@ export function WhatIfExplorer2D({
           const yLabel = yAxis.label;
           // Color dots matching AXIS_COLORS in scatter-chart.tsx
           const axisColors = [
-            "rgb(59, 130, 246)",  // Blue (y1)
+            "rgb(59, 130, 246)", // Blue (y1)
             "rgb(249, 115, 22)", // Orange (y2)
             "rgb(20, 184, 166)", // Teal (y3)
           ];
@@ -729,26 +738,34 @@ export function WhatIfExplorer2D({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t">
         <div>
           <div className="text-muted-foreground text-xs">Total P/L (All)</div>
-          <div className={`font-medium ${whatIfResults.allTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+          <div
+            className={`font-medium ${whatIfResults.allTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+          >
             {formatPl(whatIfResults.allTotalPl)}
           </div>
         </div>
         <div>
           <div className="text-muted-foreground text-xs">Total P/L (In Range)</div>
-          <div className={`font-medium ${whatIfResults.keptTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+          <div
+            className={`font-medium ${whatIfResults.keptTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+          >
             {formatPl(whatIfResults.keptTotalPl)}
           </div>
         </div>
         <div>
           <div className="text-muted-foreground text-xs">P/L Change if Filtered</div>
-          <div className={`font-medium ${whatIfResults.keptTotalPl - whatIfResults.allTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+          <div
+            className={`font-medium ${whatIfResults.keptTotalPl - whatIfResults.allTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+          >
             {whatIfResults.keptTotalPl - whatIfResults.allTotalPl >= 0 ? "+" : ""}
             {formatPl(whatIfResults.keptTotalPl - whatIfResults.allTotalPl)}
           </div>
         </div>
         <div>
           <div className="text-muted-foreground text-xs">vs All Trades</div>
-          <div className={`font-medium ${whatIfResults.improvement > 0 ? "text-green-600 dark:text-green-400" : whatIfResults.improvement < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+          <div
+            className={`font-medium ${whatIfResults.improvement > 0 ? "text-green-600 dark:text-green-400" : whatIfResults.improvement < 0 ? "text-red-600 dark:text-red-400" : ""}`}
+          >
             {whatIfResults.improvement > 0 ? "+" : ""}
             {formatMetric(whatIfResults.improvement)}
           </div>
@@ -757,8 +774,8 @@ export function WhatIfExplorer2D({
 
       {/* Footer summary */}
       <div className="mt-3 pt-2 border-t text-xs text-muted-foreground">
-        Keeping {whatIfResults.keptPct.toFixed(0)}% of trades ({whatIfResults.inRange.count} of {whatIfResults.totalTrades}).
-        {" "}All trades avg: {formatMetric(whatIfResults.allAvg)}
+        Keeping {whatIfResults.keptPct.toFixed(0)}% of trades ({whatIfResults.inRange.count} of{" "}
+        {whatIfResults.totalTrades}). All trades avg: {formatMetric(whatIfResults.allAvg)}
       </div>
     </div>
   );

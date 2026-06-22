@@ -73,7 +73,7 @@ const isWindows = process.platform === "win32";
  * a DuckDB-compatible string like "90GB".
  */
 function defaultMemoryLimit(): string {
-  const totalGB = os.totalmem() / (1024 ** 3);
+  const totalGB = os.totalmem() / 1024 ** 3;
   const targetGB = Math.max(1, Math.floor(totalGB * 0.75));
   return `${targetGB}GB`;
 }
@@ -121,7 +121,12 @@ async function getProcessParentPid(pid: number): Promise<number | null> {
   try {
     if (isWindows) {
       const { stdout } = await execFileAsync("wmic", [
-        "process", "where", `ProcessId=${pid}`, "get", "ParentProcessId", "/value",
+        "process",
+        "where",
+        `ProcessId=${pid}`,
+        "get",
+        "ParentProcessId",
+        "/value",
       ]);
       const match = stdout.match(/ParentProcessId=(\d+)/);
       if (!match) return null;
@@ -140,7 +145,12 @@ async function getProcessCommand(pid: number): Promise<string | null> {
   try {
     if (isWindows) {
       const { stdout } = await execFileAsync("wmic", [
-        "process", "where", `ProcessId=${pid}`, "get", "CommandLine", "/value",
+        "process",
+        "where",
+        `ProcessId=${pid}`,
+        "get",
+        "CommandLine",
+        "/value",
       ]);
       const match = stdout.match(/CommandLine=(.+)/);
       if (!match) return null;
@@ -169,7 +179,7 @@ async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boole
 async function tryRecoverLockByTerminatingStaleProcess(
   errorMessage: string,
   dbPath: string,
-  forceRecovery: boolean
+  forceRecovery: boolean,
 ): Promise<boolean> {
   const lockHolderPid = parseLockHolderPid(errorMessage);
   if (!lockHolderPid || lockHolderPid === process.pid) {
@@ -192,7 +202,8 @@ async function tryRecoverLockByTerminatingStaleProcess(
     command.includes("packages\\mcp-server\\server\\index.js");
   // Normalize command paths for consistent comparison (Windows backslashes → forward slashes)
   const normalizedCommand = command.replace(/\\/g, "/");
-  const targetsSameDb = normalizedCommand.includes(normalizedDbPath) || normalizedCommand.includes(normalizedDbDir);
+  const targetsSameDb =
+    normalizedCommand.includes(normalizedDbPath) || normalizedCommand.includes(normalizedDbDir);
 
   if (!isTradeblocksProcess || !targetsSameDb) {
     return false;
@@ -203,9 +214,7 @@ async function tryRecoverLockByTerminatingStaleProcess(
   // Windows: child keeps original PPID even after parent dies — check if parent is still alive.
   // Only kill non-orphaned processes if forceRecovery is explicitly enabled.
   const ppid = await getProcessParentPid(lockHolderPid);
-  const orphaned = isWindows
-    ? (ppid !== null && !isProcessAlive(ppid))
-    : ppid === 1;
+  const orphaned = isWindows ? ppid !== null && !isProcessAlive(ppid) : ppid === 1;
   if (!orphaned && !forceRecovery) {
     return false;
   }
@@ -221,12 +230,12 @@ async function tryRecoverLockByTerminatingStaleProcess(
 
   const exited = await waitForProcessExit(
     lockHolderPid,
-    Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 1500
+    Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 1500,
   );
 
   if (exited) {
     console.error(
-      `Recovered DuckDB lock at ${dbPath} by stopping ${reason} tradeblocks-mcp process PID ${lockHolderPid}.`
+      `Recovered DuckDB lock at ${dbPath} by stopping ${reason} tradeblocks-mcp process PID ${lockHolderPid}.`,
     );
   }
 
@@ -267,7 +276,7 @@ function resolveMarketDbPath(dataDir: string): string {
 async function attachMarketDb(
   conn: DuckDBConnection,
   marketDbPath: string,
-  mode: "read_write" | "read_only"
+  mode: "read_write" | "read_only",
 ): Promise<void> {
   await fs.mkdir(path.dirname(marketDbPath), { recursive: true });
   const readOnlyClause = mode === "read_only" ? " (READ_ONLY)" : "";
@@ -278,9 +287,17 @@ async function attachMarketDb(
     const msg = error instanceof Error ? error.message : String(error);
     if (msg.includes("corrupt") || msg.includes("Invalid") || msg.includes("cannot open")) {
       console.error(`market.duckdb appears corrupted at ${marketDbPath}. Recreating.`);
-      try { await fs.unlink(marketDbPath); } catch { /* file may not exist */ }
+      try {
+        await fs.unlink(marketDbPath);
+      } catch {
+        /* file may not exist */
+      }
       // Also try removing WAL file
-      try { await fs.unlink(marketDbPath + ".wal"); } catch { /* ignore */ }
+      try {
+        await fs.unlink(marketDbPath + ".wal");
+      } catch {
+        /* ignore */
+      }
       await conn.run(`ATTACH '${escapedPath}' AS market${readOnlyClause}`);
     } else {
       throw new Error(`Failed to attach market.duckdb at ${marketDbPath}: ${msg}`);
@@ -303,7 +320,7 @@ async function detachMarketDb(conn: DuckDBConnection): Promise<void> {
 async function openReadWriteConnection(
   dbPath: string,
   threads: string,
-  memoryLimit: string
+  memoryLimit: string,
 ): Promise<DuckDBConnection> {
   // enable_external_access must be "true" at instance creation to allow ATTACH of local files.
   // DuckDB 1.4+ blocks all filesystem operations (including local ATTACH) when set to "false"
@@ -373,7 +390,10 @@ async function openReadWriteConnection(
     const blocksDir = (await import("../sync/index.ts")).getBlocksDir(dataRoot);
     await migrateMetadataToJson(connection, dataRoot, blocksDir);
   } catch (err) {
-    console.warn("[json-migration] Migration failed (non-fatal):", err instanceof Error ? err.message : err);
+    console.warn(
+      "[json-migration] Migration failed (non-fatal):",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   connectionMode = "read_write";
@@ -384,7 +404,7 @@ async function openReadWriteConnection(
 async function openReadOnlyConnection(
   dbPath: string,
   threads: string,
-  memoryLimit: string
+  memoryLimit: string,
 ): Promise<DuckDBConnection> {
   // enable_external_access must be "true" at instance creation to allow ATTACH.
   // We do NOT call SET enable_external_access = false because it also blocks local
@@ -405,11 +425,19 @@ async function openReadOnlyConnection(
 
 function resetConnectionState(): void {
   if (connection) {
-    try { connection.closeSync(); } catch { /* non-fatal */ }
+    try {
+      connection.closeSync();
+    } catch {
+      /* non-fatal */
+    }
   }
   connection = null;
   if (instance) {
-    try { instance.closeSync(); } catch { /* non-fatal */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* non-fatal */
+    }
   }
   instance = null;
   connectionMode = null;
@@ -469,7 +497,11 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
     // Lock recovery: auto-kill orphaned tradeblocks-mcp processes (PPID=1) that hold the lock.
     // With DUCKDB_LOCK_RECOVERY=true, also kills non-orphaned holders (force mode).
     if (isLockError(errorMessage)) {
-      const recovered = await tryRecoverLockByTerminatingStaleProcess(errorMessage, dbPath, forceRecovery);
+      const recovered = await tryRecoverLockByTerminatingStaleProcess(
+        errorMessage,
+        dbPath,
+        forceRecovery,
+      );
       if (recovered) {
         // DuckDB file locks may linger briefly after process death — retry with backoff
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -484,7 +516,7 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
             if (attempt < 2 && isLockError(retryMsg)) continue;
             resetConnectionState();
             throw new Error(
-              `Failed to initialize DuckDB at ${dbPath} after lock recovery: ${retryMsg}`
+              `Failed to initialize DuckDB at ${dbPath} after lock recovery: ${retryMsg}`,
             );
           }
         }
@@ -503,7 +535,7 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
       throw new Error(
         `DuckDB database appears corrupted at ${dbPath}. ` +
           `Please delete the file manually and restart. ` +
-          `Original error: ${errorMessage}`
+          `Original error: ${errorMessage}`,
       );
     }
 
@@ -520,8 +552,16 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
  */
 export async function closeConnection(): Promise<void> {
   if (connection) {
-    try { await connection.run("CHECKPOINT"); } catch { /* non-fatal */ }
-    try { await detachMarketDb(connection); } catch { /* non-fatal, log debug */ }
+    try {
+      await connection.run("CHECKPOINT");
+    } catch {
+      /* non-fatal */
+    }
+    try {
+      await detachMarketDb(connection);
+    } catch {
+      /* non-fatal, log debug */
+    }
     try {
       // closeSync is the synchronous close method for DuckDB connections
       connection.closeSync();
@@ -536,7 +576,11 @@ export async function closeConnection(): Promise<void> {
   // Close the DuckDB instance to release the file lock.
   // Without this, the native handle leaks until GC and blocks subsequent RW opens.
   if (instance) {
-    try { instance.closeSync(); } catch { /* non-fatal */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* non-fatal */
+    }
   }
   instance = null;
   connectionMode = null;
@@ -554,7 +598,7 @@ export async function closeConnection(): Promise<void> {
  */
 export async function upgradeToReadWrite(
   dataDir: string,
-  options?: { fallbackToReadOnly?: boolean }
+  options?: { fallbackToReadOnly?: boolean },
 ): Promise<DuckDBConnection> {
   if (connectionMode === "read_write" && connection) return connection;
   await closeConnection();
@@ -599,9 +643,12 @@ export async function upgradeToReadWrite(
     }
   }
 
-  throw lastError || new Error(
-    "Cannot acquire DuckDB write lock. Another process holds it. " +
-    "Kill other tradeblocks-mcp processes or restart Claude Code."
+  throw (
+    lastError ||
+    new Error(
+      "Cannot acquire DuckDB write lock. Another process holds it. " +
+        "Kill other tradeblocks-mcp processes or restart Claude Code.",
+    )
   );
 }
 
@@ -666,9 +713,7 @@ export interface MarketOnlyConnection {
   close(): Promise<void>;
 }
 
-export async function openMarketOnlyConnection(
-  baseDir: string,
-): Promise<MarketOnlyConnection> {
+export async function openMarketOnlyConnection(baseDir: string): Promise<MarketOnlyConnection> {
   const marketDbPath = resolveMarketDbPath(baseDir);
 
   // `:memory:` host means the connection does not open any on-disk database
@@ -704,10 +749,26 @@ export async function openMarketOnlyConnection(
     // for the next reader. DETACH is best-effort — if it fails (e.g. an
     // in-flight statement still references the catalog), we still want to
     // close the handle so subsequent processes can acquire the RW lock.
-    try { await conn.run("CHECKPOINT market"); } catch { /* non-fatal */ }
-    try { await detachMarketDb(conn); } catch { /* non-fatal */ }
-    try { conn.closeSync(); } catch { /* non-fatal */ }
-    try { memoryInstance.closeSync(); } catch { /* non-fatal */ }
+    try {
+      await conn.run("CHECKPOINT market");
+    } catch {
+      /* non-fatal */
+    }
+    try {
+      await detachMarketDb(conn);
+    } catch {
+      /* non-fatal */
+    }
+    try {
+      conn.closeSync();
+    } catch {
+      /* non-fatal */
+    }
+    try {
+      memoryInstance.closeSync();
+    } catch {
+      /* non-fatal */
+    }
   };
 
   return { conn, marketDbPath, close };
@@ -800,8 +861,16 @@ export async function openMarketParquetConnection(
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
-    try { conn.closeSync(); } catch { /* non-fatal */ }
-    try { memoryInstance.closeSync(); } catch { /* non-fatal */ }
+    try {
+      conn.closeSync();
+    } catch {
+      /* non-fatal */
+    }
+    try {
+      memoryInstance.closeSync();
+    } catch {
+      /* non-fatal */
+    }
   };
 
   return { conn, dataRoot, close };
@@ -815,9 +884,7 @@ export async function openMarketParquetConnection(
  */
 export type MarketReadOnlyConnection = MarketParquetConnection;
 
-export function openMarketReadOnlyConnection(
-  baseDir: string,
-): Promise<MarketReadOnlyConnection> {
+export function openMarketReadOnlyConnection(baseDir: string): Promise<MarketReadOnlyConnection> {
   return openMarketParquetConnection(baseDir);
 }
 

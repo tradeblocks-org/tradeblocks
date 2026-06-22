@@ -52,7 +52,7 @@ export interface DataQuality {
   /** Calendar dates where no data was found at all. */
   missingDataDates: string[];
   /** Overall confidence level based on data density and coverage. */
-  confidenceLevel: 'high' | 'medium' | 'low';
+  confidenceLevel: "high" | "medium" | "low";
 }
 
 /**
@@ -106,27 +106,23 @@ export interface CoverageResult {
  *   medium — everything else
  */
 export function scoreDataQuality(input: DataQualityInput): DataQuality {
-  const avgBarsPerDay =
-    input.tradingDays > 0
-      ? Math.round(input.totalBars / input.tradingDays)
-      : 0;
+  const avgBarsPerDay = input.tradingDays > 0 ? Math.round(input.totalBars / input.tradingDays) : 0;
 
   // Total days = tradingDays (days with data) + daysWithNoData
   const totalDaysInRange = input.tradingDays + input.daysWithNoData;
-  const missingPct =
-    totalDaysInRange > 0 ? input.daysWithNoData / totalDaysInRange : 1;
+  const missingPct = totalDaysInRange > 0 ? input.daysWithNoData / totalDaysInRange : 1;
 
-  let confidenceLevel: 'high' | 'medium' | 'low';
+  let confidenceLevel: "high" | "medium" | "low";
 
   if (input.tradingDays === 0 || avgBarsPerDay < 50) {
-    confidenceLevel = 'low';
-  } else if (missingPct > 0.10) {
+    confidenceLevel = "low";
+  } else if (missingPct > 0.1) {
     // More than 10% of calendar trading days missing → cap at low
-    confidenceLevel = 'low';
+    confidenceLevel = "low";
   } else if (avgBarsPerDay >= 200 && missingPct <= 0.05) {
-    confidenceLevel = 'high';
+    confidenceLevel = "high";
   } else {
-    confidenceLevel = 'medium';
+    confidenceLevel = "medium";
   }
 
   return {
@@ -169,12 +165,11 @@ export async function queryCoverage(
   const quoteCov = await stores.quote.getCoverage(underlying, fromDate, toDate);
 
   // Build covered-date set.
-  const dates = enumerateCoveredDates(spotCov.earliest, spotCov.latest)
-    .concat(enumerateCoveredDates(quoteCov.earliest, quoteCov.latest));
-  const uniqueDates = [...new Set(dates)].sort();
-  const quoteDateSet = new Set(
+  const dates = enumerateCoveredDates(spotCov.earliest, spotCov.latest).concat(
     enumerateCoveredDates(quoteCov.earliest, quoteCov.latest),
   );
+  const uniqueDates = [...new Set(dates)].sort();
+  const quoteDateSet = new Set(enumerateCoveredDates(quoteCov.earliest, quoteCov.latest));
 
   if (uniqueDates.length === 0) {
     return {
@@ -230,10 +225,10 @@ function enumerateCoveredDates(from: string | null, to: string | null): string[]
 // ---------------------------------------------------------------------------
 
 /** Classify bar count into density label. */
-function densityLabel(barCount: number): 'dense' | 'sparse' | 'none' {
-  if (barCount >= 200) return 'dense';
-  if (barCount > 0) return 'sparse';
-  return 'none';
+function densityLabel(barCount: number): "dense" | "sparse" | "none" {
+  if (barCount >= 200) return "dense";
+  if (barCount > 0) return "sparse";
+  return "none";
 }
 
 /**
@@ -247,10 +242,7 @@ function densityLabel(barCount: number): 'dense' | 'sparse' | 'none' {
  *   2025-04-01 to 2025-06-30: no data
  * ```
  */
-export function formatCoverageReport(
-  tickerPattern: string,
-  coverage: CoverageResult,
-): string {
+export function formatCoverageReport(tickerPattern: string, coverage: CoverageResult): string {
   if (coverage.dateBreakdown.length === 0) {
     return `No data found for ${tickerPattern}`;
   }
@@ -264,7 +256,7 @@ export function formatCoverageReport(
   interface Group {
     fromDate: string;
     toDate: string;
-    density: 'dense' | 'sparse' | 'none';
+    density: "dense" | "sparse" | "none";
     barCounts: number[];
     hasQuotes: boolean;
   }
@@ -295,27 +287,23 @@ export function formatCoverageReport(
   for (const group of groups) {
     const avgBars =
       group.barCounts.length > 0
-        ? Math.round(
-            group.barCounts.reduce((s, v) => s + v, 0) / group.barCounts.length,
-          )
+        ? Math.round(group.barCounts.reduce((s, v) => s + v, 0) / group.barCounts.length)
         : 0;
 
     const rangeStr =
-      group.fromDate === group.toDate
-        ? group.fromDate
-        : `${group.fromDate} to ${group.toDate}`;
+      group.fromDate === group.toDate ? group.fromDate : `${group.fromDate} to ${group.toDate}`;
 
     let detail: string;
-    if (group.density === 'dense') {
+    if (group.density === "dense") {
       detail = `dense (avg ${avgBars} bars/day, quotes available)`;
-    } else if (group.density === 'sparse') {
+    } else if (group.density === "sparse") {
       detail = `sparse (avg ${avgBars} bars/day, trade bars only)`;
     } else {
-      detail = 'no data';
+      detail = "no data";
     }
 
     lines.push(`  ${rangeStr}: ${detail}`);
   }
 
-  return lines.join('\n');
+  return lines.join("\n");
 }

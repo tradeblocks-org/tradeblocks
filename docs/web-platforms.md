@@ -7,17 +7,18 @@ Connect TradeBlocks MCP to web-based AI platforms for trading analysis from your
 Web AI platforms like ChatGPT, Google AI Studio, and Julius require **remote MCP server URLs** - they cannot connect to servers running on localhost. TradeBlocks MCP runs locally to keep your backtest data on your machine.
 
 **Solution:** Use an ngrok tunnel to expose your local MCP server as a remote URL. This approach:
+
 - Keeps your trading data on your local machine
 - Allows web platforms to connect via secure HTTPS
 - Requires no cloud deployment or data uploads
 
 ## Platform Compatibility
 
-| Platform | MCP Support | Plan Required | Setup Complexity |
-|----------|-------------|---------------|------------------|
-| ChatGPT | Developer Mode | Pro/Plus/Business/Enterprise/Edu | Medium |
-| Google AI Studio | Native | Free | Easy |
-| Julius AI | Native | Free tier available | Easy |
+| Platform         | MCP Support    | Plan Required                    | Setup Complexity |
+| ---------------- | -------------- | -------------------------------- | ---------------- |
+| ChatGPT          | Developer Mode | Pro/Plus/Business/Enterprise/Edu | Medium           |
+| Google AI Studio | Native         | Free                             | Easy             |
+| Julius AI        | Native         | Free tier available              | Easy             |
 
 ## Prerequisites
 
@@ -34,16 +35,19 @@ Before setting up any web platform:
 ## Quick Start (All Platforms)
 
 **Terminal 1:** Start MCP server with HTTP transport:
+
 ```bash
 tradeblocks-mcp --http ~/Trading/backtests
 ```
 
 Or with a custom port:
+
 ```bash
 tradeblocks-mcp --http --port 8080 ~/Trading/backtests
 ```
 
 **Terminal 2:** Expose via ngrok:
+
 ```bash
 ngrok http 3100
 ```

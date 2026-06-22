@@ -6,28 +6,22 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  loadBlock,
-  listBlocks,
-  loadReportingLog,
-} from "../../utils/block-loader.ts";
+import { loadBlock, listBlocks, loadReportingLog } from "../../utils/block-loader.ts";
 import {
   createToolOutput,
   formatCurrency,
   formatPercent,
   formatRatio,
 } from "../../utils/output-formatter.ts";
-import {
-  PortfolioStatsCalculator,
-  calculateDailyExposure,
-} from "@tradeblocks/lib";
+import { PortfolioStatsCalculator, calculateDailyExposure } from "@tradeblocks/lib";
 import type { Trade, PeakExposure, EquityCurvePoint } from "@tradeblocks/lib";
 import { resolveTradeTicker } from "../../utils/ticker.ts";
-import { filterByStrategy, filterByDateRange, filterDailyLogsByDateRange } from "../shared/filters.ts";
 import {
-  withSyncedBlock,
-  withFullSync,
-} from "../middleware/sync-middleware.ts";
+  filterByStrategy,
+  filterByDateRange,
+  filterDailyLogsByDateRange,
+} from "../shared/filters.ts";
+import { withSyncedBlock, withFullSync } from "../middleware/sync-middleware.ts";
 
 /**
  * Calculate peak daily exposure using the shared sweep-line algorithm.
@@ -35,7 +29,7 @@ import {
  */
 function calculatePeakExposure(
   trades: Trade[],
-  initialCapital: number
+  initialCapital: number,
 ): {
   peakByDollars: PeakExposure | null;
   peakByPercent: PeakExposure | null;
@@ -43,8 +37,7 @@ function calculatePeakExposure(
   // Build equity curve from trades - P&L is realized on close date
   const closedTrades = trades.filter((t) => t.dateClosed);
   const sortedByClose = [...closedTrades].sort(
-    (a, b) =>
-      new Date(a.dateClosed!).getTime() - new Date(b.dateClosed!).getTime()
+    (a, b) => new Date(a.dateClosed!).getTime() - new Date(b.dateClosed!).getTime(),
   );
 
   const equityCurve: EquityCurvePoint[] = [];
@@ -70,10 +63,7 @@ function calculatePeakExposure(
 /**
  * Register core block tools
  */
-export function registerCoreBlockTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerCoreBlockTools(server: McpServer, baseDir: string): void {
   const calculator = new PortfolioStatsCalculator();
 
   // Tool 1: list_blocks (formerly list_backtests)
@@ -87,16 +77,11 @@ export function registerCoreBlockTools(
           .enum(["name", "tradeCount", "netPl", "dateRange"])
           .default("name")
           .describe("Sort results by field (default: name)"),
-        sortOrder: z
-          .enum(["asc", "desc"])
-          .default("asc")
-          .describe("Sort direction (default: asc)"),
+        sortOrder: z.enum(["asc", "desc"]).default("asc").describe("Sort direction (default: asc)"),
         containsStrategy: z
           .string()
           .optional()
-          .describe(
-            "Filter to blocks containing this strategy name (case-insensitive)"
-          ),
+          .describe("Filter to blocks containing this strategy name (case-insensitive)"),
         minTrades: z
           .number()
           .min(1)
@@ -105,14 +90,12 @@ export function registerCoreBlockTools(
         hasDailyLog: z
           .boolean()
           .optional()
-          .describe(
-            "Filter to blocks with (true) or without (false) daily log data"
-          ),
+          .describe("Filter to blocks with (true) or without (false) daily log data"),
         hasReportingLog: z
           .boolean()
           .optional()
           .describe(
-            "Filter to blocks with (true) or without (false) reporting log data (actual trade execution)"
+            "Filter to blocks with (true) or without (false) reporting log data (actual trade execution)",
           ),
         limit: z
           .number()
@@ -125,109 +108,99 @@ export function registerCoreBlockTools(
     withFullSync(
       baseDir,
       async (
-        {
-          sortBy,
-          sortOrder,
-          containsStrategy,
-          minTrades,
-          hasDailyLog,
-          hasReportingLog,
-          limit,
-        },
-        { blockSyncResult: syncResult }
+        { sortBy, sortOrder, containsStrategy, minTrades, hasDailyLog, hasReportingLog, limit },
+        { blockSyncResult: syncResult },
       ) => {
         try {
           let blocks = await listBlocks(baseDir);
 
-        // Apply filters
-        if (containsStrategy) {
-          const strategyLower = containsStrategy.toLowerCase();
-          blocks = blocks.filter((b) =>
-            b.strategies.some((s) => s.toLowerCase().includes(strategyLower))
-          );
-        }
-        if (minTrades !== undefined) {
-          blocks = blocks.filter((b) => b.tradeCount >= minTrades);
-        }
-        if (hasDailyLog !== undefined) {
-          blocks = blocks.filter((b) => b.hasDailyLog === hasDailyLog);
-        }
-        if (hasReportingLog !== undefined) {
-          blocks = blocks.filter((b) => b.hasReportingLog === hasReportingLog);
-        }
-
-        // Sort blocks based on parameters
-        const multiplier = sortOrder === "asc" ? 1 : -1;
-        blocks = [...blocks].sort((a, b) => {
-          switch (sortBy) {
-            case "tradeCount":
-              return (a.tradeCount - b.tradeCount) * multiplier;
-            case "netPl":
-              return ((a.netPl ?? 0) - (b.netPl ?? 0)) * multiplier;
-            case "dateRange": {
-              const aTime = a.dateRange.end?.getTime() ?? 0;
-              const bTime = b.dateRange.end?.getTime() ?? 0;
-              return (aTime - bTime) * multiplier;
-            }
-            case "name":
-            default:
-              return a.name.localeCompare(b.name) * multiplier;
+          // Apply filters
+          if (containsStrategy) {
+            const strategyLower = containsStrategy.toLowerCase();
+            blocks = blocks.filter((b) =>
+              b.strategies.some((s) => s.toLowerCase().includes(strategyLower)),
+            );
           }
-        });
+          if (minTrades !== undefined) {
+            blocks = blocks.filter((b) => b.tradeCount >= minTrades);
+          }
+          if (hasDailyLog !== undefined) {
+            blocks = blocks.filter((b) => b.hasDailyLog === hasDailyLog);
+          }
+          if (hasReportingLog !== undefined) {
+            blocks = blocks.filter((b) => b.hasReportingLog === hasReportingLog);
+          }
 
-        // Apply limit
-        const totalBeforeLimit = blocks.length;
-        if (limit !== undefined && limit < blocks.length) {
-          blocks = blocks.slice(0, limit);
-        }
+          // Sort blocks based on parameters
+          const multiplier = sortOrder === "asc" ? 1 : -1;
+          blocks = [...blocks].sort((a, b) => {
+            switch (sortBy) {
+              case "tradeCount":
+                return (a.tradeCount - b.tradeCount) * multiplier;
+              case "netPl":
+                return ((a.netPl ?? 0) - (b.netPl ?? 0)) * multiplier;
+              case "dateRange": {
+                const aTime = a.dateRange.end?.getTime() ?? 0;
+                const bTime = b.dateRange.end?.getTime() ?? 0;
+                return (aTime - bTime) * multiplier;
+              }
+              case "name":
+              default:
+                return a.name.localeCompare(b.name) * multiplier;
+            }
+          });
 
-        // Brief summary for user display
-        const blocksWithReporting = blocks.filter(
-          (b) => b.hasReportingLog
-        ).length;
-        const summary = `Found ${blocks.length} block(s)${totalBeforeLimit > blocks.length ? ` (showing ${blocks.length} of ${totalBeforeLimit})` : ""}${blocksWithReporting > 0 ? `, ${blocksWithReporting} with reporting logs` : ""}`;
+          // Apply limit
+          const totalBeforeLimit = blocks.length;
+          if (limit !== undefined && limit < blocks.length) {
+            blocks = blocks.slice(0, limit);
+          }
 
-        // Collect sync errors
-        const syncErrors = [...syncResult.errors];
+          // Brief summary for user display
+          const blocksWithReporting = blocks.filter((b) => b.hasReportingLog).length;
+          const summary = `Found ${blocks.length} block(s)${totalBeforeLimit > blocks.length ? ` (showing ${blocks.length} of ${totalBeforeLimit})` : ""}${blocksWithReporting > 0 ? `, ${blocksWithReporting} with reporting logs` : ""}`;
 
-        // Build structured data for Claude reasoning
-        const structuredData = {
-          options: {
-            sortBy,
-            sortOrder,
-            containsStrategy: containsStrategy ?? null,
-            minTrades: minTrades ?? null,
-            hasDailyLog: hasDailyLog ?? null,
-            hasReportingLog: hasReportingLog ?? null,
-            limit: limit ?? null,
-          },
-          totalMatching: totalBeforeLimit,
-          blocks: blocks.map((b) => ({
-            id: b.blockId,
-            name: b.name,
-            tradeCount: b.tradeCount,
-            dateRange: {
-              start: b.dateRange.start?.toISOString() ?? null,
-              end: b.dateRange.end?.toISOString() ?? null,
+          // Collect sync errors
+          const syncErrors = [...syncResult.errors];
+
+          // Build structured data for Claude reasoning
+          const structuredData = {
+            options: {
+              sortBy,
+              sortOrder,
+              containsStrategy: containsStrategy ?? null,
+              minTrades: minTrades ?? null,
+              hasDailyLog: hasDailyLog ?? null,
+              hasReportingLog: hasReportingLog ?? null,
+              limit: limit ?? null,
             },
-            strategies: b.strategies,
-            totalPl: b.totalPl,
-            netPl: b.netPl,
-            hasDailyLog: b.hasDailyLog,
-            hasReportingLog: b.hasReportingLog,
-            reportingLog: b.reportingLog ?? null,
-          })),
-          count: blocks.length,
-          // Add sync info (informational for Claude)
-          syncInfo: {
-            blocksProcessed: syncResult.blocksProcessed,
-            blocksSynced: syncResult.blocksSynced,
-            blocksUnchanged: syncResult.blocksUnchanged,
-            blocksDeleted: syncResult.blocksDeleted,
-          },
-          // Add sync errors if any occurred
-          ...(syncErrors.length > 0 ? { syncErrors } : {}),
-        };
+            totalMatching: totalBeforeLimit,
+            blocks: blocks.map((b) => ({
+              id: b.blockId,
+              name: b.name,
+              tradeCount: b.tradeCount,
+              dateRange: {
+                start: b.dateRange.start?.toISOString() ?? null,
+                end: b.dateRange.end?.toISOString() ?? null,
+              },
+              strategies: b.strategies,
+              totalPl: b.totalPl,
+              netPl: b.netPl,
+              hasDailyLog: b.hasDailyLog,
+              hasReportingLog: b.hasReportingLog,
+              reportingLog: b.reportingLog ?? null,
+            })),
+            count: blocks.length,
+            // Add sync info (informational for Claude)
+            syncInfo: {
+              blocksProcessed: syncResult.blocksProcessed,
+              blocksSynced: syncResult.blocksSynced,
+              blocksUnchanged: syncResult.blocksUnchanged,
+              blocksDeleted: syncResult.blocksDeleted,
+            },
+            // Add sync errors if any occurred
+            ...(syncErrors.length > 0 ? { syncErrors } : {}),
+          };
 
           return createToolOutput(summary, structuredData);
         } catch (error) {
@@ -241,8 +214,8 @@ export function registerCoreBlockTools(
             isError: true,
           };
         }
-      }
-    )
+      },
+    ),
   );
 
   // Tool 2: get_block_info
@@ -252,9 +225,7 @@ export function registerCoreBlockTools(
       description:
         "Get detailed metadata for a block including available strategies, date range, and daily log status. Use blockId from list_blocks.",
       inputSchema: z.object({
-        blockId: z
-          .string()
-          .describe("Block ID from list_blocks (e.g., 'main-port')"),
+        blockId: z.string().describe("Block ID from list_blocks (e.g., 'main-port')"),
       }),
     },
     withSyncedBlock(baseDir, async ({ blockId }) => {
@@ -263,9 +234,7 @@ export function registerCoreBlockTools(
         const trades = block.trades;
         const dailyLogs = block.dailyLogs;
 
-        const strategies = Array.from(
-          new Set(trades.map((t) => t.strategy))
-        ).sort();
+        const strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
         const dates = trades.map((t) => new Date(t.dateOpened).getTime());
         const dateRange = {
           start: dates.length > 0 ? new Date(Math.min(...dates)) : null,
@@ -299,7 +268,7 @@ export function registerCoreBlockTools(
           isError: true,
         };
       }
-    })
+    }),
   );
 
   // Tool 2b: get_reporting_log_stats
@@ -347,13 +316,16 @@ export function registerCoreBlockTools(
           strategyTrades.get(key)!.push(trade);
         }
 
-        const byStrategy: Record<string, {
-          tradeCount: number;
-          winRate: number;
-          totalPL: number;
-          avgPL: number;
-          contractCount: number;
-        }> = {};
+        const byStrategy: Record<
+          string,
+          {
+            tradeCount: number;
+            winRate: number;
+            totalPL: number;
+            avgPL: number;
+            contractCount: number;
+          }
+        > = {};
 
         for (const [strategy, strategyTradeList] of strategyTrades) {
           const tradeCount = strategyTradeList.length;
@@ -361,9 +333,7 @@ export function registerCoreBlockTools(
           const winRate = tradeCount > 0 ? winningTrades / tradeCount : 0;
           const totalPL = strategyTradeList.reduce((sum, t) => sum + t.pl, 0);
           const avgPL = tradeCount > 0 ? totalPL / tradeCount : 0;
-          const contractCount = strategyTradeList.reduce(
-            (sum, t) => sum + t.numContracts, 0
-          );
+          const contractCount = strategyTradeList.reduce((sum, t) => sum + t.numContracts, 0);
           byStrategy[strategy] = { tradeCount, winRate, totalPL, avgPL, contractCount };
         }
 
@@ -404,7 +374,7 @@ export function registerCoreBlockTools(
           isError: true,
         };
       }
-    })
+    }),
   );
 
   // Tool 3: get_statistics
@@ -414,23 +384,13 @@ export function registerCoreBlockTools(
       description:
         "Get comprehensive portfolio statistics: win rate, Sharpe ratio, max drawdown, P&L metrics, and more. Use blockId from list_blocks. Optionally filter by strategy, ticker, or date range.",
       inputSchema: z.object({
-        blockId: z
-          .string()
-          .describe("Block ID from list_blocks (e.g., 'main-port')"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        blockId: z.string().describe("Block ID from list_blocks (e.g., 'main-port')"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         tickerFilter: z
           .string()
           .optional()
-          .describe(
-            "Filter trades by underlying ticker symbol (e.g., 'SPY', 'AAPL')"
-          ),
-        startDate: z
-          .string()
-          .optional()
-          .describe("Start date filter (YYYY-MM-DD)"),
+          .describe("Filter trades by underlying ticker symbol (e.g., 'SPY', 'AAPL')"),
+        startDate: z.string().optional().describe("Start date filter (YYYY-MM-DD)"),
         endDate: z.string().optional().describe("End date filter (YYYY-MM-DD)"),
       }),
     },
@@ -439,105 +399,101 @@ export function registerCoreBlockTools(
       async ({ blockId, strategy, tickerFilter, startDate, endDate }, { syncResult }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
-        let trades = block.trades;
-        const dailyLogs = block.dailyLogs;
+          let trades = block.trades;
+          const dailyLogs = block.dailyLogs;
 
-        // Apply filters
-        trades = filterByStrategy(trades, strategy);
-        trades = filterByDateRange(trades, startDate, endDate);
+          // Apply filters
+          trades = filterByStrategy(trades, strategy);
+          trades = filterByDateRange(trades, startDate, endDate);
 
-        // Apply ticker filter (supports both explicit ticker columns and legs-derived symbols)
-        if (tickerFilter) {
-          const tickerLower = tickerFilter.toLowerCase();
-          trades = trades.filter(
-            (t) => resolveTradeTicker(t).toLowerCase() === tickerLower
+          // Apply ticker filter (supports both explicit ticker columns and legs-derived symbols)
+          if (tickerFilter) {
+            const tickerLower = tickerFilter.toLowerCase();
+            trades = trades.filter((t) => resolveTradeTicker(t).toLowerCase() === tickerLower);
+          }
+
+          if (trades.length === 0) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `No trades found matching the specified filters.`,
+                },
+              ],
+            };
+          }
+
+          // Filter daily logs by date range when date filters are provided
+          // Only applies when not strategy-filtered (daily logs represent full portfolio)
+          const isStrategyFiltered = !!strategy;
+          let filteredDailyLogs = dailyLogs;
+          if (!isStrategyFiltered && (startDate || endDate) && dailyLogs) {
+            filteredDailyLogs = filterDailyLogsByDateRange(dailyLogs, startDate, endDate);
+          }
+
+          // When strategy filter is applied, we MUST use trade-based calculations
+          // because daily logs represent the FULL portfolio, not per-strategy
+          const stats = calculator.calculatePortfolioStats(
+            trades,
+            isStrategyFiltered ? undefined : filteredDailyLogs,
+            isStrategyFiltered,
           );
-        }
 
-        if (trades.length === 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `No trades found matching the specified filters.`,
-              },
-            ],
+          // Calculate peak daily exposure
+          const peakExposure = calculatePeakExposure(trades, stats.initialCapital);
+
+          // Brief summary for user display
+          const summary = `Stats: ${blockId}${strategy ? ` (${strategy})` : ""} | ${stats.totalTrades} trades | Win: ${formatPercent(stats.winRate * 100)} | Net P&L: ${formatCurrency(stats.netPl)} | Sharpe: ${formatRatio(stats.sharpeRatio)}`;
+
+          // Build structured data for Claude reasoning - include full PortfolioStats
+          const structuredData = {
+            blockId,
+            filters: {
+              strategy: strategy ?? null,
+              tickerFilter: tickerFilter ?? null,
+              startDate: startDate ?? null,
+              endDate: endDate ?? null,
+            },
+            stats: {
+              totalTrades: stats.totalTrades,
+              winningTrades: stats.winningTrades,
+              losingTrades: stats.losingTrades,
+              breakEvenTrades: stats.breakEvenTrades,
+              winRate: stats.winRate,
+              totalPl: stats.totalPl,
+              netPl: stats.netPl,
+              totalCommissions: stats.totalCommissions,
+              avgWin: stats.avgWin,
+              avgLoss: stats.avgLoss,
+              maxWin: stats.maxWin,
+              maxLoss: stats.maxLoss,
+              profitFactor: stats.profitFactor,
+              sharpeRatio: stats.sharpeRatio,
+              sortinoRatio: stats.sortinoRatio,
+              calmarRatio: stats.calmarRatio,
+              maxDrawdown: stats.maxDrawdown,
+              timeInDrawdown: stats.timeInDrawdown,
+              kellyPercentage: stats.kellyPercentage,
+              cagr: stats.cagr,
+              initialCapital: stats.initialCapital,
+              avgDailyPl: stats.avgDailyPl,
+              maxWinStreak: stats.maxWinStreak,
+              maxLossStreak: stats.maxLossStreak,
+              currentStreak: stats.currentStreak,
+              monthlyWinRate: stats.monthlyWinRate,
+              weeklyWinRate: stats.weeklyWinRate,
+            },
+            peakExposure: {
+              byDollars: peakExposure.peakByDollars,
+              byPercent: peakExposure.peakByPercent,
+            },
+            // Add sync info if sync occurred
+            ...(syncResult.status === "synced"
+              ? { syncInfo: { status: "synced", tradeCount: syncResult.tradeCount } }
+              : {}),
+            // Add sync warning if sync errored (continuing with potentially stale data)
+            ...(syncResult.status === "error" ? { syncWarning: syncResult.error } : {}),
           };
-        }
-
-        // Filter daily logs by date range when date filters are provided
-        // Only applies when not strategy-filtered (daily logs represent full portfolio)
-        const isStrategyFiltered = !!strategy;
-        let filteredDailyLogs = dailyLogs;
-        if (!isStrategyFiltered && (startDate || endDate) && dailyLogs) {
-          filteredDailyLogs = filterDailyLogsByDateRange(dailyLogs, startDate, endDate);
-        }
-
-        // When strategy filter is applied, we MUST use trade-based calculations
-        // because daily logs represent the FULL portfolio, not per-strategy
-        const stats = calculator.calculatePortfolioStats(
-          trades,
-          isStrategyFiltered ? undefined : filteredDailyLogs,
-          isStrategyFiltered
-        );
-
-        // Calculate peak daily exposure
-        const peakExposure = calculatePeakExposure(trades, stats.initialCapital);
-
-        // Brief summary for user display
-        const summary = `Stats: ${blockId}${strategy ? ` (${strategy})` : ""} | ${stats.totalTrades} trades | Win: ${formatPercent(stats.winRate * 100)} | Net P&L: ${formatCurrency(stats.netPl)} | Sharpe: ${formatRatio(stats.sharpeRatio)}`;
-
-        // Build structured data for Claude reasoning - include full PortfolioStats
-        const structuredData = {
-          blockId,
-          filters: {
-            strategy: strategy ?? null,
-            tickerFilter: tickerFilter ?? null,
-            startDate: startDate ?? null,
-            endDate: endDate ?? null,
-          },
-          stats: {
-            totalTrades: stats.totalTrades,
-            winningTrades: stats.winningTrades,
-            losingTrades: stats.losingTrades,
-            breakEvenTrades: stats.breakEvenTrades,
-            winRate: stats.winRate,
-            totalPl: stats.totalPl,
-            netPl: stats.netPl,
-            totalCommissions: stats.totalCommissions,
-            avgWin: stats.avgWin,
-            avgLoss: stats.avgLoss,
-            maxWin: stats.maxWin,
-            maxLoss: stats.maxLoss,
-            profitFactor: stats.profitFactor,
-            sharpeRatio: stats.sharpeRatio,
-            sortinoRatio: stats.sortinoRatio,
-            calmarRatio: stats.calmarRatio,
-            maxDrawdown: stats.maxDrawdown,
-            timeInDrawdown: stats.timeInDrawdown,
-            kellyPercentage: stats.kellyPercentage,
-            cagr: stats.cagr,
-            initialCapital: stats.initialCapital,
-            avgDailyPl: stats.avgDailyPl,
-            maxWinStreak: stats.maxWinStreak,
-            maxLossStreak: stats.maxLossStreak,
-            currentStreak: stats.currentStreak,
-            monthlyWinRate: stats.monthlyWinRate,
-            weeklyWinRate: stats.weeklyWinRate,
-          },
-          peakExposure: {
-            byDollars: peakExposure.peakByDollars,
-            byPercent: peakExposure.peakByPercent,
-          },
-          // Add sync info if sync occurred
-          ...(syncResult.status === "synced"
-            ? { syncInfo: { status: "synced", tradeCount: syncResult.tradeCount } }
-            : {}),
-          // Add sync warning if sync errored (continuing with potentially stale data)
-          ...(syncResult.status === "error"
-            ? { syncWarning: syncResult.error }
-            : {}),
-        };
 
           return createToolOutput(summary, structuredData);
         } catch (error) {
@@ -551,8 +507,7 @@ export function registerCoreBlockTools(
             isError: true,
           };
         }
-      }
-    )
+      },
+    ),
   );
-
 }

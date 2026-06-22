@@ -14,8 +14,7 @@ export function ScreePlotChart({ result }: ScreePlotChartProps) {
   const { theme } = useTheme();
 
   const { plotData, layout } = useMemo(() => {
-    const { eigenvalues, explainedVariance, effectiveFactors, varianceThreshold } =
-      result;
+    const { eigenvalues, explainedVariance, effectiveFactors, varianceThreshold } = result;
     const isDark = theme === "dark";
     const thresholdPct = varianceThreshold * 100;
 
@@ -30,17 +29,10 @@ export function ScreePlotChart({ result }: ScreePlotChartProps) {
       name: "Eigenvalue",
       marker: {
         color: eigenvalues.map((_, i) =>
-          i < effectiveFactors
-            ? isDark
-              ? "#3b82f6"
-              : "#2563eb"
-            : isDark
-            ? "#475569"
-            : "#94a3b8"
+          i < effectiveFactors ? (isDark ? "#3b82f6" : "#2563eb") : isDark ? "#475569" : "#94a3b8",
         ),
       },
-      hovertemplate:
-        "<b>%{x}</b><br>Eigenvalue: %{y:.3f}<extra></extra>",
+      hovertemplate: "<b>%{x}</b><br>Eigenvalue: %{y:.3f}<extra></extra>",
     };
 
     // Line chart for cumulative explained variance
@@ -59,8 +51,7 @@ export function ScreePlotChart({ result }: ScreePlotChartProps) {
         size: 8,
         color: isDark ? "#f97316" : "#ea580c",
       },
-      hovertemplate:
-        "<b>%{x}</b><br>Cumulative: %{y:.1f}%<extra></extra>",
+      hovertemplate: "<b>%{x}</b><br>Cumulative: %{y:.1f}%<extra></extra>",
     };
 
     // Threshold line (configurable)
@@ -151,8 +142,7 @@ export function ScreePlotChart({ result }: ScreePlotChartProps) {
       title="Factor Analysis (Scree Plot)"
       description={`${strategies.length} strategies decompose into ${effectiveFactors} effective risk factors`}
       tooltip={{
-        flavor:
-          "Shows how many independent sources of tail risk exist in your portfolio.",
+        flavor: "Shows how many independent sources of tail risk exist in your portfolio.",
         detailed: `Your portfolio has ${strategies.length} strategy labels, but they share underlying risk factors. The blue bars show eigenvalues (variance captured by each factor). The orange line shows cumulative variance explained. The annotation shows how many factors are needed to explain ${thresholdPct}% of tail risk. Fewer effective factors = more concentrated tail risk.`,
       }}
       data={plotData}

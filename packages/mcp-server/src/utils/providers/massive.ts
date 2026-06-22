@@ -238,10 +238,12 @@ export function nanosToETMinuteKey(nanosTimestamp: number): string {
 
 function etOffsetMinutesForDate(dateStr: string): number {
   const probe = new Date(`${dateStr}T12:00:00Z`);
-  const offsetToken = probe.toLocaleString("en-US", {
-    timeZone: "America/New_York",
-    timeZoneName: "shortOffset",
-  }).match(/GMT([+-]\d{1,2})(?::(\d{2}))?/);
+  const offsetToken = probe
+    .toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      timeZoneName: "shortOffset",
+    })
+    .match(/GMT([+-]\d{1,2})(?::(\d{2}))?/);
   if (!offsetToken) {
     throw new Error(`Unable to resolve ET offset for ${dateStr}`);
   }
@@ -265,9 +267,7 @@ function etDateTimeToUtcIso(dateStr: string, timeStr: string): string {
 function getApiKey(): string {
   const key = process.env.MASSIVE_API_KEY;
   if (!key) {
-    throw new Error(
-      "Set MASSIVE_API_KEY environment variable to use Massive.com data import"
-    );
+    throw new Error("Set MASSIVE_API_KEY environment variable to use Massive.com data import");
   }
   return key;
 }
@@ -275,7 +275,7 @@ function getApiKey(): string {
 async function fetchWithRetry(
   url: string,
   headers: Record<string, string>,
-  maxRetries = 2
+  maxRetries = 2,
 ): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await fetch(url, {
@@ -285,9 +285,7 @@ async function fetchWithRetry(
 
     if (response.status === 429) {
       if (attempt === maxRetries) {
-        throw new Error(
-          "Massive.com rate limit exceeded — try again in a few minutes"
-        );
+        throw new Error("Massive.com rate limit exceeded — try again in a few minutes");
       }
       const retryAfter = response.headers.get("Retry-After");
       const backoffMs = retryAfter
@@ -306,9 +304,7 @@ async function fetchWithRetry(
 // Snapshot Helpers
 // ===========================================================================
 
-const INDEX_TICKERS = new Set([
-  "SPX", "NDX", "RUT", "DJX", "VIX", "VIX9D", "VIX3M", "OEX", "XSP",
-]);
+const INDEX_TICKERS = new Set(["SPX", "NDX", "RUT", "DJX", "VIX", "VIX9D", "VIX3M", "OEX", "XSP"]);
 
 function detectSnapshotAssetClass(ticker: string): AssetClass {
   return INDEX_TICKERS.has(ticker.toUpperCase()) ? "index" : "stock";
@@ -333,18 +329,14 @@ function computeDTE(expirationDate: string): number {
   const todayDay = parseInt(todayDayS, 10);
 
   const dte =
-    (Date.UTC(expYear, expMonth - 1, expDay) -
-      Date.UTC(todayYear, todayMonth - 1, todayDay)) /
+    (Date.UTC(expYear, expMonth - 1, expDay) - Date.UTC(todayYear, todayMonth - 1, todayDay)) /
     86_400_000;
 
   return dte <= 0 ? 0.001 : dte;
 }
 
-function mapContract(
-  contract: z.infer<typeof MassiveSnapshotContractSchema>,
-): OptionContract {
-  const hasApiGreeks =
-    contract.greeks != null && contract.greeks.delta != null;
+function mapContract(contract: z.infer<typeof MassiveSnapshotContractSchema>): OptionContract {
+  const hasApiGreeks = contract.greeks != null && contract.greeks.delta != null;
 
   let delta: number | null = null;
   let gamma: number | null = null;
@@ -361,8 +353,7 @@ function mapContract(
     iv = contract.implied_volatility;
     greeksSource = "massive";
   } else {
-    const optionPrice =
-      contract.last_trade?.price ?? contract.last_quote.midpoint;
+    const optionPrice = contract.last_trade?.price ?? contract.last_quote.midpoint;
     const underlyingPrice = contract.underlying_asset.price;
     const strike = contract.details.strike_price;
     const dte = computeDTE(contract.details.expiration_date);
@@ -425,31 +416,24 @@ export class MassiveProvider implements MarketDataProvider {
     const tier = resolveMassiveDataTier();
     return {
       tradeBars: true,
-      quotes: tier === 'quotes',
-      greeks: false,          // Massive does not provide greeks — we compute via BSM
-      flatFiles: true,        // S3 flat files available via rclone
-      bulkByRoot: false,      // Massive is per-ticker, not bulk-by-root
+      quotes: tier === "quotes",
+      greeks: false, // Massive does not provide greeks — we compute via BSM
+      flatFiles: true, // S3 flat files available via rclone
+      bulkByRoot: false, // Massive is per-ticker, not bulk-by-root
       perTicker: true,
       minuteBars: true,
       dailyBars: true,
       dataAvailability: {
-        option: { from: '2014-01-02' },
-        index: { from: '2023-02-14' },
-        stock: { from: '2014-01-02' },
+        option: { from: "2014-01-02" },
+        index: { from: "2023-02-14" },
+        stock: { from: "2014-01-02" },
       },
     };
   }
 
   async fetchBars(options: FetchBarsOptions): Promise<BarRow[]> {
     const apiKey = getApiKey();
-    const {
-      ticker,
-      from,
-      to,
-      timespan = "day",
-      multiplier = 1,
-      assetClass = "stock",
-    } = options;
+    const { ticker, from, to, timespan = "day", multiplier = 1, assetClass = "stock" } = options;
 
     const apiTicker = toMassiveTicker(ticker, assetClass);
     const storageTicker = fromMassiveTicker(apiTicker);
@@ -466,22 +450,18 @@ export class MassiveProvider implements MarketDataProvider {
       pageCount++;
       if (pageCount > MASSIVE_MAX_PAGES) {
         throw new Error(
-          `Pagination safety limit reached (${MASSIVE_MAX_PAGES} pages) — possible API issue`
+          `Pagination safety limit reached (${MASSIVE_MAX_PAGES} pages) — possible API issue`,
         );
       }
 
       const response = await fetchWithRetry(url, headers);
 
       if (response.status === 401) {
-        throw new Error(
-          "MASSIVE_API_KEY rejected by Massive.com — check your key"
-        );
+        throw new Error("MASSIVE_API_KEY rejected by Massive.com — check your key");
       }
 
       if (!response.ok) {
-        throw new Error(
-          `Massive.com API error: HTTP ${response.status} ${response.statusText}`
-        );
+        throw new Error(`Massive.com API error: HTTP ${response.status} ${response.statusText}`);
       }
 
       const json = await response.json();
@@ -516,9 +496,7 @@ export class MassiveProvider implements MarketDataProvider {
         const nextUrlObj = new URL(data.next_url);
         const cursor = nextUrlObj.searchParams.get("cursor") ?? data.next_url;
         if (seenCursors.has(cursor)) {
-          throw new Error(
-            `Pagination loop detected — cursor repeated: ${cursor.slice(0, 50)}...`
-          );
+          throw new Error(`Pagination loop detected — cursor repeated: ${cursor.slice(0, 50)}...`);
         }
         seenCursors.add(cursor);
         url = data.next_url;
@@ -557,8 +535,8 @@ export class MassiveProvider implements MarketDataProvider {
     const result = new Map<string, MinuteQuote>();
 
     // Iterate trading days in the range
-    const startDate = new Date(from + 'T00:00:00');
-    const endDate = new Date(to + 'T00:00:00');
+    const startDate = new Date(from + "T00:00:00");
+    const endDate = new Date(to + "T00:00:00");
     const encodedTicker = encodeURIComponent(apiTicker);
 
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
@@ -663,28 +641,28 @@ export class MassiveProvider implements MarketDataProvider {
   }
 
   async downloadFlatFile(date: string, assetClass: string): Promise<string | null> {
-    const [year, month] = date.split('-');
+    const [year, month] = date.split("-");
     const assetPathMap: Record<string, string> = {
-      option: 'us_options_opra/minute_aggs_v1',
-      index:  'us_indices/minute_aggs_v1',
-      stock:  'us_stocks_sip/minute_aggs_v1',
+      option: "us_options_opra/minute_aggs_v1",
+      index: "us_indices/minute_aggs_v1",
+      stock: "us_stocks_sip/minute_aggs_v1",
     };
     const assetPath = assetPathMap[assetClass] ?? assetPathMap.stock;
     const s3Path = `s3massive:flatfiles/${assetPath}/${year}/${month}/${date}.csv.gz`;
     // Separate tmp dirs per asset class to avoid file collisions
-    const tmpDir = assetClass === 'index' ? '/tmp/massive-flat-index' : '/tmp/massive-flat';
+    const tmpDir = assetClass === "index" ? "/tmp/massive-flat-index" : "/tmp/massive-flat";
     const localPath = `${tmpDir}/${date}.csv.gz`;
 
-    const { existsSync, mkdirSync } = await import('fs');
-    const { execFile } = await import('child_process');
-    const { promisify } = await import('util');
+    const { existsSync, mkdirSync } = await import("fs");
+    const { execFile } = await import("child_process");
+    const { promisify } = await import("util");
     const execFileAsync = promisify(execFile);
 
     mkdirSync(tmpDir, { recursive: true });
     if (existsSync(localPath)) return localPath;
 
     try {
-      await execFileAsync('rclone', ['copy', s3Path, `${tmpDir}/`], { timeout: 120_000 });
+      await execFileAsync("rclone", ["copy", s3Path, `${tmpDir}/`], { timeout: 120_000 });
     } catch {
       return null;
     }
@@ -695,7 +673,7 @@ export class MassiveProvider implements MarketDataProvider {
     const { date, dataset, assetClass, tickers, outputPath } = options;
 
     // Skip if output Parquet already exists
-    const { existsSync: exists, mkdirSync: mkdir } = await import('fs');
+    const { existsSync: exists, mkdirSync: mkdir } = await import("fs");
     if (exists(outputPath)) {
       return { rowCount: 0, skipped: true };
     }
@@ -706,21 +684,21 @@ export class MassiveProvider implements MarketDataProvider {
       return { rowCount: 0, skipped: true };
     }
 
-    const { execFile } = await import('child_process');
-    const { promisify } = await import('util');
-    const { dirname } = await import('path');
+    const { execFile } = await import("child_process");
+    const { promisify } = await import("util");
+    const { dirname } = await import("path");
     const execFileAsync = promisify(execFile);
 
     // S3 path mapping
     const s3PathMap: Record<string, Record<string, string>> = {
       option: {
-        minute_bars: 'us_options_opra/minute_aggs_v1',
-        daily_bars: 'us_options_opra/day_aggs_v1',
-        trades: 'us_options_opra/trades_v1',
+        minute_bars: "us_options_opra/minute_aggs_v1",
+        daily_bars: "us_options_opra/day_aggs_v1",
+        trades: "us_options_opra/trades_v1",
       },
       index: {
-        minute_bars: 'us_indices/minute_aggs_v1',
-        daily_bars: 'us_indices/day_aggs_v1',
+        minute_bars: "us_indices/minute_aggs_v1",
+        daily_bars: "us_indices/day_aggs_v1",
       },
     };
 
@@ -729,7 +707,7 @@ export class MassiveProvider implements MarketDataProvider {
       throw new Error(`Unsupported asset class/dataset combination: ${assetClass}/${dataset}`);
     }
 
-    const [year, month] = date.split('-');
+    const [year, month] = date.split("-");
     const s3Path = `s3massive:flatfiles/${s3Subpath}/${year}/${month}/${date}.csv.gz`;
     const tmpDir = `/tmp/massive-bulk-${assetClass}-${dataset}`;
     const localCsv = `${tmpDir}/${date}.csv.gz`;
@@ -740,21 +718,19 @@ export class MassiveProvider implements MarketDataProvider {
     try {
       // Download CSV.gz from S3 via rclone (if not already cached)
       if (!exists(localCsv)) {
-        await execFileAsync('rclone', ['copy', s3Path, `${tmpDir}/`], { timeout: 300_000 });
+        await execFileAsync("rclone", ["copy", s3Path, `${tmpDir}/`], { timeout: 300_000 });
         if (!exists(localCsv)) {
           throw new Error(`rclone download failed — file not found: ${localCsv}`);
         }
       }
 
       // Build ticker filter WHERE clause
-      const prefix = assetClass === 'option' ? 'O:' : 'I:';
-      const tickerConditions = tickers
-        .map(t => `ticker LIKE '${prefix}${t}%'`)
-        .join(' OR ');
+      const prefix = assetClass === "option" ? "O:" : "I:";
+      const tickerConditions = tickers.map((t) => `ticker LIKE '${prefix}${t}%'`).join(" OR ");
       const whereClause = `WHERE ${tickerConditions}`;
 
       // CSV column definitions differ by asset class
-      const isOption = assetClass === 'option';
+      const isOption = assetClass === "option";
       const csvColumns = isOption
         ? "columns = {'ticker': 'VARCHAR', 'volume': 'BIGINT', 'open': 'DOUBLE', 'close': 'DOUBLE', 'high': 'DOUBLE', 'low': 'DOUBLE', 'window_start': 'BIGINT', 'transactions': 'BIGINT'}"
         : "columns = {'ticker': 'VARCHAR', 'open': 'DOUBLE', 'close': 'DOUBLE', 'high': 'DOUBLE', 'low': 'DOUBLE', 'window_start': 'BIGINT'}";
@@ -797,8 +773,8 @@ export class MassiveProvider implements MarketDataProvider {
       `;
 
       // Use in-memory DuckDB to run the conversion
-      const { DuckDBInstance } = await import('@duckdb/node-api');
-      const db = await DuckDBInstance.create(':memory:');
+      const { DuckDBInstance } = await import("@duckdb/node-api");
+      const db = await DuckDBInstance.create(":memory:");
       const conn = await db.connect();
 
       try {
@@ -806,9 +782,7 @@ export class MassiveProvider implements MarketDataProvider {
         await conn.run(sql);
 
         // Get row count from the written Parquet
-        const countResult = await conn.runAndReadAll(
-          `SELECT count(*) AS cnt FROM '${outputPath}'`
-        );
+        const countResult = await conn.runAndReadAll(`SELECT count(*) AS cnt FROM '${outputPath}'`);
         const rowCount = Number(countResult.getRows()[0][0]);
         return { rowCount, skipped: false };
       } finally {
@@ -817,7 +791,7 @@ export class MassiveProvider implements MarketDataProvider {
     } finally {
       // Clean up temp CSV (keep output Parquet)
       try {
-        const { unlinkSync } = await import('fs');
+        const { unlinkSync } = await import("fs");
         if (exists(localCsv)) unlinkSync(localCsv);
       } catch {
         // Ignore cleanup errors
@@ -870,15 +844,11 @@ export class MassiveProvider implements MarketDataProvider {
       const response = await fetchWithRetry(url, headers);
 
       if (response.status === 401) {
-        throw new Error(
-          "MASSIVE_API_KEY rejected by Massive.com — check your key",
-        );
+        throw new Error("MASSIVE_API_KEY rejected by Massive.com — check your key");
       }
 
       if (!response.ok) {
-        throw new Error(
-          `Massive.com API error: HTTP ${response.status} ${response.statusText}`,
-        );
+        throw new Error(`Massive.com API error: HTTP ${response.status} ${response.statusText}`);
       }
 
       const json = await response.json();
@@ -895,9 +865,7 @@ export class MassiveProvider implements MarketDataProvider {
 
       if (data.results.length > 0 && underlyingPrice === 0) {
         underlyingPrice = data.results[0].underlying_asset.price;
-        underlyingTicker = fromMassiveTicker(
-          data.results[0].underlying_asset.ticker,
-        );
+        underlyingTicker = fromMassiveTicker(data.results[0].underlying_asset.ticker);
       }
 
       for (const contract of data.results) {
@@ -908,9 +876,7 @@ export class MassiveProvider implements MarketDataProvider {
         const nextUrlObj = new URL(data.next_url);
         const cursor = nextUrlObj.searchParams.get("cursor") ?? data.next_url;
         if (seenCursors.has(cursor)) {
-          throw new Error(
-            `Pagination loop detected — cursor repeated: ${cursor.slice(0, 50)}...`,
-          );
+          throw new Error(`Pagination loop detected — cursor repeated: ${cursor.slice(0, 50)}...`);
         }
         seenCursors.add(cursor);
         url = data.next_url;

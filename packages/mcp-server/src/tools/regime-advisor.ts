@@ -14,21 +14,10 @@ import type { Trade } from "@tradeblocks/lib";
 import { getConnection } from "../db/connection.ts";
 import { listProfiles } from "../db/profile-schemas.ts";
 import { filterByStrategy } from "./shared/filters.ts";
-import {
-  buildLookaheadFreeQuery,
-  type MarketLookupKey,
-} from "../utils/field-timing.ts";
-import {
-  DEFAULT_MARKET_TICKER,
-  marketTickerDateKey,
-  resolveTradeTicker,
-} from "../utils/ticker.ts";
+import { buildLookaheadFreeQuery, type MarketLookupKey } from "../utils/field-timing.ts";
+import { DEFAULT_MARKET_TICKER, marketTickerDateKey, resolveTradeTicker } from "../utils/ticker.ts";
 import { computeSliceStats, type SliceStats } from "../utils/analysis-stats.ts";
-import {
-  upgradeToReadWrite,
-  downgradeToReadOnly,
-  getConnectionMode,
-} from "../db/connection.ts";
+import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.ts";
 import { syncAllBlocks } from "../sync/index.ts";
 
 // =============================================================================
@@ -86,7 +75,7 @@ function resultToRecords(result: {
 }
 
 function recordsByTickerDate(
-  records: Record<string, unknown>[]
+  records: Record<string, unknown>[],
 ): Map<string, Record<string, unknown>> {
   const mapped = new Map<string, Record<string, unknown>>();
   for (const record of records) {
@@ -144,16 +133,12 @@ export const regimeAllocationAdvisorSchema = z.object({
   blockId: z
     .string()
     .optional()
-    .describe(
-      "Block ID to analyze. When omitted, aggregate across all profiled strategies."
-    ),
+    .describe("Block ID to analyze. When omitted, aggregate across all profiled strategies."),
   minTrades: z
     .number()
     .optional()
     .default(5)
-    .describe(
-      "Minimum trades per regime cell for reliable stats (default: 5)"
-    ),
+    .describe("Minimum trades per regime cell for reliable stats (default: 5)"),
 });
 
 // =============================================================================
@@ -162,7 +147,7 @@ export const regimeAllocationAdvisorSchema = z.object({
 
 export async function handleRegimeAllocationAdvisor(
   input: z.infer<typeof regimeAllocationAdvisorSchema>,
-  baseDir: string
+  baseDir: string,
 ): Promise<ReturnType<typeof createToolOutput>> {
   const minTrades = input.minTrades ?? 5;
   const warnings: string[] = [];
@@ -177,7 +162,7 @@ export async function handleRegimeAllocationAdvisor(
       input.blockId
         ? `No strategy profiles found for block '${input.blockId}'. Use profile_strategy to create profiles first.`
         : "No strategy profiles found. Use profile_strategy to create profiles first.",
-      { error: "no_profiles" }
+      { error: "no_profiles" },
     );
   }
 
@@ -206,7 +191,7 @@ export async function handleRegimeAllocationAdvisor(
       if (!profile.expectedRegimes || profile.expectedRegimes.length === 0) {
         skippedNoRegimes++;
         profileUpgradeHints.push(
-          `Strategy '${profile.strategyName}' (block: ${profile.blockId}) has no expectedRegimes. Add via profile_strategy.`
+          `Strategy '${profile.strategyName}' (block: ${profile.blockId}) has no expectedRegimes. Add via profile_strategy.`,
         );
         continue;
       }
@@ -217,7 +202,7 @@ export async function handleRegimeAllocationAdvisor(
         block = await loadBlock(baseDir, profile.blockId);
       } catch {
         warnings.push(
-          `Could not load block '${profile.blockId}' for strategy '${profile.strategyName}'. Skipped.`
+          `Could not load block '${profile.blockId}' for strategy '${profile.strategyName}'. Skipped.`,
         );
         continue;
       }
@@ -233,7 +218,7 @@ export async function handleRegimeAllocationAdvisor(
 
       if (trades.length === 0) {
         warnings.push(
-          `No trades found for strategy '${profile.strategyName}' in block '${profile.blockId}'. Skipped.`
+          `No trades found for strategy '${profile.strategyName}' in block '${profile.blockId}'. Skipped.`,
         );
         continue;
       }
@@ -267,14 +252,14 @@ export async function handleRegimeAllocationAdvisor(
       if (matched.length === 0) {
         skippedNoMarket++;
         warnings.push(
-          `No market data matched for strategy '${profile.strategyName}' (${trades.length} trades). Import and enrich market data first.`
+          `No market data matched for strategy '${profile.strategyName}' (${trades.length} trades). Import and enrich market data first.`,
         );
         continue;
       }
 
       if (unmatchedCount > 0) {
         warnings.push(
-          `Strategy '${profile.strategyName}': ${unmatchedCount} of ${trades.length} trades had no market data match.`
+          `Strategy '${profile.strategyName}': ${unmatchedCount} of ${trades.length} trades had no market data match.`,
         );
       }
 
@@ -297,9 +282,7 @@ export async function handleRegimeAllocationAdvisor(
       }
 
       // Build per-regime comparison
-      const expectedSet = new Set(
-        profile.expectedRegimes.map((r) => r.toLowerCase())
-      );
+      const expectedSet = new Set(profile.expectedRegimes.map((r) => r.toLowerCase()));
       const regimePerformance: Record<string, RegimeCell> = {};
 
       for (const [label, pls] of Object.entries(regimePls)) {
@@ -345,8 +328,7 @@ export async function handleRegimeAllocationAdvisor(
 
       // Allocation from position sizing
       const allocationPct =
-        profile.positionSizing?.liveAllocationPct ??
-        profile.positionSizing?.allocationPct;
+        profile.positionSizing?.liveAllocationPct ?? profile.positionSizing?.allocationPct;
 
       strategies.push({
         strategyName: profile.strategyName,
@@ -362,7 +344,7 @@ export async function handleRegimeAllocationAdvisor(
       });
     } catch (err) {
       warnings.push(
-        `Error processing strategy '${profile.strategyName}' (block: ${profile.blockId}): ${(err as Error).message}`
+        `Error processing strategy '${profile.strategyName}' (block: ${profile.blockId}): ${(err as Error).message}`,
       );
     }
   }
@@ -400,12 +382,8 @@ export async function handleRegimeAllocationAdvisor(
   const summaryText =
     `Regime allocation advisor: ${strategies.length}/${profiles.length} strategies analyzed. ` +
     `${allThesisViolations.length} thesis violation(s), ${allHiddenEdges.length} hidden edge(s). ` +
-    (skippedNoRegimes > 0
-      ? `${skippedNoRegimes} skipped (no expectedRegimes). `
-      : "") +
-    (skippedNoMarket > 0
-      ? `${skippedNoMarket} skipped (no market data). `
-      : "");
+    (skippedNoRegimes > 0 ? `${skippedNoRegimes} skipped (no expectedRegimes). ` : "") +
+    (skippedNoMarket > 0 ? `${skippedNoMarket} skipped (no market data). ` : "");
 
   return createToolOutput(summaryText, {
     strategies,
@@ -420,10 +398,7 @@ export async function handleRegimeAllocationAdvisor(
 // Registration
 // =============================================================================
 
-export function registerRegimeAdvisorTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerRegimeAdvisorTools(server: McpServer, baseDir: string): void {
   server.registerTool(
     "regime_allocation_advisor",
     {
@@ -450,6 +425,6 @@ export function registerRegimeAdvisorTools(
         }
       }
       return handleRegimeAllocationAdvisor(input, baseDir);
-    }
+    },
   );
 }

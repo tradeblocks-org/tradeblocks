@@ -45,11 +45,7 @@ function lit(value: string): string {
  * Read raw minute bars from `market.spot` for a ticker over a date range.
  * Results are ordered by (date, time) so callers receive a deterministic stream.
  */
-export function buildReadBarsSQL(
-  ticker: string,
-  from: string,
-  to: string,
-): BuiltSQL {
+export function buildReadBarsSQL(ticker: string, from: string, to: string): BuiltSQL {
   return {
     sql: `SELECT ticker, date, time, open, high, low, close, bid, ask
           FROM market.spot
@@ -65,11 +61,7 @@ export function buildReadBarsSQL(
  * idioms. Window-function equivalents are explicitly avoided — they do NOT
  * coexist with `GROUP BY` and are a common source of incorrect ordering.
  */
-export function buildReadDailyBarsSQL(
-  ticker: string,
-  from: string,
-  to: string,
-): BuiltSQL {
+export function buildReadDailyBarsSQL(ticker: string, from: string, to: string): BuiltSQL {
   return {
     sql: `SELECT
             ticker,
@@ -103,11 +95,7 @@ export function buildReadDailyBarsSQL(
  * Used by the enricher's VIX RTH open path, where only the opening tick of
  * the VIX family is needed for term-structure context computation.
  */
-export function buildReadRthOpensSQL(
-  ticker: string,
-  from: string,
-  to: string,
-): BuiltSQL {
+export function buildReadRthOpensSQL(ticker: string, from: string, to: string): BuiltSQL {
   return {
     sql: `SELECT date, first(open ORDER BY time) AS open
           FROM market.spot

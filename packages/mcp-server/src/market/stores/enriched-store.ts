@@ -18,8 +18,8 @@ export interface EnrichedReadOpts {
   ticker: string;
   from: string;
   to: string;
-  includeContext?: boolean;   // join enriched_context (VIX family cross-ticker fields)
-  includeOhlcv?: boolean;     // join spot daily for OHLCV (avoids double-storing OHLCV)
+  includeContext?: boolean; // join enriched_context (VIX family cross-ticker fields)
+  includeOhlcv?: boolean; // join spot daily for OHLCV (avoids double-storing OHLCV)
 }
 
 export abstract class EnrichedStore {

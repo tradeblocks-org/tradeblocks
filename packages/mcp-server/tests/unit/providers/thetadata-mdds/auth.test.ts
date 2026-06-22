@@ -23,7 +23,9 @@ describe("ThetaData MDDS auth", () => {
     try {
       const file = join(dir, "creds.txt");
       writeFileSync(file, "file@example.com\nfile-pass\n", "utf8");
-      const creds = resolveThetaCredentials({ THETADATA_CREDENTIALS_FILE: file } as NodeJS.ProcessEnv);
+      const creds = resolveThetaCredentials({
+        THETADATA_CREDENTIALS_FILE: file,
+      } as NodeJS.ProcessEnv);
       expect(creds).toEqual({ email: "file@example.com", password: "file-pass", source: file });
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -46,10 +48,13 @@ describe("ThetaData MDDS auth", () => {
 
   it("authenticates through Nexus without leaking credentials in errors", async () => {
     const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({
-        sessionId: "session-123",
-        user: { stockSubscription: 1, optionsSubscription: 2, indicesSubscription: 2 },
-      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+      new Response(
+        JSON.stringify({
+          sessionId: "session-123",
+          user: { stockSubscription: 1, optionsSubscription: 2, indicesSubscription: 2 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
     );
 
     const result = await authenticateThetaData(
@@ -77,7 +82,11 @@ describe("ThetaData MDDS auth", () => {
           error: "Invalid credentials for person@example.com with password secret",
           sessionId: "550e8400-e29b-41d4-a716-446655440000",
         }),
-        { status: 401, statusText: "Unauthorized", headers: { "Content-Type": "application/json" } },
+        {
+          status: 401,
+          statusText: "Unauthorized",
+          headers: { "Content-Type": "application/json" },
+        },
       ),
     );
 
@@ -119,10 +128,13 @@ describe("ThetaData MDDS auth", () => {
 
   it("ignores absent or non-integer subscription fields", async () => {
     const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({
-        sessionId: "session-123",
-        user: { stockSubscription: 1.5, optionsSubscription: "2", indicesSubscription: 3 },
-      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+      new Response(
+        JSON.stringify({
+          sessionId: "session-123",
+          user: { stockSubscription: 1.5, optionsSubscription: "2", indicesSubscription: 3 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
     );
 
     const result = await authenticateThetaData(

@@ -51,16 +51,16 @@ npm run test:coverage    # Coverage report
 
 ## Documentation
 
-| Guide | Description |
-|-------|-------------|
-| [Getting Started](docs/getting-started.md) | Installation, env vars, first import |
-| [Market Data](docs/market-data.md) | CSV import, Massive API, enrichment |
-| [MCP Tools](docs/mcp-tools.md) | Complete tool reference by category |
-| [Architecture](docs/architecture.md) | Data flow, schemas, key patterns |
-| [Development Guide](docs/development.md) | Contributing, local dev setup |
-| [MCP Server](packages/mcp-server/README.md) | Installation, platform configuration |
-| [Usage Guide](docs/usage.md) | Tool reference, example workflows |
-| [Agent Skills](packages/agent-skills/README.md) | Guided conversational analysis |
+| Guide                                           | Description                          |
+| ----------------------------------------------- | ------------------------------------ |
+| [Getting Started](docs/getting-started.md)      | Installation, env vars, first import |
+| [Market Data](docs/market-data.md)              | CSV import, Massive API, enrichment  |
+| [MCP Tools](docs/mcp-tools.md)                  | Complete tool reference by category  |
+| [Architecture](docs/architecture.md)            | Data flow, schemas, key patterns     |
+| [Development Guide](docs/development.md)        | Contributing, local dev setup        |
+| [MCP Server](packages/mcp-server/README.md)     | Installation, platform configuration |
+| [Usage Guide](docs/usage.md)                    | Tool reference, example workflows    |
+| [Agent Skills](packages/agent-skills/README.md) | Guided conversational analysis       |
 
 ## Data Format
 
@@ -75,12 +75,14 @@ Files are auto-detected by column headers, not filenames. See [Usage Guide](docs
 ## Features Overview
 
 ### Web Dashboard
+
 - Performance dashboards with equity curves, drawdowns, monthly returns
 - Risk tooling: Monte Carlo simulator, position sizing, correlation analysis
 - Block-based organization for multiple strategies
 - Client-side storage (IndexedDB) - data stays on your machine
 
 ### MCP Server
+
 - Tools for statistics, simulations, walk-forward analysis, and SQL queries
 - SQL analytics layer (`run_sql` + `describe_database`) for flexible data exploration
 - Massive.com API integration for automated market data import

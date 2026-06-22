@@ -8,7 +8,12 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getConnection, upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.ts";
+import {
+  getConnection,
+  upgradeToReadWrite,
+  downgradeToReadOnly,
+  getConnectionMode,
+} from "../db/connection.ts";
 import { withFullSync } from "./middleware/sync-middleware.ts";
 import { createToolOutput } from "../utils/output-formatter.ts";
 import {
@@ -35,7 +40,7 @@ interface ColumnInfo {
   description: string;
   nullable: boolean;
   hypothesis: boolean;
-  timing?: 'open' | 'close' | 'static';
+  timing?: "open" | "close" | "static";
 }
 
 interface BlockBreakdown {
@@ -105,9 +110,9 @@ function generateLagTemplate(): {
   fieldCounts: { openKnown: number; static: number; closeDerived: number };
 } {
   // Qualify daily-sourced fields with d., context-sourced with c.
-  const dailyOpenCols = [...DAILY_OPEN_FIELDS].map(f => `    d.${f}`).join(',\n');
-  const contextOpenCols = [...CONTEXT_OPEN_FIELDS].map(f => `    c.${f}`).join(',\n');
-  const staticCols = [...DAILY_STATIC_FIELDS].map(f => `    d.${f}`).join(',\n');
+  const dailyOpenCols = [...DAILY_OPEN_FIELDS].map((f) => `    d.${f}`).join(",\n");
+  const contextOpenCols = [...CONTEXT_OPEN_FIELDS].map((f) => `    c.${f}`).join(",\n");
+  const staticCols = [...DAILY_STATIC_FIELDS].map((f) => `    d.${f}`).join(",\n");
 
   const sql = `-- Lookahead-free CTE template for market.enriched + market.spot_daily + VIX tickers + market.enriched_context
 -- Open-known fields: safe to use same-day (known at/before market open)
@@ -174,9 +179,9 @@ WHERE t.block_id = 'my-block'`;
 
   return {
     description:
-      'Reusable LAG() CTE for lookahead-free queries joining trades to market.enriched + market.spot_daily + VIX tickers + market.enriched_context. ' +
-      'Close-derived fields (VIX_Close, Vol_Regime, RSI_14, etc.) use LAG() to get the prior trading day value, ' +
-      'preventing lookahead bias. Open-known and static fields are safe to use same-day.',
+      "Reusable LAG() CTE for lookahead-free queries joining trades to market.enriched + market.spot_daily + VIX tickers + market.enriched_context. " +
+      "Close-derived fields (VIX_Close, Vol_Regime, RSI_14, etc.) use LAG() to get the prior trading day value, " +
+      "preventing lookahead bias. Open-known and static fields are safe to use same-day.",
     sql,
     fieldCounts: {
       openKnown: OPEN_KNOWN_FIELDS.size,
@@ -248,7 +253,7 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
 
         // Get row count
         const countResult = await conn.runAndReadAll(
-          `SELECT COUNT(*) FROM ${schemaName}.${tableName}`
+          `SELECT COUNT(*) FROM ${schemaName}.${tableName}`,
         );
         const rowCount = Number(countResult.getRows()[0][0]);
         totalRows += rowCount;
@@ -258,20 +263,17 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
         const tableDesc = schemaDesc?.tables?.[tableName];
 
         // Build column info with merged descriptions
-        const columns: ColumnInfo[] = columnsData.map(
-          ([columnName, dataType, isNullable]) => {
-            const colDesc: ColumnDescription | undefined =
-              tableDesc?.columns?.[columnName];
-            return {
-              name: columnName,
-              type: dataType,
-              description: colDesc?.description || "",
-              nullable: isNullable,
-              hypothesis: colDesc?.hypothesis || false,
-              timing: colDesc?.timing,
-            };
-          }
-        );
+        const columns: ColumnInfo[] = columnsData.map(([columnName, dataType, isNullable]) => {
+          const colDesc: ColumnDescription | undefined = tableDesc?.columns?.[columnName];
+          return {
+            name: columnName,
+            type: dataType,
+            description: colDesc?.description || "",
+            nullable: isNullable,
+            hypothesis: colDesc?.hypothesis || false,
+            timing: colDesc?.timing,
+          };
+        });
 
         // Build table info
         const tableInfo: TableInfo = {
@@ -303,9 +305,9 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
       let vixTenors: string[] = [];
       try {
         const tenorResult = await conn.runAndReadAll(
-          `SELECT DISTINCT ticker FROM market.enriched WHERE ticker LIKE 'VIX%' ORDER BY ticker`
+          `SELECT DISTINCT ticker FROM market.enriched WHERE ticker LIKE 'VIX%' ORDER BY ticker`,
         );
-        vixTenors = tenorResult.getRows().map(r => r[0] as string);
+        vixTenors = tenorResult.getRows().map((r) => r[0] as string);
       } catch {
         // No market.enriched or no VIX rows — skip
       }
@@ -325,11 +327,16 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
         syncInfo: {
           blocksProcessed: blockSyncResult.blocksProcessed,
         },
-        vixTenors: vixTenors.length > 0 ? {
-          available: vixTenors,
-          queryPattern: "SELECT e.date, s.close, e.ivr, e.ivp FROM market.enriched e JOIN market.spot_daily s ON s.date = e.date AND s.ticker = e.ticker WHERE e.ticker = '{TENOR}'",
-          ratioPattern: "SELECT a.date, a.close / b.close AS ratio FROM market.spot_daily a JOIN market.spot_daily b ON a.date = b.date AND b.ticker = 'VIX' WHERE a.ticker = '{TENOR}'",
-        } : undefined,
+        vixTenors:
+          vixTenors.length > 0
+            ? {
+                available: vixTenors,
+                queryPattern:
+                  "SELECT e.date, s.close, e.ivr, e.ivp FROM market.enriched e JOIN market.spot_daily s ON s.date = e.date AND s.ticker = e.ticker WHERE e.ticker = '{TENOR}'",
+                ratioPattern:
+                  "SELECT a.date, a.close / b.close AS ratio FROM market.spot_daily a JOIN market.spot_daily b ON a.date = b.date AND b.ticker = 'VIX' WHERE a.ticker = '{TENOR}'",
+              }
+            : undefined,
       };
 
       const tableCount = tables.length;
@@ -337,7 +344,7 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
       const summary = `Database schema: ${tableCount} tables across ${schemaCount} schemas. ${totalRows} total rows.`;
 
       return createToolOutput(summary, result);
-    })
+    }),
   );
 
   // --------------------------------------------------------------------------
@@ -362,25 +369,21 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
       if (getConnectionMode() !== "read_write") {
         throw new Error(
           "Cannot purge market table: another session holds the database write lock. " +
-          "Close other Claude Code sessions or wait for their sync to complete."
+            "Close other Claude Code sessions or wait for their sync to complete.",
         );
       }
       try {
         const fullTableName = `market.${table}`;
 
         // Get current row count before deletion
-        const countResult = await conn.runAndReadAll(
-          `SELECT COUNT(*) FROM ${fullTableName}`
-        );
+        const countResult = await conn.runAndReadAll(`SELECT COUNT(*) FROM ${fullTableName}`);
         const rowsBefore = Number(countResult.getRows()[0][0]);
 
         // Delete table data and sync metadata atomically
         try {
           await conn.run(`BEGIN TRANSACTION`);
           await conn.run(`DELETE FROM ${fullTableName}`);
-          await conn.run(
-            `DELETE FROM market._sync_metadata WHERE target_table = '${table}'`
-          );
+          await conn.run(`DELETE FROM market._sync_metadata WHERE target_table = '${table}'`);
           await conn.run(`COMMIT`);
         } catch (e) {
           await conn.run(`ROLLBACK`).catch(() => {});
@@ -396,11 +399,11 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
 
         return createToolOutput(
           `Purged ${rowsBefore} rows from ${fullTableName}. Sync metadata cleared for matching market files.`,
-          result
+          result,
         );
       } finally {
         await downgradeToReadOnly(baseDir);
       }
-    }
+    },
   );
 }

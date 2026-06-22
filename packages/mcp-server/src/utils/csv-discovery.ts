@@ -90,7 +90,7 @@ export async function detectCsvType(filePath: string): Promise<CsvType> {
     const hasPl = plColumnAliases.some((alias) => headers.includes(alias));
     // Match trade columns - require header to contain the full column pattern
     const matchedTradeColumns = tradeOptionalColumns.filter((col) =>
-      headers.some((h) => h.includes(col))
+      headers.some((h) => h.includes(col)),
     );
 
     if (hasPl && matchedTradeColumns.length >= 2) {
@@ -99,7 +99,7 @@ export async function detectCsvType(filePath: string): Promise<CsvType> {
       // but also have "Initial Premium" (or aliases) which tradelogs use "Premium" instead.
       const reportingOnlyColumns = ["initial premium", "initial credit", "initial premium ($)"];
       const hasReportingOnly = reportingOnlyColumns.some((col) =>
-        headers.some((h) => h.includes(col))
+        headers.some((h) => h.includes(col)),
       );
       if (hasReportingOnly) {
         return "reportinglog";
@@ -110,7 +110,7 @@ export async function detectCsvType(filePath: string): Promise<CsvType> {
     // Daily log detection:
     // Required: "Date" (but not "Date Opened"/"Date Closed"), and value column
     const hasSimpleDate = headers.some(
-      (h) => h === "date" || (h.includes("date") && !h.includes("opened") && !h.includes("closed"))
+      (h) => h === "date" || (h.includes("date") && !h.includes("opened") && !h.includes("closed")),
     );
     const valueColumnAliases = [
       "portfolio value",
@@ -120,7 +120,7 @@ export async function detectCsvType(filePath: string): Promise<CsvType> {
       "netliquidity",
     ];
     const hasValue = valueColumnAliases.some((alias) =>
-      headers.some((h) => h.includes(alias) || alias.includes(h))
+      headers.some((h) => h.includes(alias) || alias.includes(h)),
     );
 
     // Dailylog: has date + value columns but lacks trade-specific columns
@@ -130,26 +130,21 @@ export async function detectCsvType(filePath: string): Promise<CsvType> {
 
     // TAT (Trade Automation Toolbox) detection:
     // Has "TradeID" AND "ProfitLoss" AND "BuyingPower"
-    const tatSignature = ['tradeid', 'profitloss', 'buyingpower'];
+    const tatSignature = ["tradeid", "profitloss", "buyingpower"];
     const isTat = tatSignature.every((sig) => headers.includes(sig));
     if (isTat) {
-      return 'reportinglog';
+      return "reportinglog";
     }
 
     // Reporting log detection:
     // Has "Actual P/L" or columns from REPORTING_TRADE_COLUMN_ALIASES
-    const reportingAliases = Object.keys(REPORTING_TRADE_COLUMN_ALIASES).map(
-      (k) => k.toLowerCase()
+    const reportingAliases = Object.keys(REPORTING_TRADE_COLUMN_ALIASES).map((k) =>
+      k.toLowerCase(),
     );
-    const hasReportingColumns = reportingAliases.some((alias) =>
-      headers.includes(alias)
-    );
-    const hasActualPl = headers.some(
-      (h) => h.includes("actual") && h.includes("p")
-    );
+    const hasReportingColumns = reportingAliases.some((alias) => headers.includes(alias));
+    const hasActualPl = headers.some((h) => h.includes("actual") && h.includes("p"));
     const hasReportedStyle =
-      headers.includes("trade id") ||
-      headers.some((h) => h.includes("reported"));
+      headers.includes("trade id") || headers.some((h) => h.includes("reported"));
 
     if (hasActualPl || hasReportingColumns || hasReportedStyle) {
       // Double-check it's not a regular tradelog
@@ -174,7 +169,7 @@ export async function detectCsvType(filePath: string): Promise<CsvType> {
  * Returns mapping of detected CSV types to filenames.
  */
 export async function discoverCsvFiles(
-  folderPath: string
+  folderPath: string,
 ): Promise<{ mappings: CsvMappings; unrecognized: string[] }> {
   const mappings: CsvMappings = {};
   const unrecognized: string[] = [];
@@ -252,11 +247,10 @@ export async function discoverCsvFiles(
 /**
  * Log warning when folder has CSVs but none match expected patterns
  */
-export function logCsvDiscoveryWarning(
-  folderName: string,
-  csvFiles: string[]
-): void {
-  console.error(`Warning: Folder '${folderName}' has CSV files but none match expected trade log format.`);
+export function logCsvDiscoveryWarning(folderName: string, csvFiles: string[]): void {
+  console.error(
+    `Warning: Folder '${folderName}' has CSV files but none match expected trade log format.`,
+  );
   console.error(`  Found: ${csvFiles.join(", ")}`);
   console.error(`  Expected columns: P/L, Date Opened, Date Closed, Symbol, Strategy`);
 }

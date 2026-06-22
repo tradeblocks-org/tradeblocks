@@ -45,11 +45,7 @@ import { SizingModeToggle } from "@/components/sizing-mode-toggle";
 import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@tradeblocks/lib";
 
@@ -59,9 +55,7 @@ export default function PerformanceBlocksPage() {
   // Block store
   const activeBlock = useBlockStore((state) => {
     const activeBlockId = state.activeBlockId;
-    return activeBlockId
-      ? state.blocks.find((block) => block.id === activeBlockId)
-      : null;
+    return activeBlockId ? state.blocks.find((block) => block.id === activeBlockId) : null;
   });
   const isBlockLoading = useBlockStore((state) => state.isLoading);
   const blockIsInitialized = useBlockStore((state) => state.isInitialized);
@@ -80,9 +74,7 @@ export default function PerformanceBlocksPage() {
   } = usePerformanceStore();
 
   // Local state for date range picker
-  const [dateRange, setLocalDateRange] = useState<DateRange | undefined>(
-    undefined
-  );
+  const [dateRange, setLocalDateRange] = useState<DateRange | undefined>(undefined);
 
   // Handle date range changes
   const handleDateRangeChange = (newDateRange: DateRange | undefined) => {
@@ -166,9 +158,7 @@ export default function PerformanceBlocksPage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">
-            Loading {activeBlock.name} performance data...
-          </p>
+          <p className="text-muted-foreground">Loading {activeBlock.name} performance data...</p>
         </div>
       </div>
     );
@@ -180,9 +170,7 @@ export default function PerformanceBlocksPage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center max-w-md">
           <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">
-            Error Loading Performance Data
-          </h3>
+          <h3 className="text-lg font-semibold mb-2">Error Loading Performance Data</h3>
           <p className="text-muted-foreground mb-4">{error}</p>
         </div>
       </div>
@@ -197,8 +185,8 @@ export default function PerformanceBlocksPage() {
           <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">No Trade Data</h3>
           <p className="text-muted-foreground mb-4">
-            This block doesn&apos;t contain any trades yet. Upload trading data
-            to see performance analytics.
+            This block doesn&apos;t contain any trades yet. Upload trading data to see performance
+            analytics.
           </p>
         </div>
       </div>
@@ -217,15 +205,14 @@ export default function PerformanceBlocksPage() {
                 variant="outline"
                 className={cn(
                   "w-[280px] justify-start text-left font-normal",
-                  !dateRange && "text-muted-foreground"
+                  !dateRange && "text-muted-foreground",
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {dateRange?.from ? (
                   dateRange.to ? (
                     <>
-                      {format(dateRange.from, "LLL dd, y")} -{" "}
-                      {format(dateRange.to, "LLL dd, y")}
+                      {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
                     </>
                   ) : (
                     format(dateRange.from, "LLL dd, y")
@@ -236,10 +223,7 @@ export default function PerformanceBlocksPage() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <DateRangePicker
-                date={dateRange}
-                onDateChange={handleDateRangeChange}
-              />
+              <DateRangePicker date={dateRange} onDateChange={handleDateRangeChange} />
             </PopoverContent>
           </Popover>
         </div>

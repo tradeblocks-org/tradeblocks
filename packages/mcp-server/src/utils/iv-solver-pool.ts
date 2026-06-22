@@ -146,7 +146,12 @@ function jobsToColumns(jobs: IvSolveJob[]): IvSolveColumns {
 }
 
 /** Slice a column batch into a per-shard request, copying the [lo, hi) window. */
-function shardRequest(cols: IvSolveColumns, id: number, lo: number, hi: number): IvSolveBatchRequest {
+function shardRequest(
+  cols: IvSolveColumns,
+  id: number,
+  lo: number,
+  hi: number,
+): IvSolveBatchRequest {
   return {
     id,
     count: hi - lo,

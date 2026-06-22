@@ -118,9 +118,7 @@ export function selectVerificationSampleDates(
     ...PHASE_5_KNOWN_EVENTS.map((s) => s.date),
     ...PHASE_5_STRUCTURAL_DATES.map((s) => s.date),
   ]);
-  const candidates = enumerateWeekdays(fromDate, toDate).filter(
-    (d) => !selectedSet.has(d),
-  );
+  const candidates = enumerateWeekdays(fromDate, toDate).filter((d) => !selectedSet.has(d));
 
   const random: SampleDate[] = [];
   const pool = [...candidates];
@@ -129,7 +127,7 @@ export function selectVerificationSampleDates(
     random.push({ date: pool.splice(idx, 1)[0], category: "random" });
   }
 
-  return [...PHASE_5_KNOWN_EVENTS, ...PHASE_5_STRUCTURAL_DATES, ...random].sort(
-    (a, b) => a.date.localeCompare(b.date),
+  return [...PHASE_5_KNOWN_EVENTS, ...PHASE_5_STRUCTURAL_DATES, ...random].sort((a, b) =>
+    a.date.localeCompare(b.date),
   );
 }

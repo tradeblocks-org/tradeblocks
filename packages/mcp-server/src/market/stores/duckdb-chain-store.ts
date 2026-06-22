@@ -14,11 +14,7 @@ import type { ContractRow, CoverageReport } from "./types.ts";
 import { buildReadChainSQL } from "./chain-sql.ts";
 
 export class DuckdbChainStore extends ChainStore {
-  async writeChain(
-    underlying: string,
-    date: string,
-    rows: ContractRow[],
-  ): Promise<void> {
+  async writeChain(underlying: string, date: string, rows: ContractRow[]): Promise<void> {
     if (rows.length === 0) return;
     const placeholders = rows
       .map((_, i) => {
@@ -56,10 +52,7 @@ export class DuckdbChainStore extends ChainStore {
     return { rowCount: Number(result.rowsChanged) };
   }
 
-  async readChain(
-    underlying: string,
-    date: string,
-  ): Promise<ContractRow[]> {
+  async readChain(underlying: string, date: string): Promise<ContractRow[]> {
     // Builder inlines values; unbound runAndReadAll(sql) bypasses
     // extract_statements (chain-sql.ts header).
     const { sql } = buildReadChainSQL(underlying, date);
@@ -76,11 +69,7 @@ export class DuckdbChainStore extends ChainStore {
     }));
   }
 
-  async getCoverage(
-    underlying: string,
-    from: string,
-    to: string,
-  ): Promise<CoverageReport> {
+  async getCoverage(underlying: string, from: string, to: string): Promise<CoverageReport> {
     // Inline literals — same leak rationale as readChain.
     const underlyingLit = underlying.replace(/'/g, "''");
     const fromLit = from.replace(/'/g, "''");

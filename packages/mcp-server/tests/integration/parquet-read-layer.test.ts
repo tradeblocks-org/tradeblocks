@@ -13,10 +13,7 @@ import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
-import {
-  createMarketParquetViews,
-  ensureMutableMarketTables,
-} from "../../src/test-exports.ts";
+import { createMarketParquetViews, ensureMutableMarketTables } from "../../src/test-exports.ts";
 
 describe("Parquet Read Layer (end-to-end)", () => {
   let tmpDir: string;
@@ -81,7 +78,11 @@ describe("Parquet Read Layer (end-to-end)", () => {
   });
 
   afterEach(() => {
-    try { conn.closeSync(); } catch { /* ignore */ }
+    try {
+      conn.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -103,7 +104,9 @@ describe("Parquet Read Layer (end-to-end)", () => {
     const optionChainResult = await conn.runAndReadAll("SELECT COUNT(*) FROM market.option_chain");
     expect(Number(optionChainResult.getRows()[0][0])).toBe(1);
 
-    const quoteResult = await conn.runAndReadAll("SELECT COUNT(*) FROM market.option_quote_minutes");
+    const quoteResult = await conn.runAndReadAll(
+      "SELECT COUNT(*) FROM market.option_quote_minutes",
+    );
     expect(Number(quoteResult.getRows()[0][0])).toBe(1);
   });
 
@@ -131,19 +134,19 @@ describe("Parquet Read Layer (end-to-end)", () => {
     // INSERT into _sync_metadata should succeed
     await expect(
       conn.run(
-        `INSERT INTO market._sync_metadata (source, ticker, target_table, synced_at) VALUES ('test', 'SPX', 'daily', CURRENT_TIMESTAMP)`
-      )
+        `INSERT INTO market._sync_metadata (source, ticker, target_table, synced_at) VALUES ('test', 'SPX', 'daily', CURRENT_TIMESTAMP)`,
+      ),
     ).resolves.not.toThrow();
 
     // Verify data was written
     const syncResult = await conn.runAndReadAll(
-      "SELECT COUNT(*) FROM market._sync_metadata WHERE source = 'test'"
+      "SELECT COUNT(*) FROM market._sync_metadata WHERE source = 'test'",
     );
     expect(Number(syncResult.getRows()[0][0])).toBe(1);
 
     // data_coverage was removed in Phase 2 D-11 — assert the table does NOT exist
     const coverageTableCheck = await conn.runAndReadAll(
-      "SELECT COUNT(*) FROM duckdb_tables() WHERE database_name = 'market' AND table_name = 'data_coverage'"
+      "SELECT COUNT(*) FROM duckdb_tables() WHERE database_name = 'market' AND table_name = 'data_coverage'",
     );
     expect(Number(coverageTableCheck.getRows()[0][0])).toBe(0);
   });
@@ -155,7 +158,7 @@ describe("Parquet Read Layer (end-to-end)", () => {
 
     // Check views (v3.0 surface only post Phase 6 Wave D)
     const viewResult = await conn.runAndReadAll(
-      "SELECT view_name FROM duckdb_views() WHERE database_name = 'market'"
+      "SELECT view_name FROM duckdb_views() WHERE database_name = 'market'",
     );
     const viewNames = viewResult.getRows().map((r: unknown[]) => String(r[0]));
     expect(viewNames).toContain("spot");
@@ -164,7 +167,7 @@ describe("Parquet Read Layer (end-to-end)", () => {
 
     // Check mutable tables
     const tableResult = await conn.runAndReadAll(
-      "SELECT table_name FROM duckdb_tables() WHERE database_name = 'market'"
+      "SELECT table_name FROM duckdb_tables() WHERE database_name = 'market'",
     );
     const tableNames = tableResult.getRows().map((r: unknown[]) => String(r[0]));
     expect(tableNames).toContain("_sync_metadata");

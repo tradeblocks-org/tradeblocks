@@ -7,11 +7,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock, loadReportingLog } from "../utils/block-loader.ts";
-import {
-  createToolOutput,
-  formatPercent,
-  formatCurrency,
-} from "../utils/output-formatter.ts";
+import { createToolOutput, formatPercent, formatCurrency } from "../utils/output-formatter.ts";
 import type { Trade, ReportingTrade } from "@tradeblocks/lib";
 import {
   normalizeToOneLot,
@@ -85,10 +81,7 @@ function computeTotalPremium(trade: Trade): number {
 /**
  * Calculate MFE/MAE metrics for a single trade
  */
-function calculateTradeExcursionMetrics(
-  trade: Trade,
-  tradeNumber: number
-): MFEMAEDataPoint | null {
+function calculateTradeExcursionMetrics(trade: Trade, tradeNumber: number): MFEMAEDataPoint | null {
   const totalMFE = computeTotalMaxProfit(trade);
   const totalMAE = computeTotalMaxLoss(trade);
 
@@ -100,9 +93,7 @@ function calculateTradeExcursionMetrics(
   // Determine denominator for percentage calculations
   const totalPremium = computeTotalPremium(trade);
   const margin =
-    typeof trade.marginReq === "number" &&
-    isFinite(trade.marginReq) &&
-    trade.marginReq !== 0
+    typeof trade.marginReq === "number" && isFinite(trade.marginReq) && trade.marginReq !== 0
       ? Math.abs(trade.marginReq)
       : undefined;
 
@@ -175,14 +166,10 @@ function calculateMFEMAEData(trades: Trade[]): MFEMAEDataPoint[] {
  */
 function createExcursionDistribution(
   dataPoints: MFEMAEDataPoint[],
-  bucketSize: number = 10
+  bucketSize: number = 10,
 ): MFEMAEDistributionBucket[] {
-  const mfeValues = dataPoints
-    .filter((d) => d.mfePercent !== undefined)
-    .map((d) => d.mfePercent!);
-  const maeValues = dataPoints
-    .filter((d) => d.maePercent !== undefined)
-    .map((d) => d.maePercent!);
+  const mfeValues = dataPoints.filter((d) => d.mfePercent !== undefined).map((d) => d.mfePercent!);
+  const maeValues = dataPoints.filter((d) => d.maePercent !== undefined).map((d) => d.maePercent!);
 
   if (mfeValues.length === 0 && maeValues.length === 0) {
     return [];
@@ -221,18 +208,14 @@ function createExcursionDistribution(
  */
 function filterByStrategy(trades: Trade[], strategy?: string): Trade[] {
   if (!strategy) return trades;
-  return trades.filter(
-    (t) => t.strategy.toLowerCase() === strategy.toLowerCase()
-  );
+  return trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
 }
 
 /**
  * Get the ISO week number
  */
 function getISOWeekNumber(date: Date): number {
-  const d = new Date(
-    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
-  );
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
@@ -253,8 +236,7 @@ function buildEquityCurve(trades: Trade[]): Array<{
   }
 
   const sortedTrades = [...trades].sort(
-    (a, b) =>
-      new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime()
+    (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
   );
 
   // Calculate initial capital from first trade
@@ -300,7 +282,7 @@ function buildEquityCurve(trades: Trade[]): Array<{
  * Calculate drawdown series from equity curve
  */
 function buildDrawdownSeries(
-  equityCurve: Array<{ date: string; equity: number; highWaterMark: number }>
+  equityCurve: Array<{ date: string; equity: number; highWaterMark: number }>,
 ): Array<{ date: string; drawdownPct: number }> {
   return equityCurve.map((point) => ({
     date: point.date,
@@ -314,9 +296,7 @@ function buildDrawdownSeries(
 /**
  * Calculate monthly returns matrix
  */
-function buildMonthlyReturns(
-  trades: Trade[]
-): Record<number, Record<number, number>> {
+function buildMonthlyReturns(trades: Trade[]): Record<number, Record<number, number>> {
   const monthlyData: Record<string, number> = {};
 
   trades.forEach((trade) => {
@@ -352,7 +332,7 @@ function buildMonthlyReturns(
  */
 function buildReturnDistribution(
   trades: Trade[],
-  bucketCount: number = 20
+  bucketCount: number = 20,
 ): Array<{ rangeStart: number; rangeEnd: number; count: number }> {
   if (trades.length === 0) return [];
 
@@ -362,8 +342,7 @@ function buildReturnDistribution(
   const range = maxReturn - minReturn || 1;
   const bucketSize = range / bucketCount;
 
-  const buckets: Array<{ rangeStart: number; rangeEnd: number; count: number }> =
-    [];
+  const buckets: Array<{ rangeStart: number; rangeEnd: number; count: number }> = [];
 
   for (let i = 0; i < bucketCount; i++) {
     const rangeStart = minReturn + i * bucketSize;
@@ -383,24 +362,14 @@ function buildReturnDistribution(
 /**
  * Calculate day of week average P/L
  */
-function buildDayOfWeekData(
-  trades: Trade[]
-): Array<{
+function buildDayOfWeekData(trades: Trade[]): Array<{
   day: string;
   count: number;
   avgPl: number;
   totalPl: number;
   avgPlPercent: number;
 }> {
-  const dayNames = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-  ];
+  const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const dayData: Record<
     string,
     { count: number; totalPl: number; totalPlPercent: number; percentCount: number }
@@ -428,13 +397,10 @@ function buildDayOfWeekData(
   return dayNames.map((day) => ({
     day,
     count: dayData[day]?.count || 0,
-    avgPl:
-      dayData[day]?.count > 0 ? dayData[day].totalPl / dayData[day].count : 0,
+    avgPl: dayData[day]?.count > 0 ? dayData[day].totalPl / dayData[day].count : 0,
     totalPl: dayData[day]?.totalPl || 0,
     avgPlPercent:
-      dayData[day]?.percentCount > 0
-        ? dayData[day].totalPlPercent / dayData[day].percentCount
-        : 0,
+      dayData[day]?.percentCount > 0 ? dayData[day].totalPlPercent / dayData[day].percentCount : 0,
   }));
 }
 
@@ -460,8 +426,7 @@ function buildStreakData(trades: Trade[]): {
   } | null;
 } {
   const sortedTrades = [...trades].sort(
-    (a, b) =>
-      new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime()
+    (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
   );
 
   const winStreaks: number[] = [];
@@ -517,13 +482,9 @@ function buildStreakData(trades: Trade[]): {
       maxWinStreak: Math.max(...winStreaks, 0),
       maxLossStreak: Math.max(...lossStreaks, 0),
       avgWinStreak:
-        winStreaks.length > 0
-          ? winStreaks.reduce((a, b) => a + b) / winStreaks.length
-          : 0,
+        winStreaks.length > 0 ? winStreaks.reduce((a, b) => a + b) / winStreaks.length : 0,
       avgLossStreak:
-        lossStreaks.length > 0
-          ? lossStreaks.reduce((a, b) => a + b) / lossStreaks.length
-          : 0,
+        lossStreaks.length > 0 ? lossStreaks.reduce((a, b) => a + b) / lossStreaks.length : 0,
     },
     runsTest,
   };
@@ -558,8 +519,7 @@ function calculateRunsTest(trades: Trade[]): {
 
   const n = n1 + n0;
   const expectedRuns = (2 * n1 * n0) / n + 1;
-  const variance =
-    (2 * n1 * n0 * (2 * n1 * n0 - n)) / (n * n * (n - 1));
+  const variance = (2 * n1 * n0 * (2 * n1 * n0 - n)) / (n * n * (n - 1));
   const stdDev = Math.sqrt(variance);
 
   const zScore = stdDev > 0 ? (numRuns - expectedRuns) / stdDev : 0;
@@ -603,8 +563,7 @@ function normalCDF(x: number): number {
   x = Math.abs(x) / Math.sqrt(2);
 
   const t = 1.0 / (1.0 + p * x);
-  const y =
-    1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  const y = 1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
 
   return 0.5 * (1.0 + sign * y);
 }
@@ -612,9 +571,7 @@ function normalCDF(x: number): number {
 /**
  * Build trade sequence data (P&L by trade number with ROM)
  */
-function buildTradeSequence(
-  trades: Trade[]
-): Array<{
+function buildTradeSequence(trades: Trade[]): Array<{
   tradeNumber: number;
   pl: number;
   rom: number | null;
@@ -624,9 +581,7 @@ function buildTradeSequence(
 }> {
   return trades.map((trade, index) => {
     const marginReq =
-      typeof trade.marginReq === "number" && isFinite(trade.marginReq)
-        ? trade.marginReq
-        : null;
+      typeof trade.marginReq === "number" && isFinite(trade.marginReq) ? trade.marginReq : null;
     return {
       tradeNumber: index + 1,
       pl: trade.pl,
@@ -642,7 +597,7 @@ function buildTradeSequence(
  * Build ROM timeline (Return on Margin over time)
  */
 function buildRomTimeline(
-  trades: Trade[]
+  trades: Trade[],
 ): Array<{ date: string; rom: number; tradeNumber: number }> {
   return trades
     .map((trade, index) => {
@@ -663,7 +618,7 @@ function buildRomTimeline(
  */
 function buildRollingMetrics(
   trades: Trade[],
-  windowSize: number = 30
+  windowSize: number = 30,
 ): Array<{
   date: string;
   tradeNumber: number;
@@ -769,9 +724,7 @@ function buildRollingMetrics(
 /**
  * Build exit reason breakdown
  */
-function buildExitReasonBreakdown(
-  trades: Trade[]
-): Array<{
+function buildExitReasonBreakdown(trades: Trade[]): Array<{
   reason: string;
   count: number;
   avgPl: number;
@@ -785,9 +738,7 @@ function buildExitReasonBreakdown(
 
   trades.forEach((trade) => {
     const reason =
-      trade.reasonForClose && trade.reasonForClose.trim()
-        ? trade.reasonForClose.trim()
-        : "Unknown";
+      trade.reasonForClose && trade.reasonForClose.trim() ? trade.reasonForClose.trim() : "Unknown";
     const current = summaryMap.get(reason) || {
       count: 0,
       totalPl: 0,
@@ -819,9 +770,7 @@ function buildExitReasonBreakdown(
 /**
  * Build holding periods data
  */
-function buildHoldingPeriods(
-  trades: Trade[]
-): Array<{
+function buildHoldingPeriods(trades: Trade[]): Array<{
   tradeNumber: number;
   dateOpened: string;
   dateClosed: string | null;
@@ -854,9 +803,7 @@ function buildHoldingPeriods(
 /**
  * Build premium efficiency data
  */
-function buildPremiumEfficiency(
-  trades: Trade[]
-): Array<{
+function buildPremiumEfficiency(trades: Trade[]): Array<{
   tradeNumber: number;
   date: string;
   pl: number;
@@ -866,9 +813,7 @@ function buildPremiumEfficiency(
 }> {
   return trades.map((trade, index) => {
     const premium =
-      typeof trade.premium === "number" && isFinite(trade.premium)
-        ? trade.premium
-        : null;
+      typeof trade.premium === "number" && isFinite(trade.premium) ? trade.premium : null;
     let efficiencyPct: number | null = null;
     if (premium !== null && premium !== 0) {
       efficiencyPct = (trade.pl / Math.abs(premium)) * 100;
@@ -897,7 +842,7 @@ function buildPremiumEfficiency(
  */
 function buildMarginUtilization(
   trades: Trade[],
-  equityCurve?: Array<{ date: string; equity: number; tradeNumber: number }>
+  equityCurve?: Array<{ date: string; equity: number; tradeNumber: number }>,
 ): Array<{
   tradeNumber: number;
   date: string;
@@ -920,9 +865,7 @@ function buildMarginUtilization(
   return trades
     .map((trade, index) => {
       const marginReq =
-        typeof trade.marginReq === "number" && isFinite(trade.marginReq)
-          ? trade.marginReq
-          : 0;
+        typeof trade.marginReq === "number" && isFinite(trade.marginReq) ? trade.marginReq : 0;
       const numContracts =
         typeof trade.numContracts === "number" && isFinite(trade.numContracts)
           ? trade.numContracts
@@ -934,7 +877,8 @@ function buildMarginUtilization(
       if (equityCurve && equityCurve.length > 0) {
         const tradeNumber = index + 1;
         const equityValue = equityByTradeNumber.get(tradeNumber);
-        fundsAtClose = equityValue ??
+        fundsAtClose =
+          equityValue ??
           (typeof trade.fundsAtClose === "number" && isFinite(trade.fundsAtClose)
             ? trade.fundsAtClose
             : 0);
@@ -963,9 +907,7 @@ function buildMarginUtilization(
 /**
  * Build volatility regimes data (VIX-correlated)
  */
-function buildVolatilityRegimes(
-  trades: Trade[]
-): Array<{
+function buildVolatilityRegimes(trades: Trade[]): Array<{
   tradeNumber: number;
   date: string;
   openingVix: number | null;
@@ -992,10 +934,7 @@ function buildVolatilityRegimes(
         openingVix,
         closingVix,
         pl: trade.pl,
-        rom:
-          trade.marginReq && trade.marginReq > 0
-            ? (trade.pl / trade.marginReq) * 100
-            : null,
+        rom: trade.marginReq && trade.marginReq > 0 ? (trade.pl / trade.marginReq) * 100 : null,
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -1005,15 +944,12 @@ function buildVolatilityRegimes(
  * Build monthly returns percent (percentage-based)
  * Note: Uses trade-based calculation (initial capital derived from first trade)
  */
-function buildMonthlyReturnsPercent(
-  trades: Trade[]
-): Record<number, Record<number, number>> {
+function buildMonthlyReturnsPercent(trades: Trade[]): Record<number, Record<number, number>> {
   if (trades.length === 0) return {};
 
   // Sort trades by date
   const sortedTrades = [...trades].sort(
-    (a, b) =>
-      new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime()
+    (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
   );
 
   // Calculate initial capital from first trade
@@ -1098,11 +1034,7 @@ function buildMonthlyReturnsPercent(
 /**
  * Apply date range filter to trades
  */
-function filterByDateRange(
-  trades: Trade[],
-  fromDate?: string,
-  toDate?: string
-): Trade[] {
+function filterByDateRange(trades: Trade[], fromDate?: string, toDate?: string): Trade[] {
   if (!fromDate && !toDate) return trades;
 
   return trades.filter((trade) => {
@@ -1143,7 +1075,7 @@ interface PeakExposure {
  */
 function buildDailyExposure(
   trades: Trade[],
-  equityCurve: Array<{ date: string; equity: number }>
+  equityCurve: Array<{ date: string; equity: number }>,
 ): {
   dailyExposure: DailyExposurePoint[];
   peakDailyExposure: PeakExposure | null;
@@ -1176,10 +1108,7 @@ function buildDailyExposure(
 /**
  * Register all performance MCP tools
  */
-export function registerPerformanceTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerPerformanceTools(server: McpServer, baseDir: string): void {
   // Tool 1: get_performance_charts
   server.registerTool(
     "get_performance_charts",
@@ -1188,10 +1117,7 @@ export function registerPerformanceTools(
         "Get chart data for performance visualizations: equity curves, drawdowns, return distributions, rolling metrics, and trade patterns. Use blockId from list_blocks.",
       inputSchema: z.object({
         blockId: z.string().describe("Block ID from list_blocks (e.g., 'main-port')"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         charts: z
           .array(
             z.enum([
@@ -1212,22 +1138,16 @@ export function registerPerformanceTools(
               "volatility_regimes",
               "mfe_mae",
               "daily_exposure",
-            ])
+            ]),
           )
           .default(["equity_curve", "drawdown", "monthly_returns"])
           .describe(
-            "Which charts to include. Options: equity_curve, drawdown, monthly_returns, monthly_returns_percent, return_distribution, day_of_week, streak_data (win/loss streaks + runs test), trade_sequence (P&L by trade #), rom_timeline (Return on Margin over time), rolling_metrics (30-trade rolling sharpe/win rate), exit_reason_breakdown, holding_periods, premium_efficiency, margin_utilization, volatility_regimes (VIX-correlated), mfe_mae (Maximum Favorable/Adverse Excursion for stop loss/take profit optimization), daily_exposure (daily margin exposure with peak tracking)"
+            "Which charts to include. Options: equity_curve, drawdown, monthly_returns, monthly_returns_percent, return_distribution, day_of_week, streak_data (win/loss streaks + runs test), trade_sequence (P&L by trade #), rom_timeline (Return on Margin over time), rolling_metrics (30-trade rolling sharpe/win rate), exit_reason_breakdown, holding_periods, premium_efficiency, margin_utilization, volatility_regimes (VIX-correlated), mfe_mae (Maximum Favorable/Adverse Excursion for stop loss/take profit optimization), daily_exposure (daily margin exposure with peak tracking)",
           ),
         dateRange: z
           .object({
-            from: z
-              .string()
-              .optional()
-              .describe("Start date YYYY-MM-DD (inclusive)"),
-            to: z
-              .string()
-              .optional()
-              .describe("End date YYYY-MM-DD (inclusive)"),
+            from: z.string().optional().describe("Start date YYYY-MM-DD (inclusive)"),
+            to: z.string().optional().describe("End date YYYY-MM-DD (inclusive)"),
           })
           .optional()
           .describe("Filter trades to date range"),
@@ -1235,39 +1155,33 @@ export function registerPerformanceTools(
           .boolean()
           .default(false)
           .describe(
-            "Normalize all trades to 1 contract for fair comparison across different position sizes"
+            "Normalize all trades to 1 contract for fair comparison across different position sizes",
           ),
         bucketCount: z
           .number()
           .min(5)
           .max(100)
           .default(20)
-          .describe(
-            "Number of histogram buckets for return_distribution (default: 20)"
-          ),
+          .describe("Number of histogram buckets for return_distribution (default: 20)"),
         rollingWindowSize: z
           .number()
           .min(10)
           .max(100)
           .default(30)
-          .describe(
-            "Window size for rolling_metrics calculation (default: 30 trades)"
-          ),
+          .describe("Window size for rolling_metrics calculation (default: 30 trades)"),
         mfeMaeBucketSize: z
           .number()
           .min(1)
           .max(50)
           .default(10)
-          .describe(
-            "Bucket size (in %) for MFE/MAE distribution histogram (default: 10%)"
-          ),
+          .describe("Bucket size (in %) for MFE/MAE distribution histogram (default: 10%)"),
         maxDataPoints: z
           .number()
           .min(50)
           .max(10000)
           .default(500)
           .describe(
-            "Maximum data points for per-trade chart types (volatility_regimes, mfe_mae, trade_sequence, holding_periods, premium_efficiency, margin_utilization, rom_timeline). When exceeded, data is truncated with a flag. Default: 500."
+            "Maximum data points for per-trade chart types (volatility_regimes, mfe_mae, trade_sequence, holding_periods, premium_efficiency, margin_utilization, rom_timeline). When exceeded, data is truncated with a flag. Default: 500.",
           ),
       }),
     },
@@ -1320,14 +1234,22 @@ export function registerPerformanceTools(
         let anyTruncated = false;
 
         // Helper to truncate per-trade arrays when they exceed maxDataPoints
-        function truncateArray<T>(arr: T[]): T[] | { data: T[]; truncated: true; totalPoints: number } {
+        function truncateArray<T>(
+          arr: T[],
+        ): T[] | { data: T[]; truncated: true; totalPoints: number } {
           if (arr.length <= maxDataPoints) return arr;
           anyTruncated = true;
-          return { data: arr.slice(0, maxDataPoints), truncated: true as const, totalPoints: arr.length };
+          return {
+            data: arr.slice(0, maxDataPoints),
+            truncated: true as const,
+            totalPoints: arr.length,
+          };
         }
 
         // Helper to count actual output length from possibly-truncated data
-        function outputLength<T>(result: T[] | { data: T[]; truncated: true; totalPoints: number }): number {
+        function outputLength<T>(
+          result: T[] | { data: T[]; truncated: true; totalPoints: number },
+        ): number {
           return Array.isArray(result) ? result.length : result.data.length;
         }
 
@@ -1349,10 +1271,7 @@ export function registerPerformanceTools(
 
         if (charts.includes("monthly_returns")) {
           chartData.monthlyReturns = buildMonthlyReturns(trades);
-          const mr = chartData.monthlyReturns as Record<
-            number,
-            Record<number, number>
-          >;
+          const mr = chartData.monthlyReturns as Record<number, Record<number, number>>;
           for (const year of Object.keys(mr)) {
             for (const month of Object.keys(mr[Number(year)])) {
               if (mr[Number(year)][Number(month)] !== 0) dataPoints++;
@@ -1362,10 +1281,7 @@ export function registerPerformanceTools(
 
         if (charts.includes("monthly_returns_percent")) {
           chartData.monthlyReturnsPercent = buildMonthlyReturnsPercent(trades);
-          const mrp = chartData.monthlyReturnsPercent as Record<
-            number,
-            Record<number, number>
-          >;
+          const mrp = chartData.monthlyReturnsPercent as Record<number, Record<number, number>>;
           for (const year of Object.keys(mrp)) {
             for (const month of Object.keys(mrp[Number(year)])) {
               if (mrp[Number(year)][Number(month)] !== 0) dataPoints++;
@@ -1374,10 +1290,7 @@ export function registerPerformanceTools(
         }
 
         if (charts.includes("return_distribution")) {
-          chartData.returnDistribution = buildReturnDistribution(
-            trades,
-            bucketCount
-          );
+          chartData.returnDistribution = buildReturnDistribution(trades, bucketCount);
           dataPoints += (chartData.returnDistribution as unknown[]).length;
         }
 
@@ -1410,10 +1323,7 @@ export function registerPerformanceTools(
         }
 
         if (charts.includes("rolling_metrics")) {
-          chartData.rollingMetrics = buildRollingMetrics(
-            trades,
-            rollingWindowSize
-          );
+          chartData.rollingMetrics = buildRollingMetrics(trades, rollingWindowSize);
           dataPoints += (chartData.rollingMetrics as unknown[]).length;
         }
 
@@ -1466,13 +1376,11 @@ export function registerPerformanceTools(
 
           const avgMfePercent =
             dataWithMfe.length > 0
-              ? dataWithMfe.reduce((sum, d) => sum + (d.mfePercent || 0), 0) /
-                dataWithMfe.length
+              ? dataWithMfe.reduce((sum, d) => sum + (d.mfePercent || 0), 0) / dataWithMfe.length
               : 0;
           const avgMaePercent =
             dataWithMae.length > 0
-              ? dataWithMae.reduce((sum, d) => sum + (d.maePercent || 0), 0) /
-                dataWithMae.length
+              ? dataWithMae.reduce((sum, d) => sum + (d.maePercent || 0), 0) / dataWithMae.length
               : 0;
           const avgProfitCapture =
             mfeData.filter((d) => d.profitCapturePercent !== undefined).length > 0
@@ -1510,7 +1418,11 @@ export function registerPerformanceTools(
           let mfeOutputCount: number;
           if (simplifiedData.length > maxDataPoints) {
             anyTruncated = true;
-            mfeDataPointsOutput = { data: simplifiedData.slice(0, maxDataPoints), truncated: true, totalPoints: simplifiedData.length };
+            mfeDataPointsOutput = {
+              data: simplifiedData.slice(0, maxDataPoints),
+              truncated: true,
+              totalPoints: simplifiedData.length,
+            };
             mfeOutputCount = maxDataPoints;
           } else {
             mfeDataPointsOutput = simplifiedData;
@@ -1572,7 +1484,8 @@ export function registerPerformanceTools(
                   : 0,
             },
             ...(isStrategyFiltered && {
-              warning: "Percentage values may be misleading when filtering by strategy. " +
+              warning:
+                "Percentage values may be misleading when filtering by strategy. " +
                 "Margin values are absolute (sized for the full portfolio), but the equity " +
                 "curve is rebuilt for the filtered subset only. Use dollar exposure values " +
                 "for accurate analysis when filtering.",
@@ -1585,9 +1498,7 @@ export function registerPerformanceTools(
         const filters: string[] = [];
         if (strategy) filters.push(`strategy=${strategy}`);
         if (dateRange?.from || dateRange?.to) {
-          filters.push(
-            `date=${dateRange.from ?? "start"} to ${dateRange.to ?? "end"}`
-          );
+          filters.push(`date=${dateRange.from ?? "start"} to ${dateRange.to ?? "end"}`);
         }
         if (normalizeTo1Lot) filters.push("normalized");
 
@@ -1622,7 +1533,7 @@ export function registerPerformanceTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Tool 2: get_period_returns
@@ -1633,10 +1544,7 @@ export function registerPerformanceTools(
         "Get P&L breakdown by period (monthly, weekly, or daily) with gross P/L, commissions, and net P/L",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         period: z
           .enum(["monthly", "weekly", "daily"])
           .default("monthly")
@@ -1647,23 +1555,15 @@ export function registerPerformanceTools(
           .describe("Filter to specific year (optional, alternative to dateRange)"),
         dateRange: z
           .object({
-            from: z
-              .string()
-              .optional()
-              .describe("Start date YYYY-MM-DD (inclusive)"),
-            to: z
-              .string()
-              .optional()
-              .describe("End date YYYY-MM-DD (inclusive)"),
+            from: z.string().optional().describe("Start date YYYY-MM-DD (inclusive)"),
+            to: z.string().optional().describe("End date YYYY-MM-DD (inclusive)"),
           })
           .optional()
           .describe("Filter trades to date range (takes precedence over year)"),
         normalizeTo1Lot: z
           .boolean()
           .default(false)
-          .describe(
-            "Normalize all trades to 1 contract for fair comparison"
-          ),
+          .describe("Normalize all trades to 1 contract for fair comparison"),
       }),
     },
     async ({ blockId, strategy, period, year, dateRange, normalizeTo1Lot }) => {
@@ -1678,9 +1578,7 @@ export function registerPerformanceTools(
         if (dateRange) {
           trades = filterByDateRange(trades, dateRange.from, dateRange.to);
         } else if (year !== undefined) {
-          trades = trades.filter(
-            (t) => new Date(t.dateOpened).getFullYear() === year
-          );
+          trades = trades.filter((t) => new Date(t.dateOpened).getFullYear() === year);
         }
 
         // Apply normalization if requested
@@ -1740,8 +1638,7 @@ export function registerPerformanceTools(
           };
 
           const totalCommissions =
-            (trade.openingCommissionsFees ?? 0) +
-            (trade.closingCommissionsFees ?? 0);
+            (trade.openingCommissionsFees ?? 0) + (trade.closingCommissionsFees ?? 0);
 
           existing.grossPl += trade.pl;
           existing.commissions += totalCommissions;
@@ -1770,9 +1667,7 @@ export function registerPerformanceTools(
         const filters: string[] = [];
         if (strategy) filters.push(`strategy=${strategy}`);
         if (dateRange?.from || dateRange?.to) {
-          filters.push(
-            `date=${dateRange.from ?? "start"} to ${dateRange.to ?? "end"}`
-          );
+          filters.push(`date=${dateRange.from ?? "start"} to ${dateRange.to ?? "end"}`);
         } else if (year !== undefined) {
           filters.push(`year=${year}`);
         }
@@ -1807,7 +1702,7 @@ export function registerPerformanceTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Tool 3: compare_backtest_to_actual
@@ -1822,24 +1717,18 @@ export function registerPerformanceTools(
           .string()
           .optional()
           .describe(
-            "Filter to specific strategy name (matches both backtest and actual by strategy)"
+            "Filter to specific strategy name (matches both backtest and actual by strategy)",
           ),
         scaling: z
           .enum(["raw", "perContract", "toReported"])
           .default("raw")
           .describe(
-            "Scaling mode: 'raw' (no scaling), 'perContract' (divide by contracts for per-lot comparison), 'toReported' (scale backtest DOWN to match actual contract count)"
+            "Scaling mode: 'raw' (no scaling), 'perContract' (divide by contracts for per-lot comparison), 'toReported' (scale backtest DOWN to match actual contract count)",
           ),
         dateRange: z
           .object({
-            from: z
-              .string()
-              .optional()
-              .describe("Start date YYYY-MM-DD (inclusive)"),
-            to: z
-              .string()
-              .optional()
-              .describe("End date YYYY-MM-DD (inclusive)"),
+            from: z.string().optional().describe("Start date YYYY-MM-DD (inclusive)"),
+            to: z.string().optional().describe("End date YYYY-MM-DD (inclusive)"),
           })
           .optional()
           .describe("Filter trades to date range"),
@@ -1847,35 +1736,41 @@ export function registerPerformanceTools(
           .boolean()
           .default(false)
           .describe(
-            "Only include trades where both backtest and actual exist on the same date (excludes unmatched rows from output and totals)"
+            "Only include trades where both backtest and actual exist on the same date (excludes unmatched rows from output and totals)",
           ),
         detailLevel: z
           .enum(["summary", "trades"])
           .default("summary")
           .describe(
-            "'summary' (default): aggregate by date+strategy. 'trades': individual trade comparison with field-by-field differences"
+            "'summary' (default): aggregate by date+strategy. 'trades': individual trade comparison with field-by-field differences",
           ),
         outliersOnly: z
           .boolean()
           .default(false)
-          .describe(
-            "Only return high-slippage outliers (trades exceeding z-score threshold)"
-          ),
+          .describe("Only return high-slippage outliers (trades exceeding z-score threshold)"),
         outliersThreshold: z
           .number()
           .default(2)
-          .describe(
-            "Z-score threshold for outlier detection (default: 2 = ~95% confidence)"
-          ),
+          .describe("Z-score threshold for outlier detection (default: 2 = ~95% confidence)"),
         groupBy: z
           .enum(["none", "strategy", "date", "week", "month"])
           .default("none")
           .describe(
-            "Group results: 'none' (flat list), 'strategy', 'date' (daily), 'week', 'month'"
+            "Group results: 'none' (flat list), 'strategy', 'date' (daily), 'week', 'month'",
           ),
       }),
     },
-    async ({ blockId, strategy, scaling, dateRange, matchedOnly, detailLevel, outliersOnly, outliersThreshold, groupBy }) => {
+    async ({
+      blockId,
+      strategy,
+      scaling,
+      dateRange,
+      matchedOnly,
+      detailLevel,
+      outliersOnly,
+      outliersThreshold,
+      groupBy,
+    }) => {
       try {
         const block = await loadBlock(baseDir, blockId);
         let backtestTrades = block.trades;
@@ -1932,12 +1827,12 @@ export function registerPerformanceTools(
         // when no explicit dateRange is provided
         let autoFilterApplied = false;
         if (!dateRange) {
-          const actualDates = actualTrades.map(t => formatDateKey(new Date(t.dateOpened)));
+          const actualDates = actualTrades.map((t) => formatDateKey(new Date(t.dateOpened)));
           if (actualDates.length > 0) {
-            const minActualDate = actualDates.reduce((a, b) => a < b ? a : b);
-            const maxActualDate = actualDates.reduce((a, b) => a > b ? a : b);
+            const minActualDate = actualDates.reduce((a, b) => (a < b ? a : b));
+            const maxActualDate = actualDates.reduce((a, b) => (a > b ? a : b));
             const beforeCount = backtestTrades.length;
-            backtestTrades = backtestTrades.filter(t => {
+            backtestTrades = backtestTrades.filter((t) => {
               const d = formatDateKey(new Date(t.dateOpened));
               return d >= minActualDate && d <= maxActualDate;
             });
@@ -1949,7 +1844,7 @@ export function registerPerformanceTools(
         const getGroupKey = (
           dateStr: string,
           strategyName: string,
-          groupByMode: typeof groupBy
+          groupByMode: typeof groupBy,
         ): string => {
           if (groupByMode === "strategy") {
             return strategyName;
@@ -2053,13 +1948,18 @@ export function registerPerformanceTools(
               const btContracts = btTrade.numContracts;
               const actualContracts = actualTrade.numContracts;
               const { scaledBtPl, scaledActualPl: actualPl } = calculateScaledPl(
-                btTrade.pl, actualTrade.pl,
-                btContracts, actualContracts,
-                scaling
+                btTrade.pl,
+                actualTrade.pl,
+                btContracts,
+                actualContracts,
+                scaling,
               );
-              const scalingFactor = scaling === "toReported" && btContracts > 0 && actualContracts > 0
-                ? actualContracts / btContracts
-                : scaling === "toReported" && btContracts === 0 ? 0 : 1;
+              const scalingFactor =
+                scaling === "toReported" && btContracts > 0 && actualContracts > 0
+                  ? actualContracts / btContracts
+                  : scaling === "toReported" && btContracts === 0
+                    ? 0
+                    : 1;
 
               const slippage = actualPl - scaledBtPl;
               const slippagePercent =
@@ -2269,13 +2169,16 @@ export function registerPerformanceTools(
               processedActual.add(key);
 
               const { scaledBtPl, scaledActualPl } = calculateScaledPl(
-                btData.totalPl, actualData.totalPl,
-                btData.contracts, actualData.contracts,
-                scaling
+                btData.totalPl,
+                actualData.totalPl,
+                btData.contracts,
+                actualData.contracts,
+                scaling,
               );
-              const scalingFactor = scaling === "toReported" && btData.contracts > 0 && actualData.contracts > 0
-                ? actualData.contracts / btData.contracts
-                : 1;
+              const scalingFactor =
+                scaling === "toReported" && btData.contracts > 0 && actualData.contracts > 0
+                  ? actualData.contracts / btData.contracts
+                  : 1;
 
               const slippage = scaledActualPl - scaledBtPl;
               const slippagePercent =
@@ -2378,10 +2281,8 @@ export function registerPerformanceTools(
           const meanSlippage =
             slippageValues.reduce((sum, v) => sum + v, 0) / slippageValues.length;
           const variance =
-            slippageValues.reduce(
-              (sum, v) => sum + Math.pow(v - meanSlippage, 2),
-              0
-            ) / slippageValues.length;
+            slippageValues.reduce((sum, v) => sum + Math.pow(v - meanSlippage, 2), 0) /
+            slippageValues.length;
           const stdDevSlippage = Math.sqrt(variance);
 
           // Guard: skip if all values are essentially the same
@@ -2389,8 +2290,7 @@ export function registerPerformanceTools(
             // Calculate z-scores and flag outliers
             for (const comparison of comparisons) {
               if (comparison.matched) {
-                const zScore =
-                  (comparison.slippage - meanSlippage) / stdDevSlippage;
+                const zScore = (comparison.slippage - meanSlippage) / stdDevSlippage;
                 comparison.zScore = zScore;
 
                 if (Math.abs(zScore) >= outliersThreshold) {
@@ -2407,10 +2307,7 @@ export function registerPerformanceTools(
             }
 
             const outliers = comparisons.filter((c) => c.isOutlier);
-            const outlierTotalSlippage = outliers.reduce(
-              (sum, c) => sum + c.slippage,
-              0
-            );
+            const outlierTotalSlippage = outliers.reduce((sum, c) => sum + c.slippage, 0);
 
             outlierStats = {
               meanSlippage,
@@ -2422,43 +2319,46 @@ export function registerPerformanceTools(
                   ? (outliers.length / matchedComparisons.length) * 100
                   : 0,
               outlierTotalSlippage,
-              outlierAvgSlippage:
-                outliers.length > 0 ? outlierTotalSlippage / outliers.length : 0,
+              outlierAvgSlippage: outliers.length > 0 ? outlierTotalSlippage / outliers.length : 0,
             };
           }
         }
 
         // Build unmatched summaries before filtering
         const unmatchedBacktestEntries = comparisons.filter(
-          (c) => !c.matched && c.backtestPl !== 0
+          (c) => !c.matched && c.backtestPl !== 0,
         );
-        const unmatchedActualEntries = comparisons.filter(
-          (c) => !c.matched && c.actualPl !== 0
-        );
+        const unmatchedActualEntries = comparisons.filter((c) => !c.matched && c.actualPl !== 0);
 
-        const unmatchedBacktestSummary = unmatchedBacktestEntries.length > 0
-          ? {
-              count: unmatchedBacktestEntries.length,
-              dateRange: {
-                from: unmatchedBacktestEntries.reduce((a, b) => a.date < b.date ? a : b).date,
-                to: unmatchedBacktestEntries.reduce((a, b) => a.date > b.date ? a : b).date,
-              },
-              totalPl: unmatchedBacktestEntries.reduce((sum, c) => sum + c.backtestPl, 0),
-              strategies: Array.from(new Set(unmatchedBacktestEntries.map(c => c.strategy))).sort(),
-            }
-          : null;
+        const unmatchedBacktestSummary =
+          unmatchedBacktestEntries.length > 0
+            ? {
+                count: unmatchedBacktestEntries.length,
+                dateRange: {
+                  from: unmatchedBacktestEntries.reduce((a, b) => (a.date < b.date ? a : b)).date,
+                  to: unmatchedBacktestEntries.reduce((a, b) => (a.date > b.date ? a : b)).date,
+                },
+                totalPl: unmatchedBacktestEntries.reduce((sum, c) => sum + c.backtestPl, 0),
+                strategies: Array.from(
+                  new Set(unmatchedBacktestEntries.map((c) => c.strategy)),
+                ).sort(),
+              }
+            : null;
 
-        const unmatchedActualSummary = unmatchedActualEntries.length > 0
-          ? {
-              count: unmatchedActualEntries.length,
-              dateRange: {
-                from: unmatchedActualEntries.reduce((a, b) => a.date < b.date ? a : b).date,
-                to: unmatchedActualEntries.reduce((a, b) => a.date > b.date ? a : b).date,
-              },
-              totalPl: unmatchedActualEntries.reduce((sum, c) => sum + c.actualPl, 0),
-              strategies: Array.from(new Set(unmatchedActualEntries.map(c => c.strategy))).sort(),
-            }
-          : null;
+        const unmatchedActualSummary =
+          unmatchedActualEntries.length > 0
+            ? {
+                count: unmatchedActualEntries.length,
+                dateRange: {
+                  from: unmatchedActualEntries.reduce((a, b) => (a.date < b.date ? a : b)).date,
+                  to: unmatchedActualEntries.reduce((a, b) => (a.date > b.date ? a : b)).date,
+                },
+                totalPl: unmatchedActualEntries.reduce((sum, c) => sum + c.actualPl, 0),
+                strategies: Array.from(
+                  new Set(unmatchedActualEntries.map((c) => c.strategy)),
+                ).sort(),
+              }
+            : null;
 
         // Apply matchedOnly filter to the primary output set
         let outputComparisons = matchedOnly
@@ -2471,9 +2371,7 @@ export function registerPerformanceTools(
         }
 
         // Sort by absolute slippage (worst first) to surface problem areas
-        outputComparisons.sort(
-          (a, b) => Math.abs(b.slippage) - Math.abs(a.slippage)
-        );
+        outputComparisons.sort((a, b) => Math.abs(b.slippage) - Math.abs(a.slippage));
 
         // Apply grouping if requested
         let groups: GroupedResult[] | null = null;
@@ -2489,23 +2387,15 @@ export function registerPerformanceTools(
           groups = Array.from(groupMap.entries())
             .map(([groupKey, groupComparisons]) => {
               const matchedInGroup = groupComparisons.filter((c) => c.matched);
-              const totalSlippage = groupComparisons.reduce(
-                (sum, c) => sum + c.slippage,
-                0
-              );
-              const outlierCount = groupComparisons.filter(
-                (c) => c.isOutlier
-              ).length;
+              const totalSlippage = groupComparisons.reduce((sum, c) => sum + c.slippage, 0);
+              const outlierCount = groupComparisons.filter((c) => c.isOutlier).length;
 
               return {
                 groupKey,
                 count: groupComparisons.length,
                 matchedCount: matchedInGroup.length,
                 totalSlippage,
-                avgSlippage:
-                  matchedInGroup.length > 0
-                    ? totalSlippage / matchedInGroup.length
-                    : 0,
+                avgSlippage: matchedInGroup.length > 0 ? totalSlippage / matchedInGroup.length : 0,
                 outlierCount,
                 comparisons: groupComparisons,
               };
@@ -2521,40 +2411,35 @@ export function registerPerformanceTools(
         const matchedForSummary = outputComparisons.filter((c) => c.matched);
         const totalBacktestPl = comparisonsForTotals.reduce(
           (sum, c) => sum + c.scaledBacktestPl,
-          0
+          0,
         );
         const totalActualPl = comparisonsForTotals.reduce(
-          (sum, c) => sum + (scaling === "perContract" && c.actualContracts > 0
-            ? c.actualPl / c.actualContracts
-            : c.actualPl),
-          0
+          (sum, c) =>
+            sum +
+            (scaling === "perContract" && c.actualContracts > 0
+              ? c.actualPl / c.actualContracts
+              : c.actualPl),
+          0,
         );
         const totalSlippage = totalActualPl - totalBacktestPl;
         const avgSlippage =
           matchedForSummary.length > 0
-            ? matchedForSummary.reduce((sum, c) => sum + c.slippage, 0) /
-              matchedForSummary.length
+            ? matchedForSummary.reduce((sum, c) => sum + c.slippage, 0) / matchedForSummary.length
             : 0;
         const avgSlippagePercent =
-          totalBacktestPl !== 0
-            ? (totalSlippage / Math.abs(totalBacktestPl)) * 100
-            : null;
+          totalBacktestPl !== 0 ? (totalSlippage / Math.abs(totalBacktestPl)) * 100 : null;
 
         // Get unique strategies
         const backtestStrategies = Array.from(
-          new Set(backtestTrades.map((t) => t.strategy))
+          new Set(backtestTrades.map((t) => t.strategy)),
         ).sort();
-        const actualStrategies = Array.from(
-          new Set(actualTrades.map((t) => t.strategy))
-        ).sort();
+        const actualStrategies = Array.from(new Set(actualTrades.map((t) => t.strategy))).sort();
 
         // Brief summary for user display
         const filters: string[] = [];
         if (strategy) filters.push(`strategy=${strategy}`);
         if (dateRange?.from || dateRange?.to) {
-          filters.push(
-            `date=${dateRange.from ?? "start"} to ${dateRange.to ?? "end"}`
-          );
+          filters.push(`date=${dateRange.from ?? "start"} to ${dateRange.to ?? "end"}`);
         }
         if (autoFilterApplied) filters.push("auto-date-overlap");
         if (matchedOnly) filters.push("matched-only");
@@ -2568,9 +2453,7 @@ export function registerPerformanceTools(
             ? `${formatPercent(avgSlippagePercent)} slippage`
             : "N/A slippage";
         const outlierDisplay =
-          outlierStats !== null
-            ? ` | ${outlierStats.outlierCount} outliers`
-            : "";
+          outlierStats !== null ? ` | ${outlierStats.outlierCount} outliers` : "";
         const summary = `Comparison: ${blockId}${filterStr} | ${scaling} scaling | ${matchedForSummary.length}/${outputComparisons.length} matched | ${slippageDisplay}${outlierDisplay}`;
 
         // Build structured data for Claude reasoning
@@ -2627,6 +2510,6 @@ export function registerPerformanceTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

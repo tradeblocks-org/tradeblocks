@@ -34,9 +34,7 @@ function lit(value: string): string {
  * the RTH daily aggregate from `market.spot` and the `market.enriched_context`
  * table.
  */
-export function buildReadEnrichedSQL(
-  args: BuildReadEnrichedArgs,
-): BuiltSQL {
+export function buildReadEnrichedSQL(args: BuildReadEnrichedArgs): BuiltSQL {
   const { ticker, from, to, includeContext, includeOhlcv } = args;
 
   const tickerLit = lit(ticker);
@@ -52,13 +50,9 @@ export function buildReadEnrichedSQL(
          ON s_daily.ticker = e.ticker AND s_daily.date = e.date`
     : "";
 
-  const ctxJoin = includeContext
-    ? `LEFT JOIN market.enriched_context c ON c.date = e.date`
-    : "";
+  const ctxJoin = includeContext ? `LEFT JOIN market.enriched_context c ON c.date = e.date` : "";
 
-  const ohlcvCols = includeOhlcv
-    ? ", s_daily.open, s_daily.high, s_daily.low, s_daily.close"
-    : "";
+  const ohlcvCols = includeOhlcv ? ", s_daily.open, s_daily.high, s_daily.low, s_daily.close" : "";
 
   const ctxCols = includeContext
     ? ", c.Vol_Regime, c.Term_Structure_State, c.Trend_Direction, c.VIX_Spike_Pct, c.VIX_Gap_Pct"

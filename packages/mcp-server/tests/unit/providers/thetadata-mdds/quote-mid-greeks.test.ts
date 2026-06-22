@@ -71,17 +71,23 @@ describe("ThetaData quote-mid computed greeks", () => {
   });
 
   it("returns null without overwriting when quote or model inputs are unusable", () => {
-    expect(computeThetaQuoteMidGreekRow({
-      quote: quote({ bid: null }),
-      underlyingPrice: 5638.05,
-    })).toBeNull();
-    expect(computeThetaQuoteMidGreekRow({
-      quote: quote({ ask: null }),
-      underlyingPrice: 5638.05,
-    })).toBeNull();
-    expect(computeThetaQuoteMidGreekRow({
-      quote: quote(),
-      underlyingPrice: 0,
-    })).toBeNull();
+    expect(
+      computeThetaQuoteMidGreekRow({
+        quote: quote({ bid: null }),
+        underlyingPrice: 5638.05,
+      }),
+    ).toBeNull();
+    expect(
+      computeThetaQuoteMidGreekRow({
+        quote: quote({ ask: null }),
+        underlyingPrice: 5638.05,
+      }),
+    ).toBeNull();
+    expect(
+      computeThetaQuoteMidGreekRow({
+        quote: quote(),
+        underlyingPrice: 0,
+      }),
+    ).toBeNull();
   });
 });

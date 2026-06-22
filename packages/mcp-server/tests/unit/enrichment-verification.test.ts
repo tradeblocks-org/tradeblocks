@@ -35,11 +35,7 @@ describe("compareFields tolerance gate (D-09)", () => {
   });
 
   it("DOUBLE: |a - b| == 1e-9 is PASS (boundary is inclusive)", () => {
-    const out = compareFields(
-      { RSI_14: 50.0 },
-      { RSI_14: 50.0 + 1e-9 },
-      { RSI_14: "double" },
-    );
+    const out = compareFields({ RSI_14: 50.0 }, { RSI_14: 50.0 + 1e-9 }, { RSI_14: "double" });
     expect(out).toHaveLength(1);
     expect(out[0].passed).toBe(true);
     expect(out[0].type).toBe("double");
@@ -48,40 +44,24 @@ describe("compareFields tolerance gate (D-09)", () => {
   });
 
   it("DOUBLE: |a - b| == 2e-9 is FAIL (above boundary)", () => {
-    const out = compareFields(
-      { RSI_14: 50.0 },
-      { RSI_14: 50.0 + 2e-9 },
-      { RSI_14: "double" },
-    );
+    const out = compareFields({ RSI_14: 50.0 }, { RSI_14: 50.0 + 2e-9 }, { RSI_14: "double" });
     expect(out[0].passed).toBe(false);
   });
 
   it("DOUBLE: exact equal (delta 0) is PASS", () => {
-    const out = compareFields(
-      { Gap_Pct: 0.01 },
-      { Gap_Pct: 0.01 },
-      { Gap_Pct: "double" },
-    );
+    const out = compareFields({ Gap_Pct: 0.01 }, { Gap_Pct: 0.01 }, { Gap_Pct: "double" });
     expect(out[0].passed).toBe(true);
     expect(out[0].delta).toBe(0);
   });
 
   it("INTEGER: any difference is FAIL (no tolerance)", () => {
-    const out = compareFields(
-      { Gap_Filled: 1 },
-      { Gap_Filled: 0 },
-      { Gap_Filled: "integer" },
-    );
+    const out = compareFields({ Gap_Filled: 1 }, { Gap_Filled: 0 }, { Gap_Filled: "integer" });
     expect(out[0].passed).toBe(false);
     expect(out[0].type).toBe("integer");
   });
 
   it("INTEGER: exact equal is PASS", () => {
-    const out = compareFields(
-      { Is_Opex: 1 },
-      { Is_Opex: 1 },
-      { Is_Opex: "integer" },
-    );
+    const out = compareFields({ Is_Opex: 1 }, { Is_Opex: 1 }, { Is_Opex: "integer" });
     expect(out[0].passed).toBe(true);
   });
 
@@ -105,18 +85,10 @@ describe("compareFields tolerance gate (D-09)", () => {
   });
 
   it("both-null DOUBLE is PASS; null-vs-value is FAIL (Gap_Pct no-gap days)", () => {
-    const bothNull = compareFields(
-      { Gap_Pct: null },
-      { Gap_Pct: null },
-      { Gap_Pct: "double" },
-    );
+    const bothNull = compareFields({ Gap_Pct: null }, { Gap_Pct: null }, { Gap_Pct: "double" });
     expect(bothNull[0].passed).toBe(true);
 
-    const onlyOne = compareFields(
-      { Gap_Pct: null },
-      { Gap_Pct: 0 },
-      { Gap_Pct: "double" },
-    );
+    const onlyOne = compareFields({ Gap_Pct: null }, { Gap_Pct: 0 }, { Gap_Pct: "double" });
     expect(onlyOne[0].passed).toBe(false);
   });
 
@@ -151,20 +123,12 @@ describe("compareFields tolerance gate (D-09)", () => {
   });
 
   it("NaN-vs-NaN on DOUBLE is PASS", () => {
-    const out = compareFields(
-      { RSI_14: NaN },
-      { RSI_14: NaN },
-      { RSI_14: "double" },
-    );
+    const out = compareFields({ RSI_14: NaN }, { RSI_14: NaN }, { RSI_14: "double" });
     expect(out[0].passed).toBe(true);
   });
 
   it("NaN-vs-number on DOUBLE is FAIL", () => {
-    const out = compareFields(
-      { RSI_14: NaN },
-      { RSI_14: 50.0 },
-      { RSI_14: "double" },
-    );
+    const out = compareFields({ RSI_14: NaN }, { RSI_14: 50.0 }, { RSI_14: "double" });
     expect(out[0].passed).toBe(false);
   });
 });
@@ -173,13 +137,7 @@ describe("compareRow anyFailure aggregation (D-11 failure blocks deletion)", () 
   it("anyFailure=false when all fields within tolerance", () => {
     const oldRow = { RSI_14: 50.0, Gap_Filled: 1 };
     const newRow = { RSI_14: 50.0 + 5e-10, Gap_Filled: 1 };
-    const diff: RowDiff = compareRow(
-      oldRow,
-      newRow,
-      "enriched",
-      "SPX",
-      "2024-08-05",
-    );
+    const diff: RowDiff = compareRow(oldRow, newRow, "enriched", "SPX", "2024-08-05");
     expect(diff.anyFailure).toBe(false);
     expect(diff.ticker).toBe("SPX");
     expect(diff.date).toBe("2024-08-05");
@@ -189,13 +147,7 @@ describe("compareRow anyFailure aggregation (D-11 failure blocks deletion)", () 
   it("anyFailure=true when ONE field drifts past 1e-9", () => {
     const oldRow = { RSI_14: 50.0, Gap_Filled: 1 };
     const newRow = { RSI_14: 50.0 + 2e-9, Gap_Filled: 1 };
-    const diff = compareRow(
-      oldRow,
-      newRow,
-      "enriched",
-      "SPX",
-      "2024-08-05",
-    );
+    const diff = compareRow(oldRow, newRow, "enriched", "SPX", "2024-08-05");
     expect(diff.anyFailure).toBe(true);
     const rsi: FieldDiff | undefined = diff.fields.find((f: FieldDiff) => f.field === "RSI_14");
     expect(rsi?.passed).toBe(false);
@@ -206,13 +158,7 @@ describe("compareRow anyFailure aggregation (D-11 failure blocks deletion)", () 
   it("anyFailure=true when integer field differs", () => {
     const oldRow = { Gap_Filled: 1 };
     const newRow = { Gap_Filled: 0 };
-    const diff = compareRow(
-      oldRow,
-      newRow,
-      "enriched",
-      "SPX",
-      "2024-08-05",
-    );
+    const diff = compareRow(oldRow, newRow, "enriched", "SPX", "2024-08-05");
     expect(diff.anyFailure).toBe(true);
   });
 });

@@ -1,26 +1,25 @@
-"use client"
+"use client";
 
-import { Card, CardContent } from "@/components/ui/card"
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card"
-import { cn } from "@tradeblocks/lib"
-import type { WalkForwardResults } from "@tradeblocks/lib"
-import { CheckCircle2, AlertTriangle, XCircle, HelpCircle } from "lucide-react"
-import { assessResults, type Assessment } from "@tradeblocks/lib"
+import { Card, CardContent } from "@/components/ui/card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { cn } from "@tradeblocks/lib";
+import type { WalkForwardResults } from "@tradeblocks/lib";
+import { CheckCircle2, AlertTriangle, XCircle, HelpCircle } from "lucide-react";
+import { assessResults, type Assessment } from "@tradeblocks/lib";
 
 interface WalkForwardSummaryProps {
-  results: WalkForwardResults
+  results: WalkForwardResults;
 }
 
-const overallStyles: Record<Assessment, {
-  border: string
-  bg: string
-  text: string
-  icon: typeof CheckCircle2
-}> = {
+const overallStyles: Record<
+  Assessment,
+  {
+    border: string;
+    bg: string;
+    text: string;
+    icon: typeof CheckCircle2;
+  }
+> = {
   good: {
     border: "border-l-emerald-500",
     bg: "bg-emerald-500/10",
@@ -39,32 +38,32 @@ const overallStyles: Record<Assessment, {
     text: "text-rose-700 dark:text-rose-400",
     icon: XCircle,
   },
-}
+};
 
 const summaryMessages: Record<Assessment, string> = {
   good: "Results held up well when tested on new data.",
   moderate: "Results showed mixed performance across different time periods.",
   concerning: "Results may not generalize—consider adjusting your WFA configuration.",
-}
+};
 
 function getEfficiencyLabel(pct: number): string {
-  return `${Math.round(pct)}% of performance held up`
+  return `${Math.round(pct)}% of performance held up`;
 }
 
 function getStabilityLabel(assessment: Assessment): string {
   switch (assessment) {
     case "good":
-      return "Parameters were stable"
+      return "Parameters were stable";
     case "moderate":
-      return "Parameters were variable"
+      return "Parameters were variable";
     case "concerning":
-      return "Parameters were unstable"
+      return "Parameters were unstable";
   }
 }
 
 function getConsistencyLabel(consistencyPct: number, windowCount: number): string {
-  const profitableCount = Math.round((consistencyPct / 100) * windowCount)
-  return `${profitableCount} of ${windowCount} windows were profitable`
+  const profitableCount = Math.round((consistencyPct / 100) * windowCount);
+  return `${profitableCount} of ${windowCount} windows were profitable`;
 }
 
 export function WalkForwardSummary({ results }: WalkForwardSummaryProps) {
@@ -97,44 +96,47 @@ export function WalkForwardSummary({ results }: WalkForwardSummaryProps) {
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
-  const assessment = assessResults(results)
-  const style = overallStyles[assessment.overall]
-  const Icon = style.icon
+  const assessment = assessResults(results);
+  const style = overallStyles[assessment.overall];
+  const Icon = style.icon;
 
-  const efficiencyPct = results.summary.degradationFactor * 100
-  const consistencyPct = (results.stats.consistencyScore || 0) * 100
-  const windowCount = results.periods.length
+  const efficiencyPct = results.summary.degradationFactor * 100;
+  const consistencyPct = (results.stats.consistencyScore || 0) * 100;
+  const windowCount = results.periods.length;
 
   // Count skipped window reasons
-  const skippedWindows = results.skippedWindows ?? []
-  const skippedCount = skippedWindows.length
+  const skippedWindows = results.skippedWindows ?? [];
+  const skippedCount = skippedWindows.length;
   const insufficientTradesCount = skippedWindows.filter(
-    (w) => w.reason === "insufficient_is_trades" || w.reason === "insufficient_oos_trades"
-  ).length
-  const noViableParamsCount = skippedWindows.filter(
-    (w) => w.reason === "no_viable_params"
-  ).length
+    (w) => w.reason === "insufficient_is_trades" || w.reason === "insufficient_oos_trades",
+  ).length;
+  const noViableParamsCount = skippedWindows.filter((w) => w.reason === "no_viable_params").length;
 
   return (
     <Card className={cn("border-l-4", style.border)}>
       <CardContent className="pt-6 space-y-6">
         {/* Large visual status indicator and summary */}
         <div className="flex items-start gap-4">
-          <div className={cn(
-            "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
-            style.bg, style.text
-          )}>
+          <div
+            className={cn(
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
+              style.bg,
+              style.text,
+            )}
+          >
             <Icon className="h-6 w-6" />
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <h2 className={cn("text-lg font-semibold", style.text)}>
-                {assessment.overall === "good" ? "Looking Good" :
-                 assessment.overall === "moderate" ? "Mixed Results" :
-                 "Needs Attention"}
+                {assessment.overall === "good"
+                  ? "Looking Good"
+                  : assessment.overall === "moderate"
+                    ? "Mixed Results"
+                    : "Needs Attention"}
               </h2>
               <HoverCard>
                 <HoverCardTrigger asChild>
@@ -143,32 +145,36 @@ export function WalkForwardSummary({ results }: WalkForwardSummaryProps) {
                 <HoverCardContent className="w-96 p-0 overflow-hidden">
                   <div className="space-y-3">
                     <div className="bg-primary/5 border-b px-4 py-3">
-                      <h4 className="text-sm font-semibold text-primary">What Walk-Forward Analysis Tests</h4>
+                      <h4 className="text-sm font-semibold text-primary">
+                        What Walk-Forward Analysis Tests
+                      </h4>
                     </div>
                     <div className="px-4 pb-4 space-y-3">
                       <p className="text-sm font-medium text-foreground leading-relaxed">
                         Did the optimized parameters work on data they never saw?
                       </p>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        Walk-forward analysis splits your trading history into training windows (in-sample) and testing windows (out-of-sample). During training, the optimizer finds the best parameters. Those parameters are then tested on the next chunk of unseen data—simulating what happens when you trade live with optimized settings. If performance holds up on unseen data, the results are robust. If it collapses, the optimization may have fit to noise rather than a real edge.
+                        Walk-forward analysis splits your trading history into training windows
+                        (in-sample) and testing windows (out-of-sample). During training, the
+                        optimizer finds the best parameters. Those parameters are then tested on the
+                        next chunk of unseen data—simulating what happens when you trade live with
+                        optimized settings. If performance holds up on unseen data, the results are
+                        robust. If it collapses, the optimization may have fit to noise rather than
+                        a real edge.
                       </p>
                     </div>
                   </div>
                 </HoverCardContent>
               </HoverCard>
             </div>
-            <p className="text-sm text-muted-foreground">
-              {summaryMessages[assessment.overall]}
-            </p>
+            <p className="text-sm text-muted-foreground">{summaryMessages[assessment.overall]}</p>
             {skippedCount > 0 && (
               <p className="text-xs text-muted-foreground/80">
                 {skippedCount} window{skippedCount !== 1 ? "s" : ""} skipped
                 {" ("}
                 {[
-                  insufficientTradesCount > 0 &&
-                    `${insufficientTradesCount} insufficient trades`,
-                  noViableParamsCount > 0 &&
-                    `${noViableParamsCount} no viable params`,
+                  insufficientTradesCount > 0 && `${insufficientTradesCount} insufficient trades`,
+                  noViableParamsCount > 0 && `${noViableParamsCount} no viable params`,
                 ]
                   .filter(Boolean)
                   .join(", ")}
@@ -201,7 +207,7 @@ export function WalkForwardSummary({ results }: WalkForwardSummaryProps) {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function MetricCard({
@@ -210,22 +216,24 @@ function MetricCard({
   assessment,
   tooltip,
 }: {
-  label: string
-  value: string
-  assessment: Assessment
-  tooltip: string
+  label: string;
+  value: string;
+  assessment: Assessment;
+  tooltip: string;
 }) {
-  const colorClass = assessment === "good"
-    ? "text-emerald-700 dark:text-emerald-400"
-    : assessment === "moderate"
-    ? "text-amber-700 dark:text-amber-400"
-    : "text-rose-700 dark:text-rose-400"
+  const colorClass =
+    assessment === "good"
+      ? "text-emerald-700 dark:text-emerald-400"
+      : assessment === "moderate"
+        ? "text-amber-700 dark:text-amber-400"
+        : "text-rose-700 dark:text-rose-400";
 
-  const bgClass = assessment === "good"
-    ? "bg-emerald-500/5"
-    : assessment === "moderate"
-    ? "bg-amber-500/5"
-    : "bg-rose-500/5"
+  const bgClass =
+    assessment === "good"
+      ? "bg-emerald-500/5"
+      : assessment === "moderate"
+        ? "bg-amber-500/5"
+        : "bg-rose-500/5";
 
   return (
     <div className={cn("rounded-lg p-3 space-y-1", bgClass)}>
@@ -240,9 +248,7 @@ function MetricCard({
           </HoverCardContent>
         </HoverCard>
       </div>
-      <p className={cn("text-sm font-medium", colorClass)}>
-        {value}
-      </p>
+      <p className={cn("text-sm font-medium", colorClass)}>{value}</p>
     </div>
-  )
+  );
 }

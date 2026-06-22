@@ -41,14 +41,34 @@ describe("MarketIngestor.ingestBars", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("writes daily bars for a single ticker and reports rowsWritten", async () => {
     const fakeBars: BarRow[] = [
-      { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 1000000 },
-      { ticker: "SPX", date: "2026-01-06", open: 4810, high: 4830, low: 4800, close: 4825, volume: 1100000 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        open: 4800,
+        high: 4820,
+        low: 4790,
+        close: 4810,
+        volume: 1000000,
+      },
+      {
+        ticker: "SPX",
+        date: "2026-01-06",
+        open: 4810,
+        high: 4830,
+        low: 4800,
+        close: 4825,
+        volume: 1100000,
+      },
     ];
     const stores = createMarketStores({ conn, dataDir, parquetMode: false });
     const ingestor = new MarketIngestor({
@@ -98,7 +118,16 @@ describe("MarketIngestor.ingestBars", () => {
 
   it("routes intraday timespan to minute bars", async () => {
     const intradayBars: BarRow[] = [
-      { ticker: "SPX", date: "2026-01-05", time: "09:30", open: 4800, high: 4802, low: 4799, close: 4801, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        time: "09:30",
+        open: 4800,
+        high: 4802,
+        low: 4799,
+        close: 4801,
+        volume: 0,
+      },
     ];
     let capturedTimespan: string | undefined;
     const provider: MarketDataProvider = {
@@ -128,7 +157,15 @@ describe("MarketIngestor.ingestBars", () => {
 
   it("honors skipEnrichment=false and fires enricher", async () => {
     const fakeBars: BarRow[] = [
-      { ticker: "SPX", date: "2026-01-05", open: 4800, high: 4820, low: 4790, close: 4810, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2026-01-05",
+        open: 4800,
+        high: 4820,
+        low: 4790,
+        close: 4810,
+        volume: 0,
+      },
     ];
     let enrichCalled = false;
     const stores = createMarketStores({ conn, dataDir, parquetMode: false });

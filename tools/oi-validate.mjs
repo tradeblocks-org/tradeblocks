@@ -34,7 +34,9 @@ const DIST = resolve(__dirname, "../packages/mcp-server/dist/test-exports.js");
 // (mdds-01.thetadata.us:443); the "session" is the single authenticated
 // session bound to the account, shared with the running terminal.
 if (!process.env.THETADATA_CREDENTIALS_FILE) {
-  console.error("ERROR THETADATA_CREDENTIALS_FILE env var is required (path to ThetaData creds file)");
+  console.error(
+    "ERROR THETADATA_CREDENTIALS_FILE env var is required (path to ThetaData creds file)",
+  );
   process.exit(1);
 }
 process.env.THETADATA_MDDS_HOST = process.env.THETADATA_MDDS_HOST || "mdds-01.thetadata.us";
@@ -65,10 +67,14 @@ async function main() {
   const { ThetaMddsClient, decodeThetaResponseData, optionHistoryOpenInterest } = mod;
 
   const client = new ThetaMddsClient();
-  console.log("[config] MDDS target =",
+  console.log(
+    "[config] MDDS target =",
     `${process.env.THETADATA_MDDS_HOST}:${process.env.THETADATA_MDDS_PORT}`,
-    "clientType =", process.env.THETADATA_MDDS_CLIENT_TYPE,
-    "creds =", process.env.THETADATA_CREDENTIALS_FILE);
+    "clientType =",
+    process.env.THETADATA_MDDS_CLIENT_TYPE,
+    "creds =",
+    process.env.THETADATA_CREDENTIALS_FILE,
+  );
 
   await client.connect();
   console.log("[connect] authenticated, session acquired");
@@ -156,18 +162,22 @@ async function main() {
     }
   }
 
-  console.log(`\n[result] ${pass ? "PASS — gRPC OI mapping matches REST ground truth" : "FAIL — see above"}`);
+  console.log(
+    `\n[result] ${pass ? "PASS — gRPC OI mapping matches REST ground truth" : "FAIL — see above"}`,
+  );
   client.close();
   process.exitCode = pass ? 0 : 1;
 }
 
 main().catch((error) => {
   if (isSessionCollision(error)) {
-    console.error("[session-collision] Invalid session ID / UNAUTHENTICATED — the single account session collided with the running terminal. STOPPING (no retry).");
+    console.error(
+      "[session-collision] Invalid session ID / UNAUTHENTICATED — the single account session collided with the running terminal. STOPPING (no retry).",
+    );
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 2;
     return;
   }
-  console.error("[error]", error instanceof Error ? (error.stack || error.message) : String(error));
+  console.error("[error]", error instanceof Error ? error.stack || error.message : String(error));
   process.exitCode = 1;
 });

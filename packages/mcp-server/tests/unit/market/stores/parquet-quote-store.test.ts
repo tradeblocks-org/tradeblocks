@@ -21,10 +21,7 @@ import {
   buildStoreFixture,
   type FixtureHandle,
 } from "../../../fixtures/market-stores/build-fixture.ts";
-import type {
-  ContractRow,
-  QuoteRow,
-} from "../../../../src/market/stores/types.ts";
+import type { ContractRow, QuoteRow } from "../../../../src/market/stores/types.ts";
 
 const DATE = "2024-01-15";
 const EXPIRATION = "2024-01-23";
@@ -164,25 +161,21 @@ describe("ParquetQuoteStore source round-trip", () => {
       {
         occ_ticker: "SPX250107C05000000",
         timestamp: "2025-01-07 09:30",
-        bid: 13.20,
-        ask: 13.20,
+        bid: 13.2,
+        ask: 13.2,
         source: "synth_close",
       },
       {
         occ_ticker: "SPX250107C05000000",
         timestamp: "2025-01-07 09:31",
-        bid: 13.10,
-        ask: 13.30,
+        bid: 13.1,
+        ask: 13.3,
         source: "nbbo",
       },
     ];
     await store.writeQuotes("SPX", "2025-01-07", rows);
 
-    const readBack = await store.readQuotes(
-      ["SPX250107C05000000"],
-      "2025-01-07",
-      "2025-01-07",
-    );
+    const readBack = await store.readQuotes(["SPX250107C05000000"], "2025-01-07", "2025-01-07");
     const persisted = readBack.get("SPX250107C05000000")!;
     expect(persisted).toHaveLength(2);
     expect(persisted[0].source).toBe("synth_close");
@@ -210,10 +203,8 @@ describe("ParquetQuoteStore.readWindow", () => {
       expect(["put", "call"]).toContain(row.contract_type);
       expect(row.dte).toBeGreaterThanOrEqual(7);
       expect(row.dte).toBeLessThanOrEqual(11);
-      const inPutBand =
-        row.contract_type === "put" && row.strike >= 4500 && row.strike <= 4800;
-      const inCallBand =
-        row.contract_type === "call" && row.strike >= 4800 && row.strike <= 5100;
+      const inPutBand = row.contract_type === "put" && row.strike >= 4500 && row.strike <= 4800;
+      const inCallBand = row.contract_type === "call" && row.strike >= 4800 && row.strike <= 5100;
       expect(inPutBand || inCallBand).toBe(true);
     }
     await conn.close();

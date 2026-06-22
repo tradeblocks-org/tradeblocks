@@ -5,11 +5,7 @@ import { useState } from "react";
 
 import { BlockSwitchDialog } from "@/components/block-switch-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-} from "@/components/ui/sidebar";
+import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { type Block } from "@tradeblocks/lib/stores";
 
 export function SidebarActiveBlocks({ activeBlock }: { activeBlock: Block }) {
@@ -38,10 +34,7 @@ export function SidebarActiveBlocks({ activeBlock }: { activeBlock: Block }) {
         </div>
       </SidebarGroupContent>
 
-      <BlockSwitchDialog
-        open={isSwitchDialogOpen}
-        onOpenChange={setIsSwitchDialogOpen}
-      />
+      <BlockSwitchDialog open={isSwitchDialogOpen} onOpenChange={setIsSwitchDialogOpen} />
     </SidebarGroup>
   );
 }

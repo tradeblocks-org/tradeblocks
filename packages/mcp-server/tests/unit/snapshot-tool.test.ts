@@ -34,9 +34,7 @@ function makeMockContract(overrides: Record<string, unknown> = {}) {
 }
 
 function makeContracts(count: number) {
-  return Array.from({ length: count }, (_, i) =>
-    makeMockContract({ strike: 5000 + i })
-  );
+  return Array.from({ length: count }, (_, i) => makeMockContract({ strike: 5000 + i }));
 }
 
 function mockProviderSnapshot(contracts: ReturnType<typeof makeMockContract>[]) {

@@ -16,7 +16,7 @@
  * ```
  */
 
-import type { Trade } from '../models/trade.ts'
+import type { Trade } from "../models/trade.ts";
 
 /**
  * Options for rebuilding equity curves.
@@ -26,20 +26,20 @@ export interface RebuildEquityCurveOptions {
    * Initial capital to start the equity curve from.
    * If not provided, will be calculated from the first trade's fundsAtClose - pl.
    */
-  initialCapital?: number
+  initialCapital?: number;
 
   /**
    * Whether to sort trades by close date before processing.
    * Default: true
    */
-  sortByDate?: boolean
+  sortByDate?: boolean;
 
   /**
    * Whether to include commissions in P&L calculation.
    * When true, uses net P&L (pl - commissions).
    * Default: false (uses gross P&L from trade.pl)
    */
-  useNetPl?: boolean
+  useNetPl?: boolean;
 }
 
 /**
@@ -50,7 +50,7 @@ export interface ScaleTradesOptions extends RebuildEquityCurveOptions {
    * Whether to also scale commission fees.
    * Default: true
    */
-  scaleCommissions?: boolean
+  scaleCommissions?: boolean;
 }
 
 /**
@@ -59,22 +59,22 @@ export interface ScaleTradesOptions extends RebuildEquityCurveOptions {
  * @param trades - Array of trades to sort
  * @returns New array sorted by dateClosed and timeClosed
  */
-export function sortTradesByCloseDate<T extends Pick<Trade, 'dateClosed' | 'timeClosed'>>(
-  trades: T[]
+export function sortTradesByCloseDate<T extends Pick<Trade, "dateClosed" | "timeClosed">>(
+  trades: T[],
 ): T[] {
   return [...trades].sort((a, b) => {
-    if (!a.dateClosed && !b.dateClosed) return 0
-    if (!a.dateClosed) return 1
-    if (!b.dateClosed) return -1
+    if (!a.dateClosed && !b.dateClosed) return 0;
+    if (!a.dateClosed) return 1;
+    if (!b.dateClosed) return -1;
 
-    const dateA = new Date(a.dateClosed)
-    const dateB = new Date(b.dateClosed)
-    const cmp = dateA.getTime() - dateB.getTime()
-    if (cmp !== 0) return cmp
+    const dateA = new Date(a.dateClosed);
+    const dateB = new Date(b.dateClosed);
+    const cmp = dateA.getTime() - dateB.getTime();
+    if (cmp !== 0) return cmp;
 
     // Secondary sort by time
-    return (a.timeClosed || '').localeCompare(b.timeClosed || '')
-  })
+    return (a.timeClosed || "").localeCompare(b.timeClosed || "");
+  });
 }
 
 /**
@@ -86,16 +86,16 @@ export function sortTradesByCloseDate<T extends Pick<Trade, 'dateClosed' | 'time
  * @returns Initial capital, or undefined if cannot be determined
  */
 export function calculateInitialCapital(
-  sortedTrades: Pick<Trade, 'fundsAtClose' | 'pl'>[]
+  sortedTrades: Pick<Trade, "fundsAtClose" | "pl">[],
 ): number | undefined {
-  if (sortedTrades.length === 0) return undefined
+  if (sortedTrades.length === 0) return undefined;
 
-  const firstTrade = sortedTrades[0]
+  const firstTrade = sortedTrades[0];
   if (firstTrade.fundsAtClose === undefined || firstTrade.fundsAtClose === null) {
-    return undefined
+    return undefined;
   }
 
-  return firstTrade.fundsAtClose - firstTrade.pl
+  return firstTrade.fundsAtClose - firstTrade.pl;
 }
 
 /**
@@ -104,10 +104,12 @@ export function calculateInitialCapital(
  * @param trade - Trade to calculate net P&L for
  * @returns Net P&L value
  */
-export function getNetPl(trade: Pick<Trade, 'pl' | 'openingCommissionsFees' | 'closingCommissionsFees'>): number {
-  const openingComm = trade.openingCommissionsFees ?? 0
-  const closingComm = trade.closingCommissionsFees ?? 0
-  return trade.pl - openingComm - closingComm
+export function getNetPl(
+  trade: Pick<Trade, "pl" | "openingCommissionsFees" | "closingCommissionsFees">,
+): number {
+  const openingComm = trade.openingCommissionsFees ?? 0;
+  const closingComm = trade.closingCommissionsFees ?? 0;
+  return trade.pl - openingComm - closingComm;
 }
 
 /**
@@ -132,53 +134,53 @@ export function getNetPl(trade: Pick<Trade, 'pl' | 'openingCommissionsFees' | 'c
  */
 export function rebuildEquityCurve<T extends Trade>(
   trades: T[],
-  options: RebuildEquityCurveOptions = {}
+  options: RebuildEquityCurveOptions = {},
 ): T[] {
-  const { sortByDate = true, useNetPl = false } = options
+  const { sortByDate = true, useNetPl = false } = options;
 
-  if (trades.length === 0) return []
+  if (trades.length === 0) return [];
 
   // Filter to trades with close dates for equity calculation
-  const closedTrades = trades.filter(t => t.dateClosed)
-  if (closedTrades.length === 0) return [...trades]
+  const closedTrades = trades.filter((t) => t.dateClosed);
+  if (closedTrades.length === 0) return [...trades];
 
   // Sort trades chronologically
-  const sortedTrades = sortByDate ? sortTradesByCloseDate(closedTrades) : closedTrades
+  const sortedTrades = sortByDate ? sortTradesByCloseDate(closedTrades) : closedTrades;
 
   // Determine initial capital
-  let initialCapital = options.initialCapital
+  let initialCapital = options.initialCapital;
   if (initialCapital === undefined) {
     // Try to calculate from original first trade's fundsAtClose
     const originalSorted = sortTradesByCloseDate(
-      trades.filter(t => t.dateClosed && t.fundsAtClose !== undefined && t.fundsAtClose !== null)
-    )
-    initialCapital = calculateInitialCapital(originalSorted)
+      trades.filter((t) => t.dateClosed && t.fundsAtClose !== undefined && t.fundsAtClose !== null),
+    );
+    initialCapital = calculateInitialCapital(originalSorted);
 
     // Fallback to a reasonable default
     if (initialCapital === undefined) {
-      initialCapital = 1000000
+      initialCapital = 1000000;
     }
   }
 
   // Build mapping of trade -> new fundsAtClose
   // We use a Map keyed by trade reference since trades may have same values
-  const fundsAtCloseMap = new Map<T, number>()
-  let runningEquity = initialCapital
+  const fundsAtCloseMap = new Map<T, number>();
+  let runningEquity = initialCapital;
 
   for (const trade of sortedTrades) {
-    const pl = useNetPl ? getNetPl(trade) : trade.pl
-    runningEquity += pl
-    fundsAtCloseMap.set(trade, runningEquity)
+    const pl = useNetPl ? getNetPl(trade) : trade.pl;
+    runningEquity += pl;
+    fundsAtCloseMap.set(trade, runningEquity);
   }
 
   // Return trades in original order with updated fundsAtClose
-  return trades.map(trade => {
-    const newFundsAtClose = fundsAtCloseMap.get(trade)
+  return trades.map((trade) => {
+    const newFundsAtClose = fundsAtCloseMap.get(trade);
     if (newFundsAtClose !== undefined) {
-      return { ...trade, fundsAtClose: newFundsAtClose }
+      return { ...trade, fundsAtClose: newFundsAtClose };
     }
-    return { ...trade }
-  })
+    return { ...trade };
+  });
 }
 
 /**
@@ -204,33 +206,33 @@ export function rebuildEquityCurve<T extends Trade>(
 export function scaleTradesWithEquityCurve<T extends Trade>(
   trades: T[],
   scaleFactor: number,
-  options: ScaleTradesOptions = {}
+  options: ScaleTradesOptions = {},
 ): T[] {
-  const { scaleCommissions = true, ...rebuildOptions } = options
+  const { scaleCommissions = true, ...rebuildOptions } = options;
 
-  if (trades.length === 0) return []
+  if (trades.length === 0) return [];
 
   // Scale P&L and optionally commissions
-  const scaledTrades = trades.map(trade => {
+  const scaledTrades = trades.map((trade) => {
     const scaled: T = {
       ...trade,
       pl: trade.pl * scaleFactor,
-    }
+    };
 
     if (scaleCommissions) {
       if (trade.openingCommissionsFees !== undefined) {
-        scaled.openingCommissionsFees = trade.openingCommissionsFees * scaleFactor
+        scaled.openingCommissionsFees = trade.openingCommissionsFees * scaleFactor;
       }
       if (trade.closingCommissionsFees !== undefined) {
-        scaled.closingCommissionsFees = trade.closingCommissionsFees * scaleFactor
+        scaled.closingCommissionsFees = trade.closingCommissionsFees * scaleFactor;
       }
     }
 
-    return scaled
-  })
+    return scaled;
+  });
 
   // Rebuild equity curve with scaled P&L
-  return rebuildEquityCurve(scaledTrades, rebuildOptions)
+  return rebuildEquityCurve(scaledTrades, rebuildOptions);
 }
 
 /**
@@ -249,14 +251,14 @@ export function scaleTradesWithEquityCurve<T extends Trade>(
  */
 export function normalizeToOneLot<T extends Trade>(
   trades: T[],
-  options: RebuildEquityCurveOptions = {}
+  options: RebuildEquityCurveOptions = {},
 ): T[] {
-  if (trades.length === 0) return []
+  if (trades.length === 0) return [];
 
   // Normalize each trade to single contract
-  const normalizedTrades = trades.map(trade => {
-    const contracts = trade.numContracts || 1
-    const scaleFactor = 1 / contracts
+  const normalizedTrades = trades.map((trade) => {
+    const contracts = trade.numContracts || 1;
+    const scaleFactor = 1 / contracts;
 
     return {
       ...trade,
@@ -268,9 +270,9 @@ export function normalizeToOneLot<T extends Trade>(
       closingCommissionsFees: trade.closingCommissionsFees
         ? trade.closingCommissionsFees * scaleFactor
         : trade.closingCommissionsFees,
-    }
-  })
+    };
+  });
 
   // Rebuild equity curve with normalized P&L
-  return rebuildEquityCurve(normalizedTrades, options)
+  return rebuildEquityCurve(normalizedTrades, options);
 }

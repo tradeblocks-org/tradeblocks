@@ -10,12 +10,7 @@ import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
 import { REPORT_FIELDS, pearsonCorrelation } from "@tradeblocks/lib";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
-import {
-  enrichTrades,
-  getTradeFieldValue,
-  percentile,
-  type EnrichedTrade,
-} from "./helpers.ts";
+import { enrichTrades, getTradeFieldValue, percentile, type EnrichedTrade } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
@@ -23,10 +18,7 @@ import { getProfile } from "../../db/profile-schemas.ts";
 /**
  * Register predictive-related report tools
  */
-export function registerPredictiveTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerPredictiveTools(server: McpServer, baseDir: string): void {
   // Tool 5: find_predictive_fields
   server.registerTool(
     "find_predictive_fields",
@@ -35,22 +27,15 @@ export function registerPredictiveTools(
         "Identify which trade entry conditions predict profitability by calculating Pearson correlations between all numeric fields and a target field (usually P/L). Returns fields ranked by predictive strength.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Pre-filter by strategy name (case-insensitive)"),
+        strategy: z.string().optional().describe("Pre-filter by strategy name (case-insensitive)"),
         strategyName: z
           .string()
           .optional()
-          .describe("Strategy profile name. When provided, auto-filters to that strategy's trades and adds profile context to output."),
-        startDate: z
-          .string()
-          .optional()
-          .describe("Pre-filter by start date (YYYY-MM-DD)"),
-        endDate: z
-          .string()
-          .optional()
-          .describe("Pre-filter by end date (YYYY-MM-DD)"),
+          .describe(
+            "Strategy profile name. When provided, auto-filters to that strategy's trades and adds profile context to output.",
+          ),
+        startDate: z.string().optional().describe("Pre-filter by start date (YYYY-MM-DD)"),
+        endDate: z.string().optional().describe("Pre-filter by end date (YYYY-MM-DD)"),
         targetField: z
           .string()
           .default("pl")
@@ -60,7 +45,7 @@ export function registerPredictiveTools(
           .min(10)
           .default(30)
           .describe(
-            "Minimum trades with valid values for reliable correlation (default: 30, min: 10)"
+            "Minimum trades with valid values for reliable correlation (default: 30, min: 10)",
           ),
         includeCustomFields: z
           .boolean()
@@ -256,9 +241,7 @@ export function registerPredictiveTools(
               const conn = await getConnection(baseDir);
               const profile = await getProfile(conn, blockId, strategyName, baseDir);
               if (profile && profile.entryFilters.length > 0) {
-                const profileFilterFields = new Set(
-                  profile.entryFilters.map((f) => f.field)
-                );
+                const profileFilterFields = new Set(profile.entryFilters.map((f) => f.field));
                 const alignedFields = rankedFields
                   .filter((rf) => profileFilterFields.has(rf.field))
                   .map((rf) => ({
@@ -292,8 +275,8 @@ export function registerPredictiveTools(
             isError: true,
           };
         }
-      }
-    )
+      },
+    ),
   );
 
   // Tool 6: filter_curve
@@ -306,39 +289,28 @@ export function registerPredictiveTools(
         blockId: z.string().describe("Block folder name"),
         field: z
           .string()
-          .describe(
-            "Field to sweep thresholds on (e.g., 'openingVix', 'durationHours')"
-          ),
+          .describe("Field to sweep thresholds on (e.g., 'openingVix', 'durationHours')"),
         mode: z
           .enum(["lt", "gt", "both"])
           .default("both")
           .describe(
-            "Direction of filter: 'lt' (field < threshold), 'gt' (field > threshold), 'both' (show both directions)"
+            "Direction of filter: 'lt' (field < threshold), 'gt' (field > threshold), 'both' (show both directions)",
           ),
         thresholds: z
           .array(z.number())
           .optional()
           .describe(
-            "Custom threshold values to test. If omitted, auto-generates from field percentiles."
+            "Custom threshold values to test. If omitted, auto-generates from field percentiles.",
           ),
         percentileSteps: z
           .array(z.number())
           .default([5, 10, 25, 50, 75, 90, 95])
           .describe(
-            "Percentiles to use for auto-generated thresholds (default: [5, 10, 25, 50, 75, 90, 95])"
+            "Percentiles to use for auto-generated thresholds (default: [5, 10, 25, 50, 75, 90, 95])",
           ),
-        strategy: z
-          .string()
-          .optional()
-          .describe("Pre-filter by strategy name (case-insensitive)"),
-        startDate: z
-          .string()
-          .optional()
-          .describe("Pre-filter by start date (YYYY-MM-DD)"),
-        endDate: z
-          .string()
-          .optional()
-          .describe("Pre-filter by end date (YYYY-MM-DD)"),
+        strategy: z.string().optional().describe("Pre-filter by strategy name (case-insensitive)"),
+        startDate: z.string().optional().describe("Pre-filter by start date (YYYY-MM-DD)"),
+        endDate: z.string().optional().describe("Pre-filter by end date (YYYY-MM-DD)"),
       }),
     },
     withSyncedBlock(
@@ -402,9 +374,7 @@ export function registerPredictiveTools(
           const baselinePls = tradesWithField.map((t) => t.pl);
           const baselineTotalPl = baselinePls.reduce((a, b) => a + b, 0);
           const baselineAvgPl = baselineTotalPl / tradesWithField.length;
-          const baselineWinners = tradesWithField.filter(
-            (t) => t.pl > 0
-          ).length;
+          const baselineWinners = tradesWithField.filter((t) => t.pl > 0).length;
           const baselineWinRate = baselineWinners / tradesWithField.length;
 
           const baseline = {
@@ -469,8 +439,7 @@ export function registerPredictiveTools(
             const avgPl = totalPl / filteredTrades.length;
             const winners = filteredTrades.filter((t) => t.pl > 0).length;
             const winRate = winners / filteredTrades.length;
-            const percentOfTrades =
-              (filteredTrades.length / tradesWithField.length) * 100;
+            const percentOfTrades = (filteredTrades.length / tradesWithField.length) * 100;
 
             const result: ReturnType<typeof calculateMetrics> = {
               count: filteredTrades.length,
@@ -478,16 +447,12 @@ export function registerPredictiveTools(
               winRate: Math.round(winRate * 10000) / 10000,
               avgPl: Math.round(avgPl * 100) / 100,
               totalPl: Math.round(totalPl * 100) / 100,
-              winRateDelta:
-                Math.round((winRate - baseline.winRate) * 10000) / 10000,
+              winRateDelta: Math.round((winRate - baseline.winRate) * 10000) / 10000,
               avgPlDelta: Math.round((avgPl - baseline.avgPl) * 100) / 100,
             };
 
             // Add warning for small sample sizes
-            if (
-              filteredTrades.length < MIN_SAMPLE_SIZE &&
-              filteredTrades.length > 0
-            ) {
+            if (filteredTrades.length < MIN_SAMPLE_SIZE && filteredTrades.length > 0) {
               result.lowSampleWarning = `${filteredTrades.length} trades may be insufficient for reliable statistics (recommend >= ${MIN_SAMPLE_SIZE})`;
             }
 
@@ -541,11 +506,7 @@ export function registerPredictiveTools(
             // Check lt direction
             if (result.lt) {
               const { winRateDelta, avgPlDelta, percentOfTrades } = result.lt;
-              if (
-                winRateDelta > 0 &&
-                avgPlDelta > 0 &&
-                percentOfTrades >= 20
-              ) {
+              if (winRateDelta > 0 && avgPlDelta > 0 && percentOfTrades >= 20) {
                 const score = winRateDelta * avgPlDelta;
                 sweetSpots.push({
                   threshold: result.threshold,
@@ -561,11 +522,7 @@ export function registerPredictiveTools(
             // Check gt direction
             if (result.gt) {
               const { winRateDelta, avgPlDelta, percentOfTrades } = result.gt;
-              if (
-                winRateDelta > 0 &&
-                avgPlDelta > 0 &&
-                percentOfTrades >= 20
-              ) {
+              if (winRateDelta > 0 && avgPlDelta > 0 && percentOfTrades >= 20) {
                 const score = winRateDelta * avgPlDelta;
                 sweetSpots.push({
                   threshold: result.threshold,
@@ -618,7 +575,7 @@ export function registerPredictiveTools(
             isError: true,
           };
         }
-      }
-    )
+      },
+    ),
   );
 }

@@ -11,9 +11,7 @@ export interface LoginPageParams {
 }
 
 export function renderLoginPage(params: LoginPageParams): string {
-  const error = params.error
-    ? `<div class="error">${escapeHtml(params.error)}</div>`
-    : '';
+  const error = params.error ? `<div class="error">${escapeHtml(params.error)}</div>` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -65,11 +63,11 @@ export function renderLoginPage(params: LoginPageParams): string {
     ${error}
     <form method="POST" action="/login">
       <input type="hidden" name="redirect_uri" value="${escapeHtml(params.redirectUri)}">
-      <input type="hidden" name="state" value="${escapeHtml(params.state || '')}">
+      <input type="hidden" name="state" value="${escapeHtml(params.state || "")}">
       <input type="hidden" name="code_challenge" value="${escapeHtml(params.codeChallenge)}">
       <input type="hidden" name="client_id" value="${escapeHtml(params.clientId)}">
-      <input type="hidden" name="scopes" value="${escapeHtml(params.scopes.join(' '))}">
-      ${params.resource ? `<input type="hidden" name="resource" value="${escapeHtml(params.resource)}">` : ''}
+      <input type="hidden" name="scopes" value="${escapeHtml(params.scopes.join(" "))}">
+      ${params.resource ? `<input type="hidden" name="resource" value="${escapeHtml(params.resource)}">` : ""}
       <label for="username">Username</label>
       <input type="text" id="username" name="username" required autocomplete="username">
       <label for="password">Password</label>
@@ -83,8 +81,8 @@ export function renderLoginPage(params: LoginPageParams): string {
 
 function escapeHtml(str: string): string {
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }

@@ -94,8 +94,7 @@ export function ScatterChart({
   className,
 }: ScatterChartProps) {
   // Check if we're using multi-axis mode
-  const hasMultiAxis =
-    (yAxis2 && yAxis2.field !== "none") || (yAxis3 && yAxis3.field !== "none");
+  const hasMultiAxis = (yAxis2 && yAxis2.field !== "none") || (yAxis3 && yAxis3.field !== "none");
 
   // Build list of Y axes for What-If analysis
   const whatIfYAxes = useMemo((): YAxisConfig[] => {
@@ -132,7 +131,7 @@ export function ScatterChart({
         setSelectedRange({ xMin, xMax, yRanges });
       }
     },
-    [showWhatIf]
+    [showWhatIf],
   );
 
   // Clear selected range when What-If is disabled
@@ -197,7 +196,7 @@ export function ScatterChart({
           hovertemplate: y1Points.map(
             (p) =>
               `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(p.x, xAxis.field)}<br>` +
-              `${yInfo?.label ?? yAxis.field}: ${formatValueForHover(p.y, yAxis.field)}<extra></extra>`
+              `${yInfo?.label ?? yAxis.field}: ${formatValueForHover(p.y, yAxis.field)}<extra></extra>`,
           ),
         });
       }
@@ -230,7 +229,7 @@ export function ScatterChart({
             hovertemplate: y2Points.map(
               (p) =>
                 `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(p.x, xAxis.field)}<br>` +
-                `${y2Info?.label ?? yAxis2.field}: ${formatValueForHover(p.y, yAxis2.field)}<extra></extra>`
+                `${y2Info?.label ?? yAxis2.field}: ${formatValueForHover(p.y, yAxis2.field)}<extra></extra>`,
             ),
           });
         }
@@ -264,7 +263,7 @@ export function ScatterChart({
             hovertemplate: y3Points.map(
               (p) =>
                 `${xInfo?.label ?? xAxis.field}: ${formatValueForHover(p.x, xAxis.field)}<br>` +
-                `${y3Info?.label ?? yAxis3.field}: ${formatValueForHover(p.y, yAxis3.field)}<extra></extra>`
+                `${y3Info?.label ?? yAxis3.field}: ${formatValueForHover(p.y, yAxis3.field)}<extra></extra>`,
             ),
           });
         }
@@ -369,9 +368,9 @@ export function ScatterChart({
 
         // Color palette matching AXIS_COLORS for each Y axis
         const boundingBoxColors = [
-          { line: "rgb(59, 130, 246)", fill: "rgba(59, 130, 246, 0.05)" },   // Blue (y1)
-          { line: "rgb(249, 115, 22)", fill: "rgba(249, 115, 22, 0.05)" },   // Orange (y2)
-          { line: "rgb(20, 184, 166)", fill: "rgba(20, 184, 166, 0.05)" },   // Teal (y3)
+          { line: "rgb(59, 130, 246)", fill: "rgba(59, 130, 246, 0.05)" }, // Blue (y1)
+          { line: "rgb(249, 115, 22)", fill: "rgba(249, 115, 22, 0.05)" }, // Orange (y2)
+          { line: "rgb(20, 184, 166)", fill: "rgba(20, 184, 166, 0.05)" }, // Teal (y3)
         ];
 
         const shapes: Partial<Shape>[] = [];
@@ -462,10 +461,16 @@ export function ScatterChart({
     // Also check if we're actually filtering (range doesn't cover all points)
     // For single Y-axis mode, use first Y range
     const firstYRange = effectiveSelectedRange?.yRanges[0];
-    const isActuallyFiltering = effectiveSelectedRange && firstYRange && (
-      points.some((p) => p.x < effectiveSelectedRange.xMin || p.x > effectiveSelectedRange.xMax ||
-                        p.y < firstYRange.min || p.y > firstYRange.max)
-    );
+    const isActuallyFiltering =
+      effectiveSelectedRange &&
+      firstYRange &&
+      points.some(
+        (p) =>
+          p.x < effectiveSelectedRange.xMin ||
+          p.x > effectiveSelectedRange.xMax ||
+          p.y < firstYRange.min ||
+          p.y > firstYRange.max,
+      );
 
     if (effectiveSelectedRange && firstYRange && isActuallyFiltering) {
       const { xMin, xMax } = effectiveSelectedRange;
@@ -474,10 +479,10 @@ export function ScatterChart({
       const hasColorBy = colorBy && colorBy.field !== "none";
 
       const inRangePoints = points.filter(
-        (p) => p.x >= xMin && p.x <= xMax && p.y >= yMin && p.y <= yMax
+        (p) => p.x >= xMin && p.x <= xMax && p.y >= yMin && p.y <= yMax,
       );
       const outOfRangePoints = points.filter(
-        (p) => p.x < xMin || p.x > xMax || p.y < yMin || p.y > yMax
+        (p) => p.x < xMin || p.x > xMax || p.y < yMin || p.y > yMax,
       );
 
       // Out-of-range points (gray/faded)
@@ -655,9 +660,7 @@ export function ScatterChart({
 
     // Build layout
     const hasColorBy = colorBy && colorBy.field !== "none";
-    const showLegend =
-      isActuallyFiltering ||
-      (hasColorBy && colorBy.field === "isWinner");
+    const showLegend = isActuallyFiltering || (hasColorBy && colorBy.field === "isWinner");
 
     // Calculate dynamic right margin - need space for colorbar with continuous colorBy
     let rightMargin = 40;
@@ -672,9 +675,9 @@ export function ScatterChart({
 
       // Color palette matching AXIS_COLORS for each Y axis
       const boundingBoxColors = [
-        { line: "rgb(59, 130, 246)", fill: "rgba(59, 130, 246, 0.05)" },   // Blue (y1)
-        { line: "rgb(249, 115, 22)", fill: "rgba(249, 115, 22, 0.05)" },   // Orange (y2)
-        { line: "rgb(139, 92, 246)", fill: "rgba(139, 92, 246, 0.05)" },   // Purple (y3)
+        { line: "rgb(59, 130, 246)", fill: "rgba(59, 130, 246, 0.05)" }, // Blue (y1)
+        { line: "rgb(249, 115, 22)", fill: "rgba(249, 115, 22, 0.05)" }, // Orange (y2)
+        { line: "rgb(139, 92, 246)", fill: "rgba(139, 92, 246, 0.05)" }, // Purple (y3)
       ];
 
       yRanges.forEach((range, index) => {
@@ -700,12 +703,8 @@ export function ScatterChart({
     // Generate custom tick labels for time of day fields (X and Y axes)
     const isXTimeField = xAxis.field === "timeOfDayMinutes";
     const isYTimeField = yAxis.field === "timeOfDayMinutes";
-    const xTimeTicks = isXTimeField
-      ? generateTimeAxisTicksFromData(points.map((p) => p.x))
-      : null;
-    const yTimeTicks = isYTimeField
-      ? generateTimeAxisTicksFromData(points.map((p) => p.y))
-      : null;
+    const xTimeTicks = isXTimeField ? generateTimeAxisTicksFromData(points.map((p) => p.x)) : null;
+    const yTimeTicks = isYTimeField ? generateTimeAxisTicksFromData(points.map((p) => p.y)) : null;
 
     const chartLayout: Partial<Layout> = {
       xaxis: {

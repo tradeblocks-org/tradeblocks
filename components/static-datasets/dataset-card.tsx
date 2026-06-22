@@ -1,17 +1,17 @@
-"use client"
+"use client";
 
-import { useState, useCallback, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
+import { useState, useCallback, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,13 +21,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Database,
   Calendar,
@@ -41,71 +36,71 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
-} from "lucide-react"
-import type { StaticDataset, MatchStrategy } from "@tradeblocks/lib"
-import { MATCH_STRATEGY_LABELS, MATCH_STRATEGY_DESCRIPTIONS } from "@tradeblocks/lib"
-import { useStaticDatasetsStore, makeMatchStatsCacheKey } from "@tradeblocks/lib/stores"
-import type { Trade } from "@tradeblocks/lib"
+} from "lucide-react";
+import type { StaticDataset, MatchStrategy } from "@tradeblocks/lib";
+import { MATCH_STRATEGY_LABELS, MATCH_STRATEGY_DESCRIPTIONS } from "@tradeblocks/lib";
+import { useStaticDatasetsStore, makeMatchStatsCacheKey } from "@tradeblocks/lib/stores";
+import type { Trade } from "@tradeblocks/lib";
 
 interface DatasetCardProps {
-  dataset: StaticDataset
-  onPreview: (dataset: StaticDataset) => void
+  dataset: StaticDataset;
+  onPreview: (dataset: StaticDataset) => void;
   /** Trades from the active block for computing match stats */
-  trades?: Trade[]
+  trades?: Trade[];
   /** Block ID for caching match stats */
-  blockId?: string
+  blockId?: string;
 }
 
 export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCardProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [editName, setEditName] = useState(dataset.name)
-  const [nameError, setNameError] = useState<string | null>(null)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(dataset.name);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const updateMatchStrategy = useStaticDatasetsStore((state) => state.updateMatchStrategy)
-  const renameDataset = useStaticDatasetsStore((state) => state.renameDataset)
-  const deleteDataset = useStaticDatasetsStore((state) => state.deleteDataset)
-  const validateName = useStaticDatasetsStore((state) => state.validateName)
-  const computeMatchStats = useStaticDatasetsStore((state) => state.computeMatchStats)
+  const updateMatchStrategy = useStaticDatasetsStore((state) => state.updateMatchStrategy);
+  const renameDataset = useStaticDatasetsStore((state) => state.renameDataset);
+  const deleteDataset = useStaticDatasetsStore((state) => state.deleteDataset);
+  const validateName = useStaticDatasetsStore((state) => state.validateName);
+  const computeMatchStats = useStaticDatasetsStore((state) => state.computeMatchStats);
 
   // Build the cache key for this specific dataset/block/strategy combo
-  const cacheKey = blockId ? makeMatchStatsCacheKey(dataset.id, blockId, dataset.matchStrategy) : null
+  const cacheKey = blockId
+    ? makeMatchStatsCacheKey(dataset.id, blockId, dataset.matchStrategy)
+    : null;
 
   // Subscribe directly to the cached stats for this specific key
   // This ensures re-render when this specific cache entry changes
   const matchStats = useStaticDatasetsStore((state) =>
-    cacheKey && trades && trades.length > 0
-      ? state.cachedMatchStats.get(cacheKey) ?? null
-      : null
-  )
+    cacheKey && trades && trades.length > 0 ? (state.cachedMatchStats.get(cacheKey) ?? null) : null,
+  );
 
   // Subscribe directly to computing state for this specific key
   const isLoadingStats = useStaticDatasetsStore((state) =>
-    cacheKey ? state.computingMatchStats.has(cacheKey) : false
-  )
+    cacheKey ? state.computingMatchStats.has(cacheKey) : false,
+  );
 
   // Trigger computation if not cached and not already computing
   useEffect(() => {
     if (!trades || trades.length === 0 || !blockId || !cacheKey) {
-      return
+      return;
     }
 
     // Check current state and trigger computation if needed
-    const state = useStaticDatasetsStore.getState()
-    const cached = state.cachedMatchStats.get(cacheKey)
-    const computing = state.computingMatchStats.has(cacheKey)
+    const state = useStaticDatasetsStore.getState();
+    const cached = state.cachedMatchStats.get(cacheKey);
+    const computing = state.computingMatchStats.has(cacheKey);
 
     if (!cached && !computing) {
-      computeMatchStats(dataset.id, blockId, trades, dataset.matchStrategy)
+      computeMatchStats(dataset.id, blockId, trades, dataset.matchStrategy);
     }
-  }, [trades, blockId, dataset.id, dataset.matchStrategy, cacheKey, computeMatchStats])
+  }, [trades, blockId, dataset.id, dataset.matchStrategy, cacheKey, computeMatchStats]);
 
   const formatDate = (date: Date) =>
     new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
-    }).format(new Date(date))
+    }).format(new Date(date));
 
   const formatDateTime = (date: Date) =>
     new Intl.DateTimeFormat("en-US", {
@@ -114,52 +109,52 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
-    }).format(new Date(date))
+    }).format(new Date(date));
 
   const handleStrategyChange = useCallback(
     async (value: string) => {
-      await updateMatchStrategy(dataset.id, value as MatchStrategy)
+      await updateMatchStrategy(dataset.id, value as MatchStrategy);
     },
-    [dataset.id, updateMatchStrategy]
-  )
+    [dataset.id, updateMatchStrategy],
+  );
 
   const handleStartEdit = useCallback(() => {
-    setEditName(dataset.name)
-    setNameError(null)
-    setIsEditing(true)
-  }, [dataset.name])
+    setEditName(dataset.name);
+    setNameError(null);
+    setIsEditing(true);
+  }, [dataset.name]);
 
   const handleCancelEdit = useCallback(() => {
-    setEditName(dataset.name)
-    setNameError(null)
-    setIsEditing(false)
-  }, [dataset.name])
+    setEditName(dataset.name);
+    setNameError(null);
+    setIsEditing(false);
+  }, [dataset.name]);
 
   const handleSaveEdit = useCallback(async () => {
     if (!editName.trim() || editName === dataset.name) {
-      setIsEditing(false)
-      return
+      setIsEditing(false);
+      return;
     }
 
-    const validation = await validateName(editName, dataset.id)
+    const validation = await validateName(editName, dataset.id);
     if (!validation.valid) {
-      setNameError(validation.error || "Invalid name")
-      return
+      setNameError(validation.error || "Invalid name");
+      return;
     }
 
-    const result = await renameDataset(dataset.id, editName.trim())
+    const result = await renameDataset(dataset.id, editName.trim());
     if (result.success) {
-      setIsEditing(false)
-      setNameError(null)
+      setIsEditing(false);
+      setNameError(null);
     } else {
-      setNameError(result.error || "Failed to rename")
+      setNameError(result.error || "Failed to rename");
     }
-  }, [editName, dataset.id, dataset.name, validateName, renameDataset])
+  }, [editName, dataset.id, dataset.name, validateName, renameDataset]);
 
   const handleDelete = useCallback(async () => {
-    await deleteDataset(dataset.id)
-    setShowDeleteConfirm(false)
-  }, [dataset.id, deleteDataset])
+    await deleteDataset(dataset.id);
+    setShowDeleteConfirm(false);
+  }, [dataset.id, deleteDataset]);
 
   return (
     <Card className="relative">
@@ -171,12 +166,12 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
                 <Input
                   value={editName}
                   onChange={(e) => {
-                    setEditName(e.target.value)
-                    setNameError(null)
+                    setEditName(e.target.value);
+                    setNameError(null);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") handleSaveEdit()
-                    if (e.key === "Escape") handleCancelEdit()
+                    if (e.key === "Enter") handleSaveEdit();
+                    if (e.key === "Escape") handleCancelEdit();
                   }}
                   className="h-8 text-lg font-semibold"
                   autoFocus
@@ -203,12 +198,8 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
                 </Button>
               </div>
             )}
-            {nameError && (
-              <p className="text-xs text-destructive mt-1">{nameError}</p>
-            )}
-            <p className="text-sm text-muted-foreground truncate mt-1">
-              {dataset.fileName}
-            </p>
+            {nameError && <p className="text-xs text-destructive mt-1">{nameError}</p>}
+            <p className="text-sm text-muted-foreground truncate mt-1">{dataset.fileName}</p>
           </div>
           <Button
             size="icon"
@@ -244,7 +235,13 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge
-                    variant={matchStats.matchPercentage >= 90 ? "default" : matchStats.matchPercentage >= 50 ? "secondary" : "outline"}
+                    variant={
+                      matchStats.matchPercentage >= 90
+                        ? "default"
+                        : matchStats.matchPercentage >= 50
+                          ? "secondary"
+                          : "outline"
+                    }
                     className={`text-xs ${matchStats.matchPercentage < 50 ? "text-amber-600 dark:text-amber-400 border-amber-300" : ""}`}
                   >
                     {matchStats.matchPercentage >= 90 ? (
@@ -256,9 +253,13 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">
-                  <p>{matchStats.matchedTrades} of {matchStats.totalTrades} trades matched</p>
+                  <p>
+                    {matchStats.matchedTrades} of {matchStats.totalTrades} trades matched
+                  </p>
                   {matchStats.outsideDateRange > 0 && (
-                    <p className="text-muted-foreground">{matchStats.outsideDateRange} outside date range</p>
+                    <p className="text-muted-foreground">
+                      {matchStats.outsideDateRange} outside date range
+                    </p>
                   )}
                 </TooltipContent>
               </Tooltip>
@@ -305,9 +306,7 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
           </div>
           <Select value={dataset.matchStrategy} onValueChange={handleStrategyChange}>
             <SelectTrigger className="h-8 text-xs">
-              <SelectValue>
-                {MATCH_STRATEGY_LABELS[dataset.matchStrategy]}
-              </SelectValue>
+              <SelectValue>{MATCH_STRATEGY_LABELS[dataset.matchStrategy]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {(Object.keys(MATCH_STRATEGY_LABELS) as MatchStrategy[]).map((strategy) => (
@@ -342,8 +341,8 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Dataset?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete &quot;{dataset.name}&quot; and all its data.
-              This action cannot be undone.
+              This will permanently delete &quot;{dataset.name}&quot; and all its data. This action
+              cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -358,5 +357,5 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
         </AlertDialogContent>
       </AlertDialog>
     </Card>
-  )
+  );
 }

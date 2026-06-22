@@ -185,10 +185,12 @@ function isGreekForBulkContract(
   right: ThetaRight,
   contract: ThetaContractListRow,
 ): boolean {
-  return row.symbol.toUpperCase() === root.toUpperCase()
-    && row.expiration === contract.expiration
-    && formatStrike(row.strike) === formatStrike(contract.strike)
-    && row.right === right;
+  return (
+    row.symbol.toUpperCase() === root.toUpperCase() &&
+    row.expiration === contract.expiration &&
+    formatStrike(row.strike) === formatStrike(contract.strike) &&
+    row.right === right
+  );
 }
 
 function toMinuteQuote(row: BulkQuoteRow & { greeks_revision?: number | null }): MinuteQuote {
@@ -524,13 +526,12 @@ export class ThetaDataProvider implements MarketDataProvider {
       date,
       interval: "1m",
     } as const;
-    const [quotes, bandGreeks]: [ThetaQuoteRow[], ThetaFirstOrderGreekRow[]] =
-      await Promise.all([
-        this.quoteEndpoint(this.client, request),
-        this.fetchBulkGreekBand(root, contract.expiration, date, greekBandCache),
-      ]);
+    const [quotes, bandGreeks]: [ThetaQuoteRow[], ThetaFirstOrderGreekRow[]] = await Promise.all([
+      this.quoteEndpoint(this.client, request),
+      this.fetchBulkGreekBand(root, contract.expiration, date, greekBandCache),
+    ]);
     const contractBandGreeks = bandGreeks.filter((row) =>
-      isGreekForBulkContract(row, root, right, contract)
+      isGreekForBulkContract(row, root, right, contract),
     );
     const bandJoined = joinThetaQuotesAndFirstOrderGreeks({
       quotes,

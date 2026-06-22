@@ -13,7 +13,7 @@ import type { DuckDBConnection } from "@duckdb/node-api";
 export async function tableExists(
   conn: DuckDBConnection,
   schemaName: string,
-  tableName: string
+  tableName: string,
 ): Promise<boolean> {
   const result = await conn.runAndReadAll(`
     SELECT 1
@@ -27,7 +27,7 @@ async function hasColumn(
   conn: DuckDBConnection,
   schemaName: string,
   tableName: string,
-  columnName: string
+  columnName: string,
 ): Promise<boolean> {
   const result = await conn.runAndReadAll(`
     SELECT 1

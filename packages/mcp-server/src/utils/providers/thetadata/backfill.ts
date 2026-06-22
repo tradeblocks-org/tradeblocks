@@ -78,20 +78,10 @@ export interface BackfillRewriteSelectInput {
 }
 
 export function backfillManifestPath(dataRoot: string, runId: string): string {
-  return join(
-    dataRoot,
-    "market",
-    "_manifests",
-    "thetadata-mdds-backfill",
-    `${runId}.ndjson`,
-  );
+  return join(dataRoot, "market", "_manifests", "thetadata-mdds-backfill", `${runId}.ndjson`);
 }
 
-export function backfillPartitionPath(
-  dataRoot: string,
-  underlying: string,
-  date: string,
-): string {
+export function backfillPartitionPath(dataRoot: string, underlying: string, date: string): string {
   return join(
     dataRoot,
     "market",
@@ -198,9 +188,12 @@ export function groupBackfillTickersByGreekBand(
   date: string,
 ): BackfillGreekBandGroup[] {
   const validatedDate = validateDate(date);
-  const byKey = new Map<string, BackfillGreekBandGroup & {
-    contractByTicker: Map<string, BackfillParsedOccTicker>;
-  }>();
+  const byKey = new Map<
+    string,
+    BackfillGreekBandGroup & {
+      contractByTicker: Map<string, BackfillParsedOccTicker>;
+    }
+  >();
 
   for (const ticker of tickers) {
     const contract = parseBackfillOccTicker(ticker);
@@ -227,7 +220,7 @@ export function groupBackfillTickersByGreekBand(
       expiration: group.expiration,
       date: group.date,
       contracts: [...group.contractByTicker.values()].sort((left, right) =>
-        left.ticker.localeCompare(right.ticker)
+        left.ticker.localeCompare(right.ticker),
       ),
     }))
     .sort((left, right) => left.key.localeCompare(right.key));
@@ -256,9 +249,7 @@ export function collectBackfillConcreteFallbacks(
     if (coveredTimes.size === 0 && !input.fallbackUncoveredContracts) {
       continue;
     }
-    const missingTimes = [...expectedTimes]
-      .filter((time) => !coveredTimes.has(time))
-      .sort();
+    const missingTimes = [...expectedTimes].filter((time) => !coveredTimes.has(time)).sort();
     if (missingTimes.length > 0) {
       fallbacks.push({ contract, missingTimes });
     }
@@ -346,10 +337,10 @@ function sanitizeCount(name: string, value: number): number {
 
 function validateManifestStatus(value: BackfillManifestStatus): BackfillManifestStatus {
   if (
-    value === "prepared"
-    || value === "committed"
-    || value === "failed"
-    || value === "committed_manifest_failed"
+    value === "prepared" ||
+    value === "committed" ||
+    value === "failed" ||
+    value === "committed_manifest_failed"
   ) {
     return value;
   }

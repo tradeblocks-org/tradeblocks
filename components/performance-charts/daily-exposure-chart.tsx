@@ -1,11 +1,7 @@
 "use client";
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 import type { Layout, PlotData } from "plotly.js";
 import { useEffect, useMemo, useState } from "react";
@@ -45,11 +41,12 @@ export function DailyExposureChart({ className }: DailyExposureChartProps) {
     const { dailyExposure, peakDailyExposure, peakDailyExposurePercent } = data;
 
     // Use the appropriate peak based on view mode
-    const activePeak = effectiveViewMode === "dollars" ? peakDailyExposure : peakDailyExposurePercent;
+    const activePeak =
+      effectiveViewMode === "dollars" ? peakDailyExposure : peakDailyExposurePercent;
 
     const dates = dailyExposure.map((d) => d.date);
     const values = dailyExposure.map((d) =>
-      effectiveViewMode === "dollars" ? d.exposure : d.exposurePercent
+      effectiveViewMode === "dollars" ? d.exposure : d.exposurePercent,
     );
 
     // Format based on view mode
@@ -82,9 +79,7 @@ export function DailyExposureChart({ className }: DailyExposureChartProps) {
 
     if (activePeak) {
       const peakValue =
-        effectiveViewMode === "dollars"
-          ? activePeak.exposure
-          : activePeak.exposurePercent;
+        effectiveViewMode === "dollars" ? activePeak.exposure : activePeak.exposurePercent;
 
       const peakTrace: Partial<PlotData> = {
         x: [activePeak.date],
@@ -160,7 +155,10 @@ export function DailyExposureChart({ className }: DailyExposureChartProps) {
             </span>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
-            <p>% view unavailable when filtering by strategy. Margin values are sized for the full portfolio, not individual strategies.</p>
+            <p>
+              % view unavailable when filtering by strategy. Margin values are sized for the full
+              portfolio, not individual strategies.
+            </p>
           </TooltipContent>
         </Tooltip>
       ) : (
@@ -171,10 +169,7 @@ export function DailyExposureChart({ className }: DailyExposureChartProps) {
     </ToggleGroup>
   );
 
-  if (
-    !data?.dailyExposure ||
-    data.dailyExposure.length === 0
-  ) {
+  if (!data?.dailyExposure || data.dailyExposure.length === 0) {
     return (
       <ChartWrapper
         title="🛡️ Daily Exposure"

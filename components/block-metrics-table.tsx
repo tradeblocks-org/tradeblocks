@@ -1,9 +1,9 @@
 interface MetricRow {
-  category: string
-  metric: string
-  value: string
-  change: string
-  status: "positive" | "neutral" | "negative"
+  category: string;
+  metric: string;
+  value: string;
+  change: string;
+  status: "positive" | "neutral" | "negative";
 }
 
 const metrics: MetricRow[] = [
@@ -49,13 +49,13 @@ const metrics: MetricRow[] = [
     change: "Unchanged",
     status: "neutral",
   },
-]
+];
 
 const statusClass: Record<MetricRow["status"], string> = {
   positive: "text-emerald-600 dark:text-emerald-400",
   neutral: "text-muted-foreground",
   negative: "text-rose-500 dark:text-rose-400",
-}
+};
 
 export function BlockMetricsTable() {
   return (
@@ -91,13 +91,14 @@ export function BlockMetricsTable() {
           </thead>
           <tbody className="divide-y divide-border/50">
             {metrics.map((row) => (
-              <tr key={`${row.category}-${row.metric}`} className="transition-colors hover:bg-muted/30">
+              <tr
+                key={`${row.category}-${row.metric}`}
+                className="transition-colors hover:bg-muted/30"
+              >
                 <td className="whitespace-nowrap px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:px-6">
                   {row.category}
                 </td>
-                <td className="px-4 py-3 font-medium text-foreground sm:px-6">
-                  {row.metric}
-                </td>
+                <td className="px-4 py-3 font-medium text-foreground sm:px-6">{row.metric}</td>
                 <td className="px-4 py-3 font-semibold tabular-nums text-foreground sm:px-6">
                   {row.value}
                 </td>
@@ -110,5 +111,5 @@ export function BlockMetricsTable() {
         </table>
       </div>
     </div>
-  )
+  );
 }

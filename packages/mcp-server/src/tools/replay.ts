@@ -43,10 +43,8 @@ export const replayTradeSchema = z.object({
         type: z.enum(["C", "P"]).describe("Call or Put"),
         expiry: z.string().describe("Expiration date YYYY-MM-DD"),
         quantity: z.number().describe("Positive = long, negative = short"),
-        entry_price: z
-          .number()
-          .describe("Per-contract entry price (premium paid/received)"),
-      })
+        entry_price: z.number().describe("Per-contract entry price (premium paid/received)"),
+      }),
     )
     .optional()
     .describe("Explicit leg definitions for hypothetical replay"),
@@ -56,22 +54,20 @@ export const replayTradeSchema = z.object({
   trade_index: z
     .number()
     .optional()
-    .describe(
-      "0-based index of trade in block's tradelog (ordered by date_opened)"
-    ),
+    .describe("0-based index of trade in block's tradelog (ordered by date_opened)"),
 
   // Common fields
   open_date: z
     .string()
     .optional()
     .describe(
-      "Trade open date YYYY-MM-DD (required for hypothetical mode, auto-resolved for tradelog mode)"
+      "Trade open date YYYY-MM-DD (required for hypothetical mode, auto-resolved for tradelog mode)",
     ),
   close_date: z
     .string()
     .optional()
     .describe(
-      "Trade close date YYYY-MM-DD (required for hypothetical, auto-resolved for tradelog)"
+      "Trade close date YYYY-MM-DD (required for hypothetical, auto-resolved for tradelog)",
     ),
   multiplier: z
     .number()
@@ -82,21 +78,21 @@ export const replayTradeSchema = z.object({
     .default("sampled")
     .describe(
       "Output format: 'sampled' returns path sampled at ~15min intervals (default), " +
-      "'full' returns complete minute-by-minute P&L path, " +
-      "'summary' returns MFE/MAE/P&L without minute-level path"
+        "'full' returns complete minute-by-minute P&L path, " +
+        "'summary' returns MFE/MAE/P&L without minute-level path",
     ),
   close_at: z
     .enum(["trade", "expiry"])
     .default("trade")
     .describe(
       "When to end the P&L path: 'trade' (default) truncates at the trade's actual close time, " +
-      "'expiry' shows full path through option expiry. Only applies to tradelog mode."
+        "'expiry' shows full path through option expiry. Only applies to tradelog mode.",
     ),
   skip_quotes: z
     .boolean()
     .default(false)
     .describe(
-      "Skip NBBO quote enrichment for option bars. Faster, but uses cached trade bars / HL2 marks."
+      "Skip NBBO quote enrichment for option bars. Faster, but uses cached trade bars / HL2 marks.",
     ),
 });
 
@@ -105,15 +101,25 @@ export const replayTradeSchema = z.object({
 // ---------------------------------------------------------------------------
 
 const MONTH_MAP: Record<string, string> = {
-  Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
-  Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+  Jan: "01",
+  Feb: "02",
+  Mar: "03",
+  Apr: "04",
+  May: "05",
+  Jun: "06",
+  Jul: "07",
+  Aug: "08",
+  Sep: "09",
+  Oct: "10",
+  Nov: "11",
+  Dec: "12",
 };
 
 /** Convert OO expiry hint "Mar 13" + year "2026" → "2026-03-13" */
 function resolveOOExpiryHint(hint: string, year: string): string {
-  const [mon, day] = hint.split(' ');
-  const mm = MONTH_MAP[mon] ?? '01';
-  const dd = day.padStart(2, '0');
+  const [mon, day] = hint.split(" ");
+  const mm = MONTH_MAP[mon] ?? "01";
+  const dd = day.padStart(2, "0");
   return `${year}-${mm}-${dd}`;
 }
 
@@ -130,8 +136,8 @@ export function resolveOODateRange(
   tradeOpenDate: string,
 ): { from: string; to: string } | null {
   const hints = parsedLegs
-    .filter(l => l.expiryHint)
-    .map(l => resolveOOExpiryHint(l.expiryHint!, tradeYear));
+    .filter((l) => l.expiryHint)
+    .map((l) => resolveOOExpiryHint(l.expiryHint!, tradeYear));
 
   if (hints.length === 0) return null;
 
@@ -151,16 +157,9 @@ export async function handleReplayTrade(
   params: z.infer<typeof replayTradeSchema>,
   baseDir: string,
   stores: MarketStores,
-  injectedConn?: import("@duckdb/node-api").DuckDBConnection
+  injectedConn?: import("@duckdb/node-api").DuckDBConnection,
 ): Promise<ReplayResult> {
-  const {
-    legs: inputLegs,
-    block_id,
-    trade_index,
-    multiplier,
-    close_at,
-    skip_quotes,
-  } = params;
+  const { legs: inputLegs, block_id, trade_index, multiplier, close_at, skip_quotes } = params;
   let { open_date, close_date } = params;
   let tradeCloseTimestamp: string | undefined; // "YYYY-MM-DD HH:MM" when trade actually closed
 
@@ -169,9 +168,7 @@ export async function handleReplayTrade(
   if (inputLegs && inputLegs.length > 0) {
     // ----- Mode A: Hypothetical replay -----
     if (!open_date || !close_date) {
-      throw new Error(
-        "open_date and close_date are required for hypothetical replay mode"
-      );
+      throw new Error("open_date and close_date are required for hypothetical replay mode");
     }
 
     replayLegs = inputLegs.map((leg) => ({
@@ -182,21 +179,19 @@ export async function handleReplayTrade(
     }));
   } else if (block_id !== undefined && trade_index !== undefined) {
     // ----- Mode B: Tradelog replay -----
-    const conn = injectedConn ?? await getConnection(baseDir);
+    const conn = injectedConn ?? (await getConnection(baseDir));
 
     const result = await conn.runAndReadAll(
       `SELECT legs, premium, date_opened, date_closed, ticker, num_contracts, time_closed
        FROM trades.trade_data
        WHERE block_id = '${block_id.replace(/'/g, "''")}'
        ORDER BY date_opened, rowid
-       LIMIT 1 OFFSET ${trade_index}`
+       LIMIT 1 OFFSET ${trade_index}`,
     );
 
     const rows = result.getRows();
     if (rows.length === 0) {
-      throw new Error(
-        `No trade found at index ${trade_index} in block "${block_id}"`
-      );
+      throw new Error(`No trade found at index ${trade_index} in block "${block_id}"`);
     }
 
     const row = rows[0];
@@ -225,20 +220,19 @@ export async function handleReplayTrade(
       parsedLegs = parseLegsString(legsStr);
     } catch {
       throw new Error(
-        `Cannot parse legs "${legsStr}" from tradelog — use hypothetical mode with explicit strikes`
+        `Cannot parse legs "${legsStr}" from tradelog — use hypothetical mode with explicit strikes`,
       );
     }
 
     // Build ReplayLeg[] from parsed legs
     const root = ticker || parsedLegs[0].root;
-    const perContractPremium =
-      numContracts > 0 ? premium / numContracts : premium;
+    const perContractPremium = numContracts > 0 ? premium / numContracts : premium;
 
     // OO format provides per-leg entry price, contract count, and expiry hint
-    const hasOOData = parsedLegs.some(l => l.entryPrice !== undefined);
+    const hasOOData = parsedLegs.some((l) => l.entryPrice !== undefined);
 
     // Resolve per-leg expiry: OO expiryHint ("Mar 13") + year from trade date
-    const tradeYear = (open_date || dateOpened).split('-')[0];
+    const tradeYear = (open_date || dateOpened).split("-")[0];
 
     // Override fetch date range from OO expiryHints when available
     if (hasOOData) {
@@ -259,15 +253,13 @@ export async function handleReplayTrade(
         quantity: hasOOData
           ? leg.quantity * (leg.contracts ?? 1)
           : leg.quantity * (numContracts > 0 ? numContracts : 1),
-        entryPrice: hasOOData
-          ? leg.entryPrice!
-          : perContractPremium / parsedLegs.length,
+        entryPrice: hasOOData ? leg.entryPrice! : perContractPremium / parsedLegs.length,
         multiplier,
       };
     });
   } else {
     throw new Error(
-      "Provide either legs[] for hypothetical mode or block_id + trade_index for tradelog mode"
+      "Provide either legs[] for hypothetical mode or block_id + trade_index for tradelog mode",
     );
   }
 
@@ -313,7 +305,7 @@ export async function handleReplayTrade(
   const barsByLeg: BarRow[][] = replayLegs.map((leg) => {
     const quotes = quotesByOcc.get(leg.occTicker) ?? [];
     return quotes.map((q) => {
-      const [date, time] = q.timestamp.split(' ');
+      const [date, time] = q.timestamp.split(" ");
       const mid = (q.bid + q.ask) / 2;
       return {
         ticker: q.occ_ticker,
@@ -333,15 +325,20 @@ export async function handleReplayTrade(
   // ----- Fetch underlying bars + build greeks config -----
   // Reverse-map weekly roots back to standard root for underlying fetch
   const REVERSE_ROOT_MAP: Record<string, string> = {
-    SPXW: 'SPX', NDXP: 'NDX', RUTW: 'RUT',
+    SPXW: "SPX",
+    NDXP: "NDX",
+    RUTW: "RUT",
   };
   const DIVIDEND_YIELDS: Record<string, number> = {
-    SPX: 0.015, SPXW: 0.015, NDX: 0.015, NDXP: 0.015,
+    SPX: 0.015,
+    SPXW: 0.015,
+    NDX: 0.015,
+    NDXP: 0.015,
   };
 
   // Extract root from first leg's OCC ticker
   const firstRootMatch = replayLegs[0]?.occTicker.match(/^([A-Z]+)/);
-  const rawRoot = firstRootMatch ? firstRootMatch[1] : '';
+  const rawRoot = firstRootMatch ? firstRootMatch[1] : "";
   const underlyingTicker = REVERSE_ROOT_MAP[rawRoot] ?? rawRoot;
   const dividendYield = DIVIDEND_YIELDS[rawRoot] ?? 0;
 
@@ -356,11 +353,7 @@ export async function handleReplayTrade(
   );
   if (underlyingBars.length === 0) {
     try {
-      underlyingBars = await stores.spot.readDailyBars(
-        underlyingTicker,
-        open_date!,
-        close_date!,
-      );
+      underlyingBars = await stores.spot.readDailyBars(underlyingTicker, open_date!, close_date!);
     } catch {
       // No fallback available — greeks will be omitted
     }
@@ -375,17 +368,21 @@ export async function handleReplayTrade(
   if (underlyingBars.length > 0) {
     underlyingBars = underlyingBars.filter(
       (b) =>
-        Number.isFinite(b.open) && b.open > 0 &&
-        Number.isFinite(b.high) && b.high > 0 &&
-        Number.isFinite(b.low)  && b.low  > 0 &&
-        Number.isFinite(b.close)&& b.close> 0,
+        Number.isFinite(b.open) &&
+        b.open > 0 &&
+        Number.isFinite(b.high) &&
+        b.high > 0 &&
+        Number.isFinite(b.low) &&
+        b.low > 0 &&
+        Number.isFinite(b.close) &&
+        b.close > 0,
     );
   }
 
   // Build underlying price map for greeks config
   const underlyingPrices = new Map<string, number>();
   for (const b of underlyingBars) {
-    const ts = `${b.date} ${b.time ?? ''}`.trim();
+    const ts = `${b.date} ${b.time ?? ""}`.trim();
     underlyingPrices.set(ts, markPrice(b));
   }
 
@@ -394,7 +391,7 @@ export async function handleReplayTrade(
   // (e.g. one source skipped a minute), greeks computation falls back to
   // the nearest underlying timestamp within tolerance.
   const sortedTimestamps = Array.from(underlyingPrices.keys())
-    .filter(k => k.includes(' '))  // Only intraday timestamps, not date-only keys
+    .filter((k) => k.includes(" ")) // Only intraday timestamps, not date-only keys
     .sort();
 
   // VIX IVP lookup via EnrichedStore.read — used as an optional input to
@@ -427,12 +424,12 @@ export async function handleReplayTrade(
     greeksConfig = {
       underlyingPrices,
       sortedTimestamps,
-      legs: replayLegs.map(leg => {
+      legs: replayLegs.map((leg) => {
         // Extract strike, type, expiry from OCC ticker: ROOT{YYMMDD}{C|P}{strike*1000}
         const occMatch = leg.occTicker.match(/^[A-Z]+(\d{6})([CP])(\d{8})$/);
-        if (!occMatch) return { strike: 0, type: 'C' as const, expiryDate: '' };
+        if (!occMatch) return { strike: 0, type: "C" as const, expiryDate: "" };
         const yymmdd = occMatch[1];
-        const type = occMatch[2] as 'C' | 'P';
+        const type = occMatch[2] as "C" | "P";
         const strike = parseInt(occMatch[3], 10) / 1000;
         const expiryDate = `20${yymmdd.slice(0, 2)}-${yymmdd.slice(2, 4)}-${yymmdd.slice(4, 6)}`;
         return { strike, type, expiryDate };
@@ -445,8 +442,7 @@ export async function handleReplayTrade(
 
   // ----- Compute P&L path + MFE/MAE -----
   let fullPath = computeStrategyPnlPath(replayLegs, barsByLeg, greeksConfig);
-  let { mfe, mae, mfeTimestamp, maeTimestamp } =
-    computeReplayMfeMae(fullPath);
+  let { mfe, mae, mfeTimestamp, maeTimestamp } = computeReplayMfeMae(fullPath);
   let totalPnl = fullPath.length > 0 ? fullPath[fullPath.length - 1].strategyPnl : 0;
 
   // Surface a warning when >50% of leg-timestamps have null greeks — the
@@ -462,23 +458,30 @@ export async function handleReplayTrade(
       }
     }
   }
-  const greeksWarning = greeksTotalCount > 0 && greeksNullCount / greeksTotalCount > 0.5
-    ? `Greeks unavailable for ${greeksNullCount} of ${greeksTotalCount} leg-timestamps (0DTE options use Bachelier model; some legs may have insufficient time value for IV computation)`
-    : null;
+  const greeksWarning =
+    greeksTotalCount > 0 && greeksNullCount / greeksTotalCount > 0.5
+      ? `Greeks unavailable for ${greeksNullCount} of ${greeksTotalCount} leg-timestamps (0DTE options use Bachelier model; some legs may have insufficient time value for IV computation)`
+      : null;
 
   // Apply format filter
   // Truncate path at trade close timestamp when close_at === "trade" (default)
   // This ensures decompose_greeks and exit triggers only analyze the actual holding period
   if (close_at === "trade" && tradeCloseTimestamp && fullPath.length > 0) {
-    const truncIdx = fullPath.findIndex(p => p.timestamp > tradeCloseTimestamp!);
+    const truncIdx = fullPath.findIndex((p) => p.timestamp > tradeCloseTimestamp!);
     if (truncIdx > 0) {
       fullPath = fullPath.slice(0, truncIdx);
       // Recompute MFE/MAE/totalPnl on truncated path
       mfe = -Infinity;
       mae = Infinity;
       for (const p of fullPath) {
-        if (p.strategyPnl > mfe) { mfe = p.strategyPnl; mfeTimestamp = p.timestamp; }
-        if (p.strategyPnl < mae) { mae = p.strategyPnl; maeTimestamp = p.timestamp; }
+        if (p.strategyPnl > mfe) {
+          mfe = p.strategyPnl;
+          mfeTimestamp = p.timestamp;
+        }
+        if (p.strategyPnl < mae) {
+          mae = p.strategyPnl;
+          maeTimestamp = p.timestamp;
+        }
       }
       totalPnl = fullPath[fullPath.length - 1].strategyPnl;
     }
@@ -494,12 +497,13 @@ export async function handleReplayTrade(
       mfeTimestamp,
       maeTimestamp,
     ]);
-    pnlPath = fullPath.filter(p => keyTimestamps.has(p.timestamp));
+    pnlPath = fullPath.filter((p) => keyTimestamps.has(p.timestamp));
   } else if (format === "sampled") {
     // Sample at ~15min intervals (keep every 15th bar, plus first/last/MFE/MAE)
     const keyTimestamps = new Set([mfeTimestamp, maeTimestamp]);
-    pnlPath = fullPath.filter((p, i) =>
-      i === 0 || i === fullPath.length - 1 || i % 15 === 0 || keyTimestamps.has(p.timestamp)
+    pnlPath = fullPath.filter(
+      (p, i) =>
+        i === 0 || i === fullPath.length - 1 || i % 15 === 0 || keyTimestamps.has(p.timestamp),
     );
   } else {
     pnlPath = fullPath;
@@ -546,7 +550,7 @@ export function registerReplayTools(
         const summary =
           `Replayed ${result.legs.length}-leg strategy from ${params.open_date ?? "trade dates"} to ${params.close_date ?? "trade dates"}: ` +
           `$${result.totalPnl.toFixed(2)} P&L, MFE=$${result.mfe.toFixed(2)}, MAE=$${result.mae.toFixed(2)}, ` +
-          `${result.pnlPath.length} minute bars, greeks=${result.pnlPath[0]?.legGreeks ? 'yes' : 'no'}`;
+          `${result.pnlPath.length} minute bars, greeks=${result.pnlPath[0]?.legGreeks ? "yes" : "no"}`;
 
         return createToolOutput(summary, result);
       } catch (error) {
@@ -560,6 +564,6 @@ export function registerReplayTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

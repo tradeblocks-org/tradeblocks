@@ -22,7 +22,7 @@ function createMockTrade(overrides: Partial<Trade> = {}): Trade {
     openingPrice: 4500,
     legs: "CALL 4500",
     premium: 100,
-    premiumPrecision: 2,
+    premiumPrecision: "dollars",
     closingPrice: 50,
     dateClosed: new Date("2024-01-20"),
     timeClosed: "15:00:00",
@@ -157,9 +157,7 @@ describe("Performance Snapshot Cache", () => {
     });
 
     it("should not throw error when deleting non-existent cache", async () => {
-      await expect(
-        deletePerformanceSnapshotCache("non-existent-block")
-      ).resolves.not.toThrow();
+      await expect(deletePerformanceSnapshotCache("non-existent-block")).resolves.not.toThrow();
     });
   });
 
@@ -248,10 +246,7 @@ describe("Performance Snapshot Cache", () => {
       expect(cached!.portfolioStats.netPl).toBeCloseTo(98, 2);
 
       // Second snapshot with two trades
-      const secondTrades = [
-        createMockTrade({ pl: 200 }),
-        createMockTrade({ pl: -50 }),
-      ];
+      const secondTrades = [createMockTrade({ pl: 200 }), createMockTrade({ pl: -50 })];
       const secondSnapshot = await buildPerformanceSnapshot({
         trades: secondTrades,
         normalizeTo1Lot: false,

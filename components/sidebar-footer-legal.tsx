@@ -63,9 +63,7 @@ export function SidebarFooterLegal() {
         <div className="space-y-5 text-sm leading-relaxed text-foreground">
           {disclaimerSections.map((section) => (
             <section key={section.title} className="space-y-1.5">
-              <h3 className={`text-base font-semibold ${section.accent}`}>
-                {section.title}
-              </h3>
+              <h3 className={`text-base font-semibold ${section.accent}`}>{section.title}</h3>
               <p>{section.body}</p>
             </section>
           ))}
@@ -129,10 +127,7 @@ export function SidebarFooterLegal() {
   return (
     <div className="space-y-2.5 border-t border-sidebar-border/80 px-3 pb-4 pt-3 text-[0.72rem] leading-relaxed text-muted-foreground">
       <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
-        <AlertTriangle
-          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500"
-          aria-hidden
-        />
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="text-[0.7rem] leading-tight text-foreground">
             Educational use only • Not financial advice
@@ -152,11 +147,7 @@ export function SidebarFooterLegal() {
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground">
-        <a
-          href="https://www.buymeacoffee.com/davidromeo"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a href="https://www.buymeacoffee.com/davidromeo" target="_blank" rel="noopener noreferrer">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"

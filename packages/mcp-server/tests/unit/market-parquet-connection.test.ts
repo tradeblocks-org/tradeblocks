@@ -29,15 +29,16 @@ describe("openMarketParquetConnection (write-side)", () => {
   let baseDir: string;
 
   beforeEach(() => {
-    baseDir = join(
-      tmpdir(),
-      `market-parquet-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    );
+    baseDir = join(tmpdir(), `market-parquet-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(baseDir, { recursive: true });
   });
 
   afterEach(() => {
-    try { rmSync(baseDir, { recursive: true, force: true }); } catch { /* non-fatal */ }
+    try {
+      rmSync(baseDir, { recursive: true, force: true });
+    } catch {
+      /* non-fatal */
+    }
   });
 
   it("is the same connection shape as the read-only alias", async () => {
@@ -78,9 +79,7 @@ describe("openMarketParquetConnection (write-side)", () => {
           ('SPX', DATE '2024-01-02', TIME '09:31', 4705.0, 4715.0, 4700.0, 4712.0, 4711.5, 4712.5)
         ) AS t(ticker, date, time, open, high, low, close, bid, ask)
       `);
-      await mp.conn.run(
-        `COPY _staging_spot TO '${targetLit}' (FORMAT PARQUET, COMPRESSION ZSTD)`,
-      );
+      await mp.conn.run(`COPY _staging_spot TO '${targetLit}' (FORMAT PARQUET, COMPRESSION ZSTD)`);
       await mp.conn.run(`DROP TABLE IF EXISTS _staging_spot`);
 
       // The parquet file landed on disk.
@@ -91,9 +90,7 @@ describe("openMarketParquetConnection (write-side)", () => {
       // freshly written partition) and read it back through the in-memory view.
       const ro = await openMarketReadOnlyConnection(baseDir);
       try {
-        const reader = await ro.conn.runAndReadAll(
-          "SELECT count(*) AS n FROM market.spot",
-        );
+        const reader = await ro.conn.runAndReadAll("SELECT count(*) AS n FROM market.spot");
         expect(Number((reader.getRows() as Array<Array<unknown>>)[0][0])).toBe(2);
       } finally {
         await ro.close();
@@ -127,25 +124,31 @@ describe("openMarketParquetConnection (write-side)", () => {
       });
       const otherConn = await other.connect();
       try {
-        await otherConn.run(
-          `ATTACH '${marketDbPath.replace(/'/g, "''")}' AS market (READ_WRITE)`,
-        );
+        await otherConn.run(`ATTACH '${marketDbPath.replace(/'/g, "''")}' AS market (READ_WRITE)`);
         await otherConn.run("CREATE TABLE market.lock_probe (k VARCHAR)");
         await otherConn.run("INSERT INTO market.lock_probe VALUES ('held')");
-        const probe = await otherConn.runAndReadAll(
-          "SELECT count(*) AS n FROM market.lock_probe",
-        );
+        const probe = await otherConn.runAndReadAll("SELECT count(*) AS n FROM market.lock_probe");
         expect(Number((probe.getRows() as Array<Array<unknown>>)[0][0])).toBe(1);
       } finally {
-        try { await otherConn.run("DETACH market"); } catch { /* non-fatal */ }
-        try { otherConn.closeSync(); } catch { /* non-fatal */ }
-        try { other.closeSync(); } catch { /* non-fatal */ }
+        try {
+          await otherConn.run("DETACH market");
+        } catch {
+          /* non-fatal */
+        }
+        try {
+          otherConn.closeSync();
+        } catch {
+          /* non-fatal */
+        }
+        try {
+          other.closeSync();
+        } catch {
+          /* non-fatal */
+        }
       }
 
       // Finish the parquet write — still fine after the concurrent attach.
-      await mp.conn.run(
-        `COPY _staging_spot TO '${target}' (FORMAT PARQUET, COMPRESSION ZSTD)`,
-      );
+      await mp.conn.run(`COPY _staging_spot TO '${target}' (FORMAT PARQUET, COMPRESSION ZSTD)`);
       await mp.conn.run(`DROP TABLE IF EXISTS _staging_spot`);
     } finally {
       await mp.close();

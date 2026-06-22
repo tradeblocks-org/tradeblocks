@@ -18,21 +18,14 @@ import { ChainStore } from "./chain-store.ts";
 import type { ContractRow, CoverageReport } from "./types.ts";
 import { buildReadChainSQL } from "./chain-sql.ts";
 import { listPartitionValues } from "./coverage.ts";
-import {
-  resolveMarketDir,
-  writeChainPartition,
-} from "../../db/market-datasets.ts";
+import { resolveMarketDir, writeChainPartition } from "../../db/market-datasets.ts";
 
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");
 }
 
 export class ParquetChainStore extends ChainStore {
-  async writeChain(
-    underlying: string,
-    date: string,
-    rows: ContractRow[],
-  ): Promise<void> {
+  async writeChain(underlying: string, date: string, rows: ContractRow[]): Promise<void> {
     if (rows.length === 0) return;
     const staging = `_chain_write_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     await this.ctx.conn.run(
@@ -108,10 +101,7 @@ export class ParquetChainStore extends ChainStore {
     return existsSync(partitionPath);
   }
 
-  async readChain(
-    underlying: string,
-    date: string,
-  ): Promise<ContractRow[]> {
+  async readChain(underlying: string, date: string): Promise<ContractRow[]> {
     const partitionPath = path.join(
       resolveMarketDir(this.ctx.dataDir),
       "option_chain",
@@ -153,10 +143,7 @@ export class ParquetChainStore extends ChainStore {
     }));
   }
 
-  override async readChainDates(
-    underlying: string,
-    dates: string[],
-  ): Promise<ContractRow[]> {
+  override async readChainDates(underlying: string, dates: string[]): Promise<ContractRow[]> {
     if (dates.length === 0) return [];
 
     const marketDir = resolveMarketDir(this.ctx.dataDir);
@@ -193,11 +180,7 @@ export class ParquetChainStore extends ChainStore {
     }));
   }
 
-  async getCoverage(
-    underlying: string,
-    from: string,
-    to: string,
-  ): Promise<CoverageReport> {
+  async getCoverage(underlying: string, from: string, to: string): Promise<CoverageReport> {
     const dir = path.join(
       resolveMarketDir(this.ctx.dataDir),
       "option_chain",

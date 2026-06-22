@@ -125,31 +125,33 @@ export function WhatIfExplorer({
     // Get metric value for a trade
     const getMetricValue = (t: TradeWithData) => {
       switch (metric) {
-        case "rom": return t.rom;
-        case "plPct": return t.plPct;
-        default: return t.pl;
+        case "rom":
+          return t.rom;
+        case "plPct":
+          return t.plPct;
+        default:
+          return t.pl;
       }
     };
 
     // Filter trades by range
     const [minVal, maxVal] = rangeValues;
-    const keptTrades = tradesWithData.filter(
-      (t) => t.xValue >= minVal && t.xValue <= maxVal
-    );
-    const excludedTrades = tradesWithData.filter(
-      (t) => t.xValue < minVal || t.xValue > maxVal
-    );
+    const keptTrades = tradesWithData.filter((t) => t.xValue >= minVal && t.xValue <= maxVal);
+    const excludedTrades = tradesWithData.filter((t) => t.xValue < minVal || t.xValue > maxVal);
 
     // Calculate metrics (averages based on selected metric)
-    const allAvg = tradesWithData.length > 0
-      ? tradesWithData.reduce((sum, t) => sum + getMetricValue(t), 0) / tradesWithData.length
-      : 0;
-    const keptAvg = keptTrades.length > 0
-      ? keptTrades.reduce((sum, t) => sum + getMetricValue(t), 0) / keptTrades.length
-      : 0;
-    const excludedAvg = excludedTrades.length > 0
-      ? excludedTrades.reduce((sum, t) => sum + getMetricValue(t), 0) / excludedTrades.length
-      : 0;
+    const allAvg =
+      tradesWithData.length > 0
+        ? tradesWithData.reduce((sum, t) => sum + getMetricValue(t), 0) / tradesWithData.length
+        : 0;
+    const keptAvg =
+      keptTrades.length > 0
+        ? keptTrades.reduce((sum, t) => sum + getMetricValue(t), 0) / keptTrades.length
+        : 0;
+    const excludedAvg =
+      excludedTrades.length > 0
+        ? excludedTrades.reduce((sum, t) => sum + getMetricValue(t), 0) / excludedTrades.length
+        : 0;
 
     // Calculate total P/L $ amounts
     const allTotalPl = tradesWithData.reduce((sum, t) => sum + t.pl, 0);
@@ -186,9 +188,12 @@ export function WhatIfExplorer({
       // Get metric value based on current selection
       const getMetricValue = (t: TradeWithData) => {
         switch (metric) {
-          case "rom": return t.rom;
-          case "plPct": return t.plPct;
-          default: return t.pl;
+          case "rom":
+            return t.rom;
+          case "plPct":
+            return t.plPct;
+          default:
+            return t.pl;
         }
       };
 
@@ -246,7 +251,7 @@ export function WhatIfExplorer({
 
       return bestRange;
     },
-    [tradesWithData, metric, minKeptPct]
+    [tradesWithData, metric, minKeptPct],
   );
 
   // Handle optimize button click
@@ -262,7 +267,7 @@ export function WhatIfExplorer({
         setRangeValues(optimalRange);
       }
     },
-    [findOptimalRange, dataMinX, dataMaxX]
+    [findOptimalRange, dataMinX, dataMaxX],
   );
 
   // Get field info for display
@@ -316,7 +321,9 @@ export function WhatIfExplorer({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <div className="px-2 py-1.5">
-                  <div className="text-xs text-muted-foreground mb-1.5">Best Avg (keep min % of trades)</div>
+                  <div className="text-xs text-muted-foreground mb-1.5">
+                    Best Avg (keep min % of trades)
+                  </div>
                   <div className="flex items-center gap-2">
                     <Input
                       type="number"
@@ -357,7 +364,10 @@ export function WhatIfExplorer({
                   </div>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleOptimize("reset")} className="text-muted-foreground">
+                <DropdownMenuItem
+                  onClick={() => handleOptimize("reset")}
+                  className="text-muted-foreground"
+                >
                   <RotateCcw className="h-3 w-3 mr-2" />
                   Reset to Full Range
                 </DropdownMenuItem>
@@ -379,9 +389,7 @@ export function WhatIfExplorer({
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-3 border-t">
         {/* Filter info */}
         <div>
-          <div className="text-muted-foreground text-xs">
-            {fieldLabel} Range
-          </div>
+          <div className="text-muted-foreground text-xs">{fieldLabel} Range</div>
           <div className="font-medium">
             {formatXValue(whatIfResults.rangeMin)} - {formatXValue(whatIfResults.rangeMax)}
           </div>
@@ -398,8 +406,8 @@ export function WhatIfExplorer({
               whatIfResults.keptAvg > 0
                 ? "text-green-600 dark:text-green-400"
                 : whatIfResults.keptAvg < 0
-                ? "text-red-600 dark:text-red-400"
-                : ""
+                  ? "text-red-600 dark:text-red-400"
+                  : ""
             }`}
           >
             Avg {metricLabel}: {formatMetric(whatIfResults.keptAvg)}
@@ -417,8 +425,8 @@ export function WhatIfExplorer({
               whatIfResults.excludedAvg > 0
                 ? "text-green-600 dark:text-green-400"
                 : whatIfResults.excludedAvg < 0
-                ? "text-red-600 dark:text-red-400"
-                : ""
+                  ? "text-red-600 dark:text-red-400"
+                  : ""
             }`}
           >
             Avg {metricLabel}: {formatMetric(whatIfResults.excludedAvg)}
@@ -433,8 +441,8 @@ export function WhatIfExplorer({
               whatIfResults.improvement > 0
                 ? "text-green-600 dark:text-green-400"
                 : whatIfResults.improvement < 0
-                ? "text-red-600 dark:text-red-400"
-                : ""
+                  ? "text-red-600 dark:text-red-400"
+                  : ""
             }`}
           >
             {whatIfResults.improvement > 0 ? "+" : ""}
@@ -447,34 +455,58 @@ export function WhatIfExplorer({
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3 pt-3 border-t">
         <div>
           <div className="text-muted-foreground text-xs">Total P/L (All)</div>
-          <div className={`font-medium ${whatIfResults.allTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-            ${whatIfResults.allTotalPl.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          <div
+            className={`font-medium ${whatIfResults.allTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+          >
+            $
+            {whatIfResults.allTotalPl.toLocaleString(undefined, {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            })}
           </div>
         </div>
         <div>
           <div className="text-muted-foreground text-xs">Total P/L (In Range)</div>
-          <div className={`font-medium ${whatIfResults.keptTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-            ${whatIfResults.keptTotalPl.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          <div
+            className={`font-medium ${whatIfResults.keptTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+          >
+            $
+            {whatIfResults.keptTotalPl.toLocaleString(undefined, {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            })}
           </div>
         </div>
         <div>
           <div className="text-muted-foreground text-xs">Total P/L (Outside)</div>
-          <div className={`font-medium ${whatIfResults.excludedTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-            ${whatIfResults.excludedTotalPl.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          <div
+            className={`font-medium ${whatIfResults.excludedTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+          >
+            $
+            {whatIfResults.excludedTotalPl.toLocaleString(undefined, {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            })}
           </div>
         </div>
         <div>
           <div className="text-muted-foreground text-xs">P/L Change if Filtered</div>
-          <div className={`font-medium ${-whatIfResults.excludedTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-            {-whatIfResults.excludedTotalPl >= 0 ? "+" : ""}${(-whatIfResults.excludedTotalPl).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          <div
+            className={`font-medium ${-whatIfResults.excludedTotalPl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+          >
+            {-whatIfResults.excludedTotalPl >= 0 ? "+" : ""}$
+            {(-whatIfResults.excludedTotalPl).toLocaleString(undefined, {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            })}
           </div>
         </div>
       </div>
 
       {/* Summary */}
       <div className="mt-3 pt-2 border-t text-xs text-muted-foreground">
-        Keeping {whatIfResults.keptPct.toFixed(0)}% of trades ({whatIfResults.keptTrades} of {whatIfResults.totalTrades}).
-        {" "}All trades avg: {formatMetric(whatIfResults.allAvg)}
+        Keeping {whatIfResults.keptPct.toFixed(0)}% of trades ({whatIfResults.keptTrades} of{" "}
+        {whatIfResults.totalTrades}). All trades avg: {formatMetric(whatIfResults.allAvg)}
       </div>
     </div>
   );

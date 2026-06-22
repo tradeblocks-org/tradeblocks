@@ -53,11 +53,11 @@ export function computeThetaQuoteMidGreekRow(params: {
     OPTION_QUOTE_MID_GREEKS_DIVIDEND_YIELD,
   );
   if (
-    !isFiniteNumber(greeks.delta)
-    || !isFiniteNumber(greeks.gamma)
-    || !isFiniteNumber(greeks.theta)
-    || !isFiniteNumber(greeks.vega)
-    || !isFiniteNumber(greeks.iv)
+    !isFiniteNumber(greeks.delta) ||
+    !isFiniteNumber(greeks.gamma) ||
+    !isFiniteNumber(greeks.theta) ||
+    !isFiniteNumber(greeks.vega) ||
+    !isFiniteNumber(greeks.iv)
   ) {
     return null;
   }

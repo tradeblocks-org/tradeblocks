@@ -36,7 +36,10 @@ import {
 // ---------------------------------------------------------------------------
 
 function makeTmpDir(label: string): string {
-  return path.join(os.tmpdir(), `json-adapters-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  return path.join(
+    os.tmpdir(),
+    `json-adapters-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +76,10 @@ describe("Profile adapter", () => {
     const result = await upsertProfileJson(baseProfile, blocksDir);
 
     const filePath = path.join(blocksDir, "block-123", "profiles", "iron-condor-1.json");
-    const exists = await fs.access(filePath).then(() => true).catch(() => false);
+    const exists = await fs
+      .access(filePath)
+      .then(() => true)
+      .catch(() => false);
     expect(exists).toBe(true);
 
     expect(result.strategyName).toBe("Iron Condor #1");
@@ -85,7 +91,7 @@ describe("Profile adapter", () => {
     const firstCreatedAt = first.createdAt;
 
     // Small delay to ensure different timestamps
-    await new Promise(r => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 10));
 
     const second = await upsertProfileJson(baseProfile, blocksDir);
     expect(second.createdAt.getTime()).toBe(firstCreatedAt.getTime());
@@ -127,17 +133,20 @@ describe("Profile adapter", () => {
 
     const profiles = await listProfilesJson(blocksDir, "block-123");
     expect(profiles).toHaveLength(2);
-    const names = profiles.map(p => p.strategyName).sort();
+    const names = profiles.map((p) => p.strategyName).sort();
     expect(names).toEqual(["Iron Condor #1", "Pickle RIC v2"]);
   });
 
   it("listProfilesJson(blocksDir) without blockId scans all block directories", async () => {
     await upsertProfileJson(baseProfile, blocksDir);
-    await upsertProfileJson({ ...baseProfile, blockId: "block-456", strategyName: "Calendar Spread" }, blocksDir);
+    await upsertProfileJson(
+      { ...baseProfile, blockId: "block-456", strategyName: "Calendar Spread" },
+      blocksDir,
+    );
 
     const profiles = await listProfilesJson(blocksDir);
     expect(profiles).toHaveLength(2);
-    const blockIds = profiles.map(p => p.blockId).sort();
+    const blockIds = profiles.map((p) => p.blockId).sort();
     expect(blockIds).toEqual(["block-123", "block-456"]);
   });
 
@@ -251,12 +260,22 @@ describe("Market import metadata adapter", () => {
 
   it("getMarketImportMetadataJson reads entry from market-meta/sync-metadata.json by composite key", async () => {
     // Not found
-    const notFound = await getMarketImportMetadataJson("import_market_csv:/path/to/spx.csv", "SPX", "daily", dataDir);
+    const notFound = await getMarketImportMetadataJson(
+      "import_market_csv:/path/to/spx.csv",
+      "SPX",
+      "daily",
+      dataDir,
+    );
     expect(notFound).toBeNull();
 
     // Write then read
     await upsertMarketImportMetadataJson(baseMeta, dataDir);
-    const found = await getMarketImportMetadataJson("import_market_csv:/path/to/spx.csv", "SPX", "daily", dataDir);
+    const found = await getMarketImportMetadataJson(
+      "import_market_csv:/path/to/spx.csv",
+      "SPX",
+      "daily",
+      dataDir,
+    );
     expect(found).not.toBeNull();
     expect(found!.ticker).toBe("SPX");
     expect(found!.max_date).toBe("2025-06-15");
@@ -265,26 +284,49 @@ describe("Market import metadata adapter", () => {
 
   it("upsertMarketImportMetadataJson creates/updates entry in aggregate file, preserving other entries", async () => {
     await upsertMarketImportMetadataJson(baseMeta, dataDir);
-    await upsertMarketImportMetadataJson({
-      ...baseMeta,
-      ticker: "QQQ",
-      max_date: "2025-06-14",
-    }, dataDir);
+    await upsertMarketImportMetadataJson(
+      {
+        ...baseMeta,
+        ticker: "QQQ",
+        max_date: "2025-06-14",
+      },
+      dataDir,
+    );
 
     // Both should be readable
-    const spx = await getMarketImportMetadataJson("import_market_csv:/path/to/spx.csv", "SPX", "daily", dataDir);
-    const qqq = await getMarketImportMetadataJson("import_market_csv:/path/to/spx.csv", "QQQ", "daily", dataDir);
+    const spx = await getMarketImportMetadataJson(
+      "import_market_csv:/path/to/spx.csv",
+      "SPX",
+      "daily",
+      dataDir,
+    );
+    const qqq = await getMarketImportMetadataJson(
+      "import_market_csv:/path/to/spx.csv",
+      "QQQ",
+      "daily",
+      dataDir,
+    );
     expect(spx).not.toBeNull();
     expect(qqq).not.toBeNull();
     expect(qqq!.max_date).toBe("2025-06-14");
 
     // Update SPX
     await upsertMarketImportMetadataJson({ ...baseMeta, max_date: "2025-06-20" }, dataDir);
-    const updated = await getMarketImportMetadataJson("import_market_csv:/path/to/spx.csv", "SPX", "daily", dataDir);
+    const updated = await getMarketImportMetadataJson(
+      "import_market_csv:/path/to/spx.csv",
+      "SPX",
+      "daily",
+      dataDir,
+    );
     expect(updated!.max_date).toBe("2025-06-20");
 
     // QQQ should be preserved
-    const qqqStill = await getMarketImportMetadataJson("import_market_csv:/path/to/spx.csv", "QQQ", "daily", dataDir);
+    const qqqStill = await getMarketImportMetadataJson(
+      "import_market_csv:/path/to/spx.csv",
+      "QQQ",
+      "daily",
+      dataDir,
+    );
     expect(qqqStill).not.toBeNull();
   });
 });
@@ -311,61 +353,94 @@ describe("Flat import log adapter", () => {
     expect(empty.size).toBe(0);
 
     // Add entries
-    await upsertFlatImportLogJson({
-      date: "2025-06-10",
-      asset_class: "option",
-      underlying: "SPX",
-      imported_at: new Date().toISOString(),
-      bar_count: 1000,
-    }, dataDir);
-    await upsertFlatImportLogJson({
-      date: "2025-06-15",
-      asset_class: "option",
-      underlying: "SPX",
-      imported_at: new Date().toISOString(),
-      bar_count: 1200,
-    }, dataDir);
-    await upsertFlatImportLogJson({
-      date: "2025-06-20",
-      asset_class: "option",
-      underlying: "QQQ",
-      imported_at: new Date().toISOString(),
-      bar_count: 800,
-    }, dataDir);
+    await upsertFlatImportLogJson(
+      {
+        date: "2025-06-10",
+        asset_class: "option",
+        underlying: "SPX",
+        imported_at: new Date().toISOString(),
+        bar_count: 1000,
+      },
+      dataDir,
+    );
+    await upsertFlatImportLogJson(
+      {
+        date: "2025-06-15",
+        asset_class: "option",
+        underlying: "SPX",
+        imported_at: new Date().toISOString(),
+        bar_count: 1200,
+      },
+      dataDir,
+    );
+    await upsertFlatImportLogJson(
+      {
+        date: "2025-06-20",
+        asset_class: "option",
+        underlying: "QQQ",
+        imported_at: new Date().toISOString(),
+        bar_count: 800,
+      },
+      dataDir,
+    );
 
     // Filter by SPX in date range
-    const spxDates = await getFlatImportLogJson("option", "SPX", "2025-06-01", "2025-06-30", dataDir);
+    const spxDates = await getFlatImportLogJson(
+      "option",
+      "SPX",
+      "2025-06-01",
+      "2025-06-30",
+      dataDir,
+    );
     expect(spxDates.size).toBe(2);
     expect(spxDates.has("2025-06-10")).toBe(true);
     expect(spxDates.has("2025-06-15")).toBe(true);
 
     // Filter by QQQ
-    const qqqDates = await getFlatImportLogJson("option", "QQQ", "2025-06-01", "2025-06-30", dataDir);
+    const qqqDates = await getFlatImportLogJson(
+      "option",
+      "QQQ",
+      "2025-06-01",
+      "2025-06-30",
+      dataDir,
+    );
     expect(qqqDates.size).toBe(1);
     expect(qqqDates.has("2025-06-20")).toBe(true);
 
     // Filter out of range
-    const outOfRange = await getFlatImportLogJson("option", "SPX", "2025-07-01", "2025-07-31", dataDir);
+    const outOfRange = await getFlatImportLogJson(
+      "option",
+      "SPX",
+      "2025-07-01",
+      "2025-07-31",
+      dataDir,
+    );
     expect(outOfRange.size).toBe(0);
   });
 
   it("upsertFlatImportLogJson creates/updates entry by composite key (date, asset_class, underlying)", async () => {
-    await upsertFlatImportLogJson({
-      date: "2025-06-10",
-      asset_class: "option",
-      underlying: "SPX",
-      imported_at: "2025-06-10T12:00:00Z",
-      bar_count: 1000,
-    }, dataDir);
+    await upsertFlatImportLogJson(
+      {
+        date: "2025-06-10",
+        asset_class: "option",
+        underlying: "SPX",
+        imported_at: "2025-06-10T12:00:00Z",
+        bar_count: 1000,
+      },
+      dataDir,
+    );
 
     // Update same entry
-    await upsertFlatImportLogJson({
-      date: "2025-06-10",
-      asset_class: "option",
-      underlying: "SPX",
-      imported_at: "2025-06-10T14:00:00Z",
-      bar_count: 1500,
-    }, dataDir);
+    await upsertFlatImportLogJson(
+      {
+        date: "2025-06-10",
+        asset_class: "option",
+        underlying: "SPX",
+        imported_at: "2025-06-10T14:00:00Z",
+        bar_count: 1500,
+      },
+      dataDir,
+    );
 
     // Verify the update (get should still return 1 date)
     const dates = await getFlatImportLogJson("option", "SPX", "2025-06-01", "2025-06-30", dataDir);

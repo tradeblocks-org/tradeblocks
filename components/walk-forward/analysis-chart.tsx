@@ -18,14 +18,8 @@ export function WalkForwardAnalysisChart({
   periods,
   targetMetricLabel,
 }: WalkForwardAnalysisChartProps) {
-  const [timelineRange, setTimelineRange] = useState<[number, number]>([
-    1,
-    periods.length || 1,
-  ]);
-  const [paramRange, setParamRange] = useState<[number, number]>([
-    1,
-    periods.length || 1,
-  ]);
+  const [timelineRange, setTimelineRange] = useState<[number, number]>([1, periods.length || 1]);
+  const [paramRange, setParamRange] = useState<[number, number]>([1, periods.length || 1]);
 
   useEffect(() => {
     const count = periods.length || 1;
@@ -34,10 +28,7 @@ export function WalkForwardAnalysisChart({
   }, [periods]);
 
   const slicePeriods = (range: [number, number]) =>
-    periods.slice(
-      Math.max(0, range[0] - 1),
-      Math.min(periods.length, range[1])
-    );
+    periods.slice(Math.max(0, range[0] - 1), Math.min(periods.length, range[1]));
 
   const timelinePeriods = slicePeriods(timelineRange);
   const paramPeriods = slicePeriods(paramRange);
@@ -59,37 +50,26 @@ export function WalkForwardAnalysisChart({
       return null;
     }
     const midpoint = (start: Date, end: Date) =>
-      new Date(
-        (new Date(start).getTime() + new Date(end).getTime()) / 2
-      ).toISOString();
+      new Date((new Date(start).getTime() + new Date(end).getTime()) / 2).toISOString();
 
     const inSampleTrace: Data = {
       type: "scatter",
       mode: "lines+markers",
       name: "In-Sample",
-      x: timelinePeriods.map((period) =>
-        midpoint(period.inSampleStart, period.inSampleEnd)
-      ),
-      y: timelinePeriods.map((period) =>
-        Number(period.targetMetricInSample.toFixed(3))
-      ),
+      x: timelinePeriods.map((period) => midpoint(period.inSampleStart, period.inSampleEnd)),
+      y: timelinePeriods.map((period) => Number(period.targetMetricInSample.toFixed(3))),
       marker: { color: "#2563eb", size: 8 },
       line: { width: 2, color: "#2563eb" },
       hovertemplate:
-        `<b>In-Sample</b><br>${targetMetricLabel}: %{y:.3f}<br>` +
-        `Window: %{x}<extra></extra>`,
+        `<b>In-Sample</b><br>${targetMetricLabel}: %{y:.3f}<br>` + `Window: %{x}<extra></extra>`,
     };
 
     const outSampleTrace: Data = {
       type: "scatter",
       mode: "lines+markers",
       name: "Out-of-Sample",
-      x: timelinePeriods.map((period) =>
-        midpoint(period.outOfSampleStart, period.outOfSampleEnd)
-      ),
-      y: timelinePeriods.map((period) =>
-        Number(period.targetMetricOutOfSample.toFixed(3))
-      ),
+      x: timelinePeriods.map((period) => midpoint(period.outOfSampleStart, period.outOfSampleEnd)),
+      y: timelinePeriods.map((period) => Number(period.targetMetricOutOfSample.toFixed(3))),
       marker: { color: "#f97316", size: 8 },
       line: { width: 2, dash: "dot", color: "#f97316" },
       hovertemplate:
@@ -167,9 +147,7 @@ export function WalkForwardAnalysisChart({
 
   const parameterEvolution = useMemo(() => {
     const parameterKeys = Array.from(
-      new Set(
-        paramPeriods.flatMap((period) => Object.keys(period.optimalParameters))
-      )
+      new Set(paramPeriods.flatMap((period) => Object.keys(period.optimalParameters))),
     );
 
     if (parameterKeys.length === 0) {

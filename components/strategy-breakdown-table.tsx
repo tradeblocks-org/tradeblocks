@@ -3,11 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import {
   Table,
   TableBody,
@@ -17,13 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@tradeblocks/lib";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  HelpCircle,
-  TrendingUp,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, HelpCircle, TrendingUp } from "lucide-react";
 import { useState } from "react";
 
 interface StrategyData {
@@ -113,9 +103,7 @@ export function StrategyBreakdownTable({
     const bValue = b[sortField];
 
     if (typeof aValue === "string" && typeof bValue === "string") {
-      return sortDirection === "asc"
-        ? aValue.localeCompare(bValue)
-        : bValue.localeCompare(aValue);
+      return sortDirection === "asc" ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
     }
 
     if (typeof aValue === "number" && typeof bValue === "number") {
@@ -144,9 +132,7 @@ export function StrategyBreakdownTable({
   };
 
   const getPLColor = (value: number) => {
-    return value >= 0
-      ? "text-green-600 dark:text-green-400"
-      : "text-red-600 dark:text-red-400";
+    return value >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400";
   };
 
   interface TooltipContent {
@@ -181,9 +167,7 @@ export function StrategyBreakdownTable({
             <HoverCardContent className="w-80 p-0 overflow-hidden">
               <div className="space-y-3">
                 <div className="bg-primary/5 border-b px-4 py-3">
-                  <h4 className="text-sm font-semibold text-primary">
-                    {children}
-                  </h4>
+                  <h4 className="text-sm font-semibold text-primary">{children}</h4>
                 </div>
                 <div className="px-4 pb-4 space-y-3">
                   <p className="text-sm font-medium text-foreground leading-relaxed">
@@ -263,10 +247,7 @@ export function StrategyBreakdownTable({
             </TableHeader>
             <TableBody>
               {sortedData.map((row, index) => (
-                <TableRow
-                  key={index}
-                  className="hover:bg-muted/50 transition-colors"
-                >
+                <TableRow key={index} className="hover:bg-muted/50 transition-colors">
                   <TableCell className="font-medium max-w-[200px]">
                     <div className="truncate" title={row.strategy}>
                       {row.strategy}
@@ -277,17 +258,10 @@ export function StrategyBreakdownTable({
                       {row.trades}
                     </Badge>
                   </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right font-medium",
-                      getPLColor(row.totalPL)
-                    )}
-                  >
+                  <TableCell className={cn("text-right font-medium", getPLColor(row.totalPL))}>
                     {formatCurrency(row.totalPL)}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {formatPercentage(row.winRate)}
-                  </TableCell>
+                  <TableCell className="text-right">{formatPercentage(row.winRate)}</TableCell>
                   <TableCell className="text-right text-green-600 dark:text-green-400">
                     {formatCurrency(row.avgWin)}
                   </TableCell>
@@ -295,10 +269,7 @@ export function StrategyBreakdownTable({
                     {formatCurrency(row.avgLoss)}
                   </TableCell>
                   <TableCell
-                    className={cn(
-                      "text-right font-medium",
-                      getProfitFactorColor(row.profitFactor)
-                    )}
+                    className={cn("text-right font-medium", getProfitFactorColor(row.profitFactor))}
                   >
                     {row.profitFactor.toFixed(2)}
                   </TableCell>

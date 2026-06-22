@@ -43,14 +43,20 @@ beforeEach(async () => {
   mkdirSync(join(tmpDir, "market"), { recursive: true });
   db = await DuckDBInstance.create(":memory:");
   conn = await db.connect();
-  await conn.run(
-    "CREATE TABLE src AS SELECT * FROM (VALUES (1,'a'),(2,'b'),(3,'c')) t(id,label);",
-  );
+  await conn.run("CREATE TABLE src AS SELECT * FROM (VALUES (1,'a'),(2,'b'),(3,'c')) t(id,label);");
 });
 
 afterEach(() => {
-  try { conn.closeSync(); } catch { /* ignore */ }
-  try { db.closeSync(); } catch { /* ignore */ }
+  try {
+    conn.closeSync();
+  } catch {
+    /* ignore */
+  }
+  try {
+    db.closeSync();
+  } catch {
+    /* ignore */
+  }
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -125,9 +131,7 @@ describe("writeSpotPartition — path resolution", () => {
     });
     expect(rowCount).toBe(3);
     expect(
-      existsSync(
-        join(tmpDir, "market", "spot", "ticker=SPX", "date=2025-01-06", "data.parquet"),
-      ),
+      existsSync(join(tmpDir, "market", "spot", "ticker=SPX", "date=2025-01-06", "data.parquet")),
     ).toBe(true);
   });
 
@@ -154,14 +158,7 @@ describe("writeChainPartition — path resolution", () => {
     expect(rowCount).toBe(3);
     expect(
       existsSync(
-        join(
-          tmpDir,
-          "market",
-          "option_chain",
-          "underlying=SPX",
-          "date=2025-01-06",
-          "data.parquet",
-        ),
+        join(tmpDir, "market", "option_chain", "underlying=SPX", "date=2025-01-06", "data.parquet"),
       ),
     ).toBe(true);
   });
@@ -237,9 +234,7 @@ describe("writeEnrichedTickerFile — single-level partitioning", () => {
       selectQuery: "SELECT * FROM src",
     });
     expect(rowCount).toBe(3);
-    expect(
-      existsSync(join(tmpDir, "market", "enriched", "ticker=SPX", "data.parquet")),
-    ).toBe(true);
+    expect(existsSync(join(tmpDir, "market", "enriched", "ticker=SPX", "data.parquet"))).toBe(true);
   });
 });
 
@@ -250,12 +245,8 @@ describe("writeEnrichedContext — zero-partition special case", () => {
       selectQuery: "SELECT * FROM src",
     });
     expect(rowCount).toBe(3);
-    expect(
-      existsSync(join(tmpDir, "market", "enriched", "context", "data.parquet")),
-    ).toBe(true);
+    expect(existsSync(join(tmpDir, "market", "enriched", "context", "data.parquet"))).toBe(true);
     // Regression shield for the Pattern 7 note: must NOT land at enriched/data.parquet
-    expect(existsSync(join(tmpDir, "market", "enriched", "data.parquet"))).toBe(
-      false,
-    );
+    expect(existsSync(join(tmpDir, "market", "enriched", "data.parquet"))).toBe(false);
   });
 });

@@ -18,17 +18,11 @@ import type { StoreContext, CoverageReport } from "./types.ts";
 import { buildReadEnrichedSQL } from "./enriched-sql.ts";
 import { resolveMarketDir } from "../../db/market-datasets.ts";
 import { runEnrichment } from "../../utils/market-enricher.ts";
-import {
-  getEnrichedThrough,
-  upsertEnrichedThrough,
-} from "../../db/json-adapters.ts";
+import { getEnrichedThrough, upsertEnrichedThrough } from "../../db/json-adapters.ts";
 
 export class ParquetEnrichedStore extends EnrichedStore {
   private readonly spotStore: SpotStore;
-  constructor(
-    ctx: StoreContext,
-    spotStore: SpotStore,
-  ) {
+  constructor(ctx: StoreContext, spotStore: SpotStore) {
     super(ctx);
     this.spotStore = spotStore;
   }
@@ -96,9 +90,7 @@ export class ParquetEnrichedStore extends EnrichedStore {
                      ORDER BY date`;
         const reader = await this.ctx.conn.runAndReadAll(sql);
         const names = reader.columnNames();
-        return reader
-          .getRows()
-          .map((row) => Object.fromEntries(names.map((n, i) => [n, row[i]])));
+        return reader.getRows().map((row) => Object.fromEntries(names.map((n, i) => [n, row[i]])));
       }
     }
     // Builder inlines values; unbound runAndReadAll(sql) bypasses extract_statements.
@@ -111,11 +103,7 @@ export class ParquetEnrichedStore extends EnrichedStore {
     });
     const reader = await this.ctx.conn.runAndReadAll(sql);
     const names = reader.columnNames();
-    return reader
-      .getRows()
-      .map((row) =>
-        Object.fromEntries(names.map((n, i) => [n, row[i]])),
-      );
+    return reader.getRows().map((row) => Object.fromEntries(names.map((n, i) => [n, row[i]])));
   }
 
   async getCoverage(ticker: string): Promise<CoverageReport> {

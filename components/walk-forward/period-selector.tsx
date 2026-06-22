@@ -1,16 +1,16 @@
-"use client"
+"use client";
 
-import { IconPlayerPlay } from "@tabler/icons-react"
-import { AlertCircle, ChevronDown, HelpCircle, Loader2, Square, Sparkles } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { IconPlayerPlay } from "@tabler/icons-react";
+import { AlertCircle, ChevronDown, HelpCircle, Loader2, Square, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -19,31 +19,31 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
-import { MultiSelect } from "@/components/multi-select"
-import type { CorrelationMethodOption, WalkForwardOptimizationTarget } from "@tradeblocks/lib"
-import { validatePreRunConfiguration } from "@tradeblocks/lib"
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { MultiSelect } from "@/components/multi-select";
+import type { CorrelationMethodOption, WalkForwardOptimizationTarget } from "@tradeblocks/lib";
+import { validatePreRunConfiguration } from "@tradeblocks/lib";
 import {
   PARAMETER_METADATA,
   suggestStepForRange,
   useWalkForwardStore,
-} from "@tradeblocks/lib/stores"
-import { cn } from "@tradeblocks/lib"
+} from "@tradeblocks/lib/stores";
+import { cn } from "@tradeblocks/lib";
 
 interface PeriodSelectorProps {
-  blockId?: string | null
-  addon?: React.ReactNode
+  blockId?: string | null;
+  addon?: React.ReactNode;
 }
 
 const TARGET_OPTIONS: Array<{
-  value: WalkForwardOptimizationTarget
-  label: string
-  group: "performance" | "risk-adjusted"
+  value: WalkForwardOptimizationTarget;
+  label: string;
+  group: "performance" | "risk-adjusted";
 }> = [
   // Performance targets
   { value: "netPl", label: "Net Profit", group: "performance" },
@@ -55,7 +55,7 @@ const TARGET_OPTIONS: Array<{
   { value: "sharpeRatio", label: "Sharpe Ratio", group: "risk-adjusted" },
   { value: "sortinoRatio", label: "Sortino Ratio", group: "risk-adjusted" },
   { value: "calmarRatio", label: "Calmar Ratio", group: "risk-adjusted" },
-]
+];
 
 // Helper text for parameters (extends the store's PARAMETER_METADATA)
 const PARAMETER_HELPERS: Record<string, string> = {
@@ -64,169 +64,182 @@ const PARAMETER_HELPERS: Record<string, string> = {
   maxDrawdownPct: "Reject combos that breach this drawdown.",
   maxDailyLossPct: "Cut risk-off when day losses exceed cap.",
   consecutiveLossLimit: "Stops trading after N losing trades.",
-}
+};
 
 export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProps) {
-  const config = useWalkForwardStore((state) => state.config)
-  const updateConfig = useWalkForwardStore((state) => state.updateConfig)
-  const autoConfigureFromBlock = useWalkForwardStore((state) => state.autoConfigureFromBlock)
-  const tradeFrequency = useWalkForwardStore((state) => state.tradeFrequency)
-  const autoConfigApplied = useWalkForwardStore((state) => state.autoConfigApplied)
-  const constrainedByFrequency = useWalkForwardStore((state) => state.constrainedByFrequency)
-  const runAnalysis = useWalkForwardStore((state) => state.runAnalysis)
-  const cancelAnalysis = useWalkForwardStore((state) => state.cancelAnalysis)
-  const isRunning = useWalkForwardStore((state) => state.isRunning)
-  const progress = useWalkForwardStore((state) => state.progress)
-  const error = useWalkForwardStore((state) => state.error)
+  const config = useWalkForwardStore((state) => state.config);
+  const updateConfig = useWalkForwardStore((state) => state.updateConfig);
+  const autoConfigureFromBlock = useWalkForwardStore((state) => state.autoConfigureFromBlock);
+  const tradeFrequency = useWalkForwardStore((state) => state.tradeFrequency);
+  const autoConfigApplied = useWalkForwardStore((state) => state.autoConfigApplied);
+  const constrainedByFrequency = useWalkForwardStore((state) => state.constrainedByFrequency);
+  const runAnalysis = useWalkForwardStore((state) => state.runAnalysis);
+  const cancelAnalysis = useWalkForwardStore((state) => state.cancelAnalysis);
+  const isRunning = useWalkForwardStore((state) => state.isRunning);
+  const progress = useWalkForwardStore((state) => state.progress);
+  const error = useWalkForwardStore((state) => state.error);
 
   // Phase 1: Extended parameter ranges
-  const extendedParameterRanges = useWalkForwardStore((state) => state.extendedParameterRanges)
-  const setExtendedParameterRange = useWalkForwardStore((state) => state.setExtendedParameterRange)
-  const toggleParameter = useWalkForwardStore((state) => state.toggleParameter)
-  const combinationEstimate = useWalkForwardStore((state) => state.combinationEstimate)
+  const extendedParameterRanges = useWalkForwardStore((state) => state.extendedParameterRanges);
+  const setExtendedParameterRange = useWalkForwardStore((state) => state.setExtendedParameterRange);
+  const toggleParameter = useWalkForwardStore((state) => state.toggleParameter);
+  const combinationEstimate = useWalkForwardStore((state) => state.combinationEstimate);
 
   // Phase 1: Strategy filter and normalization
-  const availableStrategies = useWalkForwardStore((state) => state.availableStrategies)
-  const selectedStrategies = useWalkForwardStore((state) => state.selectedStrategies)
-  const setSelectedStrategies = useWalkForwardStore((state) => state.setSelectedStrategies)
-  const loadAvailableStrategies = useWalkForwardStore((state) => state.loadAvailableStrategies)
-  const normalizeTo1Lot = useWalkForwardStore((state) => state.normalizeTo1Lot)
-  const setNormalizeTo1Lot = useWalkForwardStore((state) => state.setNormalizeTo1Lot)
+  const availableStrategies = useWalkForwardStore((state) => state.availableStrategies);
+  const selectedStrategies = useWalkForwardStore((state) => state.selectedStrategies);
+  const setSelectedStrategies = useWalkForwardStore((state) => state.setSelectedStrategies);
+  const loadAvailableStrategies = useWalkForwardStore((state) => state.loadAvailableStrategies);
+  const normalizeTo1Lot = useWalkForwardStore((state) => state.normalizeTo1Lot);
+  const setNormalizeTo1Lot = useWalkForwardStore((state) => state.setNormalizeTo1Lot);
 
   // Phase 2: Diversification config
-  const diversificationConfig = useWalkForwardStore((state) => state.diversificationConfig)
-  const updateDiversificationConfig = useWalkForwardStore((state) => state.updateDiversificationConfig)
+  const diversificationConfig = useWalkForwardStore((state) => state.diversificationConfig);
+  const updateDiversificationConfig = useWalkForwardStore(
+    (state) => state.updateDiversificationConfig,
+  );
 
   // Phase 3: Strategy weight sweeps
-  const strategyWeightSweep = useWalkForwardStore((state) => state.strategyWeightSweep)
-  const setStrategyWeightMode = useWalkForwardStore((state) => state.setStrategyWeightMode)
-  const toggleStrategyWeight = useWalkForwardStore((state) => state.toggleStrategyWeight)
-  const setStrategyWeightConfig = useWalkForwardStore((state) => state.setStrategyWeightConfig)
-  const setTopNCount = useWalkForwardStore((state) => state.setTopNCount)
+  const strategyWeightSweep = useWalkForwardStore((state) => state.strategyWeightSweep);
+  const setStrategyWeightMode = useWalkForwardStore((state) => state.setStrategyWeightMode);
+  const toggleStrategyWeight = useWalkForwardStore((state) => state.toggleStrategyWeight);
+  const setStrategyWeightConfig = useWalkForwardStore((state) => state.setStrategyWeightConfig);
+  const setTopNCount = useWalkForwardStore((state) => state.setTopNCount);
 
   // Collapsible state
-  const [parametersOpen, setParametersOpen] = useState(false)
-  const [diversificationOpen, setDiversificationOpen] = useState(false)
-  const [strategyWeightsOpen, setStrategyWeightsOpen] = useState(false)
+  const [parametersOpen, setParametersOpen] = useState(false);
+  const [diversificationOpen, setDiversificationOpen] = useState(false);
+  const [strategyWeightsOpen, setStrategyWeightsOpen] = useState(false);
 
   // Window configuration input states (for free text editing)
-  const [inSampleInput, setInSampleInput] = useState(String(config.inSampleDays))
-  const [outOfSampleInput, setOutOfSampleInput] = useState(String(config.outOfSampleDays))
-  const [stepSizeInput, setStepSizeInput] = useState(String(config.stepSizeDays))
+  const [inSampleInput, setInSampleInput] = useState(String(config.inSampleDays));
+  const [outOfSampleInput, setOutOfSampleInput] = useState(String(config.outOfSampleDays));
+  const [stepSizeInput, setStepSizeInput] = useState(String(config.stepSizeDays));
 
   // Min trades input states (for free text editing)
-  const [minISTradesInput, setMinISTradesInput] = useState(String(config.minInSampleTrades ?? 0))
-  const [minOOSTradesInput, setMinOOSTradesInput] = useState(String(config.minOutOfSampleTrades ?? 0))
+  const [minISTradesInput, setMinISTradesInput] = useState(String(config.minInSampleTrades ?? 0));
+  const [minOOSTradesInput, setMinOOSTradesInput] = useState(
+    String(config.minOutOfSampleTrades ?? 0),
+  );
 
   // Parameter range input states (for free text editing)
   // Keys are like "kellyMultiplier_min", "kellyMultiplier_max", "kellyMultiplier_step"
   const [paramInputs, setParamInputs] = useState<Record<string, string>>(() => {
-    const inputs: Record<string, string> = {}
+    const inputs: Record<string, string> = {};
     Object.entries(extendedParameterRanges).forEach(([key, range]) => {
-      const [min, max, step] = range
-      const metadata = PARAMETER_METADATA[key]
-      const precision = metadata?.precision ?? 2
-      inputs[`${key}_min`] = min.toFixed(precision)
-      inputs[`${key}_max`] = max.toFixed(precision)
-      inputs[`${key}_step`] = step.toFixed(precision)
-    })
-    return inputs
-  })
+      const [min, max, step] = range;
+      const metadata = PARAMETER_METADATA[key];
+      const precision = metadata?.precision ?? 2;
+      inputs[`${key}_min`] = min.toFixed(precision);
+      inputs[`${key}_max`] = max.toFixed(precision);
+      inputs[`${key}_step`] = step.toFixed(precision);
+    });
+    return inputs;
+  });
 
   // Sync input states when config changes externally (e.g., presets)
   useEffect(() => {
-    setInSampleInput(String(config.inSampleDays))
-    setOutOfSampleInput(String(config.outOfSampleDays))
-    setStepSizeInput(String(config.stepSizeDays))
-    setMinISTradesInput(String(config.minInSampleTrades ?? 0))
-    setMinOOSTradesInput(String(config.minOutOfSampleTrades ?? 0))
-  }, [config.inSampleDays, config.outOfSampleDays, config.stepSizeDays, config.minInSampleTrades, config.minOutOfSampleTrades])
+    setInSampleInput(String(config.inSampleDays));
+    setOutOfSampleInput(String(config.outOfSampleDays));
+    setStepSizeInput(String(config.stepSizeDays));
+    setMinISTradesInput(String(config.minInSampleTrades ?? 0));
+    setMinOOSTradesInput(String(config.minOutOfSampleTrades ?? 0));
+  }, [
+    config.inSampleDays,
+    config.outOfSampleDays,
+    config.stepSizeDays,
+    config.minInSampleTrades,
+    config.minOutOfSampleTrades,
+  ]);
 
   // Sync parameter range inputs when extendedParameterRanges changes (e.g., slider drag, preset)
   useEffect(() => {
-    const inputs: Record<string, string> = {}
+    const inputs: Record<string, string> = {};
     Object.entries(extendedParameterRanges).forEach(([key, range]) => {
-      const [min, max, step] = range
-      const metadata = PARAMETER_METADATA[key]
-      const precision = metadata?.precision ?? 2
-      inputs[`${key}_min`] = min.toFixed(precision)
-      inputs[`${key}_max`] = max.toFixed(precision)
-      inputs[`${key}_step`] = step.toFixed(precision)
-    })
-    setParamInputs(inputs)
-  }, [extendedParameterRanges])
+      const [min, max, step] = range;
+      const metadata = PARAMETER_METADATA[key];
+      const precision = metadata?.precision ?? 2;
+      inputs[`${key}_min`] = min.toFixed(precision);
+      inputs[`${key}_max`] = max.toFixed(precision);
+      inputs[`${key}_step`] = step.toFixed(precision);
+    });
+    setParamInputs(inputs);
+  }, [extendedParameterRanges]);
 
   // Blur handlers for window configuration inputs
   const handleInSampleBlur = () => {
-    const val = parseInt(inSampleInput, 10)
+    const val = parseInt(inSampleInput, 10);
     if (!isNaN(val) && val >= 1) {
-      updateConfig({ inSampleDays: val })
-      setInSampleInput(String(val))
+      updateConfig({ inSampleDays: val });
+      setInSampleInput(String(val));
     } else {
-      setInSampleInput(String(config.inSampleDays))
+      setInSampleInput(String(config.inSampleDays));
     }
-  }
+  };
 
   const handleOutOfSampleBlur = () => {
-    const val = parseInt(outOfSampleInput, 10)
+    const val = parseInt(outOfSampleInput, 10);
     if (!isNaN(val) && val >= 1) {
-      updateConfig({ outOfSampleDays: val })
-      setOutOfSampleInput(String(val))
+      updateConfig({ outOfSampleDays: val });
+      setOutOfSampleInput(String(val));
     } else {
-      setOutOfSampleInput(String(config.outOfSampleDays))
+      setOutOfSampleInput(String(config.outOfSampleDays));
     }
-  }
+  };
 
   const handleStepSizeBlur = () => {
-    const val = parseInt(stepSizeInput, 10)
+    const val = parseInt(stepSizeInput, 10);
     if (!isNaN(val) && val >= 1) {
-      updateConfig({ stepSizeDays: val })
-      setStepSizeInput(String(val))
+      updateConfig({ stepSizeDays: val });
+      setStepSizeInput(String(val));
     } else {
-      setStepSizeInput(String(config.stepSizeDays))
+      setStepSizeInput(String(config.stepSizeDays));
     }
-  }
+  };
 
   const handleMinISTradesBlur = () => {
-    const val = parseInt(minISTradesInput, 10)
+    const val = parseInt(minISTradesInput, 10);
     if (!isNaN(val) && val >= 1) {
-      updateConfig({ minInSampleTrades: val })
-      setMinISTradesInput(String(val))
+      updateConfig({ minInSampleTrades: val });
+      setMinISTradesInput(String(val));
     } else {
-      setMinISTradesInput(String(config.minInSampleTrades ?? 0))
+      setMinISTradesInput(String(config.minInSampleTrades ?? 0));
     }
-  }
+  };
 
   const handleMinOOSTradesBlur = () => {
-    const val = parseInt(minOOSTradesInput, 10)
+    const val = parseInt(minOOSTradesInput, 10);
     if (!isNaN(val) && val >= 1) {
-      updateConfig({ minOutOfSampleTrades: val })
-      setMinOOSTradesInput(String(val))
+      updateConfig({ minOutOfSampleTrades: val });
+      setMinOOSTradesInput(String(val));
     } else {
-      setMinOOSTradesInput(String(config.minOutOfSampleTrades ?? 0))
+      setMinOOSTradesInput(String(config.minOutOfSampleTrades ?? 0));
     }
-  }
+  };
 
   // Auto-configure when block changes
   useEffect(() => {
     if (blockId) {
-      autoConfigureFromBlock(blockId)
-      loadAvailableStrategies(blockId)
+      autoConfigureFromBlock(blockId);
+      loadAvailableStrategies(blockId);
     }
-  }, [blockId, autoConfigureFromBlock, loadAvailableStrategies])
+  }, [blockId, autoConfigureFromBlock, loadAvailableStrategies]);
 
   // Disable run if no block, already running, or no sweep/constraint configured
-  const hasEnabledParameters = Object.values(extendedParameterRanges).some(([,,,enabled]) => enabled)
-  const hasEnabledConstraints = diversificationConfig.enableCorrelationConstraint || diversificationConfig.enableTailRiskConstraint
-  const hasEnabledWeightSweeps = strategyWeightSweep.configs.some(c => c.enabled)
-  const hasValidConfig = hasEnabledParameters || hasEnabledConstraints || hasEnabledWeightSweeps
-  const disableRun = !blockId || isRunning || !hasValidConfig
+  const hasEnabledParameters = Object.values(extendedParameterRanges).some(
+    ([, , , enabled]) => enabled,
+  );
+  const hasEnabledConstraints =
+    diversificationConfig.enableCorrelationConstraint ||
+    diversificationConfig.enableTailRiskConstraint;
+  const hasEnabledWeightSweeps = strategyWeightSweep.configs.some((c) => c.enabled);
+  const hasValidConfig = hasEnabledParameters || hasEnabledConstraints || hasEnabledWeightSweeps;
+  const disableRun = !blockId || isRunning || !hasValidConfig;
 
   const handleRun = async () => {
-    if (!blockId) return
-    await runAnalysis(blockId)
-  }
-
+    if (!blockId) return;
+    await runAnalysis(blockId);
+  };
 
   // Build strategy options for multi-select
   const strategyOptions = useMemo(
@@ -235,53 +248,53 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
         label: strategy,
         value: strategy,
       })),
-    [availableStrategies]
-  )
+    [availableStrategies],
+  );
 
   // Strategies eligible for weight sweeps = selected strategies (if any), otherwise all available
   const strategiesForWeightSweep = useMemo(
     () => (selectedStrategies.length > 0 ? selectedStrategies : availableStrategies),
-    [selectedStrategies, availableStrategies]
-  )
+    [selectedStrategies, availableStrategies],
+  );
 
   // Filter strategy weight configs to only show strategies in the current filter
   const filteredWeightConfigs = useMemo(
     () =>
       strategyWeightSweep.configs.filter((config) =>
-        strategiesForWeightSweep.includes(config.strategy)
+        strategiesForWeightSweep.includes(config.strategy),
       ),
-    [strategyWeightSweep.configs, strategiesForWeightSweep]
-  )
+    [strategyWeightSweep.configs, strategiesForWeightSweep],
+  );
 
   // Pre-run configuration guidance - validates config before analysis
-  const preRunObservations = useMemo(
-    () => validatePreRunConfiguration(config),
-    [config]
-  )
+  const preRunObservations = useMemo(() => validatePreRunConfiguration(config), [config]);
 
   const renderParameterControls = () => {
     return Object.entries(extendedParameterRanges).map(([key, range]) => {
-      const metadata = PARAMETER_METADATA[key]
-      if (!metadata) return null
+      const metadata = PARAMETER_METADATA[key];
+      if (!metadata) return null;
 
-      const [minValue, maxValue, stepValue, enabled] = range
-      const helperText = PARAMETER_HELPERS[key] || ""
+      const [minValue, maxValue, stepValue, enabled] = range;
+      const helperText = PARAMETER_HELPERS[key] || "";
 
-      const sliderMin = Math.min(metadata.min, minValue)
-      const sliderMax = Math.max(metadata.max, maxValue)
-      const precision = metadata.precision
+      const sliderMin = Math.min(metadata.min, minValue);
+      const sliderMax = Math.max(metadata.max, maxValue);
+      const precision = metadata.precision;
 
       // Check if step size suggestion is needed
-      const suggestedStep = suggestStepForRange(key, minValue, maxValue)
-      const currentValueCount = Math.floor((maxValue - minValue) / stepValue) + 1
-      const showStepSuggestion = enabled && stepValue < suggestedStep * 0.5 && currentValueCount > 20
+      const suggestedStep = suggestStepForRange(key, minValue, maxValue);
+      const currentValueCount = Math.floor((maxValue - minValue) / stepValue) + 1;
+      const showStepSuggestion =
+        enabled && stepValue < suggestedStep * 0.5 && currentValueCount > 20;
 
       return (
         <div
           key={key}
           className={cn(
             "space-y-2 rounded-lg border p-3 transition-colors",
-            enabled ? "border-border/40 bg-card" : "border-border/30 cursor-pointer hover:border-border/50 hover:bg-muted/30"
+            enabled
+              ? "border-border/40 bg-card"
+              : "border-border/30 cursor-pointer hover:border-border/50 hover:bg-muted/30",
           )}
           onClick={!enabled ? () => toggleParameter(key, true) : undefined}
         >
@@ -313,10 +326,10 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                 step={stepValue}
                 value={[minValue, maxValue]}
                 onValueChange={(values) => {
-                  if (!values || values.length < 2) return
-                  const nextMin = Number(values[0].toFixed(precision))
-                  const nextMax = Number(values[1].toFixed(precision))
-                  setExtendedParameterRange(key, [nextMin, nextMax, stepValue, true])
+                  if (!values || values.length < 2) return;
+                  const nextMin = Number(values[0].toFixed(precision));
+                  const nextMax = Number(values[1].toFixed(precision));
+                  setExtendedParameterRange(key, [nextMin, nextMax, stepValue, true]);
                 }}
               />
               <div className="grid grid-cols-3 gap-2">
@@ -327,19 +340,22 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     value={paramInputs[`${key}_min`] ?? minValue.toFixed(precision)}
                     step={stepValue}
                     onChange={(event) => {
-                      setParamInputs(prev => ({ ...prev, [`${key}_min`]: event.target.value }))
+                      setParamInputs((prev) => ({ ...prev, [`${key}_min`]: event.target.value }));
                     }}
                     onBlur={() => {
-                      const next = Number.parseFloat(paramInputs[`${key}_min`] ?? "")
+                      const next = Number.parseFloat(paramInputs[`${key}_min`] ?? "");
                       if (Number.isFinite(next) && next >= metadata.min) {
-                        setExtendedParameterRange(key, [next, maxValue, stepValue, true])
+                        setExtendedParameterRange(key, [next, maxValue, stepValue, true]);
                       } else {
-                        setParamInputs(prev => ({ ...prev, [`${key}_min`]: minValue.toFixed(precision) }))
+                        setParamInputs((prev) => ({
+                          ...prev,
+                          [`${key}_min`]: minValue.toFixed(precision),
+                        }));
                       }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        (e.target as HTMLInputElement).blur()
+                        (e.target as HTMLInputElement).blur();
                       }
                     }}
                   />
@@ -351,19 +367,22 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     value={paramInputs[`${key}_max`] ?? maxValue.toFixed(precision)}
                     step={stepValue}
                     onChange={(event) => {
-                      setParamInputs(prev => ({ ...prev, [`${key}_max`]: event.target.value }))
+                      setParamInputs((prev) => ({ ...prev, [`${key}_max`]: event.target.value }));
                     }}
                     onBlur={() => {
-                      const next = Number.parseFloat(paramInputs[`${key}_max`] ?? "")
+                      const next = Number.parseFloat(paramInputs[`${key}_max`] ?? "");
                       if (Number.isFinite(next) && next <= metadata.max) {
-                        setExtendedParameterRange(key, [minValue, next, stepValue, true])
+                        setExtendedParameterRange(key, [minValue, next, stepValue, true]);
                       } else {
-                        setParamInputs(prev => ({ ...prev, [`${key}_max`]: maxValue.toFixed(precision) }))
+                        setParamInputs((prev) => ({
+                          ...prev,
+                          [`${key}_max`]: maxValue.toFixed(precision),
+                        }));
                       }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        (e.target as HTMLInputElement).blur()
+                        (e.target as HTMLInputElement).blur();
                       }
                     }}
                   />
@@ -375,19 +394,22 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     value={paramInputs[`${key}_step`] ?? stepValue.toFixed(precision)}
                     step={metadata.step}
                     onChange={(event) => {
-                      setParamInputs(prev => ({ ...prev, [`${key}_step`]: event.target.value }))
+                      setParamInputs((prev) => ({ ...prev, [`${key}_step`]: event.target.value }));
                     }}
                     onBlur={() => {
-                      const parsed = Number.parseFloat(paramInputs[`${key}_step`] ?? "")
+                      const parsed = Number.parseFloat(paramInputs[`${key}_step`] ?? "");
                       if (Number.isFinite(parsed) && parsed >= metadata.step) {
-                        setExtendedParameterRange(key, [minValue, maxValue, parsed, true])
+                        setExtendedParameterRange(key, [minValue, maxValue, parsed, true]);
                       } else {
-                        setParamInputs(prev => ({ ...prev, [`${key}_step`]: stepValue.toFixed(precision) }))
+                        setParamInputs((prev) => ({
+                          ...prev,
+                          [`${key}_step`]: stepValue.toFixed(precision),
+                        }));
                       }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        (e.target as HTMLInputElement).blur()
+                        (e.target as HTMLInputElement).blur();
                       }
                     }}
                   />
@@ -399,7 +421,8 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                 <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
                   <AlertCircle className="h-3 w-3 flex-shrink-0" />
                   <span>
-                    Consider step size of {suggestedStep} for this range ({currentValueCount} values)
+                    Consider step size of {suggestedStep} for this range ({currentValueCount}{" "}
+                    values)
                   </span>
                   <Button
                     variant="ghost"
@@ -416,19 +439,17 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
             </>
           )}
         </div>
-      )
-    })
-  }
+      );
+    });
+  };
 
   const progressPercent =
     progress && progress.totalCombinations
       ? Math.min(
           100,
-          Math.round(
-            ((progress.testedCombinations ?? 0) / progress.totalCombinations) * 100
-          )
+          Math.round(((progress.testedCombinations ?? 0) / progress.totalCombinations) * 100),
         )
-      : 0
+      : 0;
 
   return (
     <Card>
@@ -452,15 +473,34 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
         )}
 
         {autoConfigApplied && tradeFrequency && (
-          <Alert className={constrainedByFrequency ? "border-amber-300/50 bg-amber-50/30 dark:bg-amber-950/20" : undefined}>
-            <Sparkles className={cn("h-4 w-4", constrainedByFrequency && "text-amber-600 dark:text-amber-400")} />
-            <AlertTitle className={constrainedByFrequency ? "text-amber-800 dark:text-amber-300" : undefined}>
+          <Alert
+            className={
+              constrainedByFrequency
+                ? "border-amber-300/50 bg-amber-50/30 dark:bg-amber-950/20"
+                : undefined
+            }
+          >
+            <Sparkles
+              className={cn(
+                "h-4 w-4",
+                constrainedByFrequency && "text-amber-600 dark:text-amber-400",
+              )}
+            />
+            <AlertTitle
+              className={constrainedByFrequency ? "text-amber-800 dark:text-amber-300" : undefined}
+            >
               {constrainedByFrequency
                 ? "Auto-configured for low-frequency trading"
                 : "Auto-configured for your trading frequency"}
             </AlertTitle>
-            <AlertDescription className={constrainedByFrequency ? "text-amber-700/80 dark:text-amber-400/80" : undefined}>
-              Detected ~{tradeFrequency.tradesPerMonth.toFixed(1)} trades/month ({tradeFrequency.totalTrades} trades over {Math.round(tradeFrequency.tradingDays / 30)} months).
+            <AlertDescription
+              className={
+                constrainedByFrequency ? "text-amber-700/80 dark:text-amber-400/80" : undefined
+              }
+            >
+              Detected ~{tradeFrequency.tradesPerMonth.toFixed(1)} trades/month (
+              {tradeFrequency.totalTrades} trades over {Math.round(tradeFrequency.tradingDays / 30)}{" "}
+              months).
               {constrainedByFrequency
                 ? " With limited trade data, shorter windows and lower trade minimums are necessary to run analysis. Results may be noisier than high-frequency strategies."
                 : " Window sizes adjusted to capture sufficient trades per period."}
@@ -486,9 +526,10 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                         The historical period used for optimization and parameter tuning.
                       </p>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        During this window, the algorithm tests different parameter combinations to find
-                        the optimal settings based on your chosen metric. Larger windows provide more
-                        data but may include outdated market regimes. Default: 45 days (range: 30-60 days).
+                        During this window, the algorithm tests different parameter combinations to
+                        find the optimal settings based on your chosen metric. Larger windows
+                        provide more data but may include outdated market regimes. Default: 45 days
+                        (range: 30-60 days).
                       </p>
                     </div>
                   </div>
@@ -520,9 +561,10 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                         The forward-testing period to validate optimized parameters on unseen data.
                       </p>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        This simulates real trading by applying optimized parameters to future data they
-                        were never trained on. Performance here reveals whether results are robust
-                        or just fit to historical noise. Default: 15 days (typically 1/3 of in-sample, range: 10-20 days).
+                        This simulates real trading by applying optimized parameters to future data
+                        they were never trained on. Performance here reveals whether results are
+                        robust or just fit to historical noise. Default: 15 days (typically 1/3 of
+                        in-sample, range: 10-20 days).
                       </p>
                     </div>
                   </div>
@@ -555,8 +597,8 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                       </p>
                       <p className="text-xs text-muted-foreground leading-relaxed">
                         Smaller steps create more overlapping windows and test results, giving finer
-                        granularity but increasing computation time. Larger steps move faster through
-                        history with less overlap. Default: 15 days (equal to OOS window for
+                        granularity but increasing computation time. Larger steps move faster
+                        through history with less overlap. Default: 15 days (equal to OOS window for
                         non-overlapping periods, range: 10-20 days).
                       </p>
                     </div>
@@ -584,7 +626,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                   "py-2",
                   obs.severity === "warning"
                     ? "border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20"
-                    : "border-slate-300/50 bg-slate-50/50 dark:bg-slate-900/30"
+                    : "border-slate-300/50 bg-slate-50/50 dark:bg-slate-900/30",
                 )}
               >
                 <AlertCircle
@@ -592,7 +634,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     "h-4 w-4",
                     obs.severity === "warning"
                       ? "text-amber-600 dark:text-amber-400"
-                      : "text-slate-600 dark:text-slate-400"
+                      : "text-slate-600 dark:text-slate-400",
                   )}
                 />
                 <AlertTitle
@@ -600,7 +642,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     "text-sm",
                     obs.severity === "warning"
                       ? "text-amber-800 dark:text-amber-300"
-                      : "text-slate-700 dark:text-slate-300"
+                      : "text-slate-700 dark:text-slate-300",
                   )}
                 >
                   {obs.title}
@@ -610,7 +652,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     "text-xs",
                     obs.severity === "warning"
                       ? "text-amber-700/80 dark:text-amber-400/80"
-                      : "text-slate-600/80 dark:text-slate-400/80"
+                      : "text-slate-600/80 dark:text-slate-400/80",
                   )}
                 >
                   {obs.description}
@@ -639,8 +681,8 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                         Select which strategies to include in the analysis.
                       </p>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        Leave empty to include all strategies. Filter to focus on specific
-                        strategy subsets or exclude strategies that don't fit your analysis.
+                        Leave empty to include all strategies. Filter to focus on specific strategy
+                        subsets or exclude strategies that don't fit your analysis.
                       </p>
                     </div>
                   </div>
@@ -689,7 +731,10 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                 checked={normalizeTo1Lot}
                 onCheckedChange={setNormalizeTo1Lot}
               />
-              <Label htmlFor="normalize-1lot" className="text-sm text-muted-foreground cursor-pointer">
+              <Label
+                htmlFor="normalize-1lot"
+                className="text-sm text-muted-foreground cursor-pointer"
+              >
                 {normalizeTo1Lot ? "Enabled" : "Disabled"}
               </Label>
             </div>
@@ -716,8 +761,8 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                       <p className="text-xs text-muted-foreground leading-relaxed">
                         Each in-sample window tests all parameter combinations and selects the one
                         with the highest value for this metric. Choose based on your priorities:
-                        risk-adjusted returns (Sharpe/Sortino), total profit (Net P/L), or consistency
-                        (Win Rate, Profit Factor).
+                        risk-adjusted returns (Sharpe/Sortino), total profit (Net P/L), or
+                        consistency (Win Rate, Profit Factor).
                       </p>
                     </div>
                   </div>
@@ -823,12 +868,12 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
         </div>
 
         {/* Nudge when no parameters enabled - above the collapsible so it's always visible */}
-        {!Object.values(extendedParameterRanges).some(([,,,enabled]) => enabled) && (
+        {!Object.values(extendedParameterRanges).some(([, , , enabled]) => enabled) && (
           <div className="flex items-start gap-2.5 rounded-md border border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-950/20 px-3 py-2.5">
             <Sparkles className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
             <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
-              Enable at least one parameter sweep to run the analysis. The optimizer tests combinations
-              across your ranges to find the best settings for each window.
+              Enable at least one parameter sweep to run the analysis. The optimizer tests
+              combinations across your ranges to find the best settings for each window.
             </p>
           </div>
         )}
@@ -855,15 +900,17 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                           Define ranges for position sizing and risk control parameters to test.
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          For each in-sample window, the optimizer tests all combinations within these
-                          ranges to find the best settings. Wider ranges explore more possibilities but
-                          increase computation time exponentially.
+                          For each in-sample window, the optimizer tests all combinations within
+                          these ranges to find the best settings. Wider ranges explore more
+                          possibilities but increase computation time exponentially.
                         </p>
                         <div className="text-xs text-muted-foreground space-y-1 border-t border-border pt-2">
                           <p className="font-medium">Example:</p>
                           <p className="font-mono text-[10px] bg-muted/50 p-2 rounded">
-                            Kelly: 0.5-1.5 (step 0.1) = 11 values<br />
-                            Max DD: 10-20 (step 2) = 6 values<br />
+                            Kelly: 0.5-1.5 (step 0.1) = 11 values
+                            <br />
+                            Max DD: 10-20 (step 2) = 6 values
+                            <br />
                             Total: 11 × 6 = 66 combinations
                           </p>
                         </div>
@@ -872,7 +919,9 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                   </HoverCardContent>
                 </HoverCard>
                 <Badge variant="outline" className="text-xs">
-                  {Object.values(extendedParameterRanges).some(([,,,enabled]) => enabled) ? "Active" : "Inactive"}
+                  {Object.values(extendedParameterRanges).some(([, , , enabled]) => enabled)
+                    ? "Active"
+                    : "Inactive"}
                 </Badge>
                 {/* Combination Estimate Badge - only show when parameters are enabled */}
                 {combinationEstimate && combinationEstimate.enabledParameters.length > 0 && (
@@ -887,7 +936,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     className={cn(
                       "text-xs",
                       combinationEstimate.warningLevel === "warning" &&
-                        "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                        "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
                     )}
                   >
                     {combinationEstimate.count.toLocaleString()} combinations
@@ -899,7 +948,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
               <ChevronDown
                 className={cn(
                   "h-4 w-4 text-muted-foreground transition-transform",
-                  parametersOpen && "rotate-180"
+                  parametersOpen && "rotate-180",
                 )}
               />
             </button>
@@ -911,7 +960,8 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                 <span className="font-medium">Breakdown: </span>
                 {combinationEstimate.enabledParameters.map((param, idx) => (
                   <span key={param}>
-                    {PARAMETER_METADATA[param]?.label ?? param}: {combinationEstimate.breakdown[param]}
+                    {PARAMETER_METADATA[param]?.label ?? param}:{" "}
+                    {combinationEstimate.breakdown[param]}
                     {idx < combinationEstimate.enabledParameters.length - 1 && " × "}
                   </span>
                 ))}
@@ -952,7 +1002,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
               <ChevronDown
                 className={cn(
                   "h-4 w-4 text-muted-foreground transition-transform",
-                  diversificationOpen && "rotate-180"
+                  diversificationOpen && "rotate-180",
                 )}
               />
             </button>
@@ -964,7 +1014,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                 "space-y-3 rounded-lg border p-3",
                 diversificationConfig.enableCorrelationConstraint
                   ? "border-border/40"
-                  : "border-border/20 opacity-70"
+                  : "border-border/20 opacity-70",
               )}
             >
               <div className="flex items-center justify-between">
@@ -986,15 +1036,17 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     <HoverCardContent className="w-80 p-0 overflow-hidden">
                       <div className="space-y-3">
                         <div className="bg-primary/5 border-b px-4 py-3">
-                          <h4 className="text-sm font-semibold text-primary">Correlation Constraint</h4>
+                          <h4 className="text-sm font-semibold text-primary">
+                            Correlation Constraint
+                          </h4>
                         </div>
                         <div className="px-4 pb-4 space-y-3">
                           <p className="text-sm font-medium text-foreground leading-relaxed">
                             Reject parameter combinations with highly correlated strategies.
                           </p>
                           <p className="text-xs text-muted-foreground leading-relaxed">
-                            If any pair of strategies exceeds the max correlation threshold,
-                            that parameter combination is rejected. This helps ensure portfolio
+                            If any pair of strategies exceeds the max correlation threshold, that
+                            parameter combination is rejected. This helps ensure portfolio
                             diversification.
                           </p>
                         </div>
@@ -1006,7 +1058,9 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
               {diversificationConfig.enableCorrelationConstraint && (
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label className="text-xs">Max Correlation: {diversificationConfig.maxCorrelationThreshold}</Label>
+                    <Label className="text-xs">
+                      Max Correlation: {diversificationConfig.maxCorrelationThreshold}
+                    </Label>
                     <Slider
                       min={0.1}
                       max={0.95}
@@ -1045,7 +1099,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                 "space-y-3 rounded-lg border p-3",
                 diversificationConfig.enableTailRiskConstraint
                   ? "border-border/40"
-                  : "border-border/20 opacity-70"
+                  : "border-border/20 opacity-70",
               )}
             >
               <div className="flex items-center justify-between">
@@ -1067,16 +1121,18 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     <HoverCardContent className="w-80 p-0 overflow-hidden">
                       <div className="space-y-3">
                         <div className="bg-primary/5 border-b px-4 py-3">
-                          <h4 className="text-sm font-semibold text-primary">Tail Risk Constraint</h4>
+                          <h4 className="text-sm font-semibold text-primary">
+                            Tail Risk Constraint
+                          </h4>
                         </div>
                         <div className="px-4 pb-4 space-y-3">
                           <p className="text-sm font-medium text-foreground leading-relaxed">
                             Reject combinations with high joint tail risk.
                           </p>
                           <p className="text-xs text-muted-foreground leading-relaxed">
-                            Measures how likely strategies are to experience extreme losses together.
-                            High tail dependence means strategies may all fail simultaneously during
-                            market stress.
+                            Measures how likely strategies are to experience extreme losses
+                            together. High tail dependence means strategies may all fail
+                            simultaneously during market stress.
                           </p>
                         </div>
                       </div>
@@ -1181,7 +1237,7 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                 <ChevronDown
                   className={cn(
                     "h-4 w-4 text-muted-foreground transition-transform",
-                    strategyWeightsOpen && "rotate-180"
+                    strategyWeightsOpen && "rotate-180",
                   )}
                 />
               </button>
@@ -1266,7 +1322,9 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                     <HoverCardContent className="w-80 p-0 overflow-hidden">
                       <div className="space-y-3">
                         <div className="bg-primary/5 border-b px-4 py-3">
-                          <h4 className="text-sm font-semibold text-primary">Strategy Weight Sweeps</h4>
+                          <h4 className="text-sm font-semibold text-primary">
+                            Strategy Weight Sweeps
+                          </h4>
                         </div>
                         <div className="px-4 pb-4 space-y-3">
                           <p className="text-sm font-medium text-foreground leading-relaxed">
@@ -1284,15 +1342,17 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                 </div>
                 <MultiSelect
                   options={strategiesForWeightSweep.map((s) => ({ label: s, value: s }))}
-                  defaultValue={filteredWeightConfigs.filter((c) => c.enabled).map((c) => c.strategy)}
+                  defaultValue={filteredWeightConfigs
+                    .filter((c) => c.enabled)
+                    .map((c) => c.strategy)}
                   onValueChange={(selected) => {
                     // Update enabled state for all strategies
                     filteredWeightConfigs.forEach((config) => {
-                      const shouldEnable = selected.includes(config.strategy)
+                      const shouldEnable = selected.includes(config.strategy);
                       if (config.enabled !== shouldEnable) {
-                        toggleStrategyWeight(config.strategy, shouldEnable)
+                        toggleStrategyWeight(config.strategy, shouldEnable);
                       }
-                    })
+                    });
                   }}
                   placeholder="Select strategies to sweep weights..."
                   maxCount={3}
@@ -1329,7 +1389,11 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                                 value={config.range[0]}
                                 onChange={(e) =>
                                   setStrategyWeightConfig(config.strategy, {
-                                    range: [Number(e.target.value), config.range[1], config.range[2]],
+                                    range: [
+                                      Number(e.target.value),
+                                      config.range[1],
+                                      config.range[2],
+                                    ],
                                   })
                                 }
                                 className="h-7"
@@ -1345,7 +1409,11 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                                 value={config.range[1]}
                                 onChange={(e) =>
                                   setStrategyWeightConfig(config.strategy, {
-                                    range: [config.range[0], Number(e.target.value), config.range[2]],
+                                    range: [
+                                      config.range[0],
+                                      Number(e.target.value),
+                                      config.range[2],
+                                    ],
                                   })
                                 }
                                 className="h-7"
@@ -1361,7 +1429,11 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
                                 value={config.range[2]}
                                 onChange={(e) =>
                                   setStrategyWeightConfig(config.strategy, {
-                                    range: [config.range[0], config.range[1], Number(e.target.value)],
+                                    range: [
+                                      config.range[0],
+                                      config.range[1],
+                                      Number(e.target.value),
+                                    ],
                                   })
                                 }
                                 className="h-7"
@@ -1433,5 +1505,5 @@ export function WalkForwardPeriodSelector({ blockId, addon }: PeriodSelectorProp
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

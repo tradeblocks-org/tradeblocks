@@ -6,10 +6,7 @@
  * - buildEnrichmentPlan: planning logic for ticker+date combos needing enrichment
  */
 
-import {
-  shouldSkipEnrichment,
-  buildEnrichmentPlan,
-} from "../../src/test-exports.ts";
+import { shouldSkipEnrichment, buildEnrichmentPlan } from "../../src/test-exports.ts";
 import type { EnrichmentPlanInput } from "../../src/test-exports.ts";
 
 // ---------------------------------------------------------------------------
@@ -96,17 +93,17 @@ describe("buildEnrichmentPlan", () => {
     const input: EnrichmentPlanInput = {
       tickers: [{ ticker, fromDate: "2025-01-10", toDate: "2025-01-12" }],
       existingCoverage: new Map([
-        [`${ticker}:2025-01-10`, 390],   // dense — skip
-        [`${ticker}:2025-01-11`, 50],    // sparse — include
+        [`${ticker}:2025-01-10`, 390], // dense — skip
+        [`${ticker}:2025-01-11`, 50], // sparse — include
         // 2025-01-12 not in map → 0 bars — include
       ]),
       providerSupportsQuotes: true,
     };
     const plan = buildEnrichmentPlan(input);
     expect(plan).toHaveLength(2);
-    expect(plan.map(p => p.date)).toEqual(["2025-01-11", "2025-01-12"]);
-    expect(plan.find(p => p.date === "2025-01-11")?.existingBarCount).toBe(50);
-    expect(plan.find(p => p.date === "2025-01-12")?.existingBarCount).toBe(0);
+    expect(plan.map((p) => p.date)).toEqual(["2025-01-11", "2025-01-12"]);
+    expect(plan.find((p) => p.date === "2025-01-11")?.existingBarCount).toBe(50);
+    expect(plan.find((p) => p.date === "2025-01-12")?.existingBarCount).toBe(0);
   });
 
   it("expands a multi-day range into individual date entries", () => {
@@ -117,7 +114,7 @@ describe("buildEnrichmentPlan", () => {
     };
     const plan = buildEnrichmentPlan(input);
     expect(plan).toHaveLength(3);
-    expect(plan.map(p => p.date)).toEqual(["2025-01-06", "2025-01-07", "2025-01-08"]);
+    expect(plan.map((p) => p.date)).toEqual(["2025-01-06", "2025-01-07", "2025-01-08"]);
   });
 
   it("handles multiple tickers independently", () => {
@@ -129,7 +126,7 @@ describe("buildEnrichmentPlan", () => {
         { ticker: tickerB, fromDate: "2025-01-10", toDate: "2025-01-10" },
       ],
       existingCoverage: new Map([
-        [`${tickerA}:2025-01-10`, 250],  // dense — skip tickerA
+        [`${tickerA}:2025-01-10`, 250], // dense — skip tickerA
         // tickerB not in map → 0 bars — include tickerB
       ]),
       providerSupportsQuotes: true,

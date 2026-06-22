@@ -19,17 +19,21 @@
  *
  * Expected: Summary line + JSON with similarity pairs
  */
-import * as path from 'path';
-import { fileURLToPath } from 'url';
+import * as path from "path";
+import { fileURLToPath } from "url";
 
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { loadBlock, calculateCorrelationMatrix, performTailRiskAnalysis } from '../../src/test-exports.ts';
+import {
+  loadBlock,
+  calculateCorrelationMatrix,
+  performTailRiskAnalysis,
+} from "../../src/test-exports.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
+const FIXTURES_DIR = path.join(__dirname, "..", "fixtures");
 
 interface Trade {
   strategy: string;
@@ -83,15 +87,15 @@ async function simulateStrategySimilarity(
   options: {
     correlationThreshold?: number;
     tailDependenceThreshold?: number;
-    method?: 'kendall' | 'spearman' | 'pearson';
+    method?: "kendall" | "spearman" | "pearson";
     minSharedDays?: number;
     topN?: number;
-  } = {}
+  } = {},
 ): Promise<StrategySimilarityResult> {
   const {
     correlationThreshold = 0.7,
     tailDependenceThreshold = 0.5,
-    method = 'kendall',
+    method = "kendall",
     minSharedDays = 30,
     topN = 5,
   } = options;
@@ -103,7 +107,13 @@ async function simulateStrategySimilarity(
     return {
       blockId,
       options: { correlationThreshold, tailDependenceThreshold, method, minSharedDays, topN },
-      strategySummary: { totalStrategies: 0, totalPairs: 0, redundantPairs: 0, highCorrelationPairs: 0, highTailDependencePairs: 0 },
+      strategySummary: {
+        totalStrategies: 0,
+        totalPairs: 0,
+        redundantPairs: 0,
+        highCorrelationPairs: 0,
+        highTailDependencePairs: 0,
+      },
       similarPairs: [],
       message: `No trades found in block "${blockId}"`,
     };
@@ -115,7 +125,13 @@ async function simulateStrategySimilarity(
     return {
       blockId,
       options: { correlationThreshold, tailDependenceThreshold, method, minSharedDays, topN },
-      strategySummary: { totalStrategies: strategies.length, totalPairs: 0, redundantPairs: 0, highCorrelationPairs: 0, highTailDependencePairs: 0 },
+      strategySummary: {
+        totalStrategies: strategies.length,
+        totalPairs: 0,
+        redundantPairs: 0,
+        highCorrelationPairs: 0,
+        highTailDependencePairs: 0,
+      },
       similarPairs: [],
       error: `Strategy similarity requires at least 2 strategies. Found ${strategies.length}.`,
     };
@@ -124,15 +140,15 @@ async function simulateStrategySimilarity(
   // Calculate correlation matrix
   const correlationMatrix = calculateCorrelationMatrix(trades, {
     method,
-    normalization: 'raw',
-    dateBasis: 'opened',
-    alignment: 'shared',
+    normalization: "raw",
+    dateBasis: "opened",
+    alignment: "shared",
   });
 
   // Calculate tail risk
   const tailRisk = performTailRiskAnalysis(trades, {
-    normalization: 'raw',
-    dateBasis: 'opened',
+    normalization: "raw",
+    dateBasis: "opened",
     minTradingDays: minSharedDays,
   });
 
@@ -143,7 +159,7 @@ async function simulateStrategySimilarity(
     if (!strategyDates[trade.strategy]) {
       strategyDates[trade.strategy] = new Set();
     }
-    const dateKey = trade.dateOpened.toISOString().split('T')[0];
+    const dateKey = trade.dateOpened.toISOString().split("T")[0];
     strategyDates[trade.strategy].add(dateKey);
   }
 
@@ -200,7 +216,9 @@ async function simulateStrategySimilarity(
       }
 
       const isHighCorrelation =
-        correlation !== null && !Number.isNaN(correlation) && Math.abs(correlation) >= correlationThreshold;
+        correlation !== null &&
+        !Number.isNaN(correlation) &&
+        Math.abs(correlation) >= correlationThreshold;
       const isHighTailDependence =
         tailDependence !== null && tailDependence >= tailDependenceThreshold;
       const isRedundant = isHighCorrelation && isHighTailDependence;
@@ -245,46 +263,46 @@ async function simulateStrategySimilarity(
   };
 }
 
-describe('strategy_similarity', () => {
-  describe('basic functionality', () => {
-    it('should calculate similarity for all strategy pairs', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+describe("strategy_similarity", () => {
+  describe("basic functionality", () => {
+    it("should calculate similarity for all strategy pairs", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       expect(result.strategySummary.totalStrategies).toBe(4);
       // 4 strategies = 4*3/2 = 6 pairs
       expect(result.strategySummary.totalPairs).toBe(6);
     });
 
-    it('should return correct summary statistics', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should return correct summary statistics", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
-      expect(result.strategySummary).toHaveProperty('totalStrategies');
-      expect(result.strategySummary).toHaveProperty('totalPairs');
-      expect(result.strategySummary).toHaveProperty('redundantPairs');
-      expect(result.strategySummary).toHaveProperty('highCorrelationPairs');
-      expect(result.strategySummary).toHaveProperty('highTailDependencePairs');
+      expect(result.strategySummary).toHaveProperty("totalStrategies");
+      expect(result.strategySummary).toHaveProperty("totalPairs");
+      expect(result.strategySummary).toHaveProperty("redundantPairs");
+      expect(result.strategySummary).toHaveProperty("highCorrelationPairs");
+      expect(result.strategySummary).toHaveProperty("highTailDependencePairs");
     });
 
-    it('should include all required fields in similarity pairs', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should include all required fields in similarity pairs", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       for (const pair of result.similarPairs) {
-        expect(pair).toHaveProperty('strategyA');
-        expect(pair).toHaveProperty('strategyB');
-        expect(pair).toHaveProperty('correlation');
-        expect(pair).toHaveProperty('tailDependence');
-        expect(pair).toHaveProperty('overlapScore');
-        expect(pair).toHaveProperty('compositeSimilarity');
-        expect(pair).toHaveProperty('sharedTradingDays');
-        expect(pair).toHaveProperty('flags');
-        expect(pair.flags).toHaveProperty('isHighCorrelation');
-        expect(pair.flags).toHaveProperty('isHighTailDependence');
-        expect(pair.flags).toHaveProperty('isRedundant');
+        expect(pair).toHaveProperty("strategyA");
+        expect(pair).toHaveProperty("strategyB");
+        expect(pair).toHaveProperty("correlation");
+        expect(pair).toHaveProperty("tailDependence");
+        expect(pair).toHaveProperty("overlapScore");
+        expect(pair).toHaveProperty("compositeSimilarity");
+        expect(pair).toHaveProperty("sharedTradingDays");
+        expect(pair).toHaveProperty("flags");
+        expect(pair.flags).toHaveProperty("isHighCorrelation");
+        expect(pair.flags).toHaveProperty("isHighTailDependence");
+        expect(pair.flags).toHaveProperty("isRedundant");
       }
     });
 
-    it('should sort pairs by composite similarity descending', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should sort pairs by composite similarity descending", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       for (let i = 1; i < result.similarPairs.length; i++) {
         const current = result.similarPairs[i].compositeSimilarity;
@@ -296,27 +314,27 @@ describe('strategy_similarity', () => {
     });
   });
 
-  describe('TrendFollowA-TrendFollowB correlation', () => {
-    it('should show high positive correlation between TrendFollowA and TrendFollowB', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+  describe("TrendFollowA-TrendFollowB correlation", () => {
+    it("should show high positive correlation between TrendFollowA and TrendFollowB", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       const trendPair = result.similarPairs.find(
         (p) =>
-          (p.strategyA === 'TrendFollowA' && p.strategyB === 'TrendFollowB') ||
-          (p.strategyA === 'TrendFollowB' && p.strategyB === 'TrendFollowA')
+          (p.strategyA === "TrendFollowA" && p.strategyB === "TrendFollowB") ||
+          (p.strategyA === "TrendFollowB" && p.strategyB === "TrendFollowA"),
       );
 
       expect(trendPair).toBeDefined();
       expect(trendPair?.correlation).toBeGreaterThan(0.5);
     });
 
-    it('should have high overlap between TrendFollowA and TrendFollowB', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should have high overlap between TrendFollowA and TrendFollowB", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       const trendPair = result.similarPairs.find(
         (p) =>
-          (p.strategyA === 'TrendFollowA' && p.strategyB === 'TrendFollowB') ||
-          (p.strategyA === 'TrendFollowB' && p.strategyB === 'TrendFollowA')
+          (p.strategyA === "TrendFollowA" && p.strategyB === "TrendFollowB") ||
+          (p.strategyA === "TrendFollowB" && p.strategyB === "TrendFollowA"),
       );
 
       expect(trendPair).toBeDefined();
@@ -325,14 +343,14 @@ describe('strategy_similarity', () => {
     });
   });
 
-  describe('TrendFollow vs MeanRevert correlation', () => {
-    it('should show negative correlation between TrendFollowA and MeanRevert', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+  describe("TrendFollow vs MeanRevert correlation", () => {
+    it("should show negative correlation between TrendFollowA and MeanRevert", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       const pair = result.similarPairs.find(
         (p) =>
-          (p.strategyA === 'MeanRevert' && p.strategyB === 'TrendFollowA') ||
-          (p.strategyA === 'TrendFollowA' && p.strategyB === 'MeanRevert')
+          (p.strategyA === "MeanRevert" && p.strategyB === "TrendFollowA") ||
+          (p.strategyA === "TrendFollowA" && p.strategyB === "MeanRevert"),
       );
 
       expect(pair).toBeDefined();
@@ -340,14 +358,14 @@ describe('strategy_similarity', () => {
     });
   });
 
-  describe('Independent strategy overlap', () => {
-    it('should show low overlap between Independent and TrendFollow strategies', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+  describe("Independent strategy overlap", () => {
+    it("should show low overlap between Independent and TrendFollow strategies", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       const pairWithA = result.similarPairs.find(
         (p) =>
-          (p.strategyA === 'Independent' && p.strategyB === 'TrendFollowA') ||
-          (p.strategyA === 'TrendFollowA' && p.strategyB === 'Independent')
+          (p.strategyA === "Independent" && p.strategyB === "TrendFollowA") ||
+          (p.strategyA === "TrendFollowA" && p.strategyB === "Independent"),
       );
 
       expect(pairWithA).toBeDefined();
@@ -355,13 +373,13 @@ describe('strategy_similarity', () => {
       expect(pairWithA?.overlapScore).toBe(0);
     });
 
-    it('should have zero shared trading days between Independent and TrendFollow', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should have zero shared trading days between Independent and TrendFollow", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       const pairWithA = result.similarPairs.find(
         (p) =>
-          (p.strategyA === 'Independent' && p.strategyB === 'TrendFollowA') ||
-          (p.strategyA === 'TrendFollowA' && p.strategyB === 'Independent')
+          (p.strategyA === "Independent" && p.strategyB === "TrendFollowA") ||
+          (p.strategyA === "TrendFollowA" && p.strategyB === "Independent"),
       );
 
       expect(pairWithA).toBeDefined();
@@ -369,57 +387,57 @@ describe('strategy_similarity', () => {
     });
   });
 
-  describe('correlationThreshold parameter', () => {
-    it('should flag more pairs as high correlation with lower threshold', async () => {
-      const resultHigh = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block', {
+  describe("correlationThreshold parameter", () => {
+    it("should flag more pairs as high correlation with lower threshold", async () => {
+      const resultHigh = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block", {
         correlationThreshold: 0.9,
       });
-      const resultLow = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block', {
+      const resultLow = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block", {
         correlationThreshold: 0.3,
       });
 
       expect(resultLow.strategySummary.highCorrelationPairs).toBeGreaterThanOrEqual(
-        resultHigh.strategySummary.highCorrelationPairs
+        resultHigh.strategySummary.highCorrelationPairs,
       );
     });
 
-    it('should use default threshold of 0.7 when not specified', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should use default threshold of 0.7 when not specified", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
       expect(result.options.correlationThreshold).toBe(0.7);
     });
   });
 
-  describe('tailDependenceThreshold parameter', () => {
-    it('should flag more pairs as high tail dependence with lower threshold', async () => {
-      const resultHigh = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block', {
+  describe("tailDependenceThreshold parameter", () => {
+    it("should flag more pairs as high tail dependence with lower threshold", async () => {
+      const resultHigh = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block", {
         tailDependenceThreshold: 0.9,
       });
-      const resultLow = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block', {
+      const resultLow = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block", {
         tailDependenceThreshold: 0.1,
       });
 
       expect(resultLow.strategySummary.highTailDependencePairs).toBeGreaterThanOrEqual(
-        resultHigh.strategySummary.highTailDependencePairs
+        resultHigh.strategySummary.highTailDependencePairs,
       );
     });
 
-    it('should use default threshold of 0.5 when not specified', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should use default threshold of 0.5 when not specified", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
       expect(result.options.tailDependenceThreshold).toBe(0.5);
     });
   });
 
-  describe('topN parameter', () => {
-    it('should limit results to topN', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block', {
+  describe("topN parameter", () => {
+    it("should limit results to topN", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block", {
         topN: 2,
       });
 
       expect(result.similarPairs.length).toBeLessThanOrEqual(2);
     });
 
-    it('should return all pairs when topN > total pairs', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block', {
+    it("should return all pairs when topN > total pairs", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block", {
         topN: 20,
       });
 
@@ -427,36 +445,36 @@ describe('strategy_similarity', () => {
       expect(result.similarPairs.length).toBe(6);
     });
 
-    it('should default to 5 when not specified', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should default to 5 when not specified", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
       expect(result.options.topN).toBe(5);
     });
   });
 
-  describe('method parameter', () => {
-    it('should use kendall by default', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
-      expect(result.options.method).toBe('kendall');
+  describe("method parameter", () => {
+    it("should use kendall by default", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
+      expect(result.options.method).toBe("kendall");
     });
 
-    it('should produce different correlations with pearson method', async () => {
-      const kendall = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block', {
-        method: 'kendall',
+    it("should produce different correlations with pearson method", async () => {
+      const kendall = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block", {
+        method: "kendall",
       });
-      const pearson = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block', {
-        method: 'pearson',
+      const pearson = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block", {
+        method: "pearson",
       });
 
       // Find TrendFollowA-TrendFollowB pair in both
       const kendallPair = kendall.similarPairs.find(
         (p) =>
-          (p.strategyA === 'TrendFollowA' && p.strategyB === 'TrendFollowB') ||
-          (p.strategyA === 'TrendFollowB' && p.strategyB === 'TrendFollowA')
+          (p.strategyA === "TrendFollowA" && p.strategyB === "TrendFollowB") ||
+          (p.strategyA === "TrendFollowB" && p.strategyB === "TrendFollowA"),
       );
       const pearsonPair = pearson.similarPairs.find(
         (p) =>
-          (p.strategyA === 'TrendFollowA' && p.strategyB === 'TrendFollowB') ||
-          (p.strategyA === 'TrendFollowB' && p.strategyB === 'TrendFollowA')
+          (p.strategyA === "TrendFollowA" && p.strategyB === "TrendFollowB") ||
+          (p.strategyA === "TrendFollowB" && p.strategyB === "TrendFollowA"),
       );
 
       expect(kendallPair?.correlation).not.toBeNull();
@@ -468,11 +486,11 @@ describe('strategy_similarity', () => {
     });
   });
 
-  describe('single strategy portfolio', () => {
-    it('should return error for single strategy block', async () => {
+  describe("single strategy portfolio", () => {
+    it("should return error for single strategy block", async () => {
       // Use mock-block which has only 2 strategies, filter to simulate single
       // This is indirect - test the error case from tool's perspective
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'mock-block');
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "mock-block");
 
       // mock-block might have 2 strategies, which is valid
       // For true single strategy test, we'd need a special fixture
@@ -480,10 +498,10 @@ describe('strategy_similarity', () => {
     });
   });
 
-  describe('two strategy portfolio', () => {
-    it('should return single pair result for two strategies', async () => {
+  describe("two strategy portfolio", () => {
+    it("should return single pair result for two strategies", async () => {
       // mock-block has 2 strategies
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'mock-block');
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "mock-block");
 
       if (result.strategySummary.totalStrategies === 2) {
         expect(result.strategySummary.totalPairs).toBe(1);
@@ -492,9 +510,9 @@ describe('strategy_similarity', () => {
     });
   });
 
-  describe('composite similarity score', () => {
-    it('should calculate composite as weighted average of correlation, tail, and overlap', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+  describe("composite similarity score", () => {
+    it("should calculate composite as weighted average of correlation, tail, and overlap", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       for (const pair of result.similarPairs) {
         if (pair.compositeSimilarity !== null && pair.correlation !== null) {
@@ -509,8 +527,8 @@ describe('strategy_similarity', () => {
       }
     });
 
-    it('should have composite between 0 and 1 for valid pairs', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should have composite between 0 and 1 for valid pairs", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       for (const pair of result.similarPairs) {
         if (pair.compositeSimilarity !== null) {
@@ -521,18 +539,18 @@ describe('strategy_similarity', () => {
     });
   });
 
-  describe('edge cases', () => {
-    it('should handle non-existent block gracefully', async () => {
+  describe("edge cases", () => {
+    it("should handle non-existent block gracefully", async () => {
       await expect(
-        simulateStrategySimilarity(FIXTURES_DIR, 'non-existent-block')
+        simulateStrategySimilarity(FIXTURES_DIR, "non-existent-block"),
       ).rejects.toThrow();
     });
 
-    it('should handle existing block with trades correctly', async () => {
-      const result = await simulateStrategySimilarity(FIXTURES_DIR, 'similarity-test-block');
+    it("should handle existing block with trades correctly", async () => {
+      const result = await simulateStrategySimilarity(FIXTURES_DIR, "similarity-test-block");
 
       expect(result).toBeDefined();
-      expect(result.blockId).toBe('similarity-test-block');
+      expect(result.blockId).toBe("similarity-test-block");
       expect(result.similarPairs.length).toBeGreaterThan(0);
     });
   });

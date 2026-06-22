@@ -9,16 +9,13 @@ const MS_PER_DAY = 1000 * 60 * 60 * 24;
  * Ensures realistic pacing for strategy-filtered simulations where the global
  * portfolio frequency would otherwise overstate the number of opportunities.
  */
-export function estimateTradesPerYear(
-  sampleTrades: Trade[],
-  fallback: number
-): number {
+export function estimateTradesPerYear(sampleTrades: Trade[], fallback: number): number {
   if (sampleTrades.length < 2) {
     return Math.max(MIN_TRADES_PER_YEAR, fallback);
   }
 
   const sortedTrades = [...sampleTrades].sort(
-    (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime()
+    (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime(),
   );
 
   const firstDate = sortedTrades[0].dateOpened;

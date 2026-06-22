@@ -3,10 +3,7 @@
  */
 
 import type { Trade } from "../models/trade.ts";
-import {
-  combineAllLegGroups,
-  type CombinedTrade
-} from "../utils/combine-leg-groups.ts";
+import { combineAllLegGroups, type CombinedTrade } from "../utils/combine-leg-groups.ts";
 import {
   INDEXES,
   promisifyRequest,
@@ -35,10 +32,7 @@ export interface StoredTrade extends Trade {
 /**
  * Add trades for a block (batch operation)
  */
-export async function addTrades(
-  blockId: string,
-  trades: Trade[]
-): Promise<void> {
+export async function addTrades(blockId: string, trades: Trade[]): Promise<void> {
   if (trades.length === 0) return;
 
   await withWriteTransaction(STORES.TRADES, async (transaction) => {
@@ -61,9 +55,7 @@ export async function addTrades(
 /**
  * Get all trades for a block
  */
-export async function getTradesByBlock(
-  blockId: string
-): Promise<StoredTrade[]> {
+export async function getTradesByBlock(blockId: string): Promise<StoredTrade[]> {
   return withReadTransaction(STORES.TRADES, async (transaction) => {
     const store = transaction.objectStore(STORES.TRADES);
     const index = store.index(INDEXES.TRADES_BY_BLOCK);
@@ -94,7 +86,7 @@ export async function getTradesByBlock(
  */
 export async function getTradesByBlockWithOptions(
   blockId: string,
-  options: { combineLegGroups?: boolean; skipCache?: boolean } = {}
+  options: { combineLegGroups?: boolean; skipCache?: boolean } = {},
 ): Promise<(StoredTrade | (CombinedTrade & { blockId: string }))[]> {
   // If combining is enabled, check cache FIRST before fetching raw trades
   // This avoids the expensive raw trade fetch when we have cached data
@@ -149,19 +141,14 @@ function queueCombinedTradesCache(blockId: string, combinedTrades: CombinedTrade
 export async function getTradesByDateRange(
   blockId: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
 ): Promise<StoredTrade[]> {
   return withReadTransaction(STORES.TRADES, async (transaction) => {
     const store = transaction.objectStore(STORES.TRADES);
     const index = store.index("composite_block_date");
 
     // Create compound key range [blockId, startDate] to [blockId, endDate]
-    const range = IDBKeyRange.bound(
-      [blockId, startDate],
-      [blockId, endDate],
-      false,
-      false
-    );
+    const range = IDBKeyRange.bound([blockId, startDate], [blockId, endDate], false, false);
 
     const result = await promisifyRequest(index.getAll(range));
     return result;
@@ -173,7 +160,7 @@ export async function getTradesByDateRange(
  */
 export async function getTradesByStrategy(
   blockId: string,
-  strategy: string
+  strategy: string,
 ): Promise<StoredTrade[]> {
   return withReadTransaction(STORES.TRADES, async (transaction) => {
     const store = transaction.objectStore(STORES.TRADES);
@@ -237,10 +224,7 @@ export async function deleteTradesByBlock(blockId: string): Promise<void> {
 /**
  * Update trades for a block (replace all)
  */
-export async function updateTradesForBlock(
-  blockId: string,
-  trades: Trade[]
-): Promise<void> {
+export async function updateTradesForBlock(blockId: string, trades: Trade[]): Promise<void> {
   await withWriteTransaction(STORES.TRADES, async (transaction) => {
     // First delete existing trades
     const store = transaction.objectStore(STORES.TRADES);
@@ -305,9 +289,8 @@ export async function getTradeStatistics(blockId: string): Promise<{
   const winningTrades = trades.filter((trade) => trade.pl > 0).length;
   const losingTrades = trades.filter((trade) => trade.pl < 0).length;
   const totalCommissions = trades.reduce(
-    (sum, trade) =>
-      sum + trade.openingCommissionsFees + trade.closingCommissionsFees,
-    0
+    (sum, trade) => sum + trade.openingCommissionsFees + trade.closingCommissionsFees,
+    0,
   );
 
   // Get date range
@@ -316,9 +299,7 @@ export async function getTradeStatistics(blockId: string): Promise<{
   const end = new Date(Math.max(...dates.map((d) => d.getTime())));
 
   // Get unique strategies
-  const strategies = Array.from(
-    new Set(trades.map((trade) => trade.strategy))
-  ).sort();
+  const strategies = Array.from(new Set(trades.map((trade) => trade.strategy))).sort();
 
   return {
     totalTrades,
@@ -334,10 +315,7 @@ export async function getTradeStatistics(blockId: string): Promise<{
 /**
  * Search trades by text (strategy, legs, reason for close)
  */
-export async function searchTrades(
-  blockId: string,
-  query: string
-): Promise<StoredTrade[]> {
+export async function searchTrades(blockId: string, query: string): Promise<StoredTrade[]> {
   const trades = await getTradesByBlock(blockId);
   const lowerQuery = query.toLowerCase();
 
@@ -345,8 +323,7 @@ export async function searchTrades(
     (trade) =>
       trade.strategy.toLowerCase().includes(lowerQuery) ||
       trade.legs.toLowerCase().includes(lowerQuery) ||
-      (trade.reasonForClose &&
-        trade.reasonForClose.toLowerCase().includes(lowerQuery))
+      (trade.reasonForClose && trade.reasonForClose.toLowerCase().includes(lowerQuery)),
   );
 }
 
@@ -356,7 +333,7 @@ export async function searchTrades(
 export async function getTradesPage(
   blockId: string,
   offset: number,
-  limit: number
+  limit: number,
 ): Promise<{ trades: StoredTrade[]; total: number }> {
   const allTrades = await getTradesByBlock(blockId);
   const total = allTrades.length;
@@ -411,8 +388,8 @@ export async function exportTradesToCSV(blockId: string): Promise<string> {
       trade.dateOpened instanceof Date
         ? trade.dateOpened.toISOString().split("T")[0]
         : typeof trade.dateOpened === "string"
-        ? new Date(trade.dateOpened).toISOString().split("T")[0]
-        : trade.dateOpened;
+          ? new Date(trade.dateOpened).toISOString().split("T")[0]
+          : trade.dateOpened;
 
     return [
       dateOpened,
@@ -424,8 +401,8 @@ export async function exportTradesToCSV(blockId: string): Promise<string> {
       trade.dateClosed instanceof Date
         ? trade.dateClosed.toISOString().split("T")[0]
         : typeof trade.dateClosed === "string" && trade.dateClosed !== ""
-        ? new Date(trade.dateClosed).toISOString().split("T")[0]
-        : "",
+          ? new Date(trade.dateClosed).toISOString().split("T")[0]
+          : "",
       trade.timeClosed || "",
       trade.avgClosingCost?.toString() || "",
       trade.reasonForClose || "",

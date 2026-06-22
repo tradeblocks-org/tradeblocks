@@ -15,23 +15,12 @@ import type { Trade } from "@tradeblocks/lib";
 import { getConnection } from "../db/connection.ts";
 import { getProfile, listProfiles } from "../db/profile-schemas.ts";
 import { filterByStrategy } from "./shared/filters.ts";
-import {
-  buildLookaheadFreeQuery,
-  type MarketLookupKey,
-} from "../utils/field-timing.ts";
-import {
-  DEFAULT_MARKET_TICKER,
-  marketTickerDateKey,
-  resolveTradeTicker,
-} from "../utils/ticker.ts";
+import { buildLookaheadFreeQuery, type MarketLookupKey } from "../utils/field-timing.ts";
+import { DEFAULT_MARKET_TICKER, marketTickerDateKey, resolveTradeTicker } from "../utils/ticker.ts";
 import { computeSliceStats, type SliceStats } from "../utils/analysis-stats.ts";
 import { buildFilterPredicate, type FilterPredicate } from "../utils/filter-predicates.ts";
 import { withSyncedBlock } from "./middleware/sync-middleware.ts";
-import {
-  upgradeToReadWrite,
-  downgradeToReadOnly,
-  getConnectionMode,
-} from "../db/connection.ts";
+import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.ts";
 import { syncAllBlocks } from "../sync/index.ts";
 
 // =============================================================================
@@ -92,7 +81,7 @@ function resultToRecords(result: {
 }
 
 function recordsByTickerDate(
-  records: Record<string, unknown>[]
+  records: Record<string, unknown>[],
 ): Map<string, Record<string, unknown>> {
   const mapped = new Map<string, Record<string, unknown>>();
   for (const record of records) {
@@ -150,8 +139,8 @@ function getTimeBucket(timeOpened: string | undefined): string | null {
 
   // morning: 09:30-11:00, midday: 11:00-14:00, afternoon: 14:00-16:00
   if (totalMinutes < 570) return null; // before 09:30
-  if (totalMinutes < 660) return "morning";   // 09:30-11:00
-  if (totalMinutes < 840) return "midday";    // 11:00-14:00
+  if (totalMinutes < 660) return "morning"; // 09:30-11:00
+  if (totalMinutes < 840) return "midday"; // 11:00-14:00
   if (totalMinutes <= 960) return "afternoon"; // 14:00-16:00
   return null; // after 16:00
 }
@@ -175,7 +164,7 @@ interface TradeWithMarket {
 async function loadTradesAndMarket(
   baseDir: string,
   blockId: string,
-  strategyName: string
+  strategyName: string,
 ): Promise<{
   matched: TradeWithMarket[];
   unmatchedCount: number;
@@ -267,7 +256,7 @@ function createNumericBuckets(values: number[]): { label: string; min: number; m
  */
 function findBucket(
   value: number,
-  buckets: { label: string; min: number; max: number }[]
+  buckets: { label: string; min: number; max: number }[],
 ): string | null {
   for (const bucket of buckets) {
     if (value >= bucket.min && value <= bucket.max) return bucket.label;
@@ -291,7 +280,7 @@ export const analyzeStructureFitSchema = z.object({
 
 export async function handleAnalyzeStructureFit(
   input: z.infer<typeof analyzeStructureFitSchema>,
-  baseDir: string
+  baseDir: string,
 ): Promise<ReturnType<typeof createToolOutput>> {
   const { blockId, strategyName } = input;
   const minTrades = input.minTrades ?? 10;
@@ -302,7 +291,7 @@ export async function handleAnalyzeStructureFit(
   if (!profile) {
     return createToolOutput(
       `No profile found for strategy '${strategyName}' in block '${blockId}'. Create one with profile_strategy first.`,
-      { error: "profile_not_found" }
+      { error: "profile_not_found" },
     );
   }
 
@@ -310,7 +299,7 @@ export async function handleAnalyzeStructureFit(
   const { matched, unmatchedCount, allTrades } = await loadTradesAndMarket(
     baseDir,
     blockId,
-    strategyName
+    strategyName,
   );
 
   const warnings: string[] = [];
@@ -318,20 +307,20 @@ export async function handleAnalyzeStructureFit(
   if (allTrades.length === 0) {
     return createToolOutput(
       `No trades found for strategy '${strategyName}' in block '${blockId}'.`,
-      { error: "no_trades" }
+      { error: "no_trades" },
     );
   }
 
   if (unmatchedCount > 0) {
     warnings.push(
-      `${unmatchedCount} of ${allTrades.length} trades had no matching market data and were excluded from market-based analysis.`
+      `${unmatchedCount} of ${allTrades.length} trades had no matching market data and were excluded from market-based analysis.`,
     );
   }
 
   if (matched.length === 0) {
     return createToolOutput(
       `No trades could be matched to market data for strategy '${strategyName}'.`,
-      { error: "no_market_match", warnings }
+      { error: "no_market_match", warnings },
     );
   }
 
@@ -427,7 +416,7 @@ export async function handleAnalyzeStructureFit(
     for (const [bucketLabel, stats] of Object.entries(bucketStats)) {
       if (stats.tradeCount > 0 && stats.tradeCount < minTrades) {
         warnings.push(
-          `${dimName}/${bucketLabel}: only ${stats.tradeCount} trades (< ${minTrades} threshold)`
+          `${dimName}/${bucketLabel}: only ${stats.tradeCount} trades (< ${minTrades} threshold)`,
         );
       }
     }
@@ -525,7 +514,7 @@ export const validateEntryFiltersSchema = z.object({
 
 export async function handleValidateEntryFilters(
   input: z.infer<typeof validateEntryFiltersSchema>,
-  baseDir: string
+  baseDir: string,
 ): Promise<ReturnType<typeof createToolOutput>> {
   const { blockId, strategyName } = input;
   const minTrades = input.minTrades ?? 10;
@@ -537,7 +526,7 @@ export async function handleValidateEntryFilters(
   if (!profile) {
     return createToolOutput(
       `No profile found for strategy '${strategyName}' in block '${blockId}'. Create one with profile_strategy first.`,
-      { error: "profile_not_found" }
+      { error: "profile_not_found" },
     );
   }
 
@@ -545,7 +534,7 @@ export async function handleValidateEntryFilters(
   if (!profile.entryFilters || profile.entryFilters.length === 0) {
     return createToolOutput(
       `Profile '${strategyName}' has no entry_filters defined. Add filters via profile_strategy to enable validation.`,
-      { no_filters: true }
+      { no_filters: true },
     );
   }
 
@@ -557,7 +546,7 @@ export async function handleValidateEntryFilters(
   if (marketFilters.length === 0) {
     return createToolOutput(
       `Profile '${strategyName}' has ${allFilters.length} filter(s) but all are tagged source:'execution' (platform-level). No market-data filters to validate.`,
-      { no_market_filters: true, execution_filters: executionFilters }
+      { no_market_filters: true, execution_filters: executionFilters },
     );
   }
 
@@ -565,34 +554,34 @@ export async function handleValidateEntryFilters(
   const { matched, unmatchedCount, allTrades } = await loadTradesAndMarket(
     baseDir,
     blockId,
-    strategyName
+    strategyName,
   );
 
   const warnings: string[] = [];
 
   if (executionFilters.length > 0) {
     warnings.push(
-      `${executionFilters.length} execution-level filter(s) skipped (not testable against market data): ${executionFilters.map((f) => f.description || f.field).join(", ")}`
+      `${executionFilters.length} execution-level filter(s) skipped (not testable against market data): ${executionFilters.map((f) => f.description || f.field).join(", ")}`,
     );
   }
 
   if (allTrades.length === 0) {
     return createToolOutput(
       `No trades found for strategy '${strategyName}' in block '${blockId}'.`,
-      { error: "no_trades" }
+      { error: "no_trades" },
     );
   }
 
   if (unmatchedCount > 0) {
     warnings.push(
-      `${unmatchedCount} of ${allTrades.length} trades had no matching market data and were excluded.`
+      `${unmatchedCount} of ${allTrades.length} trades had no matching market data and were excluded.`,
     );
   }
 
   if (matched.length === 0) {
     return createToolOutput(
       `No trades could be matched to market data for strategy '${strategyName}'.`,
-      { error: "no_market_match", warnings }
+      { error: "no_market_match", warnings },
     );
   }
 
@@ -740,10 +729,7 @@ export async function handleValidateEntryFilters(
 
   // Check per-filter: if entered performs worse than filtered_out, suggest removal
   for (const [filterDesc, { entered, filtered_out }] of Object.entries(perFilter)) {
-    if (
-      entered.tradeCount >= minTrades &&
-      filtered_out.tradeCount >= minTrades
-    ) {
+    if (entered.tradeCount >= minTrades && filtered_out.tradeCount >= minTrades) {
       if (entered.avgPl < filtered_out.avgPl && filtered_out.avgPl > 0) {
         profileUpdateHints.push({
           field: filterDesc,
@@ -770,24 +756,25 @@ export async function handleValidateEntryFilters(
   // Thin-data warnings
   if (baseline.tradeCount > 0 && baseline.tradeCount < minTrades) {
     warnings.push(
-      `Baseline (all filters): only ${baseline.tradeCount} trades (< ${minTrades} threshold)`
+      `Baseline (all filters): only ${baseline.tradeCount} trades (< ${minTrades} threshold)`,
     );
   }
   for (const [filterDesc, { entered, filtered_out }] of Object.entries(perFilter)) {
     if (entered.tradeCount > 0 && entered.tradeCount < minTrades) {
       warnings.push(
-        `${filterDesc} entered: only ${entered.tradeCount} trades (< ${minTrades} threshold)`
+        `${filterDesc} entered: only ${entered.tradeCount} trades (< ${minTrades} threshold)`,
       );
     }
     if (filtered_out.tradeCount > 0 && filtered_out.tradeCount < minTrades) {
       warnings.push(
-        `${filterDesc} filtered_out: only ${filtered_out.tradeCount} trades (< ${minTrades} threshold)`
+        `${filterDesc} filtered_out: only ${filtered_out.tradeCount} trades (< ${minTrades} threshold)`,
       );
     }
   }
 
   // Summary text
-  const execNote = executionFilters.length > 0 ? ` (${executionFilters.length} execution filter(s) skipped)` : "";
+  const execNote =
+    executionFilters.length > 0 ? ` (${executionFilters.length} execution filter(s) skipped)` : "";
   const summaryText = `Filter validation for '${strategyName}': ${filters.length} market filter(s) analyzed across ${matched.length} trades${execNote}. Baseline (all market filters): ${baseline.tradeCount} trades, win rate ${baseline.winRate.toFixed(1)}%, avg P&L $${baseline.avgPl.toFixed(2)}. ${profileUpdateHints.length} update hint(s).`;
 
   return createToolOutput(summaryText, {
@@ -798,7 +785,9 @@ export async function handleValidateEntryFilters(
       single: ablationSingle,
       pairs: ablationPairs,
     },
-    execution_filters_skipped: executionFilters.map((f) => f.description || `${f.field} ${f.operator} ${f.value}`),
+    execution_filters_skipped: executionFilters.map(
+      (f) => f.description || `${f.field} ${f.operator} ${f.value}`,
+    ),
     profile_update_hints: profileUpdateHints,
     warnings,
   });
@@ -822,8 +811,11 @@ export const portfolioStructureMapSchema = z.object({
 
 export async function handlePortfolioStructureMap(
   input: z.infer<typeof portfolioStructureMapSchema>,
-  baseDir: string
-): Promise<ReturnType<typeof createToolOutput> | { content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
+  baseDir: string,
+): Promise<
+  | ReturnType<typeof createToolOutput>
+  | { content: Array<{ type: "text"; text: string }>; isError?: boolean }
+> {
   try {
     const { blockId, minTrades } = portfolioStructureMapSchema.parse(input);
     const conn = await getConnection(baseDir);
@@ -858,7 +850,9 @@ export async function handlePortfolioStructureMap(
       try {
         block = await loadBlock(baseDir, profile.blockId);
       } catch {
-        warnings.push(`Could not load block '${profile.blockId}' for strategy '${profile.strategyName}'`);
+        warnings.push(
+          `Could not load block '${profile.blockId}' for strategy '${profile.strategyName}'`,
+        );
         continue;
       }
 
@@ -871,7 +865,9 @@ export async function handlePortfolioStructureMap(
         }
       }
       if (trades.length === 0) {
-        warnings.push(`No trades found for strategy '${profile.strategyName}' in block '${profile.blockId}'`);
+        warnings.push(
+          `No trades found for strategy '${profile.strategyName}' in block '${profile.blockId}'`,
+        );
         continue;
       }
 
@@ -927,11 +923,7 @@ export async function handlePortfolioStructureMap(
 
       // Handle missing Trend_Direction
       let trend: TrendLabel | null = null;
-      if (
-        trendRaw === null ||
-        trendRaw === undefined ||
-        trendRaw === ""
-      ) {
+      if (trendRaw === null || trendRaw === undefined || trendRaw === "") {
         unknownTrendCount++;
         if (!unknownTrendPls.has(strategyName)) {
           unknownTrendPls.set(strategyName, []);
@@ -1001,7 +993,7 @@ export async function handlePortfolioStructureMap(
           // Thin-data warning
           if (pls.length > 0 && pls.length < minTrades) {
             warnings.push(
-              `Thin data: '${stratName}' has only ${pls.length} trades in ${regimeLabel}/${trend} (threshold: ${minTrades})`
+              `Thin data: '${stratName}' has only ${pls.length} trades in ${regimeLabel}/${trend} (threshold: ${minTrades})`,
             );
           }
         }
@@ -1026,7 +1018,7 @@ export async function handlePortfolioStructureMap(
     // Handle unknown trend trades
     if (unknownTrendCount > 0) {
       warnings.push(
-        `${unknownTrendCount} trades had missing or unknown Trend_Direction. Consider running enrich_market_data to populate Trend_Direction.`
+        `${unknownTrendCount} trades had missing or unknown Trend_Direction. Consider running enrich_market_data to populate Trend_Direction.`,
       );
     }
 
@@ -1034,10 +1026,7 @@ export async function handlePortfolioStructureMap(
     const unknownTrendStats: Record<string, SliceStats> | undefined =
       unknownTrendPls.size > 0
         ? Object.fromEntries(
-            [...unknownTrendPls.entries()].map(([name, pls]) => [
-              name,
-              computeSliceStats(pls),
-            ])
+            [...unknownTrendPls.entries()].map(([name, pls]) => [name, computeSliceStats(pls)]),
           )
         : undefined;
 
@@ -1086,10 +1075,7 @@ export async function handlePortfolioStructureMap(
  * This includes portfolio_structure_map (from Plan 03) and
  * analyze_structure_fit + validate_entry_filters (from Plan 02, if present).
  */
-export function registerProfileAnalysisTools(
-  server: McpServer,
-  baseDir: string
-): void {
+export function registerProfileAnalysisTools(server: McpServer, baseDir: string): void {
   // portfolio_structure_map: optional blockId means we can't always use withSyncedBlock.
   // When blockId is provided, sync that block. When omitted, sync all blocks.
   server.registerTool(
@@ -1119,7 +1105,7 @@ export function registerProfileAnalysisTools(
       }
 
       return handlePortfolioStructureMap(input, baseDir);
-    }
+    },
   );
 
   // -------------------------------------------------------------------------
@@ -1137,7 +1123,7 @@ export function registerProfileAnalysisTools(
     },
     withSyncedBlock(baseDir, async (input, ctx) => {
       return handleAnalyzeStructureFit(input, ctx.baseDir);
-    })
+    }),
   );
 
   // -------------------------------------------------------------------------
@@ -1155,6 +1141,6 @@ export function registerProfileAnalysisTools(
     },
     withSyncedBlock(baseDir, async (input, ctx) => {
       return handleValidateEntryFilters(input, ctx.baseDir);
-    })
+    }),
   );
 }

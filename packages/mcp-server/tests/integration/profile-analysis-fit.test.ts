@@ -32,7 +32,7 @@ let tempDir: string;
 async function createBlockWithTrades(
   baseDir: string,
   blockId: string,
-  trades: Array<{ date: string; time: string; strategy: string; pl: number }>
+  trades: Array<{ date: string; time: string; strategy: string; pl: number }>,
 ): Promise<void> {
   const blockPath = path.join(baseDir, blockId);
   await fs.mkdir(blockPath, { recursive: true });
@@ -41,7 +41,7 @@ async function createBlockWithTrades(
     "Date Opened,Time Opened,Opening Price,Legs,Premium,Closing Price,Date Closed,Time Closed,Avg. Closing Cost,Reason For Close,P/L,No. of Contracts,Funds at Close,Margin Req.,Strategy,Opening Commissions + Fees,Closing Commissions + Fees";
   const rows = trades.map(
     (t) =>
-      `${t.date},${t.time},1.50,SPX Put Spread,1.50,0.50,${t.date},15:00:00,0.50,Profit Target,${t.pl},1,10000,5000,${t.strategy},0,0`
+      `${t.date},${t.time},1.50,SPX Put Spread,1.50,0.50,${t.date},15:00:00,0.50,Profit Target,${t.pl},1,10000,5000,${t.strategy},0,0`,
   );
   const csv = [header, ...rows].join("\n");
   await fs.writeFile(path.join(blockPath, "tradelog.csv"), csv);
@@ -62,7 +62,7 @@ async function insertMarketData(
     vixClose: number;
     rsi14: number;
     dayOfWeek: number;
-  }>
+  }>,
 ): Promise<void> {
   const c = conn as {
     run: (sql: string) => Promise<void>;
@@ -72,33 +72,33 @@ async function insertMarketData(
     // market.enriched (SPX) — computed indicators + calendar fields (no OHLCV)
     await c.run(
       `INSERT OR IGNORE INTO market.enriched (ticker, date, Prior_Close, Gap_Pct, Day_of_Week, RSI_14)
-       VALUES ('SPX', '${row.date}', 4490, 0.1, ${row.dayOfWeek}, ${row.rsi14})`
+       VALUES ('SPX', '${row.date}', 4490, 0.1, ${row.dayOfWeek}, ${row.rsi14})`,
     );
 
     // market.spot (SPX minute bars) — two bars so the spot_daily VIEW aggregates a daily row.
     await c.run(
       `INSERT OR IGNORE INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
        VALUES ('SPX', '${row.date}', '09:30', 4500, 4520, 4480, 4505, 4499, 4501),
-              ('SPX', '${row.date}', '16:00', 4505, 4520, 4480, 4510, 4509, 4511)`
+              ('SPX', '${row.date}', '16:00', 4505, 4520, 4480, 4510, 4509, 4511)`,
     );
 
     // market.enriched (VIX) — VIX-family IVR/IVP live here post-Phase-6.
     await c.run(
       `INSERT OR IGNORE INTO market.enriched (ticker, date, ivr, ivp)
-       VALUES ('VIX', '${row.date}', 50, 50)`
+       VALUES ('VIX', '${row.date}', 50, 50)`,
     );
 
     // market.spot (VIX minute bars) — feed the spot_daily view for VIX OHLCV.
     await c.run(
       `INSERT OR IGNORE INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
        VALUES ('VIX', '${row.date}', '09:30', ${row.vixClose + 0.5}, ${row.vixClose + 1}, ${row.vixClose - 0.5}, ${row.vixClose + 0.2}, ${row.vixClose + 0.4}, ${row.vixClose + 0.6}),
-              ('VIX', '${row.date}', '16:00', ${row.vixClose + 0.2}, ${row.vixClose + 1}, ${row.vixClose - 0.5}, ${row.vixClose}, ${row.vixClose - 0.1}, ${row.vixClose + 0.1})`
+              ('VIX', '${row.date}', '16:00', ${row.vixClose + 0.2}, ${row.vixClose + 1}, ${row.vixClose - 0.5}, ${row.vixClose}, ${row.vixClose - 0.1}, ${row.vixClose + 0.1})`,
     );
 
     // market.enriched_context — cross-ticker Vol_Regime.
     await c.run(
       `INSERT OR IGNORE INTO market.enriched_context (date, Vol_Regime)
-       VALUES ('${row.date}', ${row.volRegime})`
+       VALUES ('${row.date}', ${row.volRegime})`,
     );
   }
 }
@@ -110,7 +110,7 @@ async function createProfile(
   conn: unknown,
   blockId: string,
   strategyName: string,
-  overrides: Record<string, unknown> = {}
+  overrides: Record<string, unknown> = {},
 ): Promise<void> {
   const c = conn as {
     run: (sql: string) => Promise<void>;
@@ -139,15 +139,11 @@ function parseToolData(result: {
     resource?: { text: string };
   }>;
 }): Record<string, unknown> {
-  const resource = result.content.find(
-    (c: { type: string }) => c.type === "resource"
-  );
+  const resource = result.content.find((c: { type: string }) => c.type === "resource");
   if (!resource || !("resource" in resource)) {
     throw new Error("No resource content in tool output");
   }
-  return JSON.parse(
-    (resource as { resource: { text: string } }).resource.text
-  );
+  return JSON.parse((resource as { resource: { text: string } }).resource.text);
 }
 
 // Market dates — consecutive trading days for LAG CTE to work
@@ -217,7 +213,7 @@ describe("analyze_structure_fit", () => {
 
     const result = await handleAnalyzeStructureFit(
       { blockId: "block-1", strategyName: "Iron Condor", minTrades: 1 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);
@@ -260,14 +256,12 @@ describe("analyze_structure_fit", () => {
 
     // Profile with VIX_Close filter (close-derived, gets prev_ prefix)
     await createProfile(conn, "block-1", "Iron Condor", {
-      entryFilters: [
-        { field: "VIX_Close", operator: "<", value: 20, description: "Low VIX" },
-      ],
+      entryFilters: [{ field: "VIX_Close", operator: "<", value: 20, description: "Low VIX" }],
     });
 
     const result = await handleAnalyzeStructureFit(
       { blockId: "block-1", strategyName: "Iron Condor", minTrades: 1 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);
@@ -288,7 +282,7 @@ describe("analyze_structure_fit", () => {
 
     const result = await handleAnalyzeStructureFit(
       { blockId: "block-1", strategyName: "Iron Condor", minTrades: 1 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);
@@ -308,7 +302,7 @@ describe("analyze_structure_fit", () => {
     // High threshold to trigger warnings
     const result = await handleAnalyzeStructureFit(
       { blockId: "block-1", strategyName: "Iron Condor", minTrades: 50 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);
@@ -324,7 +318,7 @@ describe("analyze_structure_fit", () => {
 
     const result = await handleAnalyzeStructureFit(
       { blockId: "block-1", strategyName: "NonExistent", minTrades: 10 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);
@@ -340,14 +334,12 @@ describe("validate_entry_filters", () => {
 
     // VIX_Close < 20 filter — some trades will pass, some won't
     await createProfile(conn, "block-1", "Iron Condor", {
-      entryFilters: [
-        { field: "VIX_Close", operator: "<", value: 20, description: "Low VIX" },
-      ],
+      entryFilters: [{ field: "VIX_Close", operator: "<", value: 20, description: "Low VIX" }],
     });
 
     const result = await handleValidateEntryFilters(
       { blockId: "block-1", strategyName: "Iron Condor", minTrades: 1 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);
@@ -364,7 +356,9 @@ describe("validate_entry_filters", () => {
 
     const entered = filterData.entered as Record<string, number>;
     const filteredOut = filterData.filtered_out as Record<string, number>;
-    expect(entered.tradeCount + filteredOut.tradeCount + (filterData.no_data_count as number)).toBeGreaterThan(0);
+    expect(
+      entered.tradeCount + filteredOut.tradeCount + (filterData.no_data_count as number),
+    ).toBeGreaterThan(0);
   });
 
   it("runs ablation study with single and pair removal", async () => {
@@ -382,12 +376,15 @@ describe("validate_entry_filters", () => {
 
     const result = await handleValidateEntryFilters(
       { blockId: "block-1", strategyName: "Iron Condor", minTrades: 1 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);
     expect(data.ablation).toBeDefined();
-    const ablation = data.ablation as { single: Record<string, unknown>; pairs: Record<string, unknown> };
+    const ablation = data.ablation as {
+      single: Record<string, unknown>;
+      pairs: Record<string, unknown>;
+    };
 
     // Single removal: one entry per filter
     expect(Object.keys(ablation.single).length).toBe(2);
@@ -402,14 +399,12 @@ describe("validate_entry_filters", () => {
     await createBlockWithTrades(tempDir, "block-1", TRADES);
 
     await createProfile(conn, "block-1", "Iron Condor", {
-      entryFilters: [
-        { field: "VIX_Close", operator: "<", value: 20, description: "Low VIX" },
-      ],
+      entryFilters: [{ field: "VIX_Close", operator: "<", value: 20, description: "Low VIX" }],
     });
 
     const result = await handleValidateEntryFilters(
       { blockId: "block-1", strategyName: "Iron Condor", minTrades: 1 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);
@@ -437,7 +432,7 @@ describe("validate_entry_filters", () => {
 
     const result = await handleValidateEntryFilters(
       { blockId: "block-1", strategyName: "Iron Condor", minTrades: 10 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);
@@ -450,15 +445,13 @@ describe("validate_entry_filters", () => {
     await createBlockWithTrades(tempDir, "block-1", TRADES);
 
     await createProfile(conn, "block-1", "Iron Condor", {
-      entryFilters: [
-        { field: "VIX_Close", operator: "<", value: 20, description: "Low VIX" },
-      ],
+      entryFilters: [{ field: "VIX_Close", operator: "<", value: 20, description: "Low VIX" }],
     });
 
     // High threshold to trigger warnings
     const result = await handleValidateEntryFilters(
       { blockId: "block-1", strategyName: "Iron Condor", minTrades: 50 },
-      tempDir
+      tempDir,
     );
 
     const data = parseToolData(result);

@@ -83,7 +83,7 @@ export function deduplicateContracts(contracts: ContractRow[]): ContractRow[] {
     const existing = map.get(key);
     if (!existing) {
       map.set(key, c);
-    } else if (c.ticker.startsWith('SPXW') && !existing.ticker.startsWith('SPXW')) {
+    } else if (c.ticker.startsWith("SPXW") && !existing.ticker.startsWith("SPXW")) {
       map.set(key, c);
     }
   }
@@ -132,7 +132,7 @@ export async function loadChain(
 ): Promise<ChainLoadResult> {
   throw new Error(
     "chain-loader.loadChain has been removed. " +
-    "Use stores.chain.readChain(underlying, date) instead — empty array is the new skip signal.",
+      "Use stores.chain.readChain(underlying, date) instead — empty array is the new skip signal.",
   );
 }
 
@@ -150,6 +150,6 @@ export async function loadChainsBulk(
 ): Promise<Map<string, ChainLoadResult>> {
   throw new Error(
     "chain-loader.loadChainsBulk has been removed. " +
-    "Use a per-date loop with stores.chain.readChain(underlying, date) instead.",
+      "Use a per-date loop with stores.chain.readChain(underlying, date) instead.",
   );
 }

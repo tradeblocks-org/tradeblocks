@@ -37,7 +37,7 @@ export const TEMPLATE_BLOCK_ID = "_template";
 export async function attachBacktestsDb(
   conn: DuckDBConnection,
   backtestsDbPath: string,
-  mode: "read_write" | "read_only"
+  mode: "read_write" | "read_only",
 ): Promise<void> {
   await fs.mkdir(path.dirname(backtestsDbPath), { recursive: true });
   const readOnlyClause = mode === "read_only" ? " (READ_ONLY)" : "";
@@ -47,9 +47,17 @@ export async function attachBacktestsDb(
     const msg = error instanceof Error ? error.message : String(error);
     if (msg.includes("corrupt") || msg.includes("Invalid") || msg.includes("cannot open")) {
       console.error(`backtests.duckdb appears corrupted at ${backtestsDbPath}. Recreating.`);
-      try { await fs.unlink(backtestsDbPath); } catch { /* file may not exist */ }
+      try {
+        await fs.unlink(backtestsDbPath);
+      } catch {
+        /* file may not exist */
+      }
       // Also try removing WAL file
-      try { await fs.unlink(backtestsDbPath + ".wal"); } catch { /* ignore */ }
+      try {
+        await fs.unlink(backtestsDbPath + ".wal");
+      } catch {
+        /* ignore */
+      }
       await conn.run(`ATTACH '${backtestsDbPath}' AS backtests${readOnlyClause}`);
     } else {
       throw new Error(`Failed to attach backtests.duckdb at ${backtestsDbPath}: ${msg}`);
@@ -118,7 +126,7 @@ export async function ensureBacktestsTables(conn: DuckDBConnection): Promise<voi
   `);
 
   // Migration: add sortino, cagr, total_return columns (Phase 79)
-  const migrationCols = ['sortino', 'cagr', 'total_return'];
+  const migrationCols = ["sortino", "cagr", "total_return"];
   for (const col of migrationCols) {
     try {
       await conn.run(`ALTER TABLE backtests.run_metadata ADD COLUMN ${col} DOUBLE`);

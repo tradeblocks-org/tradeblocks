@@ -25,7 +25,7 @@ export function TradingFrequencyCard({ trades, tradesPerYear }: TradingFrequency
 
     // Get date range
     const sortedTrades = [...trades].sort(
-      (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime()
+      (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime(),
     );
     const firstDate = sortedTrades[0].dateOpened;
     const lastDate = sortedTrades[sortedTrades.length - 1].dateOpened;
@@ -33,7 +33,7 @@ export function TradingFrequencyCard({ trades, tradesPerYear }: TradingFrequency
     // Calculate time elapsed
     const daysElapsed = Math.max(
       1,
-      (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)
+      (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24),
     );
     const monthsElapsed = daysElapsed / 30.44; // Average days per month
     const yearsElapsed = daysElapsed / 365.25;
@@ -111,8 +111,8 @@ export function TradingFrequencyCard({ trades, tradesPerYear }: TradingFrequency
             <p className="text-sm text-muted-foreground">Based on</p>
           </div>
           <p className="text-sm" data-testid="frequency-summary">
-            <span className="font-semibold">{stats.totalTrades.toLocaleString()}</span>{' '}
-            {stats.totalTrades === 1 ? 'trade' : 'trades'} over{' '}
+            <span className="font-semibold">{stats.totalTrades.toLocaleString()}</span>{" "}
+            {stats.totalTrades === 1 ? "trade" : "trades"} over{" "}
             <span className="font-semibold">{formatTimePeriod()}</span>
           </p>
         </div>

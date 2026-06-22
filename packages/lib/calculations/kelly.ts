@@ -16,7 +16,7 @@ export interface KellyMetrics {
   // Enhanced metrics for realistic interpretation
   avgWinPct?: number; // Average win as percentage of risk/margin
   avgLossPct?: number; // Average loss as percentage of risk/margin
-  calculationMethod?: 'absolute' | 'percentage'; // How Kelly was calculated
+  calculationMethod?: "absolute" | "percentage"; // How Kelly was calculated
   hasUnrealisticValues?: boolean; // True if absolute values are unrealistic
   normalizedKellyPct?: number; // Kelly % using percentage returns (if available)
 }
@@ -34,7 +34,11 @@ const ZERO_METRICS: KellyMetrics = {
 /**
  * Detect if absolute P&L values are unrealistic (likely from unlimited compounding)
  */
-function hasUnrealisticAbsoluteValues(avgWin: number, avgLoss: number, startingCapital?: number): boolean {
+function hasUnrealisticAbsoluteValues(
+  avgWin: number,
+  avgLoss: number,
+  startingCapital?: number,
+): boolean {
   // If no starting capital provided, use heuristic thresholds
   if (!startingCapital) {
     // Values over $10M are likely unrealistic for most retail traders
@@ -80,13 +84,13 @@ function calculateKellyFromReturns(trades: Trade[]): {
   const totalTrades = winReturns.length + lossReturns.length;
   const winRate = totalTrades > 0 ? winReturns.length / totalTrades : 0;
 
-  const avgWinPct = winReturns.length > 0
-    ? winReturns.reduce((sum, val) => sum + val, 0) / winReturns.length
-    : 0;
+  const avgWinPct =
+    winReturns.length > 0 ? winReturns.reduce((sum, val) => sum + val, 0) / winReturns.length : 0;
 
-  const avgLossPct = lossReturns.length > 0
-    ? lossReturns.reduce((sum, val) => sum + val, 0) / lossReturns.length
-    : 0;
+  const avgLossPct =
+    lossReturns.length > 0
+      ? lossReturns.reduce((sum, val) => sum + val, 0) / lossReturns.length
+      : 0;
 
   const hasValidKelly = winReturns.length > 0 && lossReturns.length > 0 && avgLossPct > 0;
 
@@ -124,10 +128,7 @@ function calculateKellyFromReturns(trades: Trade[]): {
  * @param trades - Array of trades to analyze
  * @param startingCapital - Optional starting capital for unrealistic value detection
  */
-export function calculateKellyMetrics(
-  trades: Trade[],
-  startingCapital?: number
-): KellyMetrics {
+export function calculateKellyMetrics(trades: Trade[], startingCapital?: number): KellyMetrics {
   if (trades.length === 0) {
     return ZERO_METRICS;
   }
@@ -147,12 +148,8 @@ export function calculateKellyMetrics(
 
   const totalTrades = trades.length;
   const winRate = wins.length / totalTrades;
-  const avgWin = wins.length > 0
-    ? wins.reduce((sum, val) => sum + val, 0) / wins.length
-    : 0;
-  const avgLoss = losses.length > 0
-    ? losses.reduce((sum, val) => sum + val, 0) / losses.length
-    : 0;
+  const avgWin = wins.length > 0 ? wins.reduce((sum, val) => sum + val, 0) / wins.length : 0;
+  const avgLoss = losses.length > 0 ? losses.reduce((sum, val) => sum + val, 0) / losses.length : 0;
 
   // Check if we can calculate valid Kelly metrics
   const hasValidKelly = wins.length > 0 && losses.length > 0 && avgLoss > 0;
@@ -178,11 +175,13 @@ export function calculateKellyMetrics(
       avgWin,
       avgLoss,
       hasValidKelly: false,
-      calculationMethod: 'absolute',
+      calculationMethod: "absolute",
       hasUnrealisticValues: unrealistic,
       avgWinPct: normalizedMetrics?.avgWinPct,
       avgLossPct: normalizedMetrics?.avgLossPct,
-      normalizedKellyPct: normalizedMetrics?.hasValidKelly ? normalizedMetrics.fraction * 100 : undefined,
+      normalizedKellyPct: normalizedMetrics?.hasValidKelly
+        ? normalizedMetrics.fraction * 100
+        : undefined,
     };
   }
 
@@ -199,11 +198,14 @@ export function calculateKellyMetrics(
     avgWin,
     avgLoss,
     hasValidKelly: true,
-    calculationMethod: (normalizedMetrics && normalizedMetrics.hasValidKelly) ? 'percentage' : 'absolute',
+    calculationMethod:
+      normalizedMetrics && normalizedMetrics.hasValidKelly ? "percentage" : "absolute",
     hasUnrealisticValues: unrealistic,
     avgWinPct: normalizedMetrics?.avgWinPct,
     avgLossPct: normalizedMetrics?.avgLossPct,
-    normalizedKellyPct: normalizedMetrics?.hasValidKelly ? normalizedMetrics.fraction * 100 : undefined,
+    normalizedKellyPct: normalizedMetrics?.hasValidKelly
+      ? normalizedMetrics.fraction * 100
+      : undefined,
   };
 }
 
@@ -215,7 +217,7 @@ export function calculateKellyMetrics(
  */
 export function calculateStrategyKellyMetrics(
   trades: Trade[],
-  startingCapital?: number
+  startingCapital?: number,
 ): Map<string, KellyMetrics> {
   const strategyMap = new Map<string, Trade[]>();
 

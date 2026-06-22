@@ -1,76 +1,78 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Plus, Search, Database, Info } from "lucide-react"
-import { useStaticDatasetsStore, useBlockStore } from "@tradeblocks/lib/stores"
-import { DatasetCard } from "@/components/static-datasets/dataset-card"
-import { UploadDialog } from "@/components/static-datasets/upload-dialog"
-import { PreviewModal } from "@/components/static-datasets/preview-modal"
-import type { StaticDataset, Trade } from "@tradeblocks/lib"
-import { getTradesByBlock } from "@tradeblocks/lib"
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Plus, Search, Database, Info } from "lucide-react";
+import { useStaticDatasetsStore, useBlockStore } from "@tradeblocks/lib/stores";
+import { DatasetCard } from "@/components/static-datasets/dataset-card";
+import { UploadDialog } from "@/components/static-datasets/upload-dialog";
+import { PreviewModal } from "@/components/static-datasets/preview-modal";
+import type { StaticDataset, Trade } from "@tradeblocks/lib";
+import { getTradesByBlock } from "@tradeblocks/lib";
 
 export default function StaticDatasetsPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
-  const [previewDataset, setPreviewDataset] = useState<StaticDataset | null>(null)
-  const [activeBlockTrades, setActiveBlockTrades] = useState<Trade[]>([])
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [previewDataset, setPreviewDataset] = useState<StaticDataset | null>(null);
+  const [activeBlockTrades, setActiveBlockTrades] = useState<Trade[]>([]);
 
-  const datasets = useStaticDatasetsStore((state) => state.datasets)
-  const isInitialized = useStaticDatasetsStore((state) => state.isInitialized)
-  const loadDatasets = useStaticDatasetsStore((state) => state.loadDatasets)
-  const invalidateMatchStatsForBlock = useStaticDatasetsStore((state) => state.invalidateMatchStatsForBlock)
+  const datasets = useStaticDatasetsStore((state) => state.datasets);
+  const isInitialized = useStaticDatasetsStore((state) => state.isInitialized);
+  const loadDatasets = useStaticDatasetsStore((state) => state.loadDatasets);
+  const invalidateMatchStatsForBlock = useStaticDatasetsStore(
+    (state) => state.invalidateMatchStatsForBlock,
+  );
 
-  const activeBlockId = useBlockStore((state) => state.activeBlockId)
-  const blocks = useBlockStore((state) => state.blocks)
-  const activeBlock = blocks.find((b) => b.id === activeBlockId)
+  const activeBlockId = useBlockStore((state) => state.activeBlockId);
+  const blocks = useBlockStore((state) => state.blocks);
+  const activeBlock = blocks.find((b) => b.id === activeBlockId);
 
   // Load datasets on mount
   useEffect(() => {
     if (!isInitialized) {
-      loadDatasets()
+      loadDatasets();
     }
-  }, [isInitialized, loadDatasets])
+  }, [isInitialized, loadDatasets]);
 
   // Load active block trades for match stats
   // Re-fetch when trade count changes (after import/recalculation)
-  const activeBlockTradeCount = activeBlock?.tradeLog.rowCount
+  const activeBlockTradeCount = activeBlock?.tradeLog.rowCount;
   useEffect(() => {
     if (!activeBlockId) {
-      setActiveBlockTrades([])
-      return
+      setActiveBlockTrades([]);
+      return;
     }
 
     // Invalidate cached match stats for this block since trades may have changed
-    invalidateMatchStatsForBlock(activeBlockId)
+    invalidateMatchStatsForBlock(activeBlockId);
 
     const loadTrades = async () => {
       try {
-        const trades = await getTradesByBlock(activeBlockId)
-        setActiveBlockTrades(trades)
+        const trades = await getTradesByBlock(activeBlockId);
+        setActiveBlockTrades(trades);
       } catch (err) {
-        console.error("Failed to load trades for match stats:", err)
-        setActiveBlockTrades([])
+        console.error("Failed to load trades for match stats:", err);
+        setActiveBlockTrades([]);
       }
-    }
+    };
 
-    loadTrades()
-  }, [activeBlockId, activeBlockTradeCount, invalidateMatchStatsForBlock])
+    loadTrades();
+  }, [activeBlockId, activeBlockTradeCount, invalidateMatchStatsForBlock]);
 
   // Filter datasets based on search query
   const filteredDatasets = searchQuery.trim()
     ? datasets.filter(
         (d) =>
           d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          d.fileName.toLowerCase().includes(searchQuery.toLowerCase())
+          d.fileName.toLowerCase().includes(searchQuery.toLowerCase()),
       )
-    : datasets
+    : datasets;
 
   const handlePreview = (dataset: StaticDataset) => {
-    setPreviewDataset(dataset)
-  }
+    setPreviewDataset(dataset);
+  };
 
   return (
     <div className="space-y-6">
@@ -96,7 +98,8 @@ export default function StaticDatasetsPage() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-4 py-2">
           <Info className="w-4 h-4" />
           <span>
-            Preview matching against active block: <strong>{activeBlock.name}</strong> ({activeBlock.tradeLog.rowCount} trades)
+            Preview matching against active block: <strong>{activeBlock.name}</strong> (
+            {activeBlock.tradeLog.rowCount} trades)
           </span>
         </div>
       ) : (
@@ -114,8 +117,8 @@ export default function StaticDatasetsPage() {
             {!isInitialized
               ? "Loading..."
               : searchQuery.trim()
-              ? `${filteredDatasets.length} of ${datasets.length} datasets`
-              : `${datasets.length} datasets`}
+                ? `${filteredDatasets.length} of ${datasets.length} datasets`
+                : `${datasets.length} datasets`}
           </span>
         </div>
 
@@ -159,7 +162,8 @@ export default function StaticDatasetsPage() {
             <Database className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">No static datasets yet</h3>
             <p className="text-muted-foreground mb-6">
-              Upload CSV files with time-series data. Dataset columns will be available as fields in the Report Builder, matched to trades by timestamp.
+              Upload CSV files with time-series data. Dataset columns will be available as fields in
+              the Report Builder, matched to trades by timestamp.
             </p>
             <Button onClick={() => setIsUploadDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
@@ -185,10 +189,7 @@ export default function StaticDatasetsPage() {
       </div>
 
       {/* Upload Dialog */}
-      <UploadDialog
-        open={isUploadDialogOpen}
-        onOpenChange={setIsUploadDialogOpen}
-      />
+      <UploadDialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen} />
 
       {/* Preview Modal */}
       <PreviewModal
@@ -197,5 +198,5 @@ export default function StaticDatasetsPage() {
         dataset={previewDataset}
       />
     </div>
-  )
+  );
 }

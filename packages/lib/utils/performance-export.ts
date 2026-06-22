@@ -35,7 +35,10 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
     description: "Daily equity values with high water mark",
     tab: "Overview",
     exportFn: (data) => {
-      const lines = ["# Equity Curve", toCsvRow(["Date", "Equity", "High Water Mark", "Trade Number"])];
+      const lines = [
+        "# Equity Curve",
+        toCsvRow(["Date", "Equity", "High Water Mark", "Trade Number"]),
+      ];
       for (const point of data.equityCurve) {
         lines.push(
           toCsvRow([
@@ -43,7 +46,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
             point.equity.toFixed(2),
             point.highWaterMark.toFixed(2),
             point.tradeNumber,
-          ])
+          ]),
         );
       }
       return lines;
@@ -99,7 +102,9 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
       lines.push(toCsvRow(["Max Win Streak", data.streakData.statistics.maxWinStreak]));
       lines.push(toCsvRow(["Max Loss Streak", data.streakData.statistics.maxLossStreak]));
       lines.push(toCsvRow(["Avg Win Streak", data.streakData.statistics.avgWinStreak.toFixed(2)]));
-      lines.push(toCsvRow(["Avg Loss Streak", data.streakData.statistics.avgLossStreak.toFixed(2)]));
+      lines.push(
+        toCsvRow(["Avg Loss Streak", data.streakData.statistics.avgLossStreak.toFixed(2)]),
+      );
 
       return lines;
     },
@@ -113,7 +118,24 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
     tab: "Returns Analysis",
     exportFn: (data) => {
       const lines = ["# Monthly Returns (P&L)"];
-      lines.push(toCsvRow(["Year", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Total"]));
+      lines.push(
+        toCsvRow([
+          "Year",
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+          "Total",
+        ]),
+      );
 
       const years = Object.keys(data.monthlyReturns).map(Number).sort();
       for (const year of years) {
@@ -135,7 +157,23 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
       // Monthly returns percent
       lines.push("");
       lines.push("# Monthly Returns (%)");
-      lines.push(toCsvRow(["Year", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]));
+      lines.push(
+        toCsvRow([
+          "Year",
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ]),
+      );
 
       for (const year of years) {
         const months: (string | number)[] = [year];
@@ -163,7 +201,9 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
 
       // Detailed inputs (includes margin) when available
       if (data.returnDistributionDetails && data.returnDistributionDetails.length > 0) {
-        lines.push(toCsvRow(["Trade #", "Date", "P&L ($)", "Margin Req ($)", "ROM (%)", "Strategy"]));
+        lines.push(
+          toCsvRow(["Trade #", "Date", "P&L ($)", "Margin Req ($)", "ROM (%)", "Strategy"]),
+        );
         data.returnDistributionDetails.forEach((t) => {
           lines.push(
             toCsvRow([
@@ -173,7 +213,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
               t.marginReq.toFixed(2),
               t.rom.toFixed(2),
               t.strategy ?? "",
-            ])
+            ]),
           );
         });
       } else {
@@ -186,7 +226,8 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
       // Add summary statistics
       if (data.returnDistribution.length > 0) {
         const sorted = [...data.returnDistribution].sort((a, b) => a - b);
-        const mean = data.returnDistribution.reduce((a, b) => a + b, 0) / data.returnDistribution.length;
+        const mean =
+          data.returnDistribution.reduce((a, b) => a + b, 0) / data.returnDistribution.length;
         const median = sorted[Math.floor(sorted.length / 2)];
         const min = sorted[0];
         const max = sorted[sorted.length - 1];
@@ -214,7 +255,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
       lines.push(toCsvRow(["Day", "Trade Count", "Avg P&L ($)", "Avg ROM (%)"]));
       for (const dow of data.dayOfWeekData) {
         lines.push(
-          toCsvRow([dow.day, dow.count, dow.avgPl.toFixed(2), `${dow.avgPlPercent.toFixed(2)}%`])
+          toCsvRow([dow.day, dow.count, dow.avgPl.toFixed(2), `${dow.avgPlPercent.toFixed(2)}%`]),
         );
       }
       return lines;
@@ -231,7 +272,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
       lines.push(
         hasMargin
           ? toCsvRow(["Trade #", "Date", "P&L ($)", "Margin Req ($)", "ROM (%)"])
-          : toCsvRow(["Trade #", "Date", "P&L ($)", "ROM (%)"])
+          : toCsvRow(["Trade #", "Date", "P&L ($)", "ROM (%)"]),
       );
       for (const trade of data.tradeSequence) {
         const base = [trade.tradeNumber, trade.date, trade.pl.toFixed(2)];
@@ -260,7 +301,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
             m.sharpeRatio.toFixed(2),
             m.profitFactor.toFixed(2),
             m.volatility.toFixed(2),
-          ])
+          ]),
         );
       }
       return lines;
@@ -282,7 +323,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
             v.closingVix?.toFixed(2) ?? "",
             v.pl.toFixed(2),
             v.rom !== undefined ? v.rom.toFixed(2) : "",
-          ])
+          ]),
         );
       }
       return lines;
@@ -311,7 +352,9 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
     tab: "Risk & Margin",
     exportFn: (data) => {
       const lines = ["# Margin Utilization"];
-      lines.push(toCsvRow(["Date", "Margin Required ($)", "Funds at Close ($)", "Contracts", "P&L ($)"]));
+      lines.push(
+        toCsvRow(["Date", "Margin Required ($)", "Funds at Close ($)", "Contracts", "P&L ($)"]),
+      );
       for (const m of data.marginUtilization) {
         lines.push(
           toCsvRow([
@@ -320,7 +363,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
             m.fundsAtClose.toFixed(2),
             m.numContracts,
             m.pl.toFixed(2),
-          ])
+          ]),
         );
       }
       return lines;
@@ -333,7 +376,16 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
     tab: "Risk & Margin",
     exportFn: (data) => {
       const lines = ["# Holding Duration"];
-      lines.push(toCsvRow(["Trade #", "Date Opened", "Date Closed", "Duration (hours)", "P&L ($)", "Strategy"]));
+      lines.push(
+        toCsvRow([
+          "Trade #",
+          "Date Opened",
+          "Date Closed",
+          "Duration (hours)",
+          "P&L ($)",
+          "Strategy",
+        ]),
+      );
       for (const h of data.holdingPeriods) {
         lines.push(
           toCsvRow([
@@ -343,7 +395,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
             h.durationHours.toFixed(1),
             h.pl.toFixed(2),
             h.strategy,
-          ])
+          ]),
         );
       }
       return lines;
@@ -360,9 +412,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
       const lines = ["# Exit Reason Breakdown"];
       lines.push(toCsvRow(["Exit Reason", "Count", "Total P&L ($)", "Avg P&L ($)"]));
       for (const e of data.exitReasonBreakdown) {
-        lines.push(
-          toCsvRow([e.reason, e.count, e.totalPl.toFixed(2), e.avgPl.toFixed(2)])
-        );
+        lines.push(toCsvRow([e.reason, e.count, e.totalPl.toFixed(2), e.avgPl.toFixed(2)]));
       }
       return lines;
     },
@@ -383,7 +433,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
           "Total Premium ($)",
           "Efficiency (%)",
           "Efficiency Basis",
-        ])
+        ]),
       );
       for (const p of data.premiumEfficiency) {
         lines.push(
@@ -395,7 +445,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
             p.totalPremium !== undefined ? p.totalPremium.toFixed(2) : "",
             p.efficiencyPct !== undefined ? `${p.efficiencyPct.toFixed(2)}%` : "",
             p.efficiencyBasis ?? "",
-          ])
+          ]),
         );
       }
       return lines;
@@ -420,7 +470,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
           "MFE % (of margin)",
           "MAE % (of margin)",
           "Result",
-        ])
+        ]),
       );
       for (const point of data.mfeMaeData) {
         lines.push(
@@ -433,7 +483,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
             point.mfePercent !== undefined ? point.mfePercent.toFixed(2) : "",
             point.maePercent !== undefined ? point.maePercent.toFixed(2) : "",
             point.isWinner ? "Win" : "Loss",
-          ])
+          ]),
         );
       }
 
@@ -469,10 +519,7 @@ export function getChartExportsByTab(): Record<string, ChartExportConfig[]> {
 /**
  * Export multiple charts as a combined CSV
  */
-export function exportMultipleCharts(
-  data: SnapshotChartData,
-  chartIds: string[]
-): string[] {
+export function exportMultipleCharts(data: SnapshotChartData, chartIds: string[]): string[] {
   const lines: string[] = [];
   const selectedCharts = CHART_EXPORTS.filter((c) => chartIds.includes(c.id));
 
@@ -491,10 +538,7 @@ export function exportMultipleCharts(
 /**
  * Export a single chart by ID as CSV
  */
-export function exportSingleChart(
-  data: SnapshotChartData,
-  chartId: string
-): string[] | null {
+export function exportSingleChart(data: SnapshotChartData, chartId: string): string[] | null {
   const chart = CHART_EXPORTS.find((c) => c.id === chartId);
   if (!chart) return null;
   return chart.exportFn(data);
@@ -505,14 +549,14 @@ export function exportSingleChart(
  */
 export function getChartJsonData(
   data: SnapshotChartData,
-  chartId: string
+  chartId: string,
 ): Record<string, unknown> | null {
   const jsonExporters: Record<string, (data: SnapshotChartData) => Record<string, unknown>> = {
     "equity-curve": (d) => ({
       chartName: "Equity Curve",
       data: d.equityCurve,
     }),
-    "drawdown": (d) => ({
+    drawdown: (d) => ({
       chartName: "Drawdown",
       data: d.drawdownData,
     }),
@@ -529,9 +573,10 @@ export function getChartJsonData(
     }),
     "return-distribution": (d) => {
       const sorted = [...d.returnDistribution].sort((a, b) => a - b);
-      const mean = d.returnDistribution.length > 0
-        ? d.returnDistribution.reduce((a, b) => a + b, 0) / d.returnDistribution.length
-        : 0;
+      const mean =
+        d.returnDistribution.length > 0
+          ? d.returnDistribution.reduce((a, b) => a + b, 0) / d.returnDistribution.length
+          : 0;
       const median = sorted.length > 0 ? sorted[Math.floor(sorted.length / 2)] : 0;
       return {
         chartName: "Return Distribution",
@@ -604,7 +649,7 @@ export function getChartJsonData(
  */
 export function getMultipleChartsJson(
   data: SnapshotChartData,
-  chartIds: string[]
+  chartIds: string[],
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {
     exportedAt: new Date().toISOString(),

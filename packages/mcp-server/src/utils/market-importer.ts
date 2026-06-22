@@ -95,9 +95,15 @@ export function validateColumnMapping(
 
 /** Parse CSV content into rows with header mapping. Strips UTF-8 BOM. */
 function parseCSV(content: string): { headers: string[]; rows: Record<string, string>[] } {
-  const lines = content.replace(/^\uFEFF/, "").trim().split("\n");
+  const lines = content
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .split("\n");
   if (lines.length < 2) return { headers: [], rows: [] };
-  const headers = lines[0].trim().split(",").map((h) => h.trim());
+  const headers = lines[0]
+    .trim()
+    .split(",")
+    .map((h) => h.trim());
   const rows: Record<string, string>[] = [];
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -123,7 +129,9 @@ function parseFlexibleDate(value: string): string | null {
   if (!isNaN(numeric) && numeric > 1e8) {
     return new Date(numeric * 1000).toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
-      year: "numeric", month: "2-digit", day: "2-digit",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
     });
   }
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -143,7 +151,9 @@ function parseFlexibleTime(value: string): string | null {
     const d = new Date(numeric * 1000);
     return d.toLocaleTimeString("en-US", {
       timeZone: "America/New_York",
-      hour: "2-digit", minute: "2-digit", hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
     });
   }
   if (/^\d{2}:\d{2}$/.test(value)) return value;
@@ -171,11 +181,17 @@ function applyColumnMapping(
       const rawValue = row[sourceCol] ?? "";
       if (schemaCol === "date") {
         const parsed = parseFlexibleDate(rawValue);
-        if (parsed === null) { hasNullDate = true; break; }
+        if (parsed === null) {
+          hasNullDate = true;
+          break;
+        }
         mapped[schemaCol] = parsed;
       } else if (schemaCol === "time") {
         const parsed = parseFlexibleTime(rawValue);
-        if (parsed === null) { hasNullDate = true; break; }
+        if (parsed === null) {
+          hasNullDate = true;
+          break;
+        }
         mapped[schemaCol] = parsed;
       } else {
         if (rawValue === "" || rawValue === "NaN" || rawValue === "NA") {
@@ -190,7 +206,9 @@ function applyColumnMapping(
     if (!("date" in mapped)) continue;
     // Auto-extract time from a Unix-timestamp date column when `time` is not mapped.
     if (!("time" in mapped)) {
-      const dateSourceCol = Object.entries(columnMapping).find(([, schema]) => schema === "date")?.[0];
+      const dateSourceCol = Object.entries(columnMapping).find(
+        ([, schema]) => schema === "date",
+      )?.[0];
       if (dateSourceCol) {
         const rawDateValue = row[dateSourceCol] ?? "";
         const numericDate = Number(rawDateValue);
@@ -211,10 +229,7 @@ function applyColumnMapping(
  * Non-numeric values fall back to `0` so the spot store always receives well-
  * typed numbers — invalid rows are filtered upstream.
  */
-function coerceMappedRowToBar(
-  row: Record<string, unknown>,
-  ticker: string,
-): BarRow | null {
+function coerceMappedRowToBar(row: Record<string, unknown>, ticker: string): BarRow | null {
   const date = typeof row.date === "string" ? row.date : null;
   if (!date) return null;
   const time = typeof row.time === "string" ? row.time : "09:30";
@@ -408,7 +423,11 @@ export async function importFromDatabase(
     });
     bars = parseDatabaseRowsToBars(rawRows, normalizedTicker, columnMapping);
   } finally {
-    try { await conn.run(`DETACH ${EXT_ALIAS}`); } catch { /* best-effort */ }
+    try {
+      await conn.run(`DETACH ${EXT_ALIAS}`);
+    } catch {
+      /* best-effort */
+    }
   }
 
   if (bars.length === 0) {

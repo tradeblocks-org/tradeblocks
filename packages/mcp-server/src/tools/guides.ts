@@ -348,7 +348,7 @@ export function registerGuideTools(server: McpServer): void {
           .string()
           .optional()
           .describe(
-            "Optional keyword to narrow results within the topic (e.g., 'trailing' within exit_conditions)"
+            "Optional keyword to narrow results within the topic (e.g., 'trailing' within exit_conditions)",
           ),
       }),
     },
@@ -367,9 +367,7 @@ export function registerGuideTools(server: McpServer): void {
       if (subtopic) {
         const keyword = subtopic.toLowerCase();
         const sections = content.split(/\n(?=## )/);
-        const matched = sections.filter((s) =>
-          s.toLowerCase().includes(keyword)
-        );
+        const matched = sections.filter((s) => s.toLowerCase().includes(keyword));
         if (matched.length > 0) {
           content = matched.join("\n\n");
         }
@@ -380,8 +378,8 @@ export function registerGuideTools(server: McpServer): void {
 
       return createToolOutput(
         `${entry.title} — use other topics for more detail: ${allTopics.filter((t) => t !== topic).join(", ")}`,
-        { topic, title: entry.title, content, availableTopics: allTopics }
+        { topic, title: entry.title, content, availableTopics: allTopics },
       );
-    }
+    },
   );
 }

@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 /**
  * Bucket Editor
@@ -7,28 +7,23 @@
  * Uses a tag/chip interface where each threshold is a removable badge.
  */
 
-import { Label } from '@/components/ui/label'
-import { NumericTagInput } from '@/components/ui/numeric-tag-input'
-import { getDefaultBucketEdges } from '@tradeblocks/lib'
+import { Label } from "@/components/ui/label";
+import { NumericTagInput } from "@/components/ui/numeric-tag-input";
+import { getDefaultBucketEdges } from "@tradeblocks/lib";
 
 interface BucketEditorProps {
-  field: string
-  value: number[]
-  onChange: (buckets: number[]) => void
-  className?: string
+  field: string;
+  value: number[];
+  onChange: (buckets: number[]) => void;
+  className?: string;
 }
 
-export function BucketEditor({
-  field,
-  value,
-  onChange,
-  className
-}: BucketEditorProps) {
+export function BucketEditor({ field, value, onChange, className }: BucketEditorProps) {
   // Load defaults for current field
   const handleLoadDefaults = () => {
-    const defaults = getDefaultBucketEdges(field)
-    onChange(defaults)
-  }
+    const defaults = getDefaultBucketEdges(field);
+    onChange(defaults);
+  };
 
   return (
     <div className={className}>
@@ -43,13 +38,9 @@ export function BucketEditor({
         </button>
       </div>
 
-      <NumericTagInput
-        value={value}
-        onChange={onChange}
-        placeholder="Type a number, press Enter"
-      />
+      <NumericTagInput value={value} onChange={onChange} placeholder="Type a number, press Enter" />
     </div>
-  )
+  );
 }
 
-export default BucketEditor
+export default BucketEditor;

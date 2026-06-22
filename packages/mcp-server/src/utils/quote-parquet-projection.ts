@@ -105,14 +105,9 @@ export function quoteParquetGreekProjection(
  * Read path (`quoteParquetGreekProjection` above) stays untouched so
  * existing DOUBLE partitions continue to read without widening cost.
  */
-export function quoteParquetGreekWriteProjection(
-  columns: ParquetColumnSet,
-  alias = "q",
-): string {
+export function quoteParquetGreekWriteProjection(columns: ParquetColumnSet, alias = "q"): string {
   const castReal = (name: string) =>
-    hasColumn(columns, name)
-      ? `CAST(${alias}.${name} AS REAL)`
-      : `NULL::REAL`;
+    hasColumn(columns, name) ? `CAST(${alias}.${name} AS REAL)` : `NULL::REAL`;
   return [
     `${castReal("delta")} AS delta`,
     `${castReal("gamma")} AS gamma`,
@@ -127,10 +122,7 @@ export function quoteParquetGreekWriteProjection(
   ].join(",\n              ");
 }
 
-export function quoteParquetCanonicalProjection(
-  columns: ParquetColumnSet,
-  alias = "q",
-): string {
+export function quoteParquetCanonicalProjection(columns: ParquetColumnSet, alias = "q"): string {
   return [
     `${quoteParquetColumnExpr(columns, alias, "underlying", "VARCHAR")} AS underlying`,
     `${quoteParquetColumnExpr(columns, alias, "date", "VARCHAR")} AS date`,

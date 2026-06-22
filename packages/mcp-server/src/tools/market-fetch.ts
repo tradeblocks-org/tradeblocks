@@ -29,13 +29,21 @@ export function registerMarketFetchTools(
         tickers: z.array(z.string()).min(1).describe("Ticker symbols (e.g., ['SPX','VIX'])"),
         from: z.string().describe("Start date YYYY-MM-DD"),
         to: z.string().describe("End date YYYY-MM-DD"),
-        timespan: z.enum(["1d", "1m", "5m", "15m", "1h"]).default("1d")
+        timespan: z
+          .enum(["1d", "1m", "5m", "15m", "1h"])
+          .default("1d")
           .describe("Bar granularity. '1d' = daily; others = intraday."),
-        provider: z.enum(["massive", "thetadata"]).optional()
+        provider: z
+          .enum(["massive", "thetadata"])
+          .optional()
           .describe("Optional per-call provider override. Defaults to env MARKET_DATA_PROVIDER."),
-        skip_enrichment: z.boolean().default(false)
+        skip_enrichment: z
+          .boolean()
+          .default(false)
           .describe("Skip per-ticker enrichment (RSI/ATR/etc.) after write."),
-        dry_run: z.boolean().default(false)
+        dry_run: z
+          .boolean()
+          .default(false)
           .describe("Validate inputs and preview without writing."),
       }),
     },
@@ -73,10 +81,20 @@ export function registerMarketFetchTools(
         "Massive falls back automatically on Developer/lower plans; ThetaData (both modes) returns true NBBO. " +
         "Returns status='unsupported' with a clear error only when the active provider lacks the requested mode (e.g., bulk-by-underlying on Massive).",
       inputSchema: z.object({
-        tickers: z.array(z.string()).min(1).optional()
-          .describe("Option tickers in OCC format (e.g., 'SPXW260321C05800000'). No O: prefix. Mutually exclusive with 'underlyings'."),
-        underlyings: z.array(z.string()).min(1).optional()
-          .describe("Underlying symbols (e.g. ['SPX']). Bulk mode — returns every contract's minute quotes per date. Mutually exclusive with 'tickers'."),
+        tickers: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe(
+            "Option tickers in OCC format (e.g., 'SPXW260321C05800000'). No O: prefix. Mutually exclusive with 'underlyings'.",
+          ),
+        underlyings: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe(
+            "Underlying symbols (e.g. ['SPX']). Bulk mode — returns every contract's minute quotes per date. Mutually exclusive with 'tickers'.",
+          ),
         from: z.string().describe("Start date YYYY-MM-DD"),
         to: z.string().describe("End date YYYY-MM-DD"),
         provider: z.enum(["massive", "thetadata"]).optional(),
@@ -97,13 +115,14 @@ export function registerMarketFetchTools(
           let progress = 0;
           onProgress = async (event) => {
             progress++;
-            const message = event.kind === "group"
-              ? `${event.underlying} ${event.root}/${event.right} ${event.date} ` +
-                `${event.phase === "checkpoint" ? "checkpoint" : "done"} (${event.status})` +
-                (event.totalContracts != null
-                  ? ` ${event.completedContracts ?? 0}/${event.totalContracts} contracts`
-                  : "")
-              : `${event.underlying} ${event.date} flushed — ${event.rowsWritten} rows`;
+            const message =
+              event.kind === "group"
+                ? `${event.underlying} ${event.root}/${event.right} ${event.date} ` +
+                  `${event.phase === "checkpoint" ? "checkpoint" : "done"} (${event.status})` +
+                  (event.totalContracts != null
+                    ? ` ${event.completedContracts ?? 0}/${event.totalContracts} contracts`
+                    : "")
+                : `${event.underlying} ${event.date} flushed — ${event.rowsWritten} rows`;
             try {
               await extra.sendNotification({
                 method: "notifications/progress",
@@ -116,9 +135,17 @@ export function registerMarketFetchTools(
         }
 
         const result = await ingestor.ingestQuotes({
-          tickers, underlyings, from, to, provider, dryRun: dry_run, onProgress,
+          tickers,
+          underlyings,
+          from,
+          to,
+          provider,
+          dryRun: dry_run,
+          onProgress,
         });
-        const mode = underlyings ? `bulk (${underlyings.join(",")})` : `per-ticker (${tickers?.length ?? 0})`;
+        const mode = underlyings
+          ? `bulk (${underlyings.join(",")})`
+          : `per-ticker (${tickers?.length ?? 0})`;
         // `partial` means some batches were logged-and-skipped. The structured
         // `skipped[]` array on the result body carries the details; we surface
         // the count in the summary so console callers see it.
@@ -127,10 +154,13 @@ export function registerMarketFetchTools(
             ? ` — ${result.skipped.length} batch(es) skipped (see result.skipped[])`
             : "";
         const summary =
-          result.status === "unsupported" ? `Unsupported: ${result.error}` :
-          result.status === "error" ? `Error: ${result.error}` :
-          dry_run ? `[DRY RUN] Would fetch quotes: ${mode}` :
-          `${result.status}: wrote ${result.rowsWritten} quote rows (${mode})${partialSuffix}`;
+          result.status === "unsupported"
+            ? `Unsupported: ${result.error}`
+            : result.status === "error"
+              ? `Error: ${result.error}`
+              : dry_run
+                ? `[DRY RUN] Would fetch quotes: ${mode}`
+                : `${result.status}: wrote ${result.rowsWritten} quote rows (${mode})${partialSuffix}`;
         return createToolOutput(summary, result);
       } finally {
         await downgradeToReadOnly(baseDir);
@@ -147,7 +177,10 @@ export function registerMarketFetchTools(
         "Writes contract metadata to market.option_chain. Capability-gated on provider.fetchContractList. " +
         "Use for pre-populating the contract universe before running backtests or enriching quotes.",
       inputSchema: z.object({
-        underlyings: z.array(z.string()).min(1).describe("Underlying tickers (e.g., ['SPX','QQQ'])"),
+        underlyings: z
+          .array(z.string())
+          .min(1)
+          .describe("Underlying tickers (e.g., ['SPX','QQQ'])"),
         from: z.string().describe("Start date YYYY-MM-DD"),
         to: z.string().describe("End date YYYY-MM-DD"),
         provider: z.enum(["massive", "thetadata"]).optional(),
@@ -157,11 +190,19 @@ export function registerMarketFetchTools(
     async ({ underlyings, from, to, provider, dry_run }) => {
       await upgradeToReadWrite(baseDir);
       try {
-        const result = await ingestor.ingestChain({ underlyings, from, to, provider, dryRun: dry_run });
+        const result = await ingestor.ingestChain({
+          underlyings,
+          from,
+          to,
+          provider,
+          dryRun: dry_run,
+        });
         const summary =
-          result.status === "unsupported" ? `Unsupported: ${result.error}` :
-          dry_run ? `[DRY RUN] Would fetch chain for ${underlyings.join(", ")}` :
-          `${result.status}: wrote ${result.rowsWritten} contract rows`;
+          result.status === "unsupported"
+            ? `Unsupported: ${result.error}`
+            : dry_run
+              ? `[DRY RUN] Would fetch chain for ${underlyings.join(", ")}`
+              : `${result.status}: wrote ${result.rowsWritten} contract rows`;
         return createToolOutput(summary, result);
       } finally {
         await downgradeToReadOnly(baseDir);
@@ -186,23 +227,34 @@ export function registerMarketFetchTools(
         "  option_chain   → market.option_chain         — partition {underlying, date}\n\n" +
         "The SELECT must output the target store's canonical columns in order. Writes are single-partition: every row must belong to the named partition. Works in both Parquet and DuckDB modes — the store handles mode routing.",
       inputSchema: z.object({
-        file_path: z.string().describe(
-          "Absolute path to a local file DuckDB can read. The SELECT references this path via read_parquet('<file_path>') / read_csv('<file_path>') / read_json('<file_path>'). Provider downloads (e.g., Massive rclone output) or any user-supplied file are all valid sources.",
-        ),
-        dataset_type: z.enum(["spot_bars", "option_quotes", "option_chain"]).describe(
-          "Target store. Determines which writeFromSelect is invoked and which partition keys are required.",
-        ),
-        select_sql: z.string().describe(
-          "SELECT (or WITH ... SELECT) that produces the target store's canonical columns. " +
-          "spot_bars columns: (ticker, date, time, open, high, low, close, bid, ask). " +
-          "option_quote_minutes columns: (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source, delta, gamma, theta, vega, iv, greeks_source, greeks_revision, rate_type, rate_value, gamma_source); missing greeks/provenance columns are filled as null. " +
-          "option_chain columns: (underlying, date, ticker, contract_type, strike, expiration, dte, exercise_style).",
-        ),
-        partition: z.object({
-          ticker: z.string().optional().describe("Required for dataset_type='spot_bars'."),
-          underlying: z.string().optional().describe("Required for dataset_type='option_quotes' | 'option_chain'."),
-          date: z.string().describe("Partition date YYYY-MM-DD."),
-        }).describe("Single-partition target. Keys depend on dataset_type."),
+        file_path: z
+          .string()
+          .describe(
+            "Absolute path to a local file DuckDB can read. The SELECT references this path via read_parquet('<file_path>') / read_csv('<file_path>') / read_json('<file_path>'). Provider downloads (e.g., Massive rclone output) or any user-supplied file are all valid sources.",
+          ),
+        dataset_type: z
+          .enum(["spot_bars", "option_quotes", "option_chain"])
+          .describe(
+            "Target store. Determines which writeFromSelect is invoked and which partition keys are required.",
+          ),
+        select_sql: z
+          .string()
+          .describe(
+            "SELECT (or WITH ... SELECT) that produces the target store's canonical columns. " +
+              "spot_bars columns: (ticker, date, time, open, high, low, close, bid, ask). " +
+              "option_quote_minutes columns: (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source, delta, gamma, theta, vega, iv, greeks_source, greeks_revision, rate_type, rate_value, gamma_source); missing greeks/provenance columns are filled as null. " +
+              "option_chain columns: (underlying, date, ticker, contract_type, strike, expiration, dte, exercise_style).",
+          ),
+        partition: z
+          .object({
+            ticker: z.string().optional().describe("Required for dataset_type='spot_bars'."),
+            underlying: z
+              .string()
+              .optional()
+              .describe("Required for dataset_type='option_quotes' | 'option_chain'."),
+            date: z.string().describe("Partition date YYYY-MM-DD."),
+          })
+          .describe("Single-partition target. Keys depend on dataset_type."),
         dry_run: z.boolean().default(false),
       }),
     },
@@ -217,10 +269,13 @@ export function registerMarketFetchTools(
           dryRun: dry_run,
         });
         const summary =
-          result.status === "error" ? `Error: ${result.error}` :
-          result.status === "unsupported" ? `Unsupported: ${result.error}` :
-          dry_run ? `[DRY RUN] Would write ${dataset_type} rows from ${file_path}` :
-          `${result.status}: wrote ${result.rowsWritten} rows to ${dataset_type}`;
+          result.status === "error"
+            ? `Error: ${result.error}`
+            : result.status === "unsupported"
+              ? `Unsupported: ${result.error}`
+              : dry_run
+                ? `[DRY RUN] Would write ${dataset_type} rows from ${file_path}`
+                : `${result.status}: wrote ${result.rowsWritten} rows to ${dataset_type}`;
         return createToolOutput(summary, result);
       } finally {
         await downgradeToReadOnly(baseDir);
@@ -269,21 +324,44 @@ export function registerMarketFetchTools(
       inputSchema: z.object({
         asOf: z.string().describe("Target date YYYY-MM-DD. Typically yesterday."),
         spot_tickers: z.array(z.string()).min(1).describe("Tickers to fetch daily bars for"),
-        chain_underlyings: z.array(z.string()).optional().describe("Underlyings to fetch option chains for"),
-        quote_tickers: z.array(z.string()).optional().describe("Option tickers to fetch minute quotes for"),
-        quote_underlyings: z.array(z.string()).optional().describe(
-          "Underlyings to fetch minute quotes for via the bulk-by-underlying path (e.g., ['SPX']). " +
-            "Complementary with quote_tickers — pass whichever matches the target provider's capability. " +
-            "ThetaData supports bulk mode; Massive is per-ticker only. Both may be passed in one call — " +
-            "they dispatch as independent ingestQuotes invocations.",
-        ),
-        compute_vix_context: z.boolean().default(true).describe(
-          "If true and any VIX-family ticker is in spot_tickers, runs compute_vix_context at the end. Default true.",
-        ),
+        chain_underlyings: z
+          .array(z.string())
+          .optional()
+          .describe("Underlyings to fetch option chains for"),
+        quote_tickers: z
+          .array(z.string())
+          .optional()
+          .describe("Option tickers to fetch minute quotes for"),
+        quote_underlyings: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Underlyings to fetch minute quotes for via the bulk-by-underlying path (e.g., ['SPX']). " +
+              "Complementary with quote_tickers — pass whichever matches the target provider's capability. " +
+              "ThetaData supports bulk mode; Massive is per-ticker only. Both may be passed in one call — " +
+              "they dispatch as independent ingestQuotes invocations.",
+          ),
+        compute_vix_context: z
+          .boolean()
+          .default(true)
+          .describe(
+            "If true and any VIX-family ticker is in spot_tickers, runs compute_vix_context at the end. Default true.",
+          ),
         provider: z.enum(["massive", "thetadata"]).optional(),
       }),
     },
-    async ({ asOf, spot_tickers, chain_underlyings, quote_tickers, quote_underlyings, compute_vix_context, provider }, extra) => {
+    async (
+      {
+        asOf,
+        spot_tickers,
+        chain_underlyings,
+        quote_tickers,
+        quote_underlyings,
+        compute_vix_context,
+        provider,
+      },
+      extra,
+    ) => {
       await upgradeToReadWrite(baseDir);
       try {
         // Bulk-underlying quote fetches are the only step in this composite
@@ -300,13 +378,14 @@ export function registerMarketFetchTools(
           let progress = 0;
           onProgress = async (event) => {
             progress++;
-            const message = event.kind === "group"
-              ? `${event.underlying} ${event.root}/${event.right} ${event.date} ` +
-                `${event.phase === "checkpoint" ? "checkpoint" : "done"} (${event.status})` +
-                (event.totalContracts != null
-                  ? ` ${event.completedContracts ?? 0}/${event.totalContracts} contracts`
-                  : "")
-              : `${event.underlying} ${event.date} flushed — ${event.rowsWritten} rows`;
+            const message =
+              event.kind === "group"
+                ? `${event.underlying} ${event.root}/${event.right} ${event.date} ` +
+                  `${event.phase === "checkpoint" ? "checkpoint" : "done"} (${event.status})` +
+                  (event.totalContracts != null
+                    ? ` ${event.completedContracts ?? 0}/${event.totalContracts} contracts`
+                    : "")
+                : `${event.underlying} ${event.date} flushed — ${event.rowsWritten} rows`;
             try {
               await extra.sendNotification({
                 method: "notifications/progress",
@@ -334,7 +413,9 @@ export function registerMarketFetchTools(
           ...result.perOperation.quotes,
           ...(result.perOperation.vixContext ? [result.perOperation.vixContext] : []),
         ];
-        const unsupportedCount = operationResults.filter((item) => item.status === "unsupported").length;
+        const unsupportedCount = operationResults.filter(
+          (item) => item.status === "unsupported",
+        ).length;
         const skippedOpCount = operationResults.filter((item) => item.status === "skipped").length;
         // `partial` surfaces enrichQuoteRows batch-skip details. The structured
         // skipped[] array lives on the refresh result body; we surface the count

@@ -101,7 +101,11 @@ describe("buildFilterPredicate", () => {
     });
 
     it("returns true when value is in array (strings)", () => {
-      const pred = buildFilterPredicate({ field: "Day_of_Week", operator: "in", value: ["1", "2", "3"] });
+      const pred = buildFilterPredicate({
+        field: "Day_of_Week",
+        operator: "in",
+        value: ["1", "2", "3"],
+      });
       // loose equality should allow numeric match
       expect(pred.test({ Day_of_Week: 2 })).toBe(true);
     });
@@ -221,7 +225,11 @@ describe("buildFilterPredicate", () => {
     });
 
     it("in operator resolves day names in array", () => {
-      const pred = buildFilterPredicate({ field: "Day_of_Week", operator: "in", value: ["Monday", "Wednesday", "Friday"] });
+      const pred = buildFilterPredicate({
+        field: "Day_of_Week",
+        operator: "in",
+        value: ["Monday", "Wednesday", "Friday"],
+      });
       expect(pred.test({ Day_of_Week: 1 })).toBe(true);
       expect(pred.test({ Day_of_Week: 3 })).toBe(true);
       expect(pred.test({ Day_of_Week: 5 })).toBe(true);
@@ -229,7 +237,11 @@ describe("buildFilterPredicate", () => {
     });
 
     it("in operator handles mixed day names and numbers", () => {
-      const pred = buildFilterPredicate({ field: "Day_of_Week", operator: "in", value: ["Tuesday", 4] });
+      const pred = buildFilterPredicate({
+        field: "Day_of_Week",
+        operator: "in",
+        value: ["Tuesday", 4],
+      });
       expect(pred.test({ Day_of_Week: 2 })).toBe(true);
       expect(pred.test({ Day_of_Week: 4 })).toBe(true);
       expect(pred.test({ Day_of_Week: 1 })).toBe(false);

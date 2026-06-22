@@ -87,13 +87,27 @@ describe("Simulation Period Scaling Investigation", () => {
 
       // Use process.stdout to ensure output shows in test
       process.stdout.write(`\n--- ${years} Year Simulation (${simulationLength} trades) ---\n`);
-      process.stdout.write(`Mean Final Value: $${result.statistics.meanFinalValue.toLocaleString()}\n`);
-      process.stdout.write(`Median Final Value: $${result.statistics.medianFinalValue.toLocaleString()}\n`);
-      process.stdout.write(`Mean Total Return: ${(result.statistics.meanTotalReturn * 100).toFixed(2)}%\n`);
-      process.stdout.write(`Mean Annualized Return: ${(result.statistics.meanAnnualizedReturn * 100).toFixed(2)}%\n`);
-      process.stdout.write(`Mean Max Drawdown: ${(result.statistics.meanMaxDrawdown * 100).toFixed(2)}%\n`);
-      process.stdout.write(`Median Max Drawdown: ${(result.statistics.medianMaxDrawdown * 100).toFixed(2)}%\n`);
-      process.stdout.write(`Std Dev of Final Values: $${result.statistics.stdFinalValue.toLocaleString()}\n`);
+      process.stdout.write(
+        `Mean Final Value: $${result.statistics.meanFinalValue.toLocaleString()}\n`,
+      );
+      process.stdout.write(
+        `Median Final Value: $${result.statistics.medianFinalValue.toLocaleString()}\n`,
+      );
+      process.stdout.write(
+        `Mean Total Return: ${(result.statistics.meanTotalReturn * 100).toFixed(2)}%\n`,
+      );
+      process.stdout.write(
+        `Mean Annualized Return: ${(result.statistics.meanAnnualizedReturn * 100).toFixed(2)}%\n`,
+      );
+      process.stdout.write(
+        `Mean Max Drawdown: ${(result.statistics.meanMaxDrawdown * 100).toFixed(2)}%\n`,
+      );
+      process.stdout.write(
+        `Median Max Drawdown: ${(result.statistics.medianMaxDrawdown * 100).toFixed(2)}%\n`,
+      );
+      process.stdout.write(
+        `Std Dev of Final Values: $${result.statistics.stdFinalValue.toLocaleString()}\n`,
+      );
 
       return {
         years,
@@ -138,10 +152,16 @@ describe("Simulation Period Scaling Investigation", () => {
 
     process.stdout.write(`\n=== Key Findings ===\n`);
     process.stdout.write(`1 Year DD: ${(oneYear.meanMaxDrawdown * 100).toFixed(2)}%\n`);
-    process.stdout.write(`2 Year DD: ${(twoYear.meanMaxDrawdown * 100).toFixed(2)}% (${scaling1to2.toFixed(2)}x increase)\n`);
-    process.stdout.write(`3 Year DD: ${(threeYear.meanMaxDrawdown * 100).toFixed(2)}% (${scaling2to3.toFixed(2)}x increase)\n`);
+    process.stdout.write(
+      `2 Year DD: ${(twoYear.meanMaxDrawdown * 100).toFixed(2)}% (${scaling1to2.toFixed(2)}x increase)\n`,
+    );
+    process.stdout.write(
+      `3 Year DD: ${(threeYear.meanMaxDrawdown * 100).toFixed(2)}% (${scaling2to3.toFixed(2)}x increase)\n`,
+    );
     process.stdout.write(`Expected √2 scaling: ${Math.sqrt(2).toFixed(2)}x\n`);
-    process.stdout.write(`Actual scaling is ${scaling1to2 > Math.sqrt(2) ? 'HIGHER' : 'lower'} than expected\n`);
+    process.stdout.write(
+      `Actual scaling is ${scaling1to2 > Math.sqrt(2) ? "HIGHER" : "lower"} than expected\n`,
+    );
   });
 
   it("should compare different resampling methods", () => {
@@ -168,8 +188,12 @@ describe("Simulation Period Scaling Investigation", () => {
 
       console.log(`\n--- ${method.toUpperCase()} Method ---`);
       console.log(`Mean Max Drawdown: ${(result.statistics.meanMaxDrawdown * 100).toFixed(2)}%`);
-      console.log(`Median Max Drawdown: ${(result.statistics.medianMaxDrawdown * 100).toFixed(2)}%`);
-      console.log(`Mean Annualized Return: ${(result.statistics.meanAnnualizedReturn * 100).toFixed(2)}%`);
+      console.log(
+        `Median Max Drawdown: ${(result.statistics.medianMaxDrawdown * 100).toFixed(2)}%`,
+      );
+      console.log(
+        `Mean Annualized Return: ${(result.statistics.meanAnnualizedReturn * 100).toFixed(2)}%`,
+      );
       console.log(`Mean Final Value: $${result.statistics.meanFinalValue.toLocaleString()}`);
     });
   });
@@ -202,8 +226,12 @@ describe("Simulation Period Scaling Investigation", () => {
     expect(result.statistics.medianMaxDrawdown).toBeLessThan(1.0);
 
     process.stdout.write(`\n=== 5 Year Extended Simulation ===\n`);
-    process.stdout.write(`Mean Max Drawdown: ${(result.statistics.meanMaxDrawdown * 100).toFixed(2)}%\n`);
-    process.stdout.write(`Worst Drawdown: ${(Math.max(...result.simulations.map(s => s.maxDrawdown)) * 100).toFixed(2)}%\n`);
+    process.stdout.write(
+      `Mean Max Drawdown: ${(result.statistics.meanMaxDrawdown * 100).toFixed(2)}%\n`,
+    );
+    process.stdout.write(
+      `Worst Drawdown: ${(Math.max(...result.simulations.map((s) => s.maxDrawdown)) * 100).toFixed(2)}%\n`,
+    );
     process.stdout.write(`All drawdowns are valid (0-100%)\n`);
   });
 });

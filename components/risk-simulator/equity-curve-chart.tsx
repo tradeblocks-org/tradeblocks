@@ -40,9 +40,7 @@ export function EquityCurveChart({
           type: "scatter",
           mode: "lines",
           line: {
-            color: isDark
-              ? "rgba(100, 116, 139, 0.2)"
-              : "rgba(148, 163, 184, 0.2)",
+            color: isDark ? "rgba(100, 116, 139, 0.2)" : "rgba(148, 163, 184, 0.2)",
             width: 1,
           },
           showlegend: false,
@@ -54,16 +52,11 @@ export function EquityCurveChart({
     // P5-P25 filled area (light red/orange)
     traces.push({
       x: [...percentiles.steps, ...percentiles.steps.slice().reverse()],
-      y: [
-        ...toPercent(percentiles.p5),
-        ...toPercent(percentiles.p25).reverse(),
-      ],
+      y: [...toPercent(percentiles.p5), ...toPercent(percentiles.p25).reverse()],
       type: "scatter",
       mode: "none",
       fill: "toself",
-      fillcolor: isDark
-        ? "rgba(239, 68, 68, 0.15)"
-        : "rgba(239, 68, 68, 0.1)",
+      fillcolor: isDark ? "rgba(239, 68, 68, 0.15)" : "rgba(239, 68, 68, 0.1)",
       line: { width: 0 },
       showlegend: true,
       name: "P5-P25",
@@ -73,16 +66,11 @@ export function EquityCurveChart({
     // P25-P50 filled area (light yellow/amber)
     traces.push({
       x: [...percentiles.steps, ...percentiles.steps.slice().reverse()],
-      y: [
-        ...toPercent(percentiles.p25),
-        ...toPercent(percentiles.p50).reverse(),
-      ],
+      y: [...toPercent(percentiles.p25), ...toPercent(percentiles.p50).reverse()],
       type: "scatter",
       mode: "none",
       fill: "toself",
-      fillcolor: isDark
-        ? "rgba(251, 191, 36, 0.2)"
-        : "rgba(251, 191, 36, 0.15)",
+      fillcolor: isDark ? "rgba(251, 191, 36, 0.2)" : "rgba(251, 191, 36, 0.15)",
       line: { width: 0 },
       showlegend: true,
       name: "P25-P50",
@@ -92,16 +80,11 @@ export function EquityCurveChart({
     // P50-P75 filled area (light green)
     traces.push({
       x: [...percentiles.steps, ...percentiles.steps.slice().reverse()],
-      y: [
-        ...toPercent(percentiles.p50),
-        ...toPercent(percentiles.p75).reverse(),
-      ],
+      y: [...toPercent(percentiles.p50), ...toPercent(percentiles.p75).reverse()],
       type: "scatter",
       mode: "none",
       fill: "toself",
-      fillcolor: isDark
-        ? "rgba(34, 197, 94, 0.2)"
-        : "rgba(34, 197, 94, 0.15)",
+      fillcolor: isDark ? "rgba(34, 197, 94, 0.2)" : "rgba(34, 197, 94, 0.15)",
       line: { width: 0 },
       showlegend: true,
       name: "P50-P75",
@@ -111,16 +94,11 @@ export function EquityCurveChart({
     // P75-P95 filled area (light blue/cyan)
     traces.push({
       x: [...percentiles.steps, ...percentiles.steps.slice().reverse()],
-      y: [
-        ...toPercent(percentiles.p75),
-        ...toPercent(percentiles.p95).reverse(),
-      ],
+      y: [...toPercent(percentiles.p75), ...toPercent(percentiles.p95).reverse()],
       type: "scatter",
       mode: "none",
       fill: "toself",
-      fillcolor: isDark
-        ? "rgba(59, 130, 246, 0.15)"
-        : "rgba(59, 130, 246, 0.1)",
+      fillcolor: isDark ? "rgba(59, 130, 246, 0.15)" : "rgba(59, 130, 246, 0.1)",
       line: { width: 0 },
       showlegend: true,
       name: "P75-P95",
@@ -168,7 +146,7 @@ export function EquityCurveChart({
         mode: "lines",
         line: { color: "#8b5cf6", width: 1.5, dash: "dot" },
         name: "P95 (Best 5%)",
-      } as Data
+      } as Data,
     );
 
     // Zero line

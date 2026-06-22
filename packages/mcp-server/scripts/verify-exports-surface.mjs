@@ -47,11 +47,7 @@ const packageJsonPath = resolve(packageRoot, "package.json");
 //
 // The prefix ./server/ is excluded wholesale: the server/ directory is a
 // build output and any subpath under it would expose build internals.
-const EXCLUDED_SUBPATHS = new Set([
-  "./plugins",
-  "./index",
-  "./utils/output-formatter",
-]);
+const EXCLUDED_SUBPATHS = new Set(["./plugins", "./index", "./utils/output-formatter"]);
 const EXCLUDED_PREFIXES = ["./server/"];
 
 // Conditional exports may use any of the Node-defined conditions (types,
@@ -74,7 +70,7 @@ function collectTargets(entry, subpath) {
           ...collectTargets(value, subpath).map((t) => ({
             condition: t.condition ? `${key}.${t.condition}` : key,
             target: t.target,
-          }))
+          })),
         );
         continue;
       }
@@ -82,9 +78,7 @@ function collectTargets(entry, subpath) {
     }
     return targets;
   }
-  throw new Error(
-    `Unexpected exports entry shape for "${subpath}": ${JSON.stringify(entry)}`
-  );
+  throw new Error(`Unexpected exports entry shape for "${subpath}": ${JSON.stringify(entry)}`);
 }
 
 function main() {
@@ -92,9 +86,7 @@ function main() {
   const exportsMap = pkg.exports;
 
   if (!exportsMap || typeof exportsMap !== "object") {
-    console.error(
-      `verify-exports-surface: no exports map found in ${packageJsonPath}`
-    );
+    console.error(`verify-exports-surface: no exports map found in ${packageJsonPath}`);
     process.exit(1);
   }
 
@@ -166,15 +158,9 @@ function main() {
       console.error(`    ${f.reason}`);
     }
     console.error("");
-    console.error(
-      "  Adding an excluded subpath to the exports map is a deliberate"
-    );
-    console.error(
-      "  widening of the public surface. If intentional, update the"
-    );
-    console.error(
-      "  EXCLUDED_SUBPATHS / EXCLUDED_PREFIXES list in this script with"
-    );
+    console.error("  Adding an excluded subpath to the exports map is a deliberate");
+    console.error("  widening of the public surface. If intentional, update the");
+    console.error("  EXCLUDED_SUBPATHS / EXCLUDED_PREFIXES list in this script with");
     console.error("  a comment explaining the new policy.");
   }
 
@@ -186,7 +172,7 @@ function main() {
 
   const entryCount = Object.keys(exportsMap).length;
   console.log(
-    `verify-exports-surface: OK (${entryCount} entries, all targets resolve, no excluded subpaths present)`
+    `verify-exports-surface: OK (${entryCount} entries, all targets resolve, no excluded subpaths present)`,
   );
 }
 

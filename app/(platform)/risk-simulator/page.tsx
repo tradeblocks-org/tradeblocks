@@ -16,11 +16,7 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -70,15 +66,14 @@ export default function RiskSimulatorPage() {
   // Simulation parameters
   const [numSimulations, setNumSimulations] = useState(1000);
   const [simulationPeriodValue, setSimulationPeriodValue] = useState(1);
-  const [simulationPeriodUnit, setSimulationPeriodUnit] =
-    useState<TimeUnit>("years");
+  const [simulationPeriodUnit, setSimulationPeriodUnit] = useState<TimeUnit>("years");
   const [resamplePercentage, setResamplePercentage] = useState(100);
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
   const [initialCapital, setInitialCapital] = useState(100000);
   const [tradesPerYear, setTradesPerYear] = useState(252);
-  const [resampleMethod, setResampleMethod] = useState<
-    "trades" | "daily" | "percentage"
-  >("percentage");
+  const [resampleMethod, setResampleMethod] = useState<"trades" | "daily" | "percentage">(
+    "percentage",
+  );
   const [useFixedSeed, setUseFixedSeed] = useState(true);
   const [seedValue, setSeedValue] = useState(42);
   const [normalizeTo1Lot, setNormalizeTo1Lot] = useState(false);
@@ -86,15 +81,11 @@ export default function RiskSimulatorPage() {
   // Worst-case scenario parameters
   const [worstCaseEnabled, setWorstCaseEnabled] = useState(false);
   const [worstCasePercentage, setWorstCasePercentage] = useState(5);
-  const [worstCaseMode, setWorstCaseMode] = useState<"pool" | "guarantee">(
-    "pool"
+  const [worstCaseMode, setWorstCaseMode] = useState<"pool" | "guarantee">("pool");
+  const [worstCaseBasedOn, setWorstCaseBasedOn] = useState<"simulation" | "historical">(
+    "simulation",
   );
-  const [worstCaseBasedOn, setWorstCaseBasedOn] = useState<
-    "simulation" | "historical"
-  >("simulation");
-  const [worstCaseSizing, setWorstCaseSizing] = useState<
-    "absolute" | "relative"
-  >("relative");
+  const [worstCaseSizing, setWorstCaseSizing] = useState<"absolute" | "relative">("relative");
 
   // Chart display options
   const [scaleType, setScaleType] = useState<"linear" | "log">("linear");
@@ -135,14 +126,13 @@ export default function RiskSimulatorPage() {
 
     // Get date range
     const sortedTrades = [...trades].sort(
-      (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime()
+      (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime(),
     );
     const firstDate = sortedTrades[0].dateOpened;
     const lastDate = sortedTrades[sortedTrades.length - 1].dateOpened;
 
     // Calculate years elapsed
-    const daysElapsed =
-      (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24);
+    const daysElapsed = (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24);
     const yearsElapsed = daysElapsed / 365.25;
 
     if (yearsElapsed < 0.01) return 252; // Too short to calculate
@@ -157,7 +147,7 @@ export default function RiskSimulatorPage() {
     if (trades.length === 0) return 100000; // Default
     const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(
       trades,
-      dailyLogs.length > 0 ? dailyLogs : undefined
+      dailyLogs.length > 0 ? dailyLogs : undefined,
     );
     return initialCapital > 0 ? initialCapital : 100000;
   }, [trades, dailyLogs]);
@@ -177,8 +167,7 @@ export default function RiskSimulatorPage() {
 
       try {
         const processedBlock = await getBlock(activeBlockId);
-        const combineLegGroups =
-          processedBlock?.analysisConfig?.combineLegGroups ?? false;
+        const combineLegGroups = processedBlock?.analysisConfig?.combineLegGroups ?? false;
 
         const [loadedTrades, loadedDailyLogs] = await Promise.all([
           getTradesByBlockWithOptions(activeBlockId, { combineLegGroups }),
@@ -206,8 +195,7 @@ export default function RiskSimulatorPage() {
 
   // Update tradesPerYear and initialCapital when calculated values change
   useEffect(() => {
-    const fallbackTradesPerYear =
-      calculatedTradesPerYear > 0 ? calculatedTradesPerYear : 252;
+    const fallbackTradesPerYear = calculatedTradesPerYear > 0 ? calculatedTradesPerYear : 252;
     setTradesPerYear(fallbackTradesPerYear);
     setInitialCapital(calculatedInitialCapital);
     // Set default simulation period based on trading frequency
@@ -220,11 +208,7 @@ export default function RiskSimulatorPage() {
 
   // Calculate actual values from user-friendly inputs
   const simulationLength = useMemo(() => {
-    return timeToTrades(
-      simulationPeriodValue,
-      simulationPeriodUnit,
-      tradesPerYear
-    );
+    return timeToTrades(simulationPeriodValue, simulationPeriodUnit, tradesPerYear);
   }, [simulationPeriodValue, simulationPeriodUnit, tradesPerYear]);
 
   const worstCaseSimulationBudget = useMemo(() => {
@@ -236,11 +220,7 @@ export default function RiskSimulatorPage() {
   }, [worstCaseEnabled, simulationLength, worstCasePercentage]);
 
   const historicalWorstCaseRequest = useMemo(() => {
-    if (
-      !worstCaseEnabled ||
-      worstCaseBasedOn !== "historical" ||
-      tradesForWorstCase.length === 0
-    ) {
+    if (!worstCaseEnabled || worstCaseBasedOn !== "historical" || tradesForWorstCase.length === 0) {
       return 0;
     }
 
@@ -252,18 +232,10 @@ export default function RiskSimulatorPage() {
 
     let totalRequested = 0;
     for (const count of counts.values()) {
-      totalRequested += Math.max(
-        1,
-        Math.round((count * worstCasePercentage) / 100)
-      );
+      totalRequested += Math.max(1, Math.round((count * worstCasePercentage) / 100));
     }
     return totalRequested;
-  }, [
-    tradesForWorstCase,
-    worstCaseBasedOn,
-    worstCaseEnabled,
-    worstCasePercentage,
-  ]);
+  }, [tradesForWorstCase, worstCaseBasedOn, worstCaseEnabled, worstCasePercentage]);
 
   const shouldShowHistoricalCapHint =
     worstCaseEnabled &&
@@ -325,11 +297,7 @@ export default function RiskSimulatorPage() {
       const effectiveSimulationLength = isStrategyFiltered
         ? Math.max(
             1,
-            timeToTrades(
-              simulationPeriodValue,
-              simulationPeriodUnit,
-              effectiveTradesPerYear
-            )
+            timeToTrades(simulationPeriodValue, simulationPeriodUnit, effectiveTradesPerYear),
           )
         : simulationLength;
 
@@ -413,14 +381,10 @@ export default function RiskSimulatorPage() {
         valueAtRisk: result.statistics.valueAtRisk,
       },
       actualResamplePoolSize: result.actualResamplePoolSize,
-      selectedStrategies:
-        selectedStrategies.length > 0 ? selectedStrategies : "all",
+      selectedStrategies: selectedStrategies.length > 0 ? selectedStrategies : "all",
     };
 
-    downloadJson(
-      exportData,
-      generateExportFilename(activeBlock.name, "monte-carlo", "json")
-    );
+    downloadJson(exportData, generateExportFilename(activeBlock.name, "monte-carlo", "json"));
   };
 
   const exportAsCsv = () => {
@@ -432,134 +396,85 @@ export default function RiskSimulatorPage() {
     lines.push("# Monte Carlo Simulation Export");
     lines.push(toCsvRow(["Block", activeBlock.name]));
     lines.push(toCsvRow(["Exported At", new Date().toISOString()]));
-    lines.push(
-      toCsvRow(["Number of Simulations", result.parameters.numSimulations])
-    );
-    lines.push(
-      toCsvRow([
-        "Simulation Length (trades)",
-        result.parameters.simulationLength,
-      ])
-    );
+    lines.push(toCsvRow(["Number of Simulations", result.parameters.numSimulations]));
+    lines.push(toCsvRow(["Simulation Length (trades)", result.parameters.simulationLength]));
     lines.push(toCsvRow(["Resample Method", result.parameters.resampleMethod]));
-    lines.push(
-      toCsvRow(["Initial Capital", `$${result.parameters.initialCapital}`])
-    );
+    lines.push(toCsvRow(["Initial Capital", `$${result.parameters.initialCapital}`]));
     lines.push(toCsvRow(["Trades Per Year", result.parameters.tradesPerYear]));
-    lines.push(
-      toCsvRow(["Random Seed", result.parameters.randomSeed ?? "none"])
-    );
-    lines.push(
-      toCsvRow(["Normalize to 1-Lot", result.parameters.normalizeTo1Lot])
-    );
-    lines.push(
-      toCsvRow(["Worst-Case Enabled", result.parameters.worstCaseEnabled])
-    );
+    lines.push(toCsvRow(["Random Seed", result.parameters.randomSeed ?? "none"]));
+    lines.push(toCsvRow(["Normalize to 1-Lot", result.parameters.normalizeTo1Lot]));
+    lines.push(toCsvRow(["Worst-Case Enabled", result.parameters.worstCaseEnabled]));
     if (result.parameters.worstCaseEnabled) {
-      lines.push(
-        toCsvRow([
-          "Worst-Case Percentage",
-          `${result.parameters.worstCasePercentage}%`,
-        ])
-      );
-      lines.push(
-        toCsvRow(["Worst-Case Mode", result.parameters.worstCaseMode])
-      );
+      lines.push(toCsvRow(["Worst-Case Percentage", `${result.parameters.worstCasePercentage}%`]));
+      lines.push(toCsvRow(["Worst-Case Mode", result.parameters.worstCaseMode]));
     }
     lines.push(
       toCsvRow([
         "Selected Strategies",
         selectedStrategies.length > 0 ? selectedStrategies.join("; ") : "All",
-      ])
+      ]),
     );
     lines.push("");
 
     // Statistics section
     lines.push("# Summary Statistics");
     lines.push("Metric,Value");
+    lines.push(toCsvRow(["Mean Final Value", `$${result.statistics.meanFinalValue.toFixed(2)}`]));
     lines.push(
-      toCsvRow([
-        "Mean Final Value",
-        `$${result.statistics.meanFinalValue.toFixed(2)}`,
-      ])
+      toCsvRow(["Median Final Value", `$${result.statistics.medianFinalValue.toFixed(2)}`]),
     );
+    lines.push(toCsvRow(["Std Dev Final Value", `$${result.statistics.stdFinalValue.toFixed(2)}`]));
     lines.push(
-      toCsvRow([
-        "Median Final Value",
-        `$${result.statistics.medianFinalValue.toFixed(2)}`,
-      ])
-    );
-    lines.push(
-      toCsvRow([
-        "Std Dev Final Value",
-        `$${result.statistics.stdFinalValue.toFixed(2)}`,
-      ])
-    );
-    lines.push(
-      toCsvRow([
-        "Mean Total Return",
-        `${(result.statistics.meanTotalReturn * 100).toFixed(2)}%`,
-      ])
+      toCsvRow(["Mean Total Return", `${(result.statistics.meanTotalReturn * 100).toFixed(2)}%`]),
     );
     lines.push(
       toCsvRow([
         "Median Total Return",
         `${(result.statistics.medianTotalReturn * 100).toFixed(2)}%`,
-      ])
+      ]),
     );
     lines.push(
       toCsvRow([
         "Mean Annualized Return",
         `${(result.statistics.meanAnnualizedReturn * 100).toFixed(2)}%`,
-      ])
+      ]),
     );
     lines.push(
       toCsvRow([
         "Median Annualized Return",
         `${(result.statistics.medianAnnualizedReturn * 100).toFixed(2)}%`,
-      ])
+      ]),
     );
     lines.push(
-      toCsvRow([
-        "Mean Max Drawdown",
-        `${(result.statistics.meanMaxDrawdown * 100).toFixed(2)}%`,
-      ])
+      toCsvRow(["Mean Max Drawdown", `${(result.statistics.meanMaxDrawdown * 100).toFixed(2)}%`]),
     );
     lines.push(
       toCsvRow([
         "Median Max Drawdown",
         `${(result.statistics.medianMaxDrawdown * 100).toFixed(2)}%`,
-      ])
+      ]),
     );
-    lines.push(
-      toCsvRow([
-        "Mean Sharpe Ratio",
-        result.statistics.meanSharpeRatio.toFixed(2),
-      ])
-    );
+    lines.push(toCsvRow(["Mean Sharpe Ratio", result.statistics.meanSharpeRatio.toFixed(2)]));
     lines.push(
       toCsvRow([
         "Probability of Profit",
         `${(result.statistics.probabilityOfProfit * 100).toFixed(2)}%`,
-      ])
+      ]),
     );
     lines.push(
-      toCsvRow([
-        "VaR (5th percentile)",
-        `${(result.statistics.valueAtRisk.p5 * 100).toFixed(2)}%`,
-      ])
+      toCsvRow(["VaR (5th percentile)", `${(result.statistics.valueAtRisk.p5 * 100).toFixed(2)}%`]),
     );
     lines.push(
       toCsvRow([
         "VaR (10th percentile)",
         `${(result.statistics.valueAtRisk.p10 * 100).toFixed(2)}%`,
-      ])
+      ]),
     );
     lines.push(
       toCsvRow([
         "VaR (25th percentile)",
         `${(result.statistics.valueAtRisk.p25 * 100).toFixed(2)}%`,
-      ])
+      ]),
     );
     lines.push("");
 
@@ -575,14 +490,11 @@ export default function RiskSimulatorPage() {
           result.percentiles.p50[i].toFixed(2),
           result.percentiles.p75[i].toFixed(2),
           result.percentiles.p95[i].toFixed(2),
-        ])
+        ]),
       );
     }
 
-    downloadCsv(
-      lines,
-      generateExportFilename(activeBlock.name, "monte-carlo", "csv")
-    );
+    downloadCsv(lines, generateExportFilename(activeBlock.name, "monte-carlo", "csv"));
   };
 
   if (!activeBlockId) {
@@ -602,8 +514,8 @@ export default function RiskSimulatorPage() {
         </div>
         <Card className="p-8 text-center">
           <p className="text-muted-foreground">
-            Insufficient trades for Monte Carlo simulation. Need at least 10
-            trades, found {trades.length}.
+            Insufficient trades for Monte Carlo simulation. Need at least 10 trades, found{" "}
+            {trades.length}.
           </p>
         </Card>
       </div>
@@ -613,10 +525,7 @@ export default function RiskSimulatorPage() {
   return (
     <div className="space-y-6">
       {/* Trading Frequency Card */}
-      <TradingFrequencyCard
-        trades={trades}
-        tradesPerYear={calculatedTradesPerYear}
-      />
+      <TradingFrequencyCard trades={trades} tradesPerYear={calculatedTradesPerYear} />
 
       {/* Controls */}
       <Card className="p-6">
@@ -636,16 +545,14 @@ export default function RiskSimulatorPage() {
                   </div>
                   <div className="px-4 pb-4 space-y-3">
                     <p className="text-sm font-medium text-foreground leading-relaxed">
-                      Build thousands of possible futures from your trading
-                      blocks by reshuffling actual trade results.
+                      Build thousands of possible futures from your trading blocks by reshuffling
+                      actual trade results.
                     </p>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Each simulation randomly samples from your historical
-                      performance to project potential outcomes. This helps
-                      understand risk ranges and probability distributions, but
-                      doesn&apos;t predict actual future results. Use these
-                      projections to stress-test your strategy and understand
-                      downside scenarios.
+                      Each simulation randomly samples from your historical performance to project
+                      potential outcomes. This helps understand risk ranges and probability
+                      distributions, but doesn&apos;t predict actual future results. Use these
+                      projections to stress-test your strategy and understand downside scenarios.
                     </p>
                   </div>
                 </div>
@@ -672,15 +579,13 @@ export default function RiskSimulatorPage() {
                       </div>
                       <div className="px-4 pb-4 space-y-3">
                         <p className="text-sm font-medium text-foreground leading-relaxed">
-                          How many different future scenarios to generate from
-                          your trading history.
+                          How many different future scenarios to generate from your trading history.
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          More simulations produce smoother probability
-                          distributions and more reliable statistics. 1,000
-                          simulations provide good results for most strategies.
-                          Use 5,000+ for publication-quality analysis or when
-                          you need high precision in tail risk estimates.
+                          More simulations produce smoother probability distributions and more
+                          reliable statistics. 1,000 simulations provide good results for most
+                          strategies. Use 5,000+ for publication-quality analysis or when you need
+                          high precision in tail risk estimates.
                         </p>
                       </div>
                     </div>
@@ -691,16 +596,12 @@ export default function RiskSimulatorPage() {
                 id="num-simulations"
                 type="number"
                 value={numSimulations}
-                onChange={(e) =>
-                  setNumSimulations(parseInt(e.target.value) || 1000)
-                }
+                onChange={(e) => setNumSimulations(parseInt(e.target.value) || 1000)}
                 min={100}
                 max={10000}
                 step={100}
               />
-              <p className="text-xs text-muted-foreground">
-                100-10,000 simulations
-              </p>
+              <p className="text-xs text-muted-foreground">100-10,000 simulations</p>
             </div>
 
             {/* Column 2 - Simulation Period */}
@@ -714,20 +615,16 @@ export default function RiskSimulatorPage() {
                   <HoverCardContent className="w-80 p-0 overflow-hidden">
                     <div className="space-y-3">
                       <div className="bg-primary/5 border-b px-4 py-3">
-                        <h4 className="text-sm font-semibold text-primary">
-                          Simulation Period
-                        </h4>
+                        <h4 className="text-sm font-semibold text-primary">Simulation Period</h4>
                       </div>
                       <div className="px-4 pb-4 space-y-3">
                         <p className="text-sm font-medium text-foreground leading-relaxed">
-                          How far into the future to project your portfolio
-                          performance.
+                          How far into the future to project your portfolio performance.
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          Choose a timeframe in familiar units (days, months, or
-                          years). The simulator converts this to the number of
-                          trades based on your historical trading frequency.
-                          Longer periods show a wider range of possible outcomes
+                          Choose a timeframe in familiar units (days, months, or years). The
+                          simulator converts this to the number of trades based on your historical
+                          trading frequency. Longer periods show a wider range of possible outcomes
                           as uncertainty compounds over time.
                         </p>
                       </div>
@@ -740,9 +637,7 @@ export default function RiskSimulatorPage() {
                   id="sim-period"
                   type="number"
                   value={simulationPeriodValue}
-                  onChange={(e) =>
-                    setSimulationPeriodValue(parseFloat(e.target.value) || 1)
-                  }
+                  onChange={(e) => setSimulationPeriodValue(parseFloat(e.target.value) || 1)}
                   min={0.1}
                   max={10}
                   step={0.1}
@@ -778,21 +673,18 @@ export default function RiskSimulatorPage() {
                   <HoverCardContent className="w-80 p-0 overflow-hidden">
                     <div className="space-y-3">
                       <div className="bg-primary/5 border-b px-4 py-3">
-                        <h4 className="text-sm font-semibold text-primary">
-                          Trades Per Year
-                        </h4>
+                        <h4 className="text-sm font-semibold text-primary">Trades Per Year</h4>
                       </div>
                       <div className="px-4 pb-4 space-y-3">
                         <p className="text-sm font-medium text-foreground leading-relaxed">
-                          Expected annual trading frequency used to annualize
-                          returns and volatility metrics.
+                          Expected annual trading frequency used to annualize returns and volatility
+                          metrics.
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          This value is auto-detected from your historical
-                          trading pace and affects how performance metrics like
-                          CAGR and Sharpe Ratio are calculated. Higher values
-                          compound returns faster but should reflect a
-                          sustainable trading frequency.
+                          This value is auto-detected from your historical trading pace and affects
+                          how performance metrics like CAGR and Sharpe Ratio are calculated. Higher
+                          values compound returns faster but should reflect a sustainable trading
+                          frequency.
                         </p>
                       </div>
                     </div>
@@ -814,8 +706,7 @@ export default function RiskSimulatorPage() {
                 step={5}
               />
               <p className="text-xs text-muted-foreground">
-                Auto-detected pace ≈ {calculatedTradesPerYear.toLocaleString()}{" "}
-                trades/year.
+                Auto-detected pace ≈ {calculatedTradesPerYear.toLocaleString()} trades/year.
               </p>
             </div>
 
@@ -830,22 +721,18 @@ export default function RiskSimulatorPage() {
                   <HoverCardContent className="w-80 p-0 overflow-hidden">
                     <div className="space-y-3">
                       <div className="bg-primary/5 border-b px-4 py-3">
-                        <h4 className="text-sm font-semibold text-primary">
-                          Initial Capital
-                        </h4>
+                        <h4 className="text-sm font-semibold text-primary">Initial Capital</h4>
                       </div>
                       <div className="px-4 pb-4 space-y-3">
                         <p className="text-sm font-medium text-foreground leading-relaxed">
-                          Starting portfolio value from which all simulations
-                          begin.
+                          Starting portfolio value from which all simulations begin.
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          This value is auto-detected from your actual starting
-                          capital when you began trading. You can adjust it to
-                          simulate different account sizes or to project how
-                          your strategy would perform with more or less capital.
-                          The simulator applies your historical return patterns
-                          to this starting balance.
+                          This value is auto-detected from your actual starting capital when you
+                          began trading. You can adjust it to simulate different account sizes or to
+                          project how your strategy would perform with more or less capital. The
+                          simulator applies your historical return patterns to this starting
+                          balance.
                         </p>
                       </div>
                     </div>
@@ -856,16 +743,12 @@ export default function RiskSimulatorPage() {
                 id="initial-capital"
                 type="number"
                 value={initialCapital}
-                onChange={(e) =>
-                  setInitialCapital(parseInt(e.target.value) || 100000)
-                }
+                onChange={(e) => setInitialCapital(parseInt(e.target.value) || 100000)}
                 min={1000}
                 max={10000000}
                 step={1000}
               />
-              <p className="text-xs text-muted-foreground">
-                Starting portfolio value
-              </p>
+              <p className="text-xs text-muted-foreground">Starting portfolio value</p>
             </div>
           </div>
 
@@ -880,20 +763,16 @@ export default function RiskSimulatorPage() {
                 <HoverCardContent className="w-80 p-0 overflow-hidden">
                   <div className="space-y-3">
                     <div className="bg-primary/5 border-b px-4 py-3">
-                      <h4 className="text-sm font-semibold text-primary">
-                        Strategy Filter
-                      </h4>
+                      <h4 className="text-sm font-semibold text-primary">Strategy Filter</h4>
                     </div>
                     <div className="px-4 pb-4 space-y-3">
                       <p className="text-sm font-medium text-foreground leading-relaxed">
-                        Select which strategies to include in the Monte Carlo
-                        simulation.
+                        Select which strategies to include in the Monte Carlo simulation.
                       </p>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        Leave empty to simulate using all strategies combined.
-                        Select specific strategies to analyze their isolated
-                        performance or test strategy combinations. This is
-                        useful for comparing individual strategy risk profiles
+                        Leave empty to simulate using all strategies combined. Select specific
+                        strategies to analyze their isolated performance or test strategy
+                        combinations. This is useful for comparing individual strategy risk profiles
                         or evaluating portfolio diversification effects.
                       </p>
                     </div>
@@ -925,24 +804,20 @@ export default function RiskSimulatorPage() {
                   </h3>
                   <div className="text-xs text-blue-800 dark:text-blue-200 space-y-2">
                     <p>
-                      <strong>Percentage Returns:</strong> Best for most
-                      traders, especially those using percentage-based position
-                      sizing or compounding strategies. Automatically accounts
-                      for growing equity. Enable normalization if you trade
+                      <strong>Percentage Returns:</strong> Best for most traders, especially those
+                      using percentage-based position sizing or compounding strategies.
+                      Automatically accounts for growing equity. Enable normalization if you trade
                       varying contract sizes.
                     </p>
                     <p>
-                      <strong>Fixed Sizing Modes:</strong> Use{" "}
-                      <strong>Individual Trades</strong> or{" "}
-                      <strong>Daily Returns</strong> only if you always trade
-                      fixed dollar amounts. Enable normalization to compare
-                      across different lot sizes.
+                      <strong>Fixed Sizing Modes:</strong> Use <strong>Individual Trades</strong> or{" "}
+                      <strong>Daily Returns</strong> only if you always trade fixed dollar amounts.
+                      Enable normalization to compare across different lot sizes.
                     </p>
                     <p className="pt-2 border-t border-blue-200 dark:border-blue-800">
-                      <strong>💡 Tip:</strong> If you&apos;re unsure, stick with
-                      Percentage Returns. It prevents unrealistic drawdown
-                      calculations and matches how most traders actually size
-                      positions.
+                      <strong>💡 Tip:</strong> If you&apos;re unsure, stick with Percentage Returns.
+                      It prevents unrealistic drawdown calculations and matches how most traders
+                      actually size positions.
                     </p>
                   </div>
                 </div>
@@ -962,9 +837,7 @@ export default function RiskSimulatorPage() {
                   <HoverCardContent className="w-80 p-0 overflow-hidden">
                     <div className="space-y-3">
                       <div className="bg-primary/5 border-b px-4 py-3">
-                        <h4 className="text-sm font-semibold text-primary">
-                          Sampling Method
-                        </h4>
+                        <h4 className="text-sm font-semibold text-primary">Sampling Method</h4>
                       </div>
                       <div className="px-4 pb-4 space-y-3">
                         <p className="text-sm font-medium text-foreground leading-relaxed">
@@ -972,33 +845,26 @@ export default function RiskSimulatorPage() {
                         </p>
                         <div className="space-y-2 text-xs text-muted-foreground">
                           <p>
-                            <strong className="text-foreground">
-                              Individual Trades (Fixed):
-                            </strong>{" "}
-                            Resamples dollar P&L values from individual trades.
-                            Best for strategies with fixed position sizes.
+                            <strong className="text-foreground">Individual Trades (Fixed):</strong>{" "}
+                            Resamples dollar P&L values from individual trades. Best for strategies
+                            with fixed position sizes.
                           </p>
                           <p>
-                            <strong className="text-foreground">
-                              Daily Returns (Fixed):
-                            </strong>{" "}
-                            Groups trades by day and resamples daily P&L totals.
-                            Better for concurrent positions, but still uses
-                            fixed dollar amounts.
+                            <strong className="text-foreground">Daily Returns (Fixed):</strong>{" "}
+                            Groups trades by day and resamples daily P&L totals. Better for
+                            concurrent positions, but still uses fixed dollar amounts.
                           </p>
                           <p>
                             <strong className="text-foreground">
                               Percentage Returns (Compounding):
                             </strong>{" "}
-                            Converts each trade to a percentage return based on
-                            capital at trade time, then applies those
-                            percentages during simulation.{" "}
+                            Converts each trade to a percentage return based on capital at trade
+                            time, then applies those percentages during simulation.{" "}
                             <strong className="text-primary">
                               Essential for compounding strategies
                             </strong>{" "}
-                            where position sizes scale with equity. Prevents
-                            unrealistic drawdowns from large late-stage trades
-                            appearing early in simulations.
+                            where position sizes scale with equity. Prevents unrealistic drawdowns
+                            from large late-stage trades appearing early in simulations.
                           </p>
                         </div>
                       </div>
@@ -1016,15 +882,9 @@ export default function RiskSimulatorPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="percentage">
-                    Percentage Returns (Compounding)
-                  </SelectItem>
-                  <SelectItem value="trades">
-                    Individual Trades (Fixed Sizing)
-                  </SelectItem>
-                  <SelectItem value="daily">
-                    Daily Returns (Fixed Sizing)
-                  </SelectItem>
+                  <SelectItem value="percentage">Percentage Returns (Compounding)</SelectItem>
+                  <SelectItem value="trades">Individual Trades (Fixed Sizing)</SelectItem>
+                  <SelectItem value="daily">Daily Returns (Fixed Sizing)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
@@ -1042,23 +902,18 @@ export default function RiskSimulatorPage() {
                   <HoverCardContent className="w-80 p-0 overflow-hidden">
                     <div className="space-y-3">
                       <div className="bg-primary/5 border-b px-4 py-3">
-                        <h4 className="text-sm font-semibold text-primary">
-                          Normalize to 1-Lot
-                        </h4>
+                        <h4 className="text-sm font-semibold text-primary">Normalize to 1-Lot</h4>
                       </div>
                       <div className="px-4 pb-4 space-y-3">
                         <p className="text-sm font-medium text-foreground leading-relaxed">
-                          Scale trade P&L to a per-contract basis for consistent
-                          risk analysis.
+                          Scale trade P&L to a per-contract basis for consistent risk analysis.
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          If you trade multiple contracts per position (e.g.,
-                          5-lot or 10-lot positions), enable this to normalize
-                          all trades to 1-lot equivalents. This prevents
-                          inflated drawdowns and allows fair comparison across
-                          different position sizes. The simulator will divide
-                          each trade&apos;s P&L by its contract quantity to get
-                          per-contract performance.
+                          If you trade multiple contracts per position (e.g., 5-lot or 10-lot
+                          positions), enable this to normalize all trades to 1-lot equivalents. This
+                          prevents inflated drawdowns and allows fair comparison across different
+                          position sizes. The simulator will divide each trade&apos;s P&L by its
+                          contract quantity to get per-contract performance.
                         </p>
                       </div>
                     </div>
@@ -1088,9 +943,7 @@ export default function RiskSimulatorPage() {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Label className="text-base font-semibold">
-                    Worst-Case Scenario Testing
-                  </Label>
+                  <Label className="text-base font-semibold">Worst-Case Scenario Testing</Label>
                   <HoverCard>
                     <HoverCardTrigger asChild>
                       <HelpCircle className="h-4 w-4 text-muted-foreground/60 cursor-help" />
@@ -1104,14 +957,13 @@ export default function RiskSimulatorPage() {
                         </div>
                         <div className="px-4 pb-4 space-y-3">
                           <p className="text-sm font-medium text-foreground leading-relaxed">
-                            Inject synthetic maximum-loss trades to stress-test
-                            your portfolio against catastrophic scenarios.
+                            Inject synthetic maximum-loss trades to stress-test your portfolio
+                            against catastrophic scenarios.
                           </p>
                           <p className="text-xs text-muted-foreground leading-relaxed">
-                            For each strategy, this creates trades that lose the
-                            full allocated margin (worst possible outcome). If a
-                            strategy does not report margin, we fall back to its
-                            recorded max loss (or largest historical loser) so
+                            For each strategy, this creates trades that lose the full allocated
+                            margin (worst possible outcome). If a strategy does not report margin,
+                            we fall back to its recorded max loss (or largest historical loser) so
                             the stress still reflects that strategy&apos;s risk.
                           </p>
                         </div>
@@ -1127,10 +979,7 @@ export default function RiskSimulatorPage() {
                     checked={worstCaseEnabled}
                     onCheckedChange={setWorstCaseEnabled}
                   />
-                  <Label
-                    htmlFor="worst-case-enabled"
-                    className="cursor-pointer font-medium"
-                  >
+                  <Label htmlFor="worst-case-enabled" className="cursor-pointer font-medium">
                     Enable worst-case maximum-loss trades
                   </Label>
                 </div>
@@ -1140,9 +989,7 @@ export default function RiskSimulatorPage() {
                     {/* Percentage Slider */}
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <Label className="text-sm font-medium">
-                          Percentage of max-loss trades
-                        </Label>
+                        <Label className="text-sm font-medium">Percentage of max-loss trades</Label>
                         <HoverCard>
                           <HoverCardTrigger asChild>
                             <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
@@ -1156,17 +1003,14 @@ export default function RiskSimulatorPage() {
                               </div>
                               <div className="px-4 pb-4">
                                 <p className="text-xs text-muted-foreground leading-relaxed">
-                                  Controls how many max-loss trades are created.
-                                  In pool mode, they&apos;re added to the resample
-                                  pool. In guarantee mode, they&apos;re forced into
-                                  every simulation. Loss size is scaled to your
-                                  starting capital by default so 1% really means
-                                  “a 1% hit to the account per strategy.”
-                                  Disable that below if you want to inject the
-                                  raw historical dollar margins instead. When
-                                  margin data is missing, we automatically use
-                                  that strategy&apos;s largest recorded loss so the
-                                  test still reflects its downside.
+                                  Controls how many max-loss trades are created. In pool mode,
+                                  they&apos;re added to the resample pool. In guarantee mode,
+                                  they&apos;re forced into every simulation. Loss size is scaled to
+                                  your starting capital by default so 1% really means “a 1% hit to
+                                  the account per strategy.” Disable that below if you want to
+                                  inject the raw historical dollar margins instead. When margin data
+                                  is missing, we automatically use that strategy&apos;s largest
+                                  recorded loss so the test still reflects its downside.
                                 </p>
                               </div>
                             </div>
@@ -1176,44 +1020,37 @@ export default function RiskSimulatorPage() {
                       <div className="flex items-center gap-4">
                         <Slider
                           value={[worstCasePercentage]}
-                          onValueChange={(values) =>
-                            setWorstCasePercentage(values[0])
-                          }
+                          onValueChange={(values) => setWorstCasePercentage(values[0])}
                           min={1}
                           max={20}
                           step={1}
                           className="flex-1"
                         />
-                        <div className="w-16 text-right font-medium">
-                          {worstCasePercentage}%
-                        </div>
+                        <div className="w-16 text-right font-medium">{worstCasePercentage}%</div>
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {worstCaseBasedOn === "simulation" ? (
                           <>
-                            Exactly {worstCasePercentage}% of the simulation
-                            horizon (≈ {worstCaseSimulationBudget} synthetic
-                            trades) split evenly across strategies.
+                            Exactly {worstCasePercentage}% of the simulation horizon (≈{" "}
+                            {worstCaseSimulationBudget} synthetic trades) split evenly across
+                            strategies.
                           </>
                         ) : (
                           <>
-                            Weighted by each strategy&apos;s historical trade
-                            count, but capped at {worstCasePercentage}% of the
-                            simulation (≈ {worstCaseSimulationBudget} trades) so
-                            the &quot;Force {worstCasePercentage}%&quot; promise
-                            stays accurate.
+                            Weighted by each strategy&apos;s historical trade count, but capped at{" "}
+                            {worstCasePercentage}% of the simulation (≈ {worstCaseSimulationBudget}{" "}
+                            trades) so the &quot;Force {worstCasePercentage}%&quot; promise stays
+                            accurate.
                           </>
                         )}
                       </p>
                       {shouldShowHistoricalCapHint && (
                         <p className="text-[11px] text-amber-600">
-                          ℹ️ Weighting by historical data would create ~
-                          {historicalWorstCaseRequest} synthetic trades, but
-                          we&apos;re capping it at {worstCaseSimulationBudget}{" "}
-                          trades ({worstCasePercentage}% of your{" "}
-                          {simulationLength}-trade simulation) to keep the
-                          percentage accurate. The budget is distributed fairly
-                          across strategies.
+                          ℹ️ Weighting by historical data would create ~{historicalWorstCaseRequest}{" "}
+                          synthetic trades, but we&apos;re capping it at {worstCaseSimulationBudget}{" "}
+                          trades ({worstCasePercentage}% of your {simulationLength}-trade
+                          simulation) to keep the percentage accurate. The budget is distributed
+                          fairly across strategies.
                         </p>
                       )}
                     </div>
@@ -1221,9 +1058,7 @@ export default function RiskSimulatorPage() {
                     {/* Injection Mode */}
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <Label className="text-sm font-medium">
-                          Injection mode
-                        </Label>
+                        <Label className="text-sm font-medium">Injection mode</Label>
                         <HoverCard>
                           <HoverCardTrigger asChild>
                             <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
@@ -1241,9 +1076,8 @@ export default function RiskSimulatorPage() {
                                     Add to resample pool:
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    Max-loss trades are added to the pool and
-                                    sampled randomly. They may appear 0, 1, or
-                                    multiple times per simulation. More
+                                    Max-loss trades are added to the pool and sampled randomly. They
+                                    may appear 0, 1, or multiple times per simulation. More
                                     conservative approach.
                                   </p>
                                 </div>
@@ -1252,11 +1086,10 @@ export default function RiskSimulatorPage() {
                                     Guarantee in every simulation:
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    Each simulation MUST include the exact
-                                    percentage of max-loss trades. We swap out
-                                    baseline draws (instead of appending) so the
-                                    simulation horizon stays the same while the
-                                    losses are randomly interspersed.
+                                    Each simulation MUST include the exact percentage of max-loss
+                                    trades. We swap out baseline draws (instead of appending) so the
+                                    simulation horizon stays the same while the losses are randomly
+                                    interspersed.
                                   </p>
                                 </div>
                               </div>
@@ -1322,21 +1155,19 @@ export default function RiskSimulatorPage() {
                                   <span className="font-medium text-foreground">
                                     Scale to account size (recommended):
                                   </span>
-                                  &nbsp;Uses each strategy&apos;s worst observed
-                                  loss as a percentage of account capital, then
-                                  applies it to your current starting capital.
-                                  A 1% slider therefore means “1% of the account”
+                                  &nbsp;Uses each strategy&apos;s worst observed loss as a
+                                  percentage of account capital, then applies it to your current
+                                  starting capital. A 1% slider therefore means “1% of the account”
                                   instead of “historical dollars.”
                                 </p>
                                 <p>
                                   <span className="font-medium text-foreground">
                                     Use historical dollars:
                                   </span>
-                                  &nbsp;Injects the raw worst-case dollar amount
-                                  from the trade log. Pick this if you want to
-                                  replay the exact historical blow-ups and
-                                  you&apos;re confident those dollar figures match
-                                  today&apos;s allocations.
+                                  &nbsp;Injects the raw worst-case dollar amount from the trade log.
+                                  Pick this if you want to replay the exact historical blow-ups and
+                                  you&apos;re confident those dollar figures match today&apos;s
+                                  allocations.
                                 </p>
                               </div>
                             </div>
@@ -1384,9 +1215,7 @@ export default function RiskSimulatorPage() {
                     {/* Percentage Basis */}
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <Label className="text-sm font-medium">
-                          Percentage based on
-                        </Label>
+                        <Label className="text-sm font-medium">Percentage based on</Label>
                         <HoverCard>
                           <HoverCardTrigger asChild>
                             <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
@@ -1404,11 +1233,9 @@ export default function RiskSimulatorPage() {
                                     Simulation length (recommended):
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    Percentage is based on the simulation
-                                    length. For example, 5% of a 500-trade
-                                    simulation would add ~25 max-loss trades
-                                    (divided evenly across strategies). More
-                                    intuitive for stress testing.
+                                    Percentage is based on the simulation length. For example, 5% of
+                                    a 500-trade simulation would add ~25 max-loss trades (divided
+                                    evenly across strategies). More intuitive for stress testing.
                                   </p>
                                 </div>
                                 <div>
@@ -1416,10 +1243,9 @@ export default function RiskSimulatorPage() {
                                     Historical data count:
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    Percentage is based on historical trade
-                                    count per strategy. With large datasets,
-                                    this can inject many worst-case trades.
-                                    Better for proportional historical analysis.
+                                    Percentage is based on historical trade count per strategy. With
+                                    large datasets, this can inject many worst-case trades. Better
+                                    for proportional historical analysis.
                                   </p>
                                 </div>
                               </div>
@@ -1493,17 +1319,14 @@ export default function RiskSimulatorPage() {
                             </div>
                             <div className="px-4 pb-4 space-y-3">
                               <p className="text-sm font-medium text-foreground leading-relaxed">
-                                Weight simulations toward your most recent
-                                trading performance.
+                                Weight simulations toward your most recent trading performance.
                               </p>
                               <p className="text-xs text-muted-foreground leading-relaxed">
-                                Set to 100% to use your entire trading history,
-                                or reduce to focus on recent trades. For
-                                example, 25% uses only your most recent quarter
-                                of trades. This is useful when your strategy has
-                                evolved, market conditions have changed, or you
-                                want to stress-test against recent volatility
-                                patterns.
+                                Set to 100% to use your entire trading history, or reduce to focus
+                                on recent trades. For example, 25% uses only your most recent
+                                quarter of trades. This is useful when your strategy has evolved,
+                                market conditions have changed, or you want to stress-test against
+                                recent volatility patterns.
                               </p>
                             </div>
                           </div>
@@ -1513,17 +1336,13 @@ export default function RiskSimulatorPage() {
                     <div className="flex items-center gap-4">
                       <Slider
                         value={[resamplePercentage]}
-                        onValueChange={(values) =>
-                          setResamplePercentage(values[0])
-                        }
+                        onValueChange={(values) => setResamplePercentage(values[0])}
                         min={10}
                         max={100}
                         step={5}
                         className="flex-1"
                       />
-                      <div className="w-16 text-right font-medium">
-                        {resamplePercentage}%
-                      </div>
+                      <div className="w-16 text-right font-medium">{resamplePercentage}%</div>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Using{" "}
@@ -1545,22 +1364,18 @@ export default function RiskSimulatorPage() {
                         <HoverCardContent className="w-80 p-0 overflow-hidden">
                           <div className="space-y-3">
                             <div className="bg-primary/5 border-b px-4 py-3">
-                              <h4 className="text-sm font-semibold text-primary">
-                                Random Seed
-                              </h4>
+                              <h4 className="text-sm font-semibold text-primary">Random Seed</h4>
                             </div>
                             <div className="px-4 pb-4 space-y-3">
                               <p className="text-sm font-medium text-foreground leading-relaxed">
-                                Control whether simulations produce identical or
-                                varied results across runs.
+                                Control whether simulations produce identical or varied results
+                                across runs.
                               </p>
                               <p className="text-xs text-muted-foreground leading-relaxed">
-                                Enable fixed seed to get reproducible results -
-                                the same simulation parameters will always
-                                produce identical outputs. This is essential for
-                                comparing different scenarios (like various
-                                position sizes or time periods) on equal
-                                footing. Disable for truly random simulations
+                                Enable fixed seed to get reproducible results - the same simulation
+                                parameters will always produce identical outputs. This is essential
+                                for comparing different scenarios (like various position sizes or
+                                time periods) on equal footing. Disable for truly random simulations
                                 that vary each time you run them.
                               </p>
                             </div>
@@ -1583,18 +1398,14 @@ export default function RiskSimulatorPage() {
                         <Input
                           type="number"
                           value={seedValue}
-                          onChange={(e) =>
-                            setSeedValue(parseInt(e.target.value) || 42)
-                          }
+                          onChange={(e) => setSeedValue(parseInt(e.target.value) || 42)}
                           min={0}
                           max={999999}
                           className="w-24"
                         />
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Enable for reproducible results
-                    </p>
+                    <p className="text-xs text-muted-foreground">Enable for reproducible results</p>
                   </div>
                 </div>
               </AccordionContent>
@@ -1616,30 +1427,16 @@ export default function RiskSimulatorPage() {
               )}
               {isRunning ? "Running Simulation..." : "Run Simulation"}
             </Button>
-            <Button
-              onClick={resetSimulation}
-              variant="outline"
-              className="gap-2"
-            >
+            <Button onClick={resetSimulation} variant="outline" className="gap-2">
               <RotateCcw className="h-4 w-4" />
               Reset
             </Button>
             <div className="ml-auto flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportAsCsv}
-                disabled={!result}
-              >
+              <Button variant="outline" size="sm" onClick={exportAsCsv} disabled={!result}>
                 <Download className="mr-2 h-4 w-4" />
                 CSV
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportAsJson}
-                disabled={!result}
-              >
+              <Button variant="outline" size="sm" onClick={exportAsJson} disabled={!result}>
                 <Download className="mr-2 h-4 w-4" />
                 JSON
               </Button>
@@ -1670,9 +1467,7 @@ export default function RiskSimulatorPage() {
           {/* Equity Curve Chart */}
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">
-                Portfolio Growth Projections
-              </h2>
+              <h2 className="text-lg font-semibold">Portfolio Growth Projections</h2>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <button
@@ -1702,10 +1497,7 @@ export default function RiskSimulatorPage() {
                     checked={showIndividualPaths}
                     onCheckedChange={setShowIndividualPaths}
                   />
-                  <Label
-                    htmlFor="show-paths"
-                    className="cursor-pointer text-sm"
-                  >
+                  <Label htmlFor="show-paths" className="cursor-pointer text-sm">
                     Show Individual Paths
                   </Label>
                 </div>
@@ -1752,8 +1544,7 @@ function EquityCurveChart({
     const { percentiles, simulations } = result;
 
     // Convert percentiles to portfolio values
-    const toPortfolioValue = (arr: number[]) =>
-      arr.map((v) => initialCapital * (1 + v));
+    const toPortfolioValue = (arr: number[]) => arr.map((v) => initialCapital * (1 + v));
 
     const traces: Data[] = [];
 
@@ -1769,9 +1560,7 @@ function EquityCurveChart({
           type: "scatter",
           mode: "lines",
           line: {
-            color: isDark
-              ? `rgba(100, 116, 139, ${opacity})`
-              : `rgba(148, 163, 184, ${opacity})`,
+            color: isDark ? `rgba(100, 116, 139, ${opacity})` : `rgba(148, 163, 184, ${opacity})`,
             width: 1,
           },
           showlegend: false,
@@ -1783,10 +1572,7 @@ function EquityCurveChart({
     // P5-P95 filled area (light gray)
     traces.push({
       x: [...percentiles.steps, ...percentiles.steps.slice().reverse()],
-      y: [
-        ...toPortfolioValue(percentiles.p5),
-        ...toPortfolioValue(percentiles.p95).reverse(),
-      ],
+      y: [...toPortfolioValue(percentiles.p5), ...toPortfolioValue(percentiles.p95).reverse()],
       type: "scatter",
       mode: "none",
       fill: "toself",
@@ -1800,10 +1586,7 @@ function EquityCurveChart({
     // P25-P75 filled area (light blue)
     traces.push({
       x: [...percentiles.steps, ...percentiles.steps.slice().reverse()],
-      y: [
-        ...toPortfolioValue(percentiles.p25),
-        ...toPortfolioValue(percentiles.p75).reverse(),
-      ],
+      y: [...toPortfolioValue(percentiles.p25), ...toPortfolioValue(percentiles.p75).reverse()],
       type: "scatter",
       mode: "none",
       fill: "toself",
@@ -1822,8 +1605,7 @@ function EquityCurveChart({
       mode: "lines",
       name: "Median (50th)",
       line: { color: "#3b82f6", width: 2.5 },
-      hovertemplate:
-        "<b>Median</b><br>Trade: %{x}<br>Value: $%{y:,.0f}<extra></extra>",
+      hovertemplate: "<b>Median</b><br>Trade: %{x}<br>Value: $%{y:,.0f}<extra></extra>",
     });
 
     // Initial capital line

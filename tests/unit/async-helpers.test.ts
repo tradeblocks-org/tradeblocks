@@ -1,12 +1,7 @@
 /**
  * Tests for async helper utilities
  */
-import {
-  yieldToMain,
-  checkCancelled,
-  waitForRender,
-  RENDER_DELAY_MS,
-} from "@tradeblocks/lib";
+import { yieldToMain, checkCancelled, waitForRender, RENDER_DELAY_MS } from "@tradeblocks/lib";
 
 describe("async-helpers", () => {
   describe("yieldToMain", () => {

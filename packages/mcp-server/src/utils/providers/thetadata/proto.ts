@@ -9,16 +9,18 @@ import type { Root } from "protobufjs";
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 
 function protoCandidates(): string[] {
-  return Array.from(new Set([
-    resolve(moduleDir, "mdds.proto"),
-    resolve(moduleDir, "../../../mdds.proto"),
-    resolve(moduleDir, "../../../../server/mdds.proto"),
-    resolve(moduleDir, "../../../../dist/mdds.proto"),
-    resolve(process.cwd(), "packages/mcp-server/src/utils/providers/thetadata/mdds.proto"),
-    resolve(process.cwd(), "src/utils/providers/thetadata/mdds.proto"),
-    resolve(process.cwd(), "server/mdds.proto"),
-    resolve(process.cwd(), "dist/mdds.proto"),
-  ]));
+  return Array.from(
+    new Set([
+      resolve(moduleDir, "mdds.proto"),
+      resolve(moduleDir, "../../../mdds.proto"),
+      resolve(moduleDir, "../../../../server/mdds.proto"),
+      resolve(moduleDir, "../../../../dist/mdds.proto"),
+      resolve(process.cwd(), "packages/mcp-server/src/utils/providers/thetadata/mdds.proto"),
+      resolve(process.cwd(), "src/utils/providers/thetadata/mdds.proto"),
+      resolve(process.cwd(), "server/mdds.proto"),
+      resolve(process.cwd(), "dist/mdds.proto"),
+    ]),
+  );
 }
 
 export function resolveMddsProtoPath(): string {

@@ -15,20 +15,12 @@
  * tool layer doesn't reach into `market._sync_metadata` directly.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import {
-  buildStoreFixture,
-  type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.ts";
+import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import { makeBars } from "../fixtures/market-stores/bars-fixture.ts";
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
-import {
-  createMarketStores,
-  type MarketStores,
-} from "../../src/test-exports.ts";
+import { createMarketStores, type MarketStores } from "../../src/test-exports.ts";
 import { registerMarketEnrichmentTools } from "../../src/tools/market-enrichment.ts";
-import {
-  getEnrichedThrough,
-} from "../../src/db/json-adapters.ts";
+import { getEnrichedThrough } from "../../src/db/json-adapters.ts";
 
 // Direct module import so the absence-of-symbols assertions can inspect
 // the live module shape.
@@ -85,7 +77,7 @@ async function seedDailyOhlcv(
       `INSERT OR REPLACE INTO market.spot
          (ticker, date, time, open, high, low, close)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [ticker, dates[i], '09:30', close - 0.2, close + 0.5, close - 0.5, close],
+      [ticker, dates[i], "09:30", close - 0.2, close + 0.5, close - 0.5, close],
     );
     // Seed an empty market.enriched row so UPDATE targets have somewhere to write.
     await fixture.ctx.conn.run(
@@ -244,11 +236,7 @@ describe("tools/market-enrichment.ts handler — delegates to stores", () => {
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
 
     // Register the tool — this is what production code does in src/index.ts
-    registerMarketEnrichmentTools(
-      fakeServer as never,
-      fixture.ctx.dataDir,
-      stores,
-    );
+    registerMarketEnrichmentTools(fakeServer as never, fixture.ctx.dataDir, stores);
 
     const handler = registered.get("enrich_market_data");
     expect(handler).toBeDefined();
@@ -312,11 +300,7 @@ describe("tools/market-enrichment.ts handler — delegates to stores", () => {
     await seedDailyOhlcv(fixture, "VIX", dates);
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
 
-    registerMarketEnrichmentTools(
-      fakeServer as never,
-      fixture.ctx.dataDir,
-      stores,
-    );
+    registerMarketEnrichmentTools(fakeServer as never, fixture.ctx.dataDir, stores);
     const handler = registered.get("enrich_market_data");
     expect(handler).toBeDefined();
 
@@ -349,9 +333,7 @@ describe("tools/market-enrichment.ts handler — delegates to stores", () => {
       (k) => k !== "default" && k !== "__esModule",
     );
     expect(exportNames).toContain("registerMarketEnrichmentTools");
-    expect(typeof marketEnrichmentTool.registerMarketEnrichmentTools).toBe(
-      "function",
-    );
+    expect(typeof marketEnrichmentTool.registerMarketEnrichmentTools).toBe("function");
   });
 });
 

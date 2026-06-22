@@ -17,7 +17,7 @@ function createMockTrade(
   pl: number,
   numContracts: number,
   dateOpened: Date = new Date("2024-01-01"),
-  fundsAtClose: number = 100000 // Default to a reasonable fundsAtClose
+  fundsAtClose: number = 100000, // Default to a reasonable fundsAtClose
 ): Trade {
   return {
     dateOpened,
@@ -40,8 +40,8 @@ describe("calculatePercentageReturns", () => {
   it("should calculate percentage returns based on HISTORICAL capital at trade time", () => {
     // Create trades with proper fundsAtClose values showing historical account growth
     const trades = [
-      createMockTrade(5000, 1, new Date("2024-01-01"), 105000),   // Started at 100k, +5k = 105k
-      createMockTrade(5250, 1, new Date("2024-01-02"), 110250),   // Started at 105k, +5.25k = 110.25k
+      createMockTrade(5000, 1, new Date("2024-01-01"), 105000), // Started at 100k, +5k = 105k
+      createMockTrade(5250, 1, new Date("2024-01-02"), 110250), // Started at 105k, +5.25k = 110.25k
       createMockTrade(-5512.5, 1, new Date("2024-01-03"), 104737.5), // Started at 110.25k, -5.5125k
     ];
 
@@ -71,40 +71,40 @@ describe("calculatePercentageReturns", () => {
 
   it("should handle negative returns correctly", () => {
     const trades = [
-      createMockTrade(-10000, 1, new Date("2024-01-01"), 90000),  // Started at 100k, -10k = 90k
-      createMockTrade(-9000, 1, new Date("2024-01-02"), 81000),   // Started at 90k, -9k = 81k
+      createMockTrade(-10000, 1, new Date("2024-01-01"), 90000), // Started at 100k, -10k = 90k
+      createMockTrade(-9000, 1, new Date("2024-01-02"), 81000), // Started at 90k, -9k = 81k
     ];
 
     const percentageReturns = calculatePercentageReturns(trades);
 
-    expect(percentageReturns[0]).toBeCloseTo(-0.10, 4); // -10000 / 100000 = -0.10
-    expect(percentageReturns[1]).toBeCloseTo(-0.10, 4); // -9000 / 90000 = -0.10
+    expect(percentageReturns[0]).toBeCloseTo(-0.1, 4); // -10000 / 100000 = -0.10
+    expect(percentageReturns[1]).toBeCloseTo(-0.1, 4); // -9000 / 90000 = -0.10
   });
 
   it("should handle account blowup gracefully", () => {
     const trades = [
-      createMockTrade(-100000, 1, new Date("2024-01-01"), 0),      // Started at 100k, lost it all
-      createMockTrade(5000, 1, new Date("2024-01-02"), 5000),      // Can't trade with no capital
+      createMockTrade(-100000, 1, new Date("2024-01-01"), 0), // Started at 100k, lost it all
+      createMockTrade(5000, 1, new Date("2024-01-02"), 5000), // Can't trade with no capital
     ];
 
     const percentageReturns = calculatePercentageReturns(trades);
 
     expect(percentageReturns[0]).toBe(-1.0); // -100000 / 100000 = -1.0 (-100%)
-    expect(percentageReturns[1]).toBe(0);    // Account is busted (capital <= 0), return 0
+    expect(percentageReturns[1]).toBe(0); // Account is busted (capital <= 0), return 0
   });
 
   it("should sort trades chronologically before calculating", () => {
     const trades = [
-      createMockTrade(5000, 1, new Date("2024-01-03"), 115250),   // Out of order - should be third
-      createMockTrade(5000, 1, new Date("2024-01-01"), 105000),   // Should be first
-      createMockTrade(5250, 1, new Date("2024-01-02"), 110250),   // Should be second
+      createMockTrade(5000, 1, new Date("2024-01-03"), 115250), // Out of order - should be third
+      createMockTrade(5000, 1, new Date("2024-01-01"), 105000), // Should be first
+      createMockTrade(5250, 1, new Date("2024-01-02"), 110250), // Should be second
     ];
 
     const percentageReturns = calculatePercentageReturns(trades);
 
     // Should process in correct chronological order
-    expect(percentageReturns[0]).toBeCloseTo(0.05, 4);    // 5k / 100k (first trade)
-    expect(percentageReturns[1]).toBeCloseTo(0.05, 4);    // 5.25k / 105k (second trade)
+    expect(percentageReturns[0]).toBeCloseTo(0.05, 4); // 5k / 100k (first trade)
+    expect(percentageReturns[1]).toBeCloseTo(0.05, 4); // 5.25k / 105k (second trade)
     expect(percentageReturns[2]).toBeCloseTo(0.04535, 3); // 5k / 110.25k (third trade)
   });
 });
@@ -145,9 +145,7 @@ describe("runMonteCarloSimulation with percentage mode", () => {
       const riskAmount = capital * 0.05;
       const pl = isWin ? riskAmount * 1.5 : -riskAmount;
 
-      trades.push(
-        createMockTrade(pl, 1, new Date(2024, 0, i + 1))
-      );
+      trades.push(createMockTrade(pl, 1, new Date(2024, 0, i + 1)));
 
       capital += pl;
     }
@@ -182,7 +180,7 @@ describe("runMonteCarloSimulation with percentage mode", () => {
     const simpleTrades = [];
     let capital = 100000;
     for (let i = 0; i < 15; i++) {
-      const pl = capital * 0.10; // +10% each trade
+      const pl = capital * 0.1; // +10% each trade
       simpleTrades.push(createMockTrade(pl, 1, new Date(2024, 0, i + 1)));
       capital += pl;
     }
@@ -224,13 +222,13 @@ describe("runMonteCarloSimulation with percentage mode", () => {
 
     // Results should be different
     expect(resultPercentage.statistics.meanMaxDrawdown).not.toBe(
-      resultDollar.statistics.meanMaxDrawdown
+      resultDollar.statistics.meanMaxDrawdown,
     );
 
     // Percentage mode should have more reasonable drawdowns for compounding strategies
     // (accounting for the fact that position sizes scale with equity)
     expect(resultPercentage.statistics.meanMaxDrawdown).toBeLessThan(
-      resultDollar.statistics.meanMaxDrawdown
+      resultDollar.statistics.meanMaxDrawdown,
     );
   });
 
@@ -257,7 +255,7 @@ describe("runMonteCarloSimulation with percentage mode", () => {
     const multiContractTrades = [];
     for (let i = 0; i < 15; i++) {
       const contracts = 5 + (i % 5); // Varying contract sizes: 5-9
-      const plPerContract = (i % 2 === 0 ? 1000 : -500);
+      const plPerContract = i % 2 === 0 ? 1000 : -500;
       const totalPL = plPerContract * contracts;
       multiContractTrades.push(createMockTrade(totalPL, contracts, new Date(2024, 0, i + 1)));
     }
@@ -287,7 +285,7 @@ describe("runMonteCarloSimulation with percentage mode", () => {
       const pl = (i % 3 === 0 ? -1 : 1) * (1000 + i * 100);
       mixedStrategyTrades.push({
         ...createMockTrade(pl, 1, new Date(2024, 0, i + 1)),
-        strategy
+        strategy,
       });
     }
 
@@ -322,7 +320,7 @@ describe("runMonteCarloSimulation with percentage mode", () => {
     };
 
     expect(() => runMonteCarloSimulation(fewTrades, params)).toThrow(
-      "Insufficient trades for Monte Carlo simulation"
+      "Insufficient trades for Monte Carlo simulation",
     );
   });
 });
@@ -334,7 +332,7 @@ describe("Initial capital scaling", () => {
     let capital = 100000; // Historical starting capital
 
     for (let i = 0; i < 20; i++) {
-      const percentReturn = (i % 2 === 0 ? 0.05 : -0.03); // Alternating +5% / -3%
+      const percentReturn = i % 2 === 0 ? 0.05 : -0.03; // Alternating +5% / -3%
       const pl = capital * percentReturn;
       capital += pl;
       trades.push(createMockTrade(pl, 1, new Date(2024, 0, i + 1), capital));
@@ -367,7 +365,7 @@ describe("Initial capital scaling", () => {
     // Returns (percentages) should be similar regardless of capital
     expect(result1M.statistics.meanTotalReturn).toBeCloseTo(
       result100k.statistics.meanTotalReturn,
-      2
+      2,
     );
   });
 });
@@ -412,7 +410,7 @@ describe("Percentage mode vs Dollar mode comparison", () => {
     // trades from late in the sequence can appear early when capital is small
     // Percentage mode should have much more reasonable drawdowns
     expect(percentageResult.statistics.meanMaxDrawdown).toBeLessThan(
-      dollarResult.statistics.meanMaxDrawdown
+      dollarResult.statistics.meanMaxDrawdown,
     );
 
     // Percentage mode max drawdown should be < 100% for this scenario
@@ -454,7 +452,7 @@ describe("Filtered strategy simulations", () => {
       simulationLength: timeToTrades(
         simulationPeriodValue,
         simulationPeriodUnit,
-        fallbackTradesPerYear
+        fallbackTradesPerYear,
       ),
       resampleMethod: "percentage" as const,
       initialCapital: baseCapital,
@@ -467,10 +465,7 @@ describe("Filtered strategy simulations", () => {
     // Additive mode prevents multiplicative runaway even with inflated frequency
     expect(runaway.statistics.meanTotalReturn).toBeLessThan(1000);
 
-    const adjustedTradesPerYear = estimateTradesPerYear(
-      trades,
-      fallbackTradesPerYear
-    );
+    const adjustedTradesPerYear = estimateTradesPerYear(trades, fallbackTradesPerYear);
     expect(adjustedTradesPerYear).toBeLessThan(fallbackTradesPerYear);
     expect(adjustedTradesPerYear).toBeGreaterThan(10);
 
@@ -480,7 +475,7 @@ describe("Filtered strategy simulations", () => {
       simulationLength: timeToTrades(
         simulationPeriodValue,
         simulationPeriodUnit,
-        adjustedTradesPerYear
+        adjustedTradesPerYear,
       ),
     };
 

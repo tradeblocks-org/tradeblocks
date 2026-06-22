@@ -1,11 +1,7 @@
 /**
  * Tests for async combine leg groups functionality
  */
-import {
-  Trade,
-  combineAllLegGroupsAsync,
-  CombineLegGroupsProgress,
-} from "@tradeblocks/lib";
+import { Trade, combineAllLegGroupsAsync, CombineLegGroupsProgress } from "@tradeblocks/lib";
 
 // Helper to create mock trades
 function createMockTrade(overrides: Partial<Trade> = {}): Trade {
@@ -172,9 +168,9 @@ describe("combineAllLegGroupsAsync", () => {
       const controller = new AbortController();
       controller.abort();
 
-      await expect(
-        combineAllLegGroupsAsync(trades, { signal: controller.signal })
-      ).rejects.toThrow("Operation cancelled");
+      await expect(combineAllLegGroupsAsync(trades, { signal: controller.signal })).rejects.toThrow(
+        "Operation cancelled",
+      );
     });
 
     it("should respect AbortSignal during processing", async () => {
@@ -186,7 +182,7 @@ describe("combineAllLegGroupsAsync", () => {
             dateOpened: new Date(`2024-01-${String(Math.floor(i / 5) + 1).padStart(2, "0")}`),
             timeOpened: `09:${String(i % 60).padStart(2, "0")}:00`,
             strategy: `Strategy${i}`,
-          })
+          }),
         );
       }
 
@@ -215,7 +211,7 @@ describe("combineAllLegGroupsAsync", () => {
             dateOpened: new Date(`2024-01-${String(Math.floor(i / 5) + 1).padStart(2, "0")}`),
             timeOpened: `09:${String(i % 60).padStart(2, "0")}:00`,
             strategy: `Strategy${i}`,
-          })
+          }),
         );
       }
 
@@ -259,7 +255,7 @@ describe("combineAllLegGroupsAsync", () => {
             timeOpened: `09:${String(i % 60).padStart(2, "0")}:00`,
             strategy: `Strategy${i % 10}`,
             pl: i * 10,
-          })
+          }),
         );
       }
 
@@ -283,7 +279,7 @@ describe("combineAllLegGroupsAsync", () => {
             dateOpened: new Date(`2024-01-${String((i % 28) + 1).padStart(2, "0")}`),
             timeOpened: `${String(Math.floor(i / 60) + 9).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}:00`,
             strategy: `S${i}`,
-          })
+          }),
         );
       }
 

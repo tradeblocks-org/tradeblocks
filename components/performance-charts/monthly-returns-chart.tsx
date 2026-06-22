@@ -67,10 +67,7 @@ function createBarTrace(config: BarTraceConfig): Partial<PlotData> {
   };
 }
 
-function createChartLayout(
-  yAxisTitle: string,
-  hasAngledLabels: boolean
-): Partial<Layout> {
+function createChartLayout(yAxisTitle: string, hasAngledLabels: boolean): Partial<Layout> {
   return {
     ...createBarChartLayout("", "Month", yAxisTitle),
     xaxis: {
@@ -106,8 +103,7 @@ export function MonthlyReturnsChart({ className }: MonthlyReturnsChartProps) {
     }
 
     const { monthlyReturns, monthlyReturnsPercent } = data;
-    const sourceData =
-      viewMode === "dollars" ? monthlyReturns : monthlyReturnsPercent;
+    const sourceData = viewMode === "dollars" ? monthlyReturns : monthlyReturnsPercent;
 
     if (!sourceData) {
       return { plotData: [], layout: {} };
@@ -141,8 +137,7 @@ export function MonthlyReturnsChart({ className }: MonthlyReturnsChartProps) {
 
       for (let monthIdx = 1; monthIdx <= 12; monthIdx++) {
         if (monthlyAggregates[monthIdx]) {
-          const avg =
-            monthlyAggregates[monthIdx].sum / monthlyAggregates[monthIdx].count;
+          const avg = monthlyAggregates[monthIdx].sum / monthlyAggregates[monthIdx].count;
           months.push(MONTH_NAMES[monthIdx - 1]);
           avgValues.push(avg);
           counts.push(monthlyAggregates[monthIdx].count);
@@ -168,9 +163,7 @@ export function MonthlyReturnsChart({ className }: MonthlyReturnsChartProps) {
       });
 
       const yAxisTitle =
-        viewMode === "dollars"
-          ? "Average Monthly Return ($)"
-          : "Average Monthly Return (%)";
+        viewMode === "dollars" ? "Average Monthly Return ($)" : "Average Monthly Return (%)";
       const chartLayout = createChartLayout(yAxisTitle, false);
 
       return { plotData: [barTrace], layout: chartLayout };
@@ -206,8 +199,7 @@ export function MonthlyReturnsChart({ className }: MonthlyReturnsChartProps) {
         hoverFormat: "<b>%{x}</b><br>Return: %{text}<extra></extra>",
       });
 
-      const yAxisTitle =
-        viewMode === "dollars" ? "Monthly Return ($)" : "Monthly Return (%)";
+      const yAxisTitle = viewMode === "dollars" ? "Monthly Return ($)" : "Monthly Return (%)";
       const chartLayout = createChartLayout(yAxisTitle, true);
 
       return { plotData: [barTrace], layout: chartLayout };
@@ -232,11 +224,7 @@ export function MonthlyReturnsChart({ className }: MonthlyReturnsChartProps) {
         variant="outline"
         size="sm"
       >
-        <ToggleGroupItem
-          value="chronological"
-          aria-label="Chronological view"
-          className="px-3"
-        >
+        <ToggleGroupItem value="chronological" aria-label="Chronological view" className="px-3">
           Chronological
         </ToggleGroupItem>
         <ToggleGroupItem value="combined" aria-label="Combined view">
@@ -262,11 +250,7 @@ export function MonthlyReturnsChart({ className }: MonthlyReturnsChartProps) {
     </div>
   );
 
-  if (
-    !data ||
-    !data.monthlyReturns ||
-    Object.keys(data.monthlyReturns).length === 0
-  ) {
+  if (!data || !data.monthlyReturns || Object.keys(data.monthlyReturns).length === 0) {
     return (
       <ChartWrapper
         title="📅 Monthly Returns"

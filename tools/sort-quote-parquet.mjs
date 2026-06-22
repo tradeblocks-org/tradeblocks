@@ -29,26 +29,33 @@
  *   node tools/sort-quote-parquet.mjs --limit 10              # process only N files
  */
 
-import { DuckDBInstance } from '@duckdb/node-api';
-import { readdirSync, statSync, renameSync, unlinkSync, existsSync } from 'fs';
-import { resolve, basename, dirname } from 'path';
+import { DuckDBInstance } from "@duckdb/node-api";
+import { readdirSync, statSync, renameSync, unlinkSync, existsSync } from "fs";
+import { resolve, basename, dirname } from "path";
 
 const ROOT = process.env.TRADEBLOCKS_DATA_ROOT
-  ? resolve(process.env.TRADEBLOCKS_DATA_ROOT, 'market', 'option_quote_minutes')
-  : resolve(process.env.HOME, 'tradeblocks-data', 'market', 'option_quote_minutes');
+  ? resolve(process.env.TRADEBLOCKS_DATA_ROOT, "market", "option_quote_minutes")
+  : resolve(process.env.HOME, "tradeblocks-data", "market", "option_quote_minutes");
 
-const TMP_SUFFIX = '.tmp.sort';
+const TMP_SUFFIX = ".tmp.sort";
 
 function parseArgs(argv) {
   const args = { underlying: null, dryRun: false, concurrency: 4, limit: 0 };
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
     const next = argv[i + 1];
-    if (flag === '--underlying') { args.underlying = next; i++; }
-    else if (flag === '--dry-run') { args.dryRun = true; }
-    else if (flag === '--concurrency') { args.concurrency = parseInt(next, 10); i++; }
-    else if (flag === '--limit') { args.limit = parseInt(next, 10); i++; }
-    else if (flag === '--help' || flag === '-h') {
+    if (flag === "--underlying") {
+      args.underlying = next;
+      i++;
+    } else if (flag === "--dry-run") {
+      args.dryRun = true;
+    } else if (flag === "--concurrency") {
+      args.concurrency = parseInt(next, 10);
+      i++;
+    } else if (flag === "--limit") {
+      args.limit = parseInt(next, 10);
+      i++;
+    } else if (flag === "--help" || flag === "-h") {
       console.log(`Usage: node tools/sort-quote-parquet.mjs [options]
 
 Re-sort option_quote_minutes parquet partitions by (ticker, time) in place.
@@ -75,13 +82,13 @@ function listPartitionFiles(underlyingFilter) {
     process.exit(1);
   }
   const underlyings = readdirSync(ROOT)
-    .filter((n) => n.startsWith('underlying='))
+    .filter((n) => n.startsWith("underlying="))
     .filter((n) => !underlyingFilter || n === `underlying=${underlyingFilter}`);
   for (const u of underlyings) {
     const uDir = resolve(ROOT, u);
-    const dates = readdirSync(uDir).filter((n) => n.startsWith('date='));
+    const dates = readdirSync(uDir).filter((n) => n.startsWith("date="));
     for (const d of dates) {
-      const file = resolve(uDir, d, 'data.parquet');
+      const file = resolve(uDir, d, "data.parquet");
       if (existsSync(file)) out.push(file);
     }
   }
@@ -139,11 +146,11 @@ async function sortOne(conn, file, dryRun) {
 
   const sortedAlready = await isAlreadySorted(conn, file);
   if (sortedAlready) {
-    return { file, status: 'skip-sorted', sizeMB: stat.size / 1024 / 1024 };
+    return { file, status: "skip-sorted", sizeMB: stat.size / 1024 / 1024 };
   }
 
   if (dryRun) {
-    return { file, status: 'would-sort', sizeMB: stat.size / 1024 / 1024 };
+    return { file, status: "would-sort", sizeMB: stat.size / 1024 / 1024 };
   }
 
   // Pre-checksum
@@ -163,7 +170,8 @@ async function sortOne(conn, file, dryRun) {
   if (before.count !== after.count) {
     unlinkSync(tmp);
     return {
-      file, status: 'fail-rowcount-mismatch',
+      file,
+      status: "fail-rowcount-mismatch",
       detail: `before=${before.count} after=${after.count}`,
     };
   }
@@ -174,7 +182,8 @@ async function sortOne(conn, file, dryRun) {
   if (sumDiff > sumTolerance) {
     unlinkSync(tmp);
     return {
-      file, status: 'fail-checksum-mismatch',
+      file,
+      status: "fail-checksum-mismatch",
       detail: `before=${before.sum} after=${after.sum} diff=${sumDiff} tol=${sumTolerance}`,
     };
   }
@@ -184,7 +193,8 @@ async function sortOne(conn, file, dryRun) {
   const newStat = statSync(file);
 
   return {
-    file, status: 'sorted',
+    file,
+    status: "sorted",
     writeMs,
     sizeBeforeMB: stat.size / 1024 / 1024,
     sizeAfterMB: newStat.size / 1024 / 1024,
@@ -193,7 +203,7 @@ async function sortOne(conn, file, dryRun) {
 }
 
 async function worker(workerId, queue, dryRun, results, totals) {
-  const inst = await DuckDBInstance.create(':memory:');
+  const inst = await DuckDBInstance.create(":memory:");
   const conn = await inst.connect();
   while (queue.length > 0) {
     const file = queue.shift();
@@ -202,28 +212,35 @@ async function worker(workerId, queue, dryRun, results, totals) {
       const r = await sortOne(conn, file, dryRun);
       results.push(r);
       totals.processed++;
-      if (r.status === 'sorted') {
+      if (r.status === "sorted") {
         totals.sorted++;
         totals.bytesBefore += (r.sizeBeforeMB || 0) * 1024 * 1024;
         totals.bytesAfter += (r.sizeAfterMB || 0) * 1024 * 1024;
         totals.rows += r.rows || 0;
-      } else if (r.status === 'skip-sorted') {
+      } else if (r.status === "skip-sorted") {
         totals.skipped++;
-      } else if (r.status === 'would-sort') {
+      } else if (r.status === "would-sort") {
         totals.wouldSort++;
       } else {
         totals.failed++;
-        console.error(`  [worker ${workerId}] FAIL ${basename(dirname(file))}/${basename(file)}: ${r.status} ${r.detail || ''}`);
+        console.error(
+          `  [worker ${workerId}] FAIL ${basename(dirname(file))}/${basename(file)}: ${r.status} ${r.detail || ""}`,
+        );
       }
-      if (totals.processed % 10 === 0 || r.status === 'sorted') {
+      if (totals.processed % 10 === 0 || r.status === "sorted") {
         const pct = ((totals.processed / totals.total) * 100).toFixed(1);
-        const tag = r.status === 'sorted' ? `sorted in ${r.writeMs}ms (${(r.sizeAfterMB/r.sizeBeforeMB*100).toFixed(0)}% size)` : r.status;
-        console.log(`  [${pct}% ${totals.processed}/${totals.total}] ${basename(dirname(dirname(file)))}/${basename(dirname(file))} → ${tag}`);
+        const tag =
+          r.status === "sorted"
+            ? `sorted in ${r.writeMs}ms (${((r.sizeAfterMB / r.sizeBeforeMB) * 100).toFixed(0)}% size)`
+            : r.status;
+        console.log(
+          `  [${pct}% ${totals.processed}/${totals.total}] ${basename(dirname(dirname(file)))}/${basename(dirname(file))} → ${tag}`,
+        );
       }
     } catch (e) {
       totals.failed++;
       console.error(`  [worker ${workerId}] ERROR ${file}: ${e.message}`);
-      results.push({ file, status: 'exception', detail: e.message });
+      results.push({ file, status: "exception", detail: e.message });
     }
   }
 }
@@ -231,8 +248,8 @@ async function worker(workerId, queue, dryRun, results, totals) {
 async function main() {
   const args = parseArgs(process.argv);
   console.log(`Root: ${ROOT}`);
-  console.log(`Filter: ${args.underlying ?? '(all underlyings)'}`);
-  console.log(`Mode: ${args.dryRun ? 'DRY-RUN' : 'IN-PLACE REWRITE'}`);
+  console.log(`Filter: ${args.underlying ?? "(all underlyings)"}`);
+  console.log(`Mode: ${args.dryRun ? "DRY-RUN" : "IN-PLACE REWRITE"}`);
   console.log(`Concurrency: ${args.concurrency} workers`);
 
   const allFiles = listPartitionFiles(args.underlying);
@@ -259,13 +276,15 @@ async function main() {
   console.log(`\nStarting ${args.concurrency} workers...`);
   const wallStart = Date.now();
   await Promise.all(
-    Array.from({ length: args.concurrency }, (_, i) => worker(i, queue, args.dryRun, results, totals))
+    Array.from({ length: args.concurrency }, (_, i) =>
+      worker(i, queue, args.dryRun, results, totals),
+    ),
   );
   const wallMs = Date.now() - wallStart;
 
-  console.log('\n══════════════════════════════════════════════════════════');
-  console.log('SUMMARY');
-  console.log('══════════════════════════════════════════════════════════');
+  console.log("\n══════════════════════════════════════════════════════════");
+  console.log("SUMMARY");
+  console.log("══════════════════════════════════════════════════════════");
   console.log(`  Total files:      ${totals.total}`);
   console.log(`  Sorted:           ${totals.sorted}`);
   console.log(`  Skipped (sorted): ${totals.skipped}`);
@@ -274,18 +293,23 @@ async function main() {
   if (totals.sorted > 0) {
     console.log(`  Rows rewritten:   ${totals.rows.toLocaleString()}`);
     console.log(`  Bytes before:     ${(totals.bytesBefore / 1024 / 1024 / 1024).toFixed(2)}GB`);
-    console.log(`  Bytes after:      ${(totals.bytesAfter / 1024 / 1024 / 1024).toFixed(2)}GB (${(totals.bytesAfter / totals.bytesBefore * 100).toFixed(0)}%)`);
+    console.log(
+      `  Bytes after:      ${(totals.bytesAfter / 1024 / 1024 / 1024).toFixed(2)}GB (${((totals.bytesAfter / totals.bytesBefore) * 100).toFixed(0)}%)`,
+    );
   }
   console.log(`  Wall time:        ${(wallMs / 1000).toFixed(1)}s`);
   if (totals.failed > 0) {
-    console.log('\nFAILED files:');
+    console.log("\nFAILED files:");
     for (const r of results) {
-      if (r.status !== 'sorted' && r.status !== 'skip-sorted' && r.status !== 'would-sort') {
-        console.log(`  ${r.file}: ${r.status} ${r.detail || ''}`);
+      if (r.status !== "sorted" && r.status !== "skip-sorted" && r.status !== "would-sort") {
+        console.log(`  ${r.file}: ${r.status} ${r.detail || ""}`);
       }
     }
     process.exit(1);
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

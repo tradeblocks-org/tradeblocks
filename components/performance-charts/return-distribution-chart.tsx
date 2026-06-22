@@ -9,9 +9,7 @@ interface ReturnDistributionChartProps {
   className?: string;
 }
 
-export function ReturnDistributionChart({
-  className,
-}: ReturnDistributionChartProps) {
+export function ReturnDistributionChart({ className }: ReturnDistributionChartProps) {
   const { data } = usePerformanceStore();
 
   const { plotData, layout } = useMemo(() => {
@@ -22,9 +20,7 @@ export function ReturnDistributionChart({
     const { returnDistribution } = data;
 
     // Calculate statistics
-    const mean =
-      returnDistribution.reduce((sum, val) => sum + val, 0) /
-      returnDistribution.length;
+    const mean = returnDistribution.reduce((sum, val) => sum + val, 0) / returnDistribution.length;
     const median = [...returnDistribution].sort((a, b) => a - b)[
       Math.floor(returnDistribution.length / 2)
     ];
@@ -46,9 +42,7 @@ export function ReturnDistributionChart({
         line: { color: "white", width: 1 },
       },
       hovertemplate:
-        "<b>ROM Range:</b> %{x:.1f}%<br>" +
-        "<b>Trade Count:</b> %{y}<br>" +
-        "<extra></extra>",
+        "<b>ROM Range:</b> %{x:.1f}%<br>" + "<b>Trade Count:</b> %{y}<br>" + "<extra></extra>",
     };
 
     const traces: Partial<PlotData>[] = [histogramTrace];
@@ -123,8 +117,10 @@ export function ReturnDistributionChart({
   }, [data]);
 
   const tooltip = {
-    flavor: "The building blocks of your trading style - are you stacking steady bricks or placing bold cornerstone moves?",
-    detailed: "The distribution of your returns reveals important characteristics about your trading style. Are you consistently hitting small wins, occasionally landing big winners, or something in between? Understanding this helps you assess whether your risk/reward profile matches your goals and personality."
+    flavor:
+      "The building blocks of your trading style - are you stacking steady bricks or placing bold cornerstone moves?",
+    detailed:
+      "The distribution of your returns reveals important characteristics about your trading style. Are you consistently hitting small wins, occasionally landing big winners, or something in between? Understanding this helps you assess whether your risk/reward profile matches your goals and personality.",
   };
 
   if (!data) {

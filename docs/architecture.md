@@ -32,23 +32,23 @@ TradeBlocks is an options trading analytics platform with two main components:
 
 ### analytics.duckdb (trades database)
 
-| Table | Purpose |
-|-------|---------|
-| `trades.trade_data` | Individual trade records synced from CSV |
-| `trades.reporting_data` | Reported/live trades for backtest vs actual comparison |
-| `trades._sync_metadata` | Block sync state tracking |
+| Table                        | Purpose                                                       |
+| ---------------------------- | ------------------------------------------------------------- |
+| `trades.trade_data`          | Individual trade records synced from CSV                      |
+| `trades.reporting_data`      | Reported/live trades for backtest vs actual comparison        |
+| `trades._sync_metadata`      | Block sync state tracking                                     |
 | `profiles.strategy_profiles` | Strategy profile storage (structure, filters, exits, regimes) |
 
 ### market.duckdb (market database)
 
-| Table | Purpose |
-|-------|---------|
-| `market.daily` | Daily OHLCV + enriched indicators + VIX ivr/ivp, keyed by `ticker, date` |
-| `market.date_context` | Cross-ticker derived fields (Vol_Regime, Term_Structure_State, Trend_Direction), keyed by `date` |
-| `market.intraday` | Minute/hourly bars + cached option bars from replay, keyed by `ticker, date, time` |
-| `market.option_chain` | Contract-universe snapshots by underlying/date/ticker |
-| `market.option_quote_minutes` | Dense option quote cache by `ticker, date, time` |
-| `market._sync_metadata` | Import tracking, enrichment watermarks, migration state |
+| Table                         | Purpose                                                                                          |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ |
+| `market.daily`                | Daily OHLCV + enriched indicators + VIX ivr/ivp, keyed by `ticker, date`                         |
+| `market.date_context`         | Cross-ticker derived fields (Vol_Regime, Term_Structure_State, Trend_Direction), keyed by `date` |
+| `market.intraday`             | Minute/hourly bars + cached option bars from replay, keyed by `ticker, date, time`               |
+| `market.option_chain`         | Contract-universe snapshots by underlying/date/ticker                                            |
+| `market.option_quote_minutes` | Dense option quote cache by `ticker, date, time`                                                 |
+| `market._sync_metadata`       | Import tracking, enrichment watermarks, migration state                                          |
 
 VIX tenors (VIX, VIX9D, VIX3M, etc.) are stored as regular ticker rows in `market.daily` with `ivr` and `ivp` columns. The enrichment pipeline discovers them dynamically.
 
@@ -71,6 +71,7 @@ Trade replay and exit trigger tools read from `market.intraday` cache before cal
 ### MCP Tool Pattern
 
 All tools follow a consistent pattern:
+
 1. **Zod schema** defines input validation
 2. **Sync middleware** ensures DuckDB data is current
 3. **Handler function** executes business logic

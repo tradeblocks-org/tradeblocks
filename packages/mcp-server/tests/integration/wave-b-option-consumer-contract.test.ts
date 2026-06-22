@@ -17,10 +17,7 @@
  *     market.option_quote_minutes view backed by it.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import {
-  buildStoreFixture,
-  type FixtureHandle,
-} from "../fixtures/market-stores/build-fixture.ts";
+import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import {
   createMarketStores,
@@ -64,11 +61,11 @@ function makeContractRow(overrides: Partial<ContractRow> = {}): ContractRow {
  */
 async function seedSpxOptionQuotes(stores: MarketStores): Promise<void> {
   const quotes: QuoteRow[] = [
-    { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 4.20, ask: 4.40 },
-    { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:31`, bid: 4.30, ask: 4.50 },
-    { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:32`, bid: 4.40, ask: 4.60 },
+    { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 4.2, ask: 4.4 },
+    { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:31`, bid: 4.3, ask: 4.5 },
+    { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:32`, bid: 4.4, ask: 4.6 },
     { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:33`, bid: 4.45, ask: 4.65 },
-    { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:34`, bid: 4.50, ask: 4.70 },
+    { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:34`, bid: 4.5, ask: 4.7 },
   ];
   await stores.quote.writeQuotes("SPX", SPX_DATE, quotes);
 }
@@ -104,21 +101,17 @@ describe("tools/replay.ts — option-leg reads", () => {
     await seedSpxOptionQuotes(stores);
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
 
-    const result = await stores.quote.readQuotes(
-      [SPX_5000C_OCC],
-      SPX_DATE,
-      SPX_DATE,
-    );
+    const result = await stores.quote.readQuotes([SPX_5000C_OCC], SPX_DATE, SPX_DATE);
 
     expect(result.has(SPX_5000C_OCC)).toBe(true);
     const quotes = result.get(SPX_5000C_OCC)!;
     expect(quotes.length).toBe(5);
 
     const firstMid = (quotes[0].bid + quotes[0].ask) / 2;
-    expect(firstMid).toBeCloseTo(4.30, 2);
+    expect(firstMid).toBeCloseTo(4.3, 2);
 
     const lastMid = (quotes[4].bid + quotes[4].ask) / 2;
-    expect(lastMid).toBeCloseTo(4.60, 2);
+    expect(lastMid).toBeCloseTo(4.6, 2);
 
     // Per replay.ts: each QuoteRow adapts to BarRow with mid as
     // open/high/low/close. Verify the timestamp split works.
@@ -131,11 +124,7 @@ describe("tools/replay.ts — option-leg reads", () => {
 
   it("returns empty Map when no quotes are seeded for the requested ticker", async () => {
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
-    const result = await stores.quote.readQuotes(
-      [SPX_5000C_OCC],
-      SPX_DATE,
-      SPX_DATE,
-    );
+    const result = await stores.quote.readQuotes([SPX_5000C_OCC], SPX_DATE, SPX_DATE);
     // No partitions exist → empty Map (silent-empty signal).
     expect(result.size).toBe(0);
   });
@@ -163,31 +152,41 @@ describe("tools/greeks-attribution.ts — trading-days coverage", () => {
     // tradingDays() weekday iteration). Seed two SPX bars on different
     // dates and assert coverage reports both.
     await stores.spot.writeBars("SPX", "2025-01-02", [
-      { ticker: "SPX", date: "2025-01-02", time: "09:30",
-        open: 5800, high: 5810, low: 5795, close: 5805,
-        bid: 5800, ask: 5805, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2025-01-02",
+        time: "09:30",
+        open: 5800,
+        high: 5810,
+        low: 5795,
+        close: 5805,
+        bid: 5800,
+        ask: 5805,
+        volume: 0,
+      },
     ]);
     await stores.spot.writeBars("SPX", "2025-01-03", [
-      { ticker: "SPX", date: "2025-01-03", time: "09:30",
-        open: 5810, high: 5815, low: 5805, close: 5812,
-        bid: 5810, ask: 5812, volume: 0 },
+      {
+        ticker: "SPX",
+        date: "2025-01-03",
+        time: "09:30",
+        open: 5810,
+        high: 5815,
+        low: 5805,
+        close: 5812,
+        bid: 5810,
+        ask: 5812,
+        volume: 0,
+      },
     ]);
-    const coverage = await stores.spot.getCoverage(
-      "SPX",
-      "2025-01-02",
-      "2025-01-03",
-    );
+    const coverage = await stores.spot.getCoverage("SPX", "2025-01-02", "2025-01-03");
     expect(coverage.totalDates).toBe(2);
     expect(coverage.earliest).toBe("2025-01-02");
     expect(coverage.latest).toBe("2025-01-03");
   });
 
   it("getCoverage reports 0 totalDates for an empty range", async () => {
-    const coverage = await stores.spot.getCoverage(
-      "SPX",
-      "2030-01-01",
-      "2030-01-31",
-    );
+    const coverage = await stores.spot.getCoverage("SPX", "2030-01-01", "2030-01-31");
     expect(coverage.totalDates).toBe(0);
   });
 });
@@ -212,9 +211,9 @@ describe("backtest/loading/market-data-loader.ts — per-date option-quote bulk 
   it("readQuotes returns Map<occTicker, QuoteRow[]> for a 3-OCC seed on one date", async () => {
     // Seed 3 distinct OCCs on the same date; assert per-OCC bucketing.
     const quotes: QuoteRow[] = [
-      { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 4.20, ask: 4.40 },
-      { occ_ticker: SPX_5000P_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 3.10, ask: 3.30 },
-      { occ_ticker: SPX_5100C_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 1.20, ask: 1.40 },
+      { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 4.2, ask: 4.4 },
+      { occ_ticker: SPX_5000P_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 3.1, ask: 3.3 },
+      { occ_ticker: SPX_5100C_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 1.2, ask: 1.4 },
       { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:31`, bid: 4.25, ask: 4.45 },
       { occ_ticker: SPX_5000P_OCC, timestamp: `${SPX_DATE} 09:31`, bid: 3.15, ask: 3.35 },
     ];
@@ -237,11 +236,7 @@ describe("backtest/loading/market-data-loader.ts — per-date option-quote bulk 
   it("mixed-underlying batch throws a clear error", async () => {
     // QQQ vs SPX in the same batch should fail loudly with both tickers named.
     await expect(
-      stores.quote.readQuotes(
-        [SPX_5000C_OCC, "QQQ250117C00400000"],
-        SPX_DATE,
-        SPX_DATE,
-      ),
+      stores.quote.readQuotes([SPX_5000C_OCC, "QQQ250117C00400000"], SPX_DATE, SPX_DATE),
     ).rejects.toThrow(/mixed underlyings/i);
   });
 });
@@ -277,17 +272,13 @@ describe("utils/quote-minute-cache.ts — chain read + quote write via stores", 
 
   it("quote.writeQuotes round-trips via quote.readQuotes", async () => {
     const quotes: QuoteRow[] = [
-      { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 4.20, ask: 4.40 },
-      { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:31`, bid: 4.30, ask: 4.50 },
+      { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:30`, bid: 4.2, ask: 4.4 },
+      { occ_ticker: SPX_5000C_OCC, timestamp: `${SPX_DATE} 09:31`, bid: 4.3, ask: 4.5 },
     ];
     await stores.quote.writeQuotes("SPX", SPX_DATE, quotes);
     await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
 
-    const result = await stores.quote.readQuotes(
-      [SPX_5000C_OCC],
-      SPX_DATE,
-      SPX_DATE,
-    );
+    const result = await stores.quote.readQuotes([SPX_5000C_OCC], SPX_DATE, SPX_DATE);
     expect(result.get(SPX_5000C_OCC)!.length).toBe(2);
   });
 });

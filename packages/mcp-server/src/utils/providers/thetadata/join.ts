@@ -8,11 +8,7 @@ import {
   OPTION_QUOTE_GREEKS_RATE_TYPE,
   OPTION_QUOTE_GREEKS_REVISION,
 } from "../../option-quote-greeks.ts";
-import type {
-  ThetaFirstOrderGreekRow,
-  ThetaQuoteRow,
-  ThetaRight,
-} from "./types.ts";
+import type { ThetaFirstOrderGreekRow, ThetaQuoteRow, ThetaRight } from "./types.ts";
 
 export interface ThetaJoinedQuoteRow extends BulkQuoteRow {
   greeks_revision?: number | null;
@@ -76,10 +72,12 @@ type CompleteThetaFirstOrderGreekRow = ThetaFirstOrderGreekRow & {
 function hasProviderFirstOrderGreeks(
   row: ThetaFirstOrderGreekRow,
 ): row is CompleteThetaFirstOrderGreekRow {
-  return isFiniteNumber(row.delta)
-    && isFiniteNumber(row.theta)
-    && isFiniteNumber(row.vega)
-    && isFiniteNumber(row.iv);
+  return (
+    isFiniteNumber(row.delta) &&
+    isFiniteNumber(row.theta) &&
+    isFiniteNumber(row.vega) &&
+    isFiniteNumber(row.iv)
+  );
 }
 
 function splitTimestamp(timestamp: string): { date: string; time: string } {
@@ -87,7 +85,10 @@ function splitTimestamp(timestamp: string): { date: string; time: string } {
   return { date, time: time.slice(0, 5) };
 }
 
-function computeGamma(row: ThetaQuoteRow, greek: ThetaFirstOrderGreekRow): {
+function computeGamma(
+  row: ThetaQuoteRow,
+  greek: ThetaFirstOrderGreekRow,
+): {
   gamma: number | null;
   rateValue: number | null;
 } {

@@ -3,10 +3,7 @@ import {
   type MarketDataProvider,
   type ProviderCapabilities,
 } from "./market-provider.ts";
-import {
-  resolveMassiveDataTier,
-  type MassiveDataTier,
-} from "./massive-tier.ts";
+import { resolveMassiveDataTier, type MassiveDataTier } from "./massive-tier.ts";
 
 export interface ResolvedProviderCapabilities extends ProviderCapabilities {
   provider: MarketDataProvider;

@@ -23,7 +23,7 @@ export function ReturnDistributionChart({ result }: ReturnDistributionChartProps
     // Calculate percentiles manually
     const sortedReturns = [...finalReturns].sort((a, b) => a - b);
     const p5 = sortedReturns[Math.floor(sortedReturns.length * 0.05)];
-    const p50 = sortedReturns[Math.floor(sortedReturns.length * 0.50)];
+    const p50 = sortedReturns[Math.floor(sortedReturns.length * 0.5)];
     const p95 = sortedReturns[Math.floor(sortedReturns.length * 0.95)];
 
     const traces: Data[] = [];
@@ -78,7 +78,7 @@ export function ReturnDistributionChart({ result }: ReturnDistributionChartProps
         name: `P95: ${p95.toFixed(1)}%`,
         showlegend: true,
         hoverinfo: "skip",
-      } as Data
+      } as Data,
     );
 
     const plotLayout = {
@@ -141,7 +141,7 @@ export function DrawdownDistributionChart({ result }: DrawdownDistributionChartP
     // Calculate percentiles
     const sortedDrawdowns = [...maxDrawdowns].sort((a, b) => a - b);
     const p5 = sortedDrawdowns[Math.floor(sortedDrawdowns.length * 0.05)];
-    const p50 = sortedDrawdowns[Math.floor(sortedDrawdowns.length * 0.50)];
+    const p50 = sortedDrawdowns[Math.floor(sortedDrawdowns.length * 0.5)];
     const p95 = sortedDrawdowns[Math.floor(sortedDrawdowns.length * 0.95)];
 
     const traces: Data[] = [];
@@ -196,7 +196,7 @@ export function DrawdownDistributionChart({ result }: DrawdownDistributionChartP
         name: `P95: ${p95.toFixed(1)}%`,
         showlegend: true,
         hoverinfo: "skip",
-      } as Data
+      } as Data,
     );
 
     const plotLayout = {

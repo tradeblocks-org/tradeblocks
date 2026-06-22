@@ -36,11 +36,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@tradeblocks/lib";
 import { format } from "date-fns";
 import { useEffect, useState } from "react";
@@ -62,12 +58,8 @@ export default function BlockStatsPage() {
   const [dataError, setDataError] = useState<string | null>(null);
 
   // Calculated metrics state
-  const [portfolioStats, setPortfolioStats] = useState<PortfolioStats | null>(
-    null
-  );
-  const [strategyStats, setStrategyStats] = useState<
-    Record<string, StrategyStats>
-  >({});
+  const [portfolioStats, setPortfolioStats] = useState<PortfolioStats | null>(null);
+  const [strategyStats, setStrategyStats] = useState<Record<string, StrategyStats>>({});
   const [, setIsCalculating] = useState(false);
   const [filteredTrades, setFilteredTrades] = useState<Trade[]>([]);
   const [peakDailyExposurePercent, setPeakDailyExposurePercent] = useState<{
@@ -79,9 +71,7 @@ export default function BlockStatsPage() {
   // Get active block from store
   const activeBlock = useBlockStore((state) => {
     const activeBlockId = state.activeBlockId;
-    return activeBlockId
-      ? state.blocks.find((block) => block.id === activeBlockId)
-      : null;
+    return activeBlockId ? state.blocks.find((block) => block.id === activeBlockId) : null;
   });
   const isLoading = useBlockStore((state) => state.isLoading);
   const isInitialized = useBlockStore((state) => state.isInitialized);
@@ -145,16 +135,12 @@ export default function BlockStatsPage() {
 
       try {
         const processedBlock = await getBlock(activeBlock.id);
-        const combineLegGroups =
-          processedBlock?.analysisConfig?.combineLegGroups ?? false;
+        const combineLegGroups = processedBlock?.analysisConfig?.combineLegGroups ?? false;
 
         // Check for cached snapshot first (for instant load with default settings)
         // Only use cache if we're using default settings (no filters, no normalization)
         const isDefaultView =
-          selectedStrategies.length === 0 &&
-          !normalizeTo1Lot &&
-          !dateRange?.from &&
-          !dateRange?.to;
+          selectedStrategies.length === 0 && !normalizeTo1Lot && !dateRange?.from && !dateRange?.to;
 
         if (isDefaultView) {
           const cachedSnapshot = await getPerformanceSnapshotCache(activeBlock.id);
@@ -186,9 +172,7 @@ export default function BlockStatsPage() {
         setDailyLogs(blockDailyLogs);
       } catch (error) {
         console.error("Failed to fetch block data:", error);
-        setDataError(
-          error instanceof Error ? error.message : "Failed to fetch data"
-        );
+        setDataError(error instanceof Error ? error.message : "Failed to fetch data");
       } finally {
         setIsLoadingData(false);
       }
@@ -212,10 +196,7 @@ export default function BlockStatsPage() {
       setIsCalculating(true);
 
       try {
-        const hasFilters =
-          selectedStrategies.length > 0 ||
-          dateRange?.from ||
-          dateRange?.to;
+        const hasFilters = selectedStrategies.length > 0 || dateRange?.from || dateRange?.to;
 
         const snapshot = await buildPerformanceSnapshot({
           trades,
@@ -238,15 +219,11 @@ export default function BlockStatsPage() {
         setPeakDailyExposurePercent(snapshot.chartData.peakDailyExposurePercent);
 
         const calculator = new PortfolioStatsCalculator();
-        const strategies = calculator.calculateStrategyStats(
-          snapshot.filteredTrades
-        );
+        const strategies = calculator.calculateStrategyStats(snapshot.filteredTrades);
         setStrategyStats(strategies);
       } catch (error) {
         console.error("Failed to calculate metrics:", error);
-        setDataError(
-          error instanceof Error ? error.message : "Failed to calculate metrics"
-        );
+        setDataError(error instanceof Error ? error.message : "Failed to calculate metrics");
       } finally {
         setIsCalculating(false);
       }
@@ -262,14 +239,11 @@ export default function BlockStatsPage() {
     if (filteredTrades.length === 0) return "No trades";
 
     const sortedTrades = [...filteredTrades].sort(
-      (a, b) =>
-        new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime()
+      (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
     );
 
     const startDate = new Date(sortedTrades[0].dateOpened).toLocaleDateString();
-    const endDate = new Date(
-      sortedTrades[sortedTrades.length - 1].dateOpened
-    ).toLocaleDateString();
+    const endDate = new Date(sortedTrades[sortedTrades.length - 1].dateOpened).toLocaleDateString();
 
     return `${startDate} to ${endDate}`;
   };
@@ -285,7 +259,7 @@ export default function BlockStatsPage() {
 
     // Calculate average return on margin from filtered trades
     const tradesWithMargin = filteredTrades.filter(
-      (trade) => trade.marginReq && trade.marginReq > 0
+      (trade) => trade.marginReq && trade.marginReq > 0,
     );
     if (tradesWithMargin.length === 0) return 0;
 
@@ -301,18 +275,14 @@ export default function BlockStatsPage() {
     if (!portfolioStats) return 0;
 
     const tradesWithMargin = filteredTrades.filter(
-      (trade) => trade.marginReq && trade.marginReq > 0
+      (trade) => trade.marginReq && trade.marginReq > 0,
     );
     if (tradesWithMargin.length === 0) return 0;
 
     const avgRoM = getAvgReturnOnMargin();
-    const roms = tradesWithMargin.map(
-      (trade) => (trade.pl / trade.marginReq!) * 100
-    );
+    const roms = tradesWithMargin.map((trade) => (trade.pl / trade.marginReq!) * 100);
 
-    const variance =
-      roms.reduce((sum, rom) => sum + Math.pow(rom - avgRoM, 2), 0) /
-      roms.length;
+    const variance = roms.reduce((sum, rom) => sum + Math.pow(rom - avgRoM, 2), 0) / roms.length;
     return Math.sqrt(variance);
   };
 
@@ -323,7 +293,7 @@ export default function BlockStatsPage() {
       ...filteredTrades.map((trade) => {
         if (!trade.marginReq || trade.marginReq <= 0) return 0;
         return (trade.pl / trade.marginReq) * 100;
-      })
+      }),
     );
 
     return bestTrade;
@@ -336,7 +306,7 @@ export default function BlockStatsPage() {
       ...filteredTrades.map((trade) => {
         if (!trade.marginReq || trade.marginReq <= 0) return 0;
         return (trade.pl / trade.marginReq) * 100;
-      })
+      }),
     );
 
     return worstTrade;
@@ -349,15 +319,14 @@ export default function BlockStatsPage() {
       (acc, trade) => {
         const totalPremium = computeTotalPremium(trade) ?? 0;
         const commissions =
-          (trade.openingCommissionsFees ?? 0) +
-          (trade.closingCommissionsFees ?? 0);
+          (trade.openingCommissionsFees ?? 0) + (trade.closingCommissionsFees ?? 0);
 
         return {
           premium: acc.premium + totalPremium,
           commissions: acc.commissions + commissions,
         };
       },
-      { premium: 0, commissions: 0 }
+      { premium: 0, commissions: 0 },
     );
 
     if (totals.premium === 0) return 0;
@@ -370,9 +339,7 @@ export default function BlockStatsPage() {
 
     const efficiencies = filteredTrades
       .map((trade) => calculatePremiumEfficiencyPercent(trade).percentage)
-      .filter(
-        (value): value is number => typeof value === "number" && isFinite(value)
-      );
+      .filter((value): value is number => typeof value === "number" && isFinite(value));
 
     if (efficiencies.length === 0) return 0;
 
@@ -387,14 +354,11 @@ export default function BlockStatsPage() {
 
     const totalHours = tradesWithClose.reduce((sum, trade) => {
       const openDate = new Date(trade.dateOpened);
-      const closeDate = trade.dateClosed
-        ? new Date(trade.dateClosed)
-        : openDate;
+      const closeDate = trade.dateClosed ? new Date(trade.dateClosed) : openDate;
       if (isNaN(openDate.getTime()) || isNaN(closeDate.getTime())) {
         return sum;
       }
-      const hours =
-        (closeDate.getTime() - openDate.getTime()) / (1000 * 60 * 60);
+      const hours = (closeDate.getTime() - openDate.getTime()) / (1000 * 60 * 60);
       return sum + Math.max(0, hours);
     }, 0);
 
@@ -406,7 +370,7 @@ export default function BlockStatsPage() {
 
     const totalContracts = filteredTrades.reduce(
       (sum, trade) => sum + (trade.numContracts ?? 0),
-      0
+      0,
     );
     return totalContracts / filteredTrades.length;
   };
@@ -419,9 +383,7 @@ export default function BlockStatsPage() {
   const getStrategyOptions = () => {
     if (trades.length === 0) return [];
 
-    const uniqueStrategies = [
-      ...new Set(trades.map((trade) => trade.strategy || "Unknown")),
-    ];
+    const uniqueStrategies = [...new Set(trades.map((trade) => trade.strategy || "Unknown"))];
     return uniqueStrategies.map((strategy) => ({
       label: strategy,
       value: strategy,
@@ -446,8 +408,7 @@ export default function BlockStatsPage() {
                 to: dateRange?.to?.toISOString(),
               }
             : "all",
-        selectedStrategies:
-          selectedStrategies.length > 0 ? selectedStrategies : "all",
+        selectedStrategies: selectedStrategies.length > 0 ? selectedStrategies : "all",
         normalizeTo1Lot,
       },
       tradeDateRange: getDateRange(),
@@ -505,10 +466,7 @@ export default function BlockStatsPage() {
     const data = buildExportData();
     if (!data || !activeBlock) return;
 
-    downloadJson(
-      data,
-      generateExportFilename(activeBlock.name, "block-stats", "json")
-    );
+    downloadJson(data, generateExportFilename(activeBlock.name, "block-stats", "json"));
   };
 
   const exportAsCsv = () => {
@@ -527,14 +485,14 @@ export default function BlockStatsPage() {
         dateRange?.from || dateRange?.to
           ? `${dateRange?.from ? format(dateRange.from, "LLL dd, y") : "Start"} - ${dateRange?.to ? format(dateRange.to, "LLL dd, y") : "End"}`
           : "All time",
-      ])
+      ]),
     );
     lines.push(toCsvRow(["Normalize to 1-Lot", normalizeTo1Lot]));
     lines.push(
       toCsvRow([
         "Selected Strategies",
         selectedStrategies.length > 0 ? selectedStrategies.join("; ") : "All",
-      ])
+      ]),
     );
     lines.push("");
 
@@ -544,78 +502,33 @@ export default function BlockStatsPage() {
     lines.push(toCsvRow(["Total Trades", portfolioStats.totalTrades]));
     lines.push(toCsvRow(["Total P/L", `$${portfolioStats.totalPl.toFixed(2)}`]));
     lines.push(toCsvRow(["Net P/L", `$${portfolioStats.netPl.toFixed(2)}`]));
-    lines.push(
-      toCsvRow(["Win Rate", `${(portfolioStats.winRate * 100).toFixed(2)}%`])
-    );
-    lines.push(
-      toCsvRow(["Profit Factor", portfolioStats.profitFactor.toFixed(2)])
-    );
-    lines.push(
-      toCsvRow([
-        "Initial Capital",
-        `$${portfolioStats.initialCapital.toFixed(2)}`,
-      ])
-    );
+    lines.push(toCsvRow(["Win Rate", `${(portfolioStats.winRate * 100).toFixed(2)}%`]));
+    lines.push(toCsvRow(["Profit Factor", portfolioStats.profitFactor.toFixed(2)]));
+    lines.push(toCsvRow(["Initial Capital", `$${portfolioStats.initialCapital.toFixed(2)}`]));
     lines.push(toCsvRow(["CAGR", `${(portfolioStats.cagr || 0).toFixed(2)}%`]));
+    lines.push(toCsvRow(["Sharpe Ratio", (portfolioStats.sharpeRatio || 0).toFixed(2)]));
+    lines.push(toCsvRow(["Sortino Ratio", (portfolioStats.sortinoRatio || 0).toFixed(2)]));
+    lines.push(toCsvRow(["Calmar Ratio", (portfolioStats.calmarRatio || 0).toFixed(2)]));
+    lines.push(toCsvRow(["Max Drawdown", `${portfolioStats.maxDrawdown.toFixed(2)}%`]));
     lines.push(
-      toCsvRow(["Sharpe Ratio", (portfolioStats.sharpeRatio || 0).toFixed(2)])
+      toCsvRow(["Time in Drawdown", `${(portfolioStats.timeInDrawdown || 0).toFixed(2)}%`]),
     );
+    lines.push(toCsvRow(["Kelly %", `${(portfolioStats.kellyPercentage || 0).toFixed(2)}%`]));
+    lines.push(toCsvRow(["Max Win Streak", portfolioStats.maxWinStreak || 0]));
+    lines.push(toCsvRow(["Max Loss Streak", portfolioStats.maxLossStreak || 0]));
     lines.push(
-      toCsvRow(["Sortino Ratio", (portfolioStats.sortinoRatio || 0).toFixed(2)])
+      toCsvRow(["Monthly Win Rate", `${(portfolioStats.monthlyWinRate || 0).toFixed(2)}%`]),
     );
-    lines.push(
-      toCsvRow(["Calmar Ratio", (portfolioStats.calmarRatio || 0).toFixed(2)])
-    );
-    lines.push(
-      toCsvRow(["Max Drawdown", `${portfolioStats.maxDrawdown.toFixed(2)}%`])
-    );
-    lines.push(
-      toCsvRow([
-        "Time in Drawdown",
-        `${(portfolioStats.timeInDrawdown || 0).toFixed(2)}%`,
-      ])
-    );
-    lines.push(
-      toCsvRow([
-        "Kelly %",
-        `${(portfolioStats.kellyPercentage || 0).toFixed(2)}%`,
-      ])
-    );
-    lines.push(
-      toCsvRow(["Max Win Streak", portfolioStats.maxWinStreak || 0])
-    );
-    lines.push(
-      toCsvRow(["Max Loss Streak", portfolioStats.maxLossStreak || 0])
-    );
-    lines.push(
-      toCsvRow([
-        "Monthly Win Rate",
-        `${(portfolioStats.monthlyWinRate || 0).toFixed(2)}%`,
-      ])
-    );
-    lines.push(
-      toCsvRow([
-        "Weekly Win Rate",
-        `${(portfolioStats.weeklyWinRate || 0).toFixed(2)}%`,
-      ])
-    );
-    lines.push(
-      toCsvRow(["Avg Return on Margin", `${getAvgReturnOnMargin().toFixed(2)}%`])
-    );
-    lines.push(
-      toCsvRow(["Commission vs Premium", `${commissionShare.toFixed(2)}%`])
-    );
-    lines.push(
-      toCsvRow(["Avg Premium Capture", `${avgPremiumEfficiency.toFixed(2)}%`])
-    );
+    lines.push(toCsvRow(["Weekly Win Rate", `${(portfolioStats.weeklyWinRate || 0).toFixed(2)}%`]));
+    lines.push(toCsvRow(["Avg Return on Margin", `${getAvgReturnOnMargin().toFixed(2)}%`]));
+    lines.push(toCsvRow(["Commission vs Premium", `${commissionShare.toFixed(2)}%`]));
+    lines.push(toCsvRow(["Avg Premium Capture", `${avgPremiumEfficiency.toFixed(2)}%`]));
     lines.push(toCsvRow(["Avg Holding (hrs)", avgHoldingHours]));
     lines.push("");
 
     // Strategy Breakdown section
     lines.push("# Strategy Breakdown");
-    lines.push(
-      "Strategy,Trades,Total P/L,Win Rate,Avg Win,Avg Loss,Profit Factor"
-    );
+    lines.push("Strategy,Trades,Total P/L,Win Rate,Avg Win,Avg Loss,Profit Factor");
     Object.values(strategyStats).forEach((stat) => {
       lines.push(
         toCsvRow([
@@ -626,14 +539,11 @@ export default function BlockStatsPage() {
           `$${stat.avgWin.toFixed(2)}`,
           `$${stat.avgLoss.toFixed(2)}`,
           stat.profitFactor.toFixed(2),
-        ])
+        ]),
       );
     });
 
-    downloadCsv(
-      lines,
-      generateExportFilename(activeBlock.name, "block-stats", "csv")
-    );
+    downloadCsv(lines, generateExportFilename(activeBlock.name, "block-stats", "csv"));
   };
 
   // Show loading state
@@ -661,9 +571,7 @@ export default function BlockStatsPage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">
-            Loading {activeBlock.name} data...
-          </p>
+          <p className="text-muted-foreground">Loading {activeBlock.name} data...</p>
         </div>
       </div>
     );
@@ -694,15 +602,14 @@ export default function BlockStatsPage() {
                 variant="outline"
                 className={cn(
                   "w-[280px] justify-start text-left font-normal",
-                  !dateRange && "text-muted-foreground"
+                  !dateRange && "text-muted-foreground",
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {dateRange?.from ? (
                   dateRange.to ? (
                     <>
-                      {format(dateRange.from, "LLL dd, y")} -{" "}
-                      {format(dateRange.to, "LLL dd, y")}
+                      {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
                     </>
                   ) : (
                     format(dateRange.from, "LLL dd, y")
@@ -713,10 +620,7 @@ export default function BlockStatsPage() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <DateRangePicker
-                date={dateRange}
-                onDateChange={handleDateRangeChange}
-              />
+              <DateRangePicker date={dateRange} onDateChange={handleDateRangeChange} />
             </PopoverContent>
           </Popover>
         </div>
@@ -739,21 +643,11 @@ export default function BlockStatsPage() {
           title="Normalize to 1-lot"
         />
         <div className="flex gap-2 ml-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportAsCsv}
-            disabled={!portfolioStats}
-          >
+          <Button variant="outline" size="sm" onClick={exportAsCsv} disabled={!portfolioStats}>
             <Download className="mr-2 h-4 w-4" />
             CSV
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportAsJson}
-            disabled={!portfolioStats}
-          >
+          <Button variant="outline" size="sm" onClick={exportAsJson} disabled={!portfolioStats}>
             <Download className="mr-2 h-4 w-4" />
             JSON
           </Button>
@@ -777,8 +671,7 @@ export default function BlockStatsPage() {
           value={portfolioStats?.totalTrades || 0}
           format="number"
           tooltip={{
-            flavor:
-              "Building blocks completed - the total foundation you've laid so far.",
+            flavor: "Building blocks completed - the total foundation you've laid so far.",
             detailed:
               "Total number of trades executed. More trades provide more data for analysis but don't necessarily mean better performance. This number helps contextualize other statistics - win rates from 10 trades are less reliable than from 100 trades.",
           }}
@@ -788,8 +681,7 @@ export default function BlockStatsPage() {
           value={getInitialCapital()}
           format="currency"
           tooltip={{
-            flavor:
-              "Foundation funds - the base capital you started building with.",
+            flavor: "Foundation funds - the base capital you started building with.",
             detailed:
               "The initial account value when trading began. This serves as the baseline for calculating percentage returns and total growth. Essential for understanding the scale of gains and losses relative to your original investment.",
           }}
@@ -823,8 +715,7 @@ export default function BlockStatsPage() {
           format="percentage"
           isPositive={getBestTrade() > 0}
           tooltip={{
-            flavor:
-              "Biggest building block - your most successful construction project to date.",
+            flavor: "Biggest building block - your most successful construction project to date.",
             detailed:
               "The highest return on margin achieved in a single trade. This represents your best-case scenario and shows the upside potential of your strategy. Extremely large best trades might indicate either great skill or significant risk-taking.",
           }}
@@ -835,8 +726,7 @@ export default function BlockStatsPage() {
           format="percentage"
           isPositive={getWorstTrade() > 0}
           tooltip={{
-            flavor:
-              "Biggest tumble - when your construction project needed the most rebuilding.",
+            flavor: "Biggest tumble - when your construction project needed the most rebuilding.",
             detailed:
               "The largest loss on margin for a single trade. This represents your worst-case scenario and indicates the downside risk of your strategy. Understanding this helps assess whether your risk management aligns with your tolerance for losses.",
           }}
@@ -870,8 +760,7 @@ export default function BlockStatsPage() {
           format="percentage"
           isPositive={(portfolioStats?.cagr || 0) > 0}
           tooltip={{
-            flavor:
-              "Annual building rate - how fast your foundation grows each year.",
+            flavor: "Annual building rate - how fast your foundation grows each year.",
             detailed:
               "Compound Annual Growth Rate normalizes returns over time, showing the equivalent annual growth rate. This allows comparison across different time periods and strategies. Higher CAGR indicates faster wealth building, but consider it alongside risk metrics.",
           }}
@@ -882,8 +771,7 @@ export default function BlockStatsPage() {
           format="percentage"
           isPositive={getAvgReturnOnMargin() > 0}
           tooltip={{
-            flavor:
-              "Standard building efficiency - typical value created per margin block.",
+            flavor: "Standard building efficiency - typical value created per margin block.",
             detailed:
               "Average Return on Margin across all trades. This metric is especially relevant for options and other margin-based strategies, showing how effectively you use borrowed buying power. Compare this to risk-free rates for context.",
           }}
@@ -894,8 +782,7 @@ export default function BlockStatsPage() {
           format="percentage"
           isPositive={(portfolioStats?.winRate || 0) > 0.5}
           tooltip={{
-            flavor:
-              "Building success rate - percentage of projects that added value.",
+            flavor: "Building success rate - percentage of projects that added value.",
             detailed:
               "Percentage of trades that were profitable. While higher win rates seem better, they don't tell the whole story. A strategy with 40% win rate but large winners can outperform a 80% win rate strategy with small winners.",
           }}
@@ -906,8 +793,7 @@ export default function BlockStatsPage() {
           format="percentage"
           isPositive={false}
           tooltip={{
-            flavor:
-              "Rebuilding frequency - percentage of projects that required reconstruction.",
+            flavor: "Rebuilding frequency - percentage of projects that required reconstruction.",
             detailed:
               "Percentage of trades that resulted in losses. This is simply the inverse of win rate. Understanding your loss frequency helps set expectations and plan for the psychological impact of inevitable losing trades.",
           }}
@@ -928,8 +814,7 @@ export default function BlockStatsPage() {
           format="percentage"
           isPositive={false}
           tooltip={{
-            flavor:
-              "Biggest foundation crack - the deepest your structure has sunk.",
+            flavor: "Biggest foundation crack - the deepest your structure has sunk.",
             detailed:
               "Maximum percentage decline from a peak to subsequent trough. This represents your worst-case scenario and is crucial for understanding the downside risk of your strategy. Most traders find drawdowns over 20-30% psychologically challenging.",
           }}
@@ -938,10 +823,13 @@ export default function BlockStatsPage() {
           title="Peak Exposure"
           value={peakDailyExposurePercent?.exposurePercent || 0}
           format="percentage"
-          subtitle={peakDailyExposurePercent ? `$${peakDailyExposurePercent.exposure.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : undefined}
+          subtitle={
+            peakDailyExposurePercent
+              ? `$${peakDailyExposurePercent.exposure.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+              : undefined
+          }
           tooltip={{
-            flavor:
-              "Maximum daily risk - the most capital at risk on any single day.",
+            flavor: "Maximum daily risk - the most capital at risk on any single day.",
             detailed:
               "Peak daily exposure shows the highest sum of margin requirements across all open positions on any single day. This represents your maximum concurrent risk and helps assess position sizing discipline. High exposure relative to account size indicates aggressive positioning.",
           }}
@@ -951,8 +839,7 @@ export default function BlockStatsPage() {
           value={portfolioStats?.timeInDrawdown || 0}
           format="percentage"
           tooltip={{
-            flavor:
-              "Rebuilding time - percentage of time spent repairing foundation damage.",
+            flavor: "Rebuilding time - percentage of time spent repairing foundation damage.",
             detailed:
               "Percentage of time the account was below previous peak values. Long periods in drawdown can be psychologically taxing and may indicate recovery issues. Strategies with quick recovery tend to be more sustainable.",
           }}
@@ -987,8 +874,7 @@ export default function BlockStatsPage() {
           format="ratio"
           isPositive={(portfolioStats?.calmarRatio || 0) > 0}
           tooltip={{
-            flavor:
-              "Recovery building rate - annual growth compared to worst foundation damage.",
+            flavor: "Recovery building rate - annual growth compared to worst foundation damage.",
             detailed:
               "CAGR divided by maximum drawdown. This shows how much annual return you're getting relative to the worst decline experienced. Higher values indicate strategies that generate good returns without severe drawdowns.",
           }}
@@ -1009,8 +895,7 @@ export default function BlockStatsPage() {
           format="number"
           isPositive={true}
           tooltip={{
-            flavor:
-              "Longest building run - most consecutive successful projects completed.",
+            flavor: "Longest building run - most consecutive successful projects completed.",
             detailed:
               "Maximum number of consecutive winning trades. Long win streaks can indicate good strategy alignment with market conditions, but they can also lead to overconfidence. Understanding your typical streak length helps with psychological preparation.",
           }}
@@ -1021,8 +906,7 @@ export default function BlockStatsPage() {
           format="number"
           isPositive={false}
           tooltip={{
-            flavor:
-              "Longest rebuilding period - most consecutive projects that needed repairs.",
+            flavor: "Longest rebuilding period - most consecutive projects that needed repairs.",
             detailed:
               "Maximum number of consecutive losing trades. Everyone experiences losing streaks, and knowing your worst helps with risk management and position sizing. Extended loss streaks might indicate strategy issues or unfavorable market conditions.",
           }}

@@ -30,7 +30,7 @@ export interface ColumnDescription {
    *  - 'static': Calendar/metadata facts known before the day (Day_of_Week, Month, Is_Opex)
    *  Only applicable to market.enriched and market.enriched_context columns. Omit for non-market tables.
    */
-  timing?: 'open' | 'close' | 'static';
+  timing?: "open" | "close" | "static";
 }
 
 export interface TableDescription {
@@ -164,7 +164,8 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
             hypothesis: true,
           },
           legs: {
-            description: "Option legs description with strikes (e.g., 'SPY 450P/445P') - compare with trade_data.legs to identify strike differences",
+            description:
+              "Option legs description with strikes (e.g., 'SPY 450P/445P') - compare with trade_data.legs to identify strike differences",
             hypothesis: true,
           },
           initial_premium: {
@@ -221,174 +222,182 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
             hypothesis: true,
           },
           date: {
-            description: "Trading date (VARCHAR, format YYYY-MM-DD). Composite primary key with ticker.",
+            description:
+              "Trading date (VARCHAR, format YYYY-MM-DD). Composite primary key with ticker.",
             hypothesis: true,
           },
           // Raw OHLCV
           open: {
             description: "Underlying open price",
             hypothesis: false,
-            timing: 'open',
+            timing: "open",
           },
           high: {
             description: "Underlying high price",
             hypothesis: false,
-            timing: 'close',
+            timing: "close",
           },
           low: {
             description: "Underlying low price",
             hypothesis: false,
-            timing: 'close',
+            timing: "close",
           },
           close: {
             description: "Underlying close price",
             hypothesis: false,
-            timing: 'close',
+            timing: "close",
           },
           Prior_Close: {
             description: "Previous day's close price",
             hypothesis: false,
-            timing: 'open',
+            timing: "open",
           },
           // Tier 1 enrichment — open-known
           Gap_Pct: {
             description: "Overnight gap percentage ((Open - Prior_Close) / Prior_Close * 100)",
             hypothesis: true,
-            timing: 'open',
+            timing: "open",
           },
           Prev_Return_Pct: {
             description: "Previous day's total return percentage (prior close to prior close)",
             hypothesis: true,
-            timing: 'open',
+            timing: "open",
           },
           Prior_Range_vs_ATR: {
-            description: "Prior trading day's (high - low) / ATR ratio, measures prior day's range relative to average true range",
+            description:
+              "Prior trading day's (high - low) / ATR ratio, measures prior day's range relative to average true range",
             hypothesis: true,
-            timing: 'open',
+            timing: "open",
           },
           // Tier 1 enrichment — close-derived
           ATR_Pct: {
             description: "Average True Range as percentage of price (14-day Wilder smoothing)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           RSI_14: {
             description: "14-day RSI (0-100, >70 overbought, <30 oversold)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Price_vs_EMA21_Pct: {
             description: "Price vs 21-day EMA as percentage ((close - EMA21) / EMA21 * 100)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Price_vs_SMA50_Pct: {
             description: "Price vs 50-day SMA as percentage ((close - SMA50) / SMA50 * 100)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Realized_Vol_5D: {
             description: "5-day realized volatility (annualized standard deviation of log returns)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Realized_Vol_20D: {
-            description: "20-day realized volatility (annualized standard deviation of log returns)",
+            description:
+              "20-day realized volatility (annualized standard deviation of log returns)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Return_5D: {
             description: "5-day cumulative return percentage",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Return_20D: {
             description: "20-day cumulative return percentage",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Intraday_Range_Pct: {
             description: "Intraday range as percentage ((High - Low) / Open * 100)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Intraday_Return_Pct: {
             description: "Open to close return percentage ((Close - Open) / Open * 100)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Close_Position_In_Range: {
             description: "Where close is in day's range (0 = low, 1 = high)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Gap_Filled: {
             description: "Whether overnight gap was filled (1 = yes, 0 = no)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Consecutive_Days: {
             description: "Consecutive up/down days (positive=up, negative=down)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           // Tier 3 intraday timing (columns exist in schema, enrichment deferred)
           High_Time: {
             description: "Time of day high as decimal hours (e.g., 10.5 = 10:30 AM ET)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Low_Time: {
             description: "Time of day low as decimal hours (e.g., 14.25 = 2:15 PM ET)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           High_Before_Low: {
             description: "Did high occur before low? (1=yes, 0=no)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Reversal_Type: {
-            description: "Reversal pattern type (1=morning reversal up, -1=morning reversal down, 0=trend day)",
+            description:
+              "Reversal pattern type (1=morning reversal up, -1=morning reversal down, 0=trend day)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Opening_Drive_Strength: {
-            description: "First-30-min range / full-day range ratio (0-1); higher = strong opening drive",
+            description:
+              "First-30-min range / full-day range ratio (0-1); higher = strong opening drive",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Intraday_Realized_Vol: {
-            description: "Annualized realized volatility from intraday bar returns (decimal, e.g., 0.15 = 15%)",
+            description:
+              "Annualized realized volatility from intraday bar returns (decimal, e.g., 0.15 = 15%)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           // Calendar fields — static
           Day_of_Week: {
             description: "Day of week (2=Monday through 6=Friday)",
             hypothesis: true,
-            timing: 'static',
+            timing: "static",
           },
           Month: {
             description: "Month number (1-12)",
             hypothesis: true,
-            timing: 'static',
+            timing: "static",
           },
           Is_Opex: {
             description: "Options expiration day flag (1=opex, 0=not)",
             hypothesis: true,
-            timing: 'static',
+            timing: "static",
           },
           // VIX-family ticker IVR/IVP (populated for VIX, VIX9D, VIX3M, etc.)
           ivr: {
-            description: "Implied Volatility Rank (252-day): where current close sits in range (0=min, 100=max). Populated for VIX-family tickers only.",
+            description:
+              "Implied Volatility Rank (252-day): where current close sits in range (0=min, 100=max). Populated for VIX-family tickers only.",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           ivp: {
-            description: "Implied Volatility Percentile (252-day): percentage of prior 251 trading days where close was at or below current level (0-100). Populated for VIX-family tickers only.",
+            description:
+              "Implied Volatility Percentile (252-day): percentage of prior 251 trading days where close was at or below current level (0-100). Populated for VIX-family tickers only.",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
         },
       },
@@ -402,29 +411,33 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
             hypothesis: true,
           },
           Vol_Regime: {
-            description: "Volatility regime classification based on VIX close (1=very low <10, 2=low 10-15, 3=normal 15-20, 4=elevated 20-25, 5=high 25-30, 6=extreme >30)",
+            description:
+              "Volatility regime classification based on VIX close (1=very low <10, 2=low 10-15, 3=normal 15-20, 4=elevated 20-25, 5=high 25-30, 6=extreme >30)",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Term_Structure_State: {
-            description: "VIX term structure state based on VIX9D/VIX ratio (-1=backwardation/inverted, 0=flat, 1=contango/normal). NULL when VIX9D data is absent.",
+            description:
+              "VIX term structure state based on VIX9D/VIX ratio (-1=backwardation/inverted, 0=flat, 1=contango/normal). NULL when VIX9D data is absent.",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           Trend_Direction: {
-            description: "Trend direction classification based on 20-day return: up (>1%), down (<-1%), flat (-1% to 1%). NULL if Return_20D unavailable.",
+            description:
+              "Trend direction classification based on 20-day return: up (>1%), down (<-1%), flat (-1% to 1%). NULL if Return_20D unavailable.",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           VIX_Spike_Pct: {
             description: "VIX spike from open to high as percentage",
             hypothesis: true,
-            timing: 'close',
+            timing: "close",
           },
           VIX_Gap_Pct: {
-            description: "VIX overnight gap percentage ((VIX_Open - prior VIX_Close) / prior VIX_Close * 100)",
+            description:
+              "VIX overnight gap percentage ((VIX_Open - prior VIX_Close) / prior VIX_Close * 100)",
             hypothesis: true,
-            timing: 'open',
+            timing: "open",
           },
         },
       },
@@ -434,15 +447,18 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
         keyColumns: ["ticker", "date", "time"],
         columns: {
           ticker: {
-            description: "Underlying ticker symbol (part of composite primary key with date and time).",
+            description:
+              "Underlying ticker symbol (part of composite primary key with date and time).",
             hypothesis: true,
           },
           date: {
-            description: "Trading date (VARCHAR, format YYYY-MM-DD). Part of composite primary key.",
+            description:
+              "Trading date (VARCHAR, format YYYY-MM-DD). Part of composite primary key.",
             hypothesis: true,
           },
           time: {
-            description: "Bar time in HH:MM Eastern Time format (e.g., '09:30', '10:00'). Part of composite primary key.",
+            description:
+              "Bar time in HH:MM Eastern Time format (e.g., '09:30', '10:00'). Part of composite primary key.",
             hypothesis: false,
           },
           open: {
@@ -587,19 +603,23 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
             hypothesis: false,
           },
           delta: {
-            description: "Option delta for the minute when available from provider data or computed fallback.",
+            description:
+              "Option delta for the minute when available from provider data or computed fallback.",
             hypothesis: true,
           },
           gamma: {
-            description: "Option gamma for the minute when available from provider data or computed fallback.",
+            description:
+              "Option gamma for the minute when available from provider data or computed fallback.",
             hypothesis: false,
           },
           theta: {
-            description: "Option theta for the minute when available from provider data or computed fallback.",
+            description:
+              "Option theta for the minute when available from provider data or computed fallback.",
             hypothesis: false,
           },
           vega: {
-            description: "Option vega (per 1% IV move) for the minute when available from provider data or computed fallback.",
+            description:
+              "Option vega (per 1% IV move) for the minute when available from provider data or computed fallback.",
             hypothesis: false,
           },
           iv: {
@@ -607,15 +627,18 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
             hypothesis: true,
           },
           greeks_source: {
-            description: "Origin of the stored minute greeks: provider-native or computed fallback.",
+            description:
+              "Origin of the stored minute greeks: provider-native or computed fallback.",
             hypothesis: false,
           },
           greeks_revision: {
-            description: "Computation revision for stored computed greeks; null for provider-native values.",
+            description:
+              "Computation revision for stored computed greeks; null for provider-native values.",
             hypothesis: false,
           },
           rate_type: {
-            description: "Interest-rate curve or rate label used by the provider or computed-greeks path.",
+            description:
+              "Interest-rate curve or rate label used by the provider or computed-greeks path.",
             hypothesis: false,
           },
           rate_value: {
@@ -623,7 +646,8 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
             hypothesis: false,
           },
           gamma_source: {
-            description: "Provenance label for the stored gamma value when it differs from the broader greeks source.",
+            description:
+              "Provenance label for the stored gamma value when it differs from the broader greeks source.",
             hypothesis: false,
           },
         },
@@ -716,7 +740,8 @@ ORDER BY t.date_opened`,
   ],
   joins: [
     {
-      description: "Trade P&L with market context (lag-aware: multi-table JOIN before LAG for correctness)",
+      description:
+        "Trade P&L with market context (lag-aware: multi-table JOIN before LAG for correctness)",
       sql: `WITH joined AS (
   SELECT d.ticker, d.date,
     d.Gap_Pct, d.Prior_Close, d.Prev_Return_Pct,
@@ -748,7 +773,8 @@ WHERE t.block_id = 'my-block'
 ORDER BY t.date_opened DESC`,
     },
     {
-      description: "Trades with ORB context (opening range breakout from minute bars in market.spot)",
+      description:
+        "Trades with ORB context (opening range breakout from minute bars in market.spot)",
       sql: `WITH orb_range AS (
   SELECT ticker, date,
     MAX(high) AS ORB_High,
@@ -775,7 +801,8 @@ WHERE t.block_id = 'my-block'
 ORDER BY t.date_opened`,
     },
     {
-      description: "VIX intraday data for a specific date (VIX bars are in market.spot with ticker='VIX')",
+      description:
+        "VIX intraday data for a specific date (VIX bars are in market.spot with ticker='VIX')",
       sql: `SELECT time, open, high, low, close
 FROM market.spot
 WHERE ticker = 'VIX'
@@ -783,7 +810,8 @@ WHERE ticker = 'VIX'
 ORDER BY time`,
     },
     {
-      description: "Trades on reversal days (lag-aware: Reversal_Type uses prior trading day via LAG)",
+      description:
+        "Trades on reversal days (lag-aware: Reversal_Type uses prior trading day via LAG)",
       sql: `WITH joined AS (
   SELECT d.ticker, d.date,
     d.High_Before_Low, d.Reversal_Type
@@ -805,7 +833,8 @@ WHERE m.prev_Reversal_Type != 0
   AND t.block_id = 'my-block'`,
     },
     {
-      description: "Enrich trades with market data (lag-aware: use enrich_trades tool for full enrichment)",
+      description:
+        "Enrich trades with market data (lag-aware: use enrich_trades tool for full enrichment)",
       sql: `WITH joined AS (
   SELECT d.ticker, d.date,
     d.Gap_Pct, d.Prior_Close,
@@ -833,7 +862,8 @@ WHERE t.block_id = 'my-block'`,
   ],
   hypothesis: [
     {
-      description: "Win rate by VIX regime (lag-aware: uses prior day's Vol_Regime from market.enriched_context)",
+      description:
+        "Win rate by VIX regime (lag-aware: uses prior day's Vol_Regime from market.enriched_context)",
       sql: `WITH joined AS (
   SELECT d.ticker, d.date, cd.Vol_Regime
   FROM market.enriched d
@@ -872,7 +902,8 @@ GROUP BY d.Day_of_Week
 ORDER BY d.Day_of_Week`,
     },
     {
-      description: "Performance by VIX term structure (lag-aware: uses prior day's Term_Structure_State from market.enriched_context)",
+      description:
+        "Performance by VIX term structure (lag-aware: uses prior day's Term_Structure_State from market.enriched_context)",
       sql: `WITH joined AS (
   SELECT d.ticker, d.date, cd.Term_Structure_State
   FROM market.enriched d
@@ -899,7 +930,8 @@ WHERE t.block_id = 'my-block'
 GROUP BY term_structure`,
     },
     {
-      description: "Aggregate by VIX buckets (lag-aware: uses prior day's VIX close from market.spot_daily ticker='VIX')",
+      description:
+        "Aggregate by VIX buckets (lag-aware: uses prior day's VIX close from market.spot_daily ticker='VIX')",
       sql: `WITH joined AS (
   SELECT d.ticker, d.date, vix_s.close AS VIX_Close
   FROM market.enriched d

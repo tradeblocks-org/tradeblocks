@@ -1,8 +1,8 @@
 // Global test setup
-import { jest } from '@jest/globals';
-import '@testing-library/jest-dom';
-import 'fake-indexeddb/auto';
-import { IDBFactory } from 'fake-indexeddb';
+import { jest } from "@jest/globals";
+import "@testing-library/jest-dom";
+import "fake-indexeddb/auto";
+import { IDBFactory } from "fake-indexeddb";
 
 // Use fake-indexeddb for tests - provides complete IndexedDB implementation
 // This is automatically populated to global scope by 'fake-indexeddb/auto'
@@ -12,7 +12,7 @@ if (!global.indexedDB) {
 }
 
 // Polyfill structuredClone for Node.js environments that don't have it
-if (typeof global.structuredClone === 'undefined') {
+if (typeof global.structuredClone === "undefined") {
   global.structuredClone = <T>(obj: T): T => {
     return JSON.parse(JSON.stringify(obj));
   };

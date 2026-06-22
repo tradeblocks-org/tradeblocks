@@ -11,12 +11,7 @@
  * D-02 reminder: no method body inspects `ctx.parquetMode`.
  */
 import { QuoteStore } from "./quote-store.ts";
-import type {
-  QuoteRow,
-  CoverageReport,
-  ReadWindowParams,
-  WindowQuoteRow,
-} from "./types.ts";
+import type { QuoteRow, CoverageReport, ReadWindowParams, WindowQuoteRow } from "./types.ts";
 import { extractRoot } from "../tickers/resolver.ts";
 import {
   describeQueryColumns,
@@ -43,7 +38,7 @@ function parseQuoteRow(row: unknown[]): QuoteRow {
     theta: row[11] == null ? null : Number(row[11]),
     vega: row[12] == null ? null : Number(row[12]),
     iv: row[13] == null ? null : Number(row[13]),
-    greeks_source: row[14] == null ? null : String(row[14]) as QuoteRow["greeks_source"],
+    greeks_source: row[14] == null ? null : (String(row[14]) as QuoteRow["greeks_source"]),
     greeks_revision: row[15] == null ? null : Number(row[15]),
     rate_type: row[16] == null ? null : String(row[16]),
     rate_value: row[17] == null ? null : Number(row[17]),
@@ -85,11 +80,7 @@ export class DuckdbQuoteStore extends QuoteStore {
     this.quoteTableColumns = null;
   }
 
-  async writeQuotes(
-    underlying: string,
-    date: string,
-    quotes: QuoteRow[],
-  ): Promise<void> {
+  async writeQuotes(underlying: string, date: string, quotes: QuoteRow[]): Promise<void> {
     if (quotes.length === 0) return;
     await this.ensureWritableQuoteSchema();
     const placeholders = quotes
@@ -109,8 +100,8 @@ export class DuckdbQuoteStore extends QuoteStore {
         q.bid,
         q.ask,
         mid,
-        null,                 // last_updated_ns — not tracked in QuoteRow
-        q.source ?? null,     // source — populated when provider tags rows (Task 6)
+        null, // last_updated_ns — not tracked in QuoteRow
+        q.source ?? null, // source — populated when provider tags rows (Task 6)
         q.delta ?? null,
         q.gamma ?? null,
         q.theta ?? null,
@@ -157,9 +148,7 @@ export class DuckdbQuoteStore extends QuoteStore {
     to: string,
   ): Promise<Map<string, QuoteRow[]>> {
     if (occTickers.length === 0) return new Map();
-    const firstUnderlying = this.ctx.tickers.resolve(
-      extractRoot(occTickers[0]),
-    );
+    const firstUnderlying = this.ctx.tickers.resolve(extractRoot(occTickers[0]));
     for (const t of occTickers) {
       const u = this.ctx.tickers.resolve(extractRoot(t));
       if (u !== firstUnderlying) {
@@ -180,9 +169,7 @@ export class DuckdbQuoteStore extends QuoteStore {
     const underlyingLit = `'${escapeSqlLiteral(firstUnderlying)}'`;
     const fromLit = `'${escapeSqlLiteral(from)}'`;
     const toLit = `'${escapeSqlLiteral(to)}'`;
-    const tickerList = occTickers
-      .map((t) => `'${escapeSqlLiteral(t)}'`)
-      .join(", ");
+    const tickerList = occTickers.map((t) => `'${escapeSqlLiteral(t)}'`).join(", ");
     const reader = await this.ctx.conn.runAndReadAll(
       `SELECT ${projection}
          FROM market.option_quote_minutes AS q
@@ -256,7 +243,7 @@ export class DuckdbQuoteStore extends QuoteStore {
       if (perf) {
         console.log(
           `    [P] readQuotesBulk underlying=${underlying} dates=${perDate.size} ` +
-          `tickers=${occUnion.size} rows=${rows.length} queryMs=${Date.now() - queryStart}`,
+            `tickers=${occUnion.size} rows=${rows.length} queryMs=${Date.now() - queryStart}`,
         );
       }
       for (const row of rows) {
@@ -355,15 +342,11 @@ export class DuckdbQuoteStore extends QuoteStore {
       theta: r[10] == null ? null : Number(r[10]),
       vega: r[11] == null ? null : Number(r[11]),
       iv: r[12] == null ? null : Number(r[12]),
-      greeks_source: r[13] == null ? null : String(r[13]) as WindowQuoteRow["greeks_source"],
+      greeks_source: r[13] == null ? null : (String(r[13]) as WindowQuoteRow["greeks_source"]),
     }));
   }
 
-  async getCoverage(
-    underlying: string,
-    from: string,
-    to: string,
-  ): Promise<CoverageReport> {
+  async getCoverage(underlying: string, from: string, to: string): Promise<CoverageReport> {
     // Inline literal path — same leak rationale (see spot-sql.ts header).
     const underlyingLit = underlying.replace(/'/g, "''");
     const fromLit = from.replace(/'/g, "''");

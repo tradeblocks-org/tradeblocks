@@ -5,11 +5,7 @@ import { ChartWrapper } from "@/components/performance-charts/chart-wrapper";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,15 +43,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function CorrelationMatrixPage() {
   const { theme } = useTheme();
-  const activeBlockId = useBlockStore(
-    (state) => state.blocks.find((b) => b.isActive)?.id
-  );
+  const activeBlockId = useBlockStore((state) => state.blocks.find((b) => b.isActive)?.id);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [method, setMethod] = useState<CorrelationMethod>("kendall");
   const [alignment, setAlignment] = useState<CorrelationAlignment>("shared");
-  const [normalization, setNormalization] =
-    useState<CorrelationNormalization>("raw");
+  const [normalization, setNormalization] = useState<CorrelationNormalization>("raw");
   const [dateBasis, setDateBasis] = useState<CorrelationDateBasis>("opened");
   const [timePeriod, setTimePeriod] = useState<CorrelationTimePeriod>("daily");
 
@@ -95,7 +88,7 @@ export default function CorrelationMatrixPage() {
         timePeriod,
         minSamples,
       }),
-    [method, alignment, normalization, dateBasis, timePeriod, minSamples]
+    [method, alignment, normalization, dateBasis, timePeriod, minSamples],
   );
 
   useEffect(() => {
@@ -108,8 +101,7 @@ export default function CorrelationMatrixPage() {
       setLoading(true);
       try {
         const processedBlock = await getBlock(activeBlockId);
-        const combineLegGroups =
-          processedBlock?.analysisConfig?.combineLegGroups ?? false;
+        const combineLegGroups = processedBlock?.analysisConfig?.combineLegGroups ?? false;
         const loadedTrades = await getTradesByBlockWithOptions(activeBlockId, {
           combineLegGroups,
         });
@@ -150,9 +142,7 @@ export default function CorrelationMatrixPage() {
     const isDark = theme === "dark";
 
     // Truncate strategy names for axis labels
-    const truncatedStrategies = strategies.map((s) =>
-      truncateStrategyName(s, 40)
-    );
+    const truncatedStrategies = strategies.map((s) => truncateStrategyName(s, 40));
 
     // Create heatmap with better contrast
     // Different colorscales for light and dark modes
@@ -185,7 +175,7 @@ export default function CorrelationMatrixPage() {
         const n = sampleSizes[i][j];
         if (Number.isNaN(val) || n < minSamples) return null;
         return val;
-      })
+      }),
     );
 
     // Text labels: show "—" for insufficient data
@@ -195,7 +185,7 @@ export default function CorrelationMatrixPage() {
         const n = sampleSizes[i][j];
         if (Number.isNaN(val) || n < minSamples) return "—";
         return val.toFixed(2);
-      })
+      }),
     );
 
     // Text colors: gray for insufficient data cells
@@ -211,7 +201,7 @@ export default function CorrelationMatrixPage() {
         } else {
           return absVal > 0.5 ? "#ffffff" : "#000000";
         }
-      })
+      }),
     );
 
     // Custom data for hover tooltips
@@ -219,13 +209,8 @@ export default function CorrelationMatrixPage() {
       row.map((val, xIndex) => {
         const n = sampleSizes[yIndex][xIndex];
         const isInsufficient = Number.isNaN(val) || n < minSamples;
-        return [
-          strategies[yIndex],
-          strategies[xIndex],
-          n,
-          isInsufficient,
-        ];
-      })
+        return [strategies[yIndex], strategies[xIndex], n, isInsufficient];
+      }),
     );
 
     // Build per-cell hover templates
@@ -241,7 +226,7 @@ export default function CorrelationMatrixPage() {
           return `<b>${strat1} ↔ ${strat2}</b><br>Insufficient data (n=${n}, requires ${minSamples})`;
         }
         return `<b>${strat1} ↔ ${strat2}</b><br>Correlation: ${val.toFixed(3)}<br>Sample size: n=${n}`;
-      })
+      }),
     );
 
     const heatmapData = {
@@ -295,8 +280,8 @@ export default function CorrelationMatrixPage() {
 
   const isDark = theme === "dark";
 
-  const activeBlock = useBlockStore(
-    (state) => state.blocks.find((block) => block.id === activeBlockId)
+  const activeBlock = useBlockStore((state) =>
+    state.blocks.find((block) => block.id === activeBlockId),
   );
 
   const handleDownloadCsv = useCallback(() => {
@@ -314,11 +299,17 @@ export default function CorrelationMatrixPage() {
       minSamples,
     });
 
-    downloadCsv(
-      lines,
-      generateExportFilename(activeBlock.name, "correlation", "csv")
-    );
-  }, [correlationMatrix, method, alignment, normalization, dateBasis, timePeriod, minSamples, activeBlock]);
+    downloadCsv(lines, generateExportFilename(activeBlock.name, "correlation", "csv"));
+  }, [
+    correlationMatrix,
+    method,
+    alignment,
+    normalization,
+    dateBasis,
+    timePeriod,
+    minSamples,
+    activeBlock,
+  ]);
 
   const handleDownloadJson = useCallback(() => {
     if (!correlationMatrix || !activeBlock) {
@@ -353,11 +344,18 @@ export default function CorrelationMatrixPage() {
         : null,
     };
 
-    downloadJson(
-      exportData,
-      generateExportFilename(activeBlock.name, "correlation", "json")
-    );
-  }, [correlationMatrix, analytics, method, alignment, normalization, dateBasis, timePeriod, minSamples, activeBlock]);
+    downloadJson(exportData, generateExportFilename(activeBlock.name, "correlation", "json"));
+  }, [
+    correlationMatrix,
+    analytics,
+    method,
+    alignment,
+    normalization,
+    dateBasis,
+    timePeriod,
+    minSamples,
+    activeBlock,
+  ]);
 
   if (loading) {
     return (
@@ -376,9 +374,7 @@ export default function CorrelationMatrixPage() {
   if (trades.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-muted-foreground">
-          No trades available for correlation analysis
-        </div>
+        <div className="text-muted-foreground">No trades available for correlation analysis</div>
       </div>
     );
   }
@@ -395,20 +391,28 @@ export default function CorrelationMatrixPage() {
             <div className="space-y-2">
               <h3 className="text-base font-semibold">What does this show?</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                This heatmap shows how your trading strategies move together. High positive correlation (+1.0) means strategies
-                move in the same direction, while negative correlation (-1.0) means they move opposite. Low correlation (~0)
-                indicates good diversification.
+                This heatmap shows how your trading strategies move together. High positive
+                correlation (+1.0) means strategies move in the same direction, while negative
+                correlation (-1.0) means they move opposite. Low correlation (~0) indicates good
+                diversification.
               </p>
               <div className="flex flex-wrap items-center gap-4 pt-2 text-xs">
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="font-medium">PEARSON</Badge>
+                  <Badge variant="secondary" className="font-medium">
+                    PEARSON
+                  </Badge>
                   <span className="text-muted-foreground">Linear relationships</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400 font-medium">
+                  <Badge
+                    variant="outline"
+                    className="border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-400 font-medium"
+                  >
                     KENDALL/SPEARMAN
                   </Badge>
-                  <span className="text-muted-foreground">Rank-based (handles outliers better)</span>
+                  <span className="text-muted-foreground">
+                    Rank-based (handles outliers better)
+                  </span>
                 </div>
               </div>
             </div>
@@ -441,9 +445,14 @@ export default function CorrelationMatrixPage() {
                           Choose how to measure strategy relationships
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          <strong>Kendall (recommended):</strong> Rank-based, robust to outliers. Best for options strategies with non-linear payoffs.<br/>
-                          <strong>Spearman:</strong> Another rank-based method, similar to Kendall but faster for large datasets.<br/>
-                          <strong>Pearson:</strong> Measures linear relationships. Best for normally distributed returns.
+                          <strong>Kendall (recommended):</strong> Rank-based, robust to outliers.
+                          Best for options strategies with non-linear payoffs.
+                          <br />
+                          <strong>Spearman:</strong> Another rank-based method, similar to Kendall
+                          but faster for large datasets.
+                          <br />
+                          <strong>Pearson:</strong> Measures linear relationships. Best for normally
+                          distributed returns.
                         </p>
                       </div>
                     </div>
@@ -452,9 +461,7 @@ export default function CorrelationMatrixPage() {
               </div>
               <Select
                 value={method}
-                onValueChange={(value) =>
-                  setMethod(value as "pearson" | "spearman" | "kendall")
-                }
+                onValueChange={(value) => setMethod(value as "pearson" | "spearman" | "kendall")}
               >
                 <SelectTrigger id="method-select">
                   <SelectValue placeholder="Select method" />
@@ -490,8 +497,11 @@ export default function CorrelationMatrixPage() {
                           How to handle days when strategies don&apos;t trade
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          <strong>Shared days (recommended):</strong> Only correlates on days where both strategies traded. Avoids artificial zeros.<br/>
-                          <strong>Zero-fill:</strong> Treats non-trading days as $0 P/L. Can distort correlation for strategies that trade different frequencies.
+                          <strong>Shared days (recommended):</strong> Only correlates on days where
+                          both strategies traded. Avoids artificial zeros.
+                          <br />
+                          <strong>Zero-fill:</strong> Treats non-trading days as $0 P/L. Can distort
+                          correlation for strategies that trade different frequencies.
                         </p>
                       </div>
                     </div>
@@ -500,9 +510,7 @@ export default function CorrelationMatrixPage() {
               </div>
               <Select
                 value={alignment}
-                onValueChange={(value) =>
-                  setAlignment(value as CorrelationAlignment)
-                }
+                onValueChange={(value) => setAlignment(value as CorrelationAlignment)}
               >
                 <SelectTrigger id="alignment-select">
                   <SelectValue placeholder="Alignment" />
@@ -529,16 +537,23 @@ export default function CorrelationMatrixPage() {
                   <HoverCardContent className="w-80 p-0 overflow-hidden">
                     <div className="space-y-3">
                       <div className="bg-primary/5 border-b px-4 py-3">
-                        <h4 className="text-sm font-semibold text-primary">Time Period Aggregation</h4>
+                        <h4 className="text-sm font-semibold text-primary">
+                          Time Period Aggregation
+                        </h4>
                       </div>
                       <div className="px-4 pb-4 space-y-3">
                         <p className="text-sm font-medium text-foreground leading-relaxed">
                           How to aggregate P&L before calculating correlations
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          <strong>Daily:</strong> Correlate daily P&L (default).<br/>
-                          <strong>Weekly:</strong> Sum P&L by ISO week, then correlate. Useful for strategies that trade on different days but may compensate each other weekly.<br/>
-                          <strong>Monthly:</strong> Sum P&L by month. Shows longer-term correlation patterns.
+                          <strong>Daily:</strong> Correlate daily P&L (default).
+                          <br />
+                          <strong>Weekly:</strong> Sum P&L by ISO week, then correlate. Useful for
+                          strategies that trade on different days but may compensate each other
+                          weekly.
+                          <br />
+                          <strong>Monthly:</strong> Sum P&L by month. Shows longer-term correlation
+                          patterns.
                         </p>
                       </div>
                     </div>
@@ -547,9 +562,7 @@ export default function CorrelationMatrixPage() {
               </div>
               <Select
                 value={timePeriod}
-                onValueChange={(value) =>
-                  handleTimePeriodChange(value as CorrelationTimePeriod)
-                }
+                onValueChange={(value) => handleTimePeriodChange(value as CorrelationTimePeriod)}
               >
                 <SelectTrigger id="time-period-select">
                   <SelectValue placeholder="Time period" />
@@ -585,9 +598,13 @@ export default function CorrelationMatrixPage() {
                           How to scale returns for comparison
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          <strong>Raw P/L:</strong> Absolute dollar returns (default).<br/>
-                          <strong>Margin-normalized:</strong> Returns divided by margin requirement. Better for comparing strategies with different capital requirements.<br/>
-                          <strong>1-lot normalized:</strong> Per-contract basis. Divides P/L by trade size (price × contracts) to show returns as if each trade was 1 lot.
+                          <strong>Raw P/L:</strong> Absolute dollar returns (default).
+                          <br />
+                          <strong>Margin-normalized:</strong> Returns divided by margin requirement.
+                          Better for comparing strategies with different capital requirements.
+                          <br />
+                          <strong>1-lot normalized:</strong> Per-contract basis. Divides P/L by
+                          trade size (price × contracts) to show returns as if each trade was 1 lot.
                         </p>
                       </div>
                     </div>
@@ -596,9 +613,7 @@ export default function CorrelationMatrixPage() {
               </div>
               <Select
                 value={normalization}
-                onValueChange={(value) =>
-                  setNormalization(value as CorrelationNormalization)
-                }
+                onValueChange={(value) => setNormalization(value as CorrelationNormalization)}
               >
                 <SelectTrigger id="return-basis-select">
                   <SelectValue placeholder="Return basis" />
@@ -634,8 +649,11 @@ export default function CorrelationMatrixPage() {
                           Which date to use for grouping trades
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          <strong>Opened date (recommended):</strong> Groups by when trades were entered. Shows entry timing correlation.<br/>
-                          <strong>Closed date:</strong> Groups by when trades were closed. Shows exit timing and P/L realization correlation.
+                          <strong>Opened date (recommended):</strong> Groups by when trades were
+                          entered. Shows entry timing correlation.
+                          <br />
+                          <strong>Closed date:</strong> Groups by when trades were closed. Shows
+                          exit timing and P/L realization correlation.
                         </p>
                       </div>
                     </div>
@@ -644,9 +662,7 @@ export default function CorrelationMatrixPage() {
               </div>
               <Select
                 value={dateBasis}
-                onValueChange={(value) =>
-                  setDateBasis(value as CorrelationDateBasis)
-                }
+                onValueChange={(value) => setDateBasis(value as CorrelationDateBasis)}
               >
                 <SelectTrigger id="date-basis-select">
                   <SelectValue placeholder="Date basis" />
@@ -680,9 +696,10 @@ export default function CorrelationMatrixPage() {
                           Minimum shared periods required for valid correlation
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          Correlations calculated with fewer shared periods than this threshold are shown as
-                          &ldquo;—&rdquo; to indicate insufficient data. Higher thresholds give more reliable
-                          correlations but may exclude more strategy pairs. Default adjusts based on time period.
+                          Correlations calculated with fewer shared periods than this threshold are
+                          shown as &ldquo;—&rdquo; to indicate insufficient data. Higher thresholds
+                          give more reliable correlations but may exclude more strategy pairs.
+                          Default adjusts based on time period.
                         </p>
                       </div>
                     </div>
@@ -714,7 +731,8 @@ export default function CorrelationMatrixPage() {
         description="Visual representation of strategy correlations"
         tooltip={{
           flavor: "Measures how your trading strategies move together over time.",
-          detailed: "Red colors indicate positive correlation (strategies tend to win/lose together), blue indicates negative correlation (strategies move opposite), and white indicates no correlation. Use this to identify diversification opportunities and understand portfolio risk."
+          detailed:
+            "Red colors indicate positive correlation (strategies tend to win/lose together), blue indicates negative correlation (strategies move opposite), and white indicates no correlation. Use this to identify diversification opportunities and understand portfolio risk.",
         }}
         data={plotData}
         layout={layout}
@@ -751,11 +769,13 @@ export default function CorrelationMatrixPage() {
               <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
               <div>
                 <p className="text-sm font-medium">
-                  {analytics.insufficientDataPairs} Strategy Pair{analytics.insufficientDataPairs > 1 ? "s Have" : " Has"} Insufficient Data
+                  {analytics.insufficientDataPairs} Strategy Pair
+                  {analytics.insufficientDataPairs > 1 ? "s Have" : " Has"} Insufficient Data
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  These pairs have fewer than {minSamples} shared trading days and are shown as &ldquo;—&rdquo; in the heatmap.
-                  Lower the Min. Samples threshold to include them, or use Zero-fill alignment.
+                  These pairs have fewer than {minSamples} shared trading days and are shown as
+                  &ldquo;—&rdquo; in the heatmap. Lower the Min. Samples threshold to include them,
+                  or use Zero-fill alignment.
                 </p>
               </div>
             </div>
@@ -772,14 +792,15 @@ export default function CorrelationMatrixPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-1">
-                <div className="text-sm font-medium text-muted-foreground">
-                  Strongest:
-                </div>
+                <div className="text-sm font-medium text-muted-foreground">Strongest:</div>
                 {Number.isNaN(analytics.strongest.value) ? (
                   <div className="text-2xl font-bold text-muted-foreground">—</div>
                 ) : (
                   <>
-                    <div className="text-2xl font-bold" style={{ color: isDark ? '#fca5a5' : '#dc2626' }}>
+                    <div
+                      className="text-2xl font-bold"
+                      style={{ color: isDark ? "#fca5a5" : "#dc2626" }}
+                    >
                       {analytics.strongest.value.toFixed(2)}
                       <span className="text-sm font-normal text-muted-foreground ml-2">
                         (n={analytics.strongest.sampleSize})
@@ -793,14 +814,15 @@ export default function CorrelationMatrixPage() {
               </div>
 
               <div className="space-y-1">
-                <div className="text-sm font-medium text-muted-foreground">
-                  Weakest:
-                </div>
+                <div className="text-sm font-medium text-muted-foreground">Weakest:</div>
                 {Number.isNaN(analytics.weakest.value) ? (
                   <div className="text-2xl font-bold text-muted-foreground">—</div>
                 ) : (
                   <>
-                    <div className="text-2xl font-bold" style={{ color: isDark ? '#93c5fd' : '#2563eb' }}>
+                    <div
+                      className="text-2xl font-bold"
+                      style={{ color: isDark ? "#93c5fd" : "#2563eb" }}
+                    >
                       {analytics.weakest.value.toFixed(2)}
                       <span className="text-sm font-normal text-muted-foreground ml-2">
                         (n={analytics.weakest.sampleSize})
@@ -823,14 +845,18 @@ export default function CorrelationMatrixPage() {
                     <HoverCardContent className="w-80 p-0 overflow-hidden">
                       <div className="space-y-3">
                         <div className="bg-primary/5 border-b px-4 py-3">
-                          <h4 className="text-sm font-semibold text-primary">Average Correlation</h4>
+                          <h4 className="text-sm font-semibold text-primary">
+                            Average Correlation
+                          </h4>
                         </div>
                         <div className="px-4 pb-4 space-y-3">
                           <p className="text-sm font-medium text-foreground leading-relaxed">
                             Signed mean of all off-diagonal correlations
                           </p>
                           <p className="text-xs text-muted-foreground leading-relaxed">
-                            Positive values indicate strategies tend to move together on average. Negative values suggest strategies tend to offset each other. Values near zero indicate diverse, uncorrelated strategies.
+                            Positive values indicate strategies tend to move together on average.
+                            Negative values suggest strategies tend to offset each other. Values
+                            near zero indicate diverse, uncorrelated strategies.
                           </p>
                         </div>
                       </div>
@@ -838,7 +864,9 @@ export default function CorrelationMatrixPage() {
                   </HoverCard>
                 </div>
                 <div className="text-2xl font-bold">
-                  {Number.isNaN(analytics.averageCorrelation) ? "—" : analytics.averageCorrelation.toFixed(2)}
+                  {Number.isNaN(analytics.averageCorrelation)
+                    ? "—"
+                    : analytics.averageCorrelation.toFixed(2)}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {analytics.strategyCount} strategies · {analyticsContext}
@@ -862,10 +890,7 @@ interface CsvMeta {
   minSamples: number;
 }
 
-function buildCorrelationCsvLines(
-  matrix: CorrelationMatrix,
-  meta: CsvMeta
-): string[] {
+function buildCorrelationCsvLines(matrix: CorrelationMatrix, meta: CsvMeta): string[] {
   const lines: string[] = [];
 
   lines.push(toCsvRow(["Generated At", new Date().toISOString()]));
@@ -886,23 +911,19 @@ function buildCorrelationCsvLines(
     lines.push(
       toCsvRow([
         matrix.strategies[index],
-        ...row.map((value) => Number.isNaN(value) ? "N/A" : value.toFixed(6)),
-      ])
+        ...row.map((value) => (Number.isNaN(value) ? "N/A" : value.toFixed(6))),
+      ]),
     );
   });
 
   lines.push("");
-  const periodLabel = meta.timePeriod === "daily" ? "Days" : meta.timePeriod === "weekly" ? "Weeks" : "Months";
+  const periodLabel =
+    meta.timePeriod === "daily" ? "Days" : meta.timePeriod === "weekly" ? "Weeks" : "Months";
   lines.push(toCsvRow([`=== SAMPLE SIZES (Shared ${periodLabel}) ===`]));
 
   lines.push(toCsvRow(["Strategy", ...matrix.strategies]));
   matrix.sampleSizes.forEach((row, index) => {
-    lines.push(
-      toCsvRow([
-        matrix.strategies[index],
-        ...row.map((value) => String(value)),
-      ])
-    );
+    lines.push(toCsvRow([matrix.strategies[index], ...row.map((value) => String(value))]));
   });
 
   return lines;
@@ -926,11 +947,7 @@ function formatAnalyticsContext({
   minSamples,
 }: AnalyticsContextArgs): string {
   const methodLabel =
-    method === "pearson"
-      ? "Pearson"
-      : method === "spearman"
-      ? "Spearman"
-      : "Kendall";
+    method === "pearson" ? "Pearson" : method === "spearman" ? "Spearman" : "Kendall";
 
   const alignmentLabel = alignment === "shared" ? "Shared periods" : "Zero-filled";
 
@@ -938,19 +955,22 @@ function formatAnalyticsContext({
     normalization === "raw"
       ? "Raw P/L"
       : normalization === "margin"
-      ? "Margin-normalized"
-      : "1-lot normalized";
+        ? "Margin-normalized"
+        : "1-lot normalized";
 
   const dateLabel = dateBasis === "opened" ? "Opened dates" : "Closed dates";
 
   const timePeriodLabel =
-    timePeriod === "daily"
-      ? "Daily"
-      : timePeriod === "weekly"
-      ? "Weekly"
-      : "Monthly";
+    timePeriod === "daily" ? "Daily" : timePeriod === "weekly" ? "Weekly" : "Monthly";
 
   const minSamplesLabel = `n≥${minSamples}`;
 
-  return [methodLabel, timePeriodLabel, alignmentLabel, normalizationLabel, dateLabel, minSamplesLabel].join(", ");
+  return [
+    methodLabel,
+    timePeriodLabel,
+    alignmentLabel,
+    normalizationLabel,
+    dateLabel,
+    minSamplesLabel,
+  ].join(", ");
 }

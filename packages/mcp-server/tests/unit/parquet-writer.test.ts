@@ -67,15 +67,26 @@ describe("parquet-writer", () => {
     let conn: DuckDBConnection;
 
     beforeEach(async () => {
-      tmpDir = join(tmpdir(), `parquet-writer-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      tmpDir = join(
+        tmpdir(),
+        `parquet-writer-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
       mkdirSync(tmpDir, { recursive: true });
       db = await DuckDBInstance.create(":memory:");
       conn = await db.connect();
     });
 
     afterEach(async () => {
-      try { conn.closeSync(); } catch { /* ignore */ }
-      try { db.closeSync(); } catch { /* ignore */ }
+      try {
+        conn.closeSync();
+      } catch {
+        /* ignore */
+      }
+      try {
+        db.closeSync();
+      } catch {
+        /* ignore */
+      }
       rmSync(tmpDir, { recursive: true, force: true });
     });
 
@@ -102,7 +113,7 @@ describe("parquet-writer", () => {
 
       // Verify contents via read_parquet
       const reader = await conn.runAndReadAll(
-        `SELECT COUNT(*) AS cnt FROM read_parquet('${targetPath}')`
+        `SELECT COUNT(*) AS cnt FROM read_parquet('${targetPath}')`,
       );
       expect(Number(reader.getRows()[0][0])).toBe(3);
     });
@@ -130,7 +141,7 @@ describe("parquet-writer", () => {
 
       // Verify staging table was dropped
       const reader = await conn.runAndReadAll(
-        `SELECT table_name FROM duckdb_tables() WHERE table_name = '_staging_cleanup_test'`
+        `SELECT table_name FROM duckdb_tables() WHERE table_name = '_staging_cleanup_test'`,
       );
       expect(reader.getRows().length).toBe(0);
     });
@@ -151,7 +162,7 @@ describe("parquet-writer", () => {
 
       // Staging table should still be cleaned up
       const reader = await conn.runAndReadAll(
-        `SELECT table_name FROM duckdb_tables() WHERE table_name = '_staging_error_test'`
+        `SELECT table_name FROM duckdb_tables() WHERE table_name = '_staging_error_test'`,
       );
       expect(reader.getRows().length).toBe(0);
     });
@@ -177,15 +188,26 @@ describe("parquet-writer", () => {
     let conn: DuckDBConnection;
 
     beforeEach(async () => {
-      tmpDir = join(tmpdir(), `parquet-partition-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      tmpDir = join(
+        tmpdir(),
+        `parquet-partition-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
       mkdirSync(tmpDir, { recursive: true });
       db = await DuckDBInstance.create(":memory:");
       conn = await db.connect();
     });
 
     afterEach(async () => {
-      try { conn.closeSync(); } catch { /* ignore */ }
-      try { db.closeSync(); } catch { /* ignore */ }
+      try {
+        conn.closeSync();
+      } catch {
+        /* ignore */
+      }
+      try {
+        db.closeSync();
+      } catch {
+        /* ignore */
+      }
       rmSync(tmpDir, { recursive: true, force: true });
     });
 
@@ -210,9 +232,7 @@ describe("parquet-writer", () => {
       expect(existsSync(expectedPath)).toBe(true);
 
       // Verify data via read_parquet
-      const reader = await conn.runAndReadAll(
-        `SELECT ticker FROM read_parquet('${expectedPath}')`
-      );
+      const reader = await conn.runAndReadAll(`SELECT ticker FROM read_parquet('${expectedPath}')`);
       expect(String(reader.getRows()[0][0])).toBe("SPX");
     });
 
@@ -240,7 +260,7 @@ describe("parquet-writer", () => {
       // Should contain v2 data, not v1
       const expectedPath = join(baseDir, "date=2025-01-06", "data.parquet");
       const reader = await conn.runAndReadAll(
-        `SELECT version FROM read_parquet('${expectedPath}')`
+        `SELECT version FROM read_parquet('${expectedPath}')`,
       );
       expect(String(reader.getRows()[0][0])).toBe("v2");
     });

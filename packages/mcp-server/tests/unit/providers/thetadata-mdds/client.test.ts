@@ -33,7 +33,10 @@ function createFakeStream<T>(): FakeStream<T> {
   const errorListeners: Array<(error: unknown) => void> = [];
   const endListeners: Array<() => void> = [];
   return {
-    on(event: "data" | "error" | "end", listener: ((chunk: T) => void) | ((error: unknown) => void) | (() => void)) {
+    on(
+      event: "data" | "error" | "end",
+      listener: ((chunk: T) => void) | ((error: unknown) => void) | (() => void),
+    ) {
       if (event === "data") dataListeners.push(listener as (chunk: T) => void);
       if (event === "error") errorListeners.push(listener as (error: unknown) => void);
       if (event === "end") endListeners.push(listener as () => void);
@@ -70,7 +73,11 @@ function deferred<T>(): Deferred<T> {
 
 describe("ThetaData MDDS client shell", () => {
   it("builds QueryInfo with auth_token in the request body", () => {
-    expect(buildThetaQueryInfo("session-abc", { THETADATA_MDDS_CLIENT_TYPE: "terminal" } as NodeJS.ProcessEnv)).toEqual({
+    expect(
+      buildThetaQueryInfo("session-abc", {
+        THETADATA_MDDS_CLIENT_TYPE: "terminal",
+      } as NodeJS.ProcessEnv),
+    ).toEqual({
       authToken: { sessionUuid: "session-abc" },
       queryParameters: { client: "terminal" },
       clientType: "terminal",
@@ -106,8 +113,8 @@ describe("ThetaData MDDS client shell", () => {
 
   it("classifies retryable grpc status codes", () => {
     expect(isRetryableGrpcCode(14)).toBe(true); // UNAVAILABLE
-    expect(isRetryableGrpcCode(4)).toBe(true);  // DEADLINE_EXCEEDED
-    expect(isRetryableGrpcCode(8)).toBe(true);  // RESOURCE_EXHAUSTED
+    expect(isRetryableGrpcCode(4)).toBe(true); // DEADLINE_EXCEEDED
+    expect(isRetryableGrpcCode(8)).toBe(true); // RESOURCE_EXHAUSTED
     expect(isRetryableGrpcCode(7)).toBe(false); // PERMISSION_DENIED
     expect(isRetryableGrpcCode(3)).toBe(false); // INVALID_ARGUMENT
   });
@@ -244,10 +251,13 @@ describe("ThetaData MDDS client shell", () => {
     const fetchImpl = (async () => {
       authCount++;
       await flushMicrotasks();
-      return new Response(JSON.stringify({
-        sessionId: "session-abc",
-        user: { optionsSubscription: 0 },
-      }), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(
+        JSON.stringify({
+          sessionId: "session-abc",
+          user: { optionsSubscription: 0 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
     }) as typeof fetch;
     const loadGrpcPackage = async () => ({
       BetaEndpoints: {
@@ -266,23 +276,30 @@ describe("ThetaData MDDS client shell", () => {
       },
     });
 
-    const client = new ThetaMddsClient({
-      THETADATA_EMAIL: "person@example.com",
-      THETADATA_PASSWORD: "secret",
-      THETADATA_MDDS_MAX_ATTEMPTS: "1",
-    } as NodeJS.ProcessEnv, fetchImpl, loadGrpcPackage);
+    const client = new ThetaMddsClient(
+      {
+        THETADATA_EMAIL: "person@example.com",
+        THETADATA_PASSWORD: "secret",
+        THETADATA_MDDS_MAX_ATTEMPTS: "1",
+      } as NodeJS.ProcessEnv,
+      fetchImpl,
+      loadGrpcPackage,
+    );
 
-    await expect(Promise.all([
-      client.callStream<string>("testMethod", {}),
-      client.callStream<string>("testMethod", {}),
-    ])).resolves.toEqual([["row"], ["row"]]);
+    await expect(
+      Promise.all([
+        client.callStream<string>("testMethod", {}),
+        client.callStream<string>("testMethod", {}),
+      ]),
+    ).resolves.toEqual([["row"], ["row"]]);
     expect(authCount).toBe(1);
     expect(grpcClientCount).toBe(1);
   });
 
   it("closes the generated client and clears connection state", async () => {
     let closeCount = 0;
-    const client = new ThetaMddsClient() as unknown as ThetaMddsClient & TestableThetaMddsClient & { close(): void };
+    const client = new ThetaMddsClient() as unknown as ThetaMddsClient &
+      TestableThetaMddsClient & { close(): void };
     client.sessionId = "session-abc";
     client.concurrencyLimit = 4;
     client.stub = {
@@ -320,28 +337,41 @@ describe("ThetaData MDDS client shell", () => {
         },
       },
     });
-    const client = new ThetaMddsClient({
-      THETADATA_EMAIL: "person@example.com",
-      THETADATA_PASSWORD: "secret",
-      THETADATA_MDDS_MAX_ATTEMPTS: "1",
-    } as NodeJS.ProcessEnv, fetchImpl, loadGrpcPackage) as unknown as ThetaMddsClient & TestableThetaMddsClient;
+    const client = new ThetaMddsClient(
+      {
+        THETADATA_EMAIL: "person@example.com",
+        THETADATA_PASSWORD: "secret",
+        THETADATA_MDDS_MAX_ATTEMPTS: "1",
+      } as NodeJS.ProcessEnv,
+      fetchImpl,
+      loadGrpcPackage,
+    ) as unknown as ThetaMddsClient & TestableThetaMddsClient;
 
     const pending = client.callStream<string>("testMethod", {});
     await flushMicrotasks();
     client.close();
-    auth.resolve(new Response(JSON.stringify({
-      sessionId: "session-abc",
-      user: { optionsSubscription: 0 },
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    auth.resolve(
+      new Response(
+        JSON.stringify({
+          sessionId: "session-abc",
+          user: { optionsSubscription: 0 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
 
-    await expect(pending).rejects.toThrow("ThetaMddsClient connection was closed before it completed");
+    await expect(pending).rejects.toThrow(
+      "ThetaMddsClient connection was closed before it completed",
+    );
     expect(staleCloseCount).toBe(1);
     expect(client.stub).toBeNull();
     expect(() => client.queryInfo()).toThrow("ThetaMddsClient is not connected");
   });
 
   it("throws an explicit error for missing stream methods", async () => {
-    const client = new ThetaMddsClient({ THETADATA_MDDS_MAX_ATTEMPTS: "1" } as NodeJS.ProcessEnv) as unknown as ThetaMddsClient & TestableThetaMddsClient;
+    const client = new ThetaMddsClient({
+      THETADATA_MDDS_MAX_ATTEMPTS: "1",
+    } as NodeJS.ProcessEnv) as unknown as ThetaMddsClient & TestableThetaMddsClient;
     client.stub = {};
 
     await expect(client.callStream("missingMethod", {})).rejects.toThrow(

@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,16 +8,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Link2, Unlink, Lock } from 'lucide-react'
-import { useTradingCalendarStore, StrategyMatch } from '@tradeblocks/lib/stores'
-import { cn } from '@tradeblocks/lib'
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Link2, Unlink, Lock } from "lucide-react";
+import { useTradingCalendarStore, StrategyMatch } from "@tradeblocks/lib/stores";
+import { cn } from "@tradeblocks/lib";
 
 interface MatchStrategiesDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDialogProps) {
@@ -26,29 +26,30 @@ export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDia
     unmatchedBacktestStrategies,
     unmatchedActualStrategies,
     linkStrategies,
-    unlinkStrategies
-  } = useTradingCalendarStore()
+    unlinkStrategies,
+  } = useTradingCalendarStore();
 
-  const [selectedBacktest, setSelectedBacktest] = useState<string | null>(null)
-  const [selectedActual, setSelectedActual] = useState<string | null>(null)
+  const [selectedBacktest, setSelectedBacktest] = useState<string | null>(null);
+  const [selectedActual, setSelectedActual] = useState<string | null>(null);
 
   const handleLink = () => {
     if (selectedBacktest && selectedActual) {
-      linkStrategies(selectedBacktest, selectedActual)
-      setSelectedBacktest(null)
-      setSelectedActual(null)
+      linkStrategies(selectedBacktest, selectedActual);
+      setSelectedBacktest(null);
+      setSelectedActual(null);
     }
-  }
+  };
 
   const handleUnlink = (match: StrategyMatch) => {
     if (!match.isAutoMatched) {
-      unlinkStrategies(match.backtestStrategy, match.actualStrategy)
+      unlinkStrategies(match.backtestStrategy, match.actualStrategy);
     }
-  }
+  };
 
-  const hasUnmatched = unmatchedBacktestStrategies.length > 0 || unmatchedActualStrategies.length > 0
-  const userMatches = strategyMatches.filter(m => !m.isAutoMatched)
-  const autoMatches = strategyMatches.filter(m => m.isAutoMatched)
+  const hasUnmatched =
+    unmatchedBacktestStrategies.length > 0 || unmatchedActualStrategies.length > 0;
+  const userMatches = strategyMatches.filter((m) => !m.isAutoMatched);
+  const autoMatches = strategyMatches.filter((m) => m.isAutoMatched);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -56,8 +57,8 @@ export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDia
         <DialogHeader>
           <DialogTitle>Match Strategies</DialogTitle>
           <DialogDescription>
-            Link backtest strategies to their corresponding actual strategies.
-            Auto-matched strategies (exact name match) cannot be unlinked.
+            Link backtest strategies to their corresponding actual strategies. Auto-matched
+            strategies (exact name match) cannot be unlinked.
           </DialogDescription>
         </DialogHeader>
 
@@ -75,11 +76,17 @@ export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDia
                       className="flex items-center justify-between p-2 bg-muted/30 rounded"
                     >
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/50">
+                        <Badge
+                          variant="outline"
+                          className="bg-blue-500/10 text-blue-500 border-blue-500/50"
+                        >
                           {match.backtestStrategy}
                         </Badge>
                         <Link2 className="h-4 w-4 text-muted-foreground" />
-                        <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/50">
+                        <Badge
+                          variant="outline"
+                          className="bg-purple-500/10 text-purple-500 border-purple-500/50"
+                        >
                           {match.actualStrategy}
                         </Badge>
                       </div>
@@ -97,11 +104,17 @@ export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDia
                       className="flex items-center justify-between p-2 bg-muted/30 rounded"
                     >
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/50">
+                        <Badge
+                          variant="outline"
+                          className="bg-blue-500/10 text-blue-500 border-blue-500/50"
+                        >
                           {match.backtestStrategy}
                         </Badge>
                         <Link2 className="h-4 w-4 text-muted-foreground" />
-                        <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/50">
+                        <Badge
+                          variant="outline"
+                          className="bg-purple-500/10 text-purple-500 border-purple-500/50"
+                        >
                           {match.actualStrategy}
                         </Badge>
                       </div>
@@ -136,14 +149,14 @@ export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDia
                       <button
                         type="button"
                         key={strategy}
-                        onClick={() => setSelectedBacktest(
-                          selectedBacktest === strategy ? null : strategy
-                        )}
+                        onClick={() =>
+                          setSelectedBacktest(selectedBacktest === strategy ? null : strategy)
+                        }
                         className={cn(
                           "w-full text-left px-3 py-2 rounded text-sm transition-colors",
                           selectedBacktest === strategy
                             ? "bg-blue-500/20 text-blue-500"
-                            : "hover:bg-muted"
+                            : "hover:bg-muted",
                         )}
                       >
                         {strategy}
@@ -170,14 +183,14 @@ export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDia
                       <button
                         type="button"
                         key={strategy}
-                        onClick={() => setSelectedActual(
-                          selectedActual === strategy ? null : strategy
-                        )}
+                        onClick={() =>
+                          setSelectedActual(selectedActual === strategy ? null : strategy)
+                        }
                         className={cn(
                           "w-full text-left px-3 py-2 rounded text-sm transition-colors",
                           selectedActual === strategy
                             ? "bg-purple-500/20 text-purple-500"
-                            : "hover:bg-muted"
+                            : "hover:bg-muted",
                         )}
                       >
                         {strategy}
@@ -199,11 +212,17 @@ export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDia
             <div className="flex items-center justify-center gap-4 p-4 border rounded-md bg-muted/30">
               {selectedBacktest && selectedActual ? (
                 <>
-                  <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/50">
+                  <Badge
+                    variant="outline"
+                    className="bg-blue-500/10 text-blue-500 border-blue-500/50"
+                  >
                     {selectedBacktest}
                   </Badge>
                   <Link2 className="h-4 w-4 text-muted-foreground" />
-                  <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/50">
+                  <Badge
+                    variant="outline"
+                    className="bg-purple-500/10 text-purple-500 border-purple-500/50"
+                  >
                     {selectedActual}
                   </Badge>
                   <Button onClick={handleLink} size="sm">
@@ -220,9 +239,7 @@ export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDia
 
           {/* All matched state */}
           {!hasUnmatched && strategyMatches.length > 0 && (
-            <div className="text-center py-4 text-muted-foreground">
-              All strategies are matched
-            </div>
+            <div className="text-center py-4 text-muted-foreground">All strategies are matched</div>
           )}
 
           {/* No strategies state */}
@@ -240,5 +257,5 @@ export function MatchStrategiesDialog({ open, onOpenChange }: MatchStrategiesDia
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

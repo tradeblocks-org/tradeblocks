@@ -41,7 +41,11 @@ describe("MarketIngestor.ingestChain", () => {
   });
 
   afterEach(() => {
-    try { instance.closeSync(); } catch { /* ignore */ }
+    try {
+      instance.closeSync();
+    } catch {
+      /* ignore */
+    }
     rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -59,10 +63,18 @@ describe("MarketIngestor.ingestChain", () => {
         dailyBars: true,
       }),
       fetchBars: async () => [],
-      fetchOptionSnapshot: async () => ({ contracts: [], underlying_price: 0, underlying_ticker: "SPX" }),
+      fetchOptionSnapshot: async () => ({
+        contracts: [],
+        underlying_price: 0,
+        underlying_ticker: "SPX",
+      }),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestChain({
       underlyings: ["SPX"],
@@ -88,7 +100,11 @@ describe("MarketIngestor.ingestChain", () => {
         dailyBars: true,
       }),
       fetchBars: async () => [],
-      fetchOptionSnapshot: async () => ({ contracts: [], underlying_price: 0, underlying_ticker: "SPX" }),
+      fetchOptionSnapshot: async () => ({
+        contracts: [],
+        underlying_price: 0,
+        underlying_ticker: "SPX",
+      }),
       // Real signature: fetchContractList(opts: FetchContractListOptions): Promise<FetchContractListResult>
       // FetchContractListOptions: { underlying, as_of, expired?, expiration_date_gte?, expiration_date_lte? }
       // FetchContractListResult: { contracts: ContractReference[], underlying: string }
@@ -96,13 +112,29 @@ describe("MarketIngestor.ingestChain", () => {
       fetchContractList: async () => ({
         underlying: "SPX",
         contracts: [
-          { ticker: "SPXW260319C04800000", contract_type: "call" as const, strike: 4800, expiration: "2026-03-19", exercise_style: "european" },
-          { ticker: "SPXW260319P04800000", contract_type: "put" as const, strike: 4800, expiration: "2026-03-19", exercise_style: "european" },
+          {
+            ticker: "SPXW260319C04800000",
+            contract_type: "call" as const,
+            strike: 4800,
+            expiration: "2026-03-19",
+            exercise_style: "european",
+          },
+          {
+            ticker: "SPXW260319P04800000",
+            contract_type: "put" as const,
+            strike: 4800,
+            expiration: "2026-03-19",
+            exercise_style: "european",
+          },
         ],
       }),
     };
     const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
-    const ingestor = new MarketIngestor({ stores, dataRoot: dataDir, providerFactory: () => provider });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
 
     const result = await ingestor.ingestChain({
       underlyings: ["SPX"],

@@ -55,9 +55,7 @@ export function EquityCurveChart({ className }: EquityCurveChartProps) {
         dash: "dot",
       },
       hovertemplate:
-        "<b>Date:</b> %{x}<br>" +
-        "<b>High Water Mark:</b> $%{y:,.2f}<br>" +
-        "<extra></extra>",
+        "<b>Date:</b> %{x}<br>" + "<b>High Water Mark:</b> $%{y:,.2f}<br>" + "<extra></extra>",
     };
 
     const traces = [equityTrace, highWaterMarkTrace];
@@ -187,8 +185,10 @@ export function EquityCurveChart({ className }: EquityCurveChartProps) {
   );
 
   const tooltip = {
-    flavor: "Your portfolio's building blocks stacked over time - every peak, valley, and milestone along the way.",
-    detailed: "This shows your account value after each trade. Steady upward movement indicates consistent profitability, while volatility reveals periods of mixed results. The overall trend tells you if your trading approach is generating wealth over time or if adjustments might be needed."
+    flavor:
+      "Your portfolio's building blocks stacked over time - every peak, valley, and milestone along the way.",
+    detailed:
+      "This shows your account value after each trade. Steady upward movement indicates consistent profitability, while volatility reveals periods of mixed results. The overall trend tells you if your trading approach is generating wealth over time or if adjustments might be needed.",
   };
 
   if (!data) {

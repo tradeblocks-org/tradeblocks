@@ -82,8 +82,7 @@ function calculateRollingVolatility(
     const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
 
     // Calculate variance and standard deviation
-    const variance =
-      values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+    const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
     const volatility = Math.sqrt(variance);
 
     results.push({
@@ -211,11 +210,7 @@ export function RiskEvolutionChart({ className }: RiskEvolutionChartProps) {
         variant="outline"
         size="sm"
       >
-        <ToggleGroupItem
-          value="dollars"
-          aria-label="View in dollars"
-          className="px-3"
-        >
+        <ToggleGroupItem value="dollars" aria-label="View in dollars" className="px-3">
           Dollars
         </ToggleGroupItem>
         <ToggleGroupItem
@@ -239,15 +234,9 @@ export function RiskEvolutionChart({ className }: RiskEvolutionChartProps) {
   const description = `Rolling volatility as a risk indicator (${windowSize}-trade window)`;
 
   // Check if we have enough trades for the window
-  const hasEnoughTrades =
-    data?.tradeSequence && data.tradeSequence.length >= windowSize;
+  const hasEnoughTrades = data?.tradeSequence && data.tradeSequence.length >= windowSize;
 
-  if (
-    !data ||
-    !data.tradeSequence ||
-    data.tradeSequence.length === 0 ||
-    !hasEnoughTrades
-  ) {
+  if (!data || !data.tradeSequence || data.tradeSequence.length === 0 || !hasEnoughTrades) {
     const emptyDescription =
       !data?.tradeSequence || data.tradeSequence.length === 0
         ? "Rolling volatility as a risk indicator"
