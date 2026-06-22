@@ -10,6 +10,19 @@
  */
 
 import { processStaticDatasetContent, matchTradeToDataset, calculateMatchStats, Trade } from '@tradeblocks/lib'
+import type { StaticDataset, StaticDatasetRow } from '@tradeblocks/lib'
+
+/**
+ * processStaticDatasetContent returns rows without datasetId (it is assigned on
+ * persistence). The matcher takes fully-formed StaticDatasetRow[], so stamp the
+ * parent dataset id onto each row for the test.
+ */
+function withDatasetId(
+  dataset: StaticDataset,
+  rows: Omit<StaticDatasetRow, 'datasetId'>[]
+): StaticDatasetRow[] {
+  return rows.map((row) => ({ ...row, datasetId: dataset.id }))
+}
 
 describe('Static dataset exact matching - GitHub issue reproduction', () => {
   it('matches trade to dataset with exact timestamp from bug report', async () => {
@@ -47,7 +60,7 @@ describe('Static dataset exact matching - GitHub issue reproduction', () => {
     }
 
     // Try to match with exact strategy
-    const matchResult = matchTradeToDataset(trade, datasetResult.rows, 'exact')
+    const matchResult = matchTradeToDataset(trade, withDatasetId(datasetResult.dataset, datasetResult.rows), 'exact')
 
     // Should find a match
     expect(matchResult).not.toBeNull()
@@ -80,7 +93,7 @@ describe('Static dataset exact matching - GitHub issue reproduction', () => {
       openingShortLongRatio: 0.337,
     }
 
-    const stats = calculateMatchStats([trade], datasetResult.dataset, datasetResult.rows)
+    const stats = calculateMatchStats([trade], datasetResult.dataset, withDatasetId(datasetResult.dataset, datasetResult.rows))
 
     // Should be 100% matched (not 0% as reported in the bug)
     expect(stats.totalTrades).toBe(1)
@@ -115,7 +128,7 @@ describe('Static dataset exact matching - GitHub issue reproduction', () => {
       openingShortLongRatio: 0.337,
     }
 
-    const matchResult = matchTradeToDataset(trade, datasetResult.rows, 'nearest-before')
+    const matchResult = matchTradeToDataset(trade, withDatasetId(datasetResult.dataset, datasetResult.rows), 'nearest-before')
 
     // Should find a match (as mentioned in the bug report)
     expect(matchResult).not.toBeNull()
@@ -150,7 +163,7 @@ describe('Static dataset exact matching - GitHub issue reproduction', () => {
       openingShortLongRatio: 0.337,
     }
 
-    const matchResult = matchTradeToDataset(trade, datasetResult.rows, 'nearest-after')
+    const matchResult = matchTradeToDataset(trade, withDatasetId(datasetResult.dataset, datasetResult.rows), 'nearest-after')
 
     // Should now find a match (the fix resolves the bug where it didn't match)
     expect(matchResult).not.toBeNull()

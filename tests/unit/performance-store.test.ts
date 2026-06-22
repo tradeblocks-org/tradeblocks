@@ -26,6 +26,9 @@ describe('performance-store chart data', () => {
     const result = await processChartData(mockTrades)
 
     const expectedInitialCapital = calculateInitialCapital(mockTrades)
+    if (expectedInitialCapital === undefined) {
+      throw new Error('mockTrades should yield a defined initial capital')
+    }
     const firstPoint = result.equityCurve[0]
 
     expect(firstPoint.equity).toBe(expectedInitialCapital)

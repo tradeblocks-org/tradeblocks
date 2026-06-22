@@ -142,8 +142,12 @@ function resetStoreState(): void {
 beforeEach(() => {
   resetStoreState()
   jest.clearAllMocks()
-  mockGetTradesByBlock.mockResolvedValue(mockTrades)
-  mockGetDailyLogsByBlock.mockResolvedValue(mockDailyLogs)
+  mockGetTradesByBlock.mockResolvedValue(
+    mockTrades.map((trade) => ({ ...trade, blockId: 'block-1' }))
+  )
+  mockGetDailyLogsByBlock.mockResolvedValue(
+    mockDailyLogs.map((entry) => ({ ...entry, blockId: 'block-1' }))
+  )
   mockSaveWalkForwardAnalysis.mockResolvedValue()
   mockGetWalkForwardAnalysesByBlock.mockResolvedValue([])
   analyzeSpy.mockResolvedValue({
@@ -432,10 +436,10 @@ describe('strategy filter and normalization', () => {
   it('loads available strategies from trades', async () => {
     // Mock trades have different strategies
     mockGetTradesByBlock.mockResolvedValue([
-      { ...mockTrades[0], strategy: 'Iron Condor' },
-      { ...mockTrades[1], strategy: 'Put Spread' },
-      { ...mockTrades[2], strategy: 'Iron Condor' },
-      { ...mockTrades[3], strategy: 'Straddle' },
+      { ...mockTrades[0], strategy: 'Iron Condor', blockId: 'block-1' },
+      { ...mockTrades[1], strategy: 'Put Spread', blockId: 'block-1' },
+      { ...mockTrades[2], strategy: 'Iron Condor', blockId: 'block-1' },
+      { ...mockTrades[3], strategy: 'Straddle', blockId: 'block-1' },
     ])
 
     await useWalkForwardStore.getState().loadAvailableStrategies('block-1')
@@ -571,8 +575,8 @@ describe('strategy weight sweep config', () => {
   it('toggles strategy weight and recalculates combinations', async () => {
     // First load strategies
     mockGetTradesByBlock.mockResolvedValue([
-      { ...mockTrades[0], strategy: 'Iron Condor' },
-      { ...mockTrades[1], strategy: 'Put Spread' },
+      { ...mockTrades[0], strategy: 'Iron Condor', blockId: 'block-1' },
+      { ...mockTrades[1], strategy: 'Put Spread', blockId: 'block-1' },
     ])
 
     await useWalkForwardStore.getState().loadAvailableStrategies('block-1')
@@ -589,7 +593,7 @@ describe('strategy weight sweep config', () => {
   it('updates strategy weight config', async () => {
     // Load strategies first
     mockGetTradesByBlock.mockResolvedValue([
-      { ...mockTrades[0], strategy: 'Straddle' },
+      { ...mockTrades[0], strategy: 'Straddle', blockId: 'block-1' },
     ])
 
     await useWalkForwardStore.getState().loadAvailableStrategies('block-1')
@@ -610,10 +614,10 @@ describe('strategy weight sweep config', () => {
   it('limits strategies in fullRange mode to 3', async () => {
     // Load 4 strategies
     mockGetTradesByBlock.mockResolvedValue([
-      { ...mockTrades[0], strategy: 'A' },
-      { ...mockTrades[1], strategy: 'B' },
-      { ...mockTrades[2], strategy: 'C' },
-      { ...mockTrades[3], strategy: 'D' },
+      { ...mockTrades[0], strategy: 'A', blockId: 'block-1' },
+      { ...mockTrades[1], strategy: 'B', blockId: 'block-1' },
+      { ...mockTrades[2], strategy: 'C', blockId: 'block-1' },
+      { ...mockTrades[3], strategy: 'D', blockId: 'block-1' },
     ])
 
     await useWalkForwardStore.getState().loadAvailableStrategies('block-1')
@@ -854,6 +858,7 @@ describe('autoConfigureFromBlock action', () => {
     // Create trades spanning 90 days with ~daily frequency
     const trades = Array.from({ length: 30 }, (_, idx) => ({
       ...mockTrades[0],
+      blockId: 'block-1',
       dateOpened: new Date(new Date('2024-01-01').getTime() + idx * 3 * DAY_MS),
       dateClosed: new Date(new Date('2024-01-02').getTime() + idx * 3 * DAY_MS),
     }))
@@ -873,7 +878,7 @@ describe('autoConfigureFromBlock action', () => {
   })
 
   it('handles block with insufficient trades', async () => {
-    mockGetTradesByBlock.mockResolvedValue([mockTrades[0]])
+    mockGetTradesByBlock.mockResolvedValue([{ ...mockTrades[0], blockId: 'block-1' }])
 
     await useWalkForwardStore.getState().autoConfigureFromBlock('block-1')
     const state = useWalkForwardStore.getState()

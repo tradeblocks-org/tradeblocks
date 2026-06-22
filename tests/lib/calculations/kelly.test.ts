@@ -10,7 +10,8 @@ describe('calculateKellyMetrics', () => {
     
     const trades: Trade[] = [
       {
-        id: '1',
+        timeOpened: '09:30:00',
+        openingPrice: 100,
         dateOpened: new Date('2024-01-01'),
         pl: 500,
         marginReq: 1000,
@@ -24,7 +25,8 @@ describe('calculateKellyMetrics', () => {
         fundsAtClose: 0
       },
       {
-        id: '2',
+        timeOpened: '09:30:00',
+        openingPrice: 100,
         dateOpened: new Date('2024-01-02'),
         pl: -1000,
         marginReq: 1000,
@@ -38,7 +40,8 @@ describe('calculateKellyMetrics', () => {
         fundsAtClose: 0
       },
       {
-        id: '3',
+        timeOpened: '09:30:00',
+        openingPrice: 100,
         dateOpened: new Date('2024-01-03'),
         pl: 500,
         marginReq: 1000,
@@ -89,7 +92,8 @@ describe('calculateKellyMetrics', () => {
     
     const trades: Trade[] = [
       {
-        id: '1',
+        timeOpened: '09:30:00',
+        openingPrice: 100,
         dateOpened: new Date('2024-01-01'),
         pl: 1000,
         marginReq: 1000,
@@ -103,7 +107,8 @@ describe('calculateKellyMetrics', () => {
         fundsAtClose: 0
       },
       {
-        id: '2',
+        timeOpened: '09:30:00',
+        openingPrice: 100,
         dateOpened: new Date('2024-01-02'),
         pl: 1000,
         marginReq: 1000,
@@ -117,7 +122,8 @@ describe('calculateKellyMetrics', () => {
         fundsAtClose: 0
       },
       {
-        id: '3',
+        timeOpened: '09:30:00',
+        openingPrice: 100,
         dateOpened: new Date('2024-01-03'),
         pl: -500,
         marginReq: 1000,

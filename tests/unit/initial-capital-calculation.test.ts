@@ -1,4 +1,8 @@
-import { PortfolioStatsCalculator, Trade, DailyLogEntry, calculateInitialCapitalFromDailyLog, calculateInitialCapital } from "@tradeblocks/lib";
+import { PortfolioStatsCalculator, Trade, DailyLogEntry, calculateInitialCapitalFromDailyLog } from "@tradeblocks/lib";
+// calculateInitialCapital (the 2-arg daily-log/trade fallback) collides by name with
+// utils/equity-curve's single-arg export, so the barrel exposes only the latter.
+// Import the fallback variant directly from its source module.
+import { calculateInitialCapital } from "../../packages/lib/processing/capital-calculator";
 
 // Helper to create mock trade
 function createMockTrade(

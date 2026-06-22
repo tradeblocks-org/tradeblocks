@@ -205,7 +205,10 @@ describe('Custom Fields', () => {
 
   describe('Extract Custom Field Names', () => {
     it('should extract unique custom field names from trades', () => {
-      const trades = [
+      const trades: Array<{
+        customFields?: Record<string, number | string>
+        dailyCustomFields?: Record<string, number | string>
+      }> = [
         { customFields: { fieldA: 1, fieldB: 'x' }, dailyCustomFields: { dailyA: 10 } },
         { customFields: { fieldA: 2, fieldC: 3 }, dailyCustomFields: { dailyA: 20, dailyB: 30 } },
         { customFields: undefined, dailyCustomFields: undefined },

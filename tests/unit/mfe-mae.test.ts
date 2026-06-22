@@ -37,7 +37,6 @@ const buildPoint = (overrides: Partial<MFEMAEDataPoint>): MFEMAEDataPoint => {
     closingCommissionsFees: undefined,
     openingShortLongRatio: 0,
     closingShortLongRatio: undefined,
-    normalizedBy,
     ...overrides,
     normalizedBy: {
       ...normalizedBy,

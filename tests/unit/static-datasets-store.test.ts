@@ -24,7 +24,6 @@ jest.mock('../../packages/lib/calculations/static-dataset-matcher', () => ({
   calculateMatchStats: jest.fn().mockReturnValue({
     totalTrades: 10,
     matchedTrades: 8,
-    unmatchedTrades: 2,
     matchPercentage: 80,
     outsideDateRange: 2,
   }),
@@ -65,18 +64,21 @@ describe('Static Datasets Store - Match Stats Caching', () => {
 
   const mockTrades: Trade[] = [
     {
-      id: 'trade-1',
-      blockId: 'block-1',
       dateOpened: new Date('2024-06-15'),
       timeOpened: '10:30:00',
+      openingPrice: 100,
+      legs: 'SPY',
+      premium: 100,
       dateClosed: new Date('2024-06-15'),
       timeClosed: '11:00:00',
-      symbol: 'SPY',
-      quantity: 1,
       pl: 100,
+      numContracts: 1,
+      fundsAtClose: 10100,
+      marginReq: 2000,
+      strategy: 'Test',
       openingCommissionsFees: 1,
       closingCommissionsFees: 1,
-      status: 'Closed',
+      openingShortLongRatio: 0,
     },
   ]
 
@@ -104,7 +106,6 @@ describe('Static Datasets Store - Match Stats Caching', () => {
       const mockStats: DatasetMatchStats = {
         totalTrades: 10,
         matchedTrades: 8,
-        unmatchedTrades: 2,
         matchPercentage: 80,
         outsideDateRange: 2,
       }
@@ -141,7 +142,6 @@ describe('Static Datasets Store - Match Stats Caching', () => {
       const mockStats: DatasetMatchStats = {
         totalTrades: 10,
         matchedTrades: 8,
-        unmatchedTrades: 2,
         matchPercentage: 80,
         outsideDateRange: 2,
       }
@@ -195,8 +195,8 @@ describe('Static Datasets Store - Match Stats Caching', () => {
 
   describe('invalidateMatchStatsForBlock', () => {
     it('removes all cached stats for a specific block', () => {
-      const stats1: DatasetMatchStats = { totalTrades: 10, matchedTrades: 8, unmatchedTrades: 2, matchPercentage: 80, outsideDateRange: 2 }
-      const stats2: DatasetMatchStats = { totalTrades: 20, matchedTrades: 18, unmatchedTrades: 2, matchPercentage: 90, outsideDateRange: 0 }
+      const stats1: DatasetMatchStats = { totalTrades: 10, matchedTrades: 8, matchPercentage: 80, outsideDateRange: 2 }
+      const stats2: DatasetMatchStats = { totalTrades: 20, matchedTrades: 18, matchPercentage: 90, outsideDateRange: 0 }
 
       const key1 = makeMatchStatsCacheKey('dataset-1', 'block-1', 'nearest-before')
       const key2 = makeMatchStatsCacheKey('dataset-2', 'block-1', 'exact')
@@ -240,8 +240,8 @@ describe('Static Datasets Store - Match Stats Caching', () => {
 
   describe('invalidateMatchStatsForDataset', () => {
     it('removes all cached stats for a specific dataset', () => {
-      const stats1: DatasetMatchStats = { totalTrades: 10, matchedTrades: 8, unmatchedTrades: 2, matchPercentage: 80, outsideDateRange: 2 }
-      const stats2: DatasetMatchStats = { totalTrades: 20, matchedTrades: 18, unmatchedTrades: 2, matchPercentage: 90, outsideDateRange: 0 }
+      const stats1: DatasetMatchStats = { totalTrades: 10, matchedTrades: 8, matchPercentage: 80, outsideDateRange: 2 }
+      const stats2: DatasetMatchStats = { totalTrades: 20, matchedTrades: 18, matchPercentage: 90, outsideDateRange: 0 }
 
       const key1 = makeMatchStatsCacheKey('dataset-1', 'block-1', 'nearest-before')
       const key2 = makeMatchStatsCacheKey('dataset-1', 'block-2', 'exact')
@@ -285,7 +285,7 @@ describe('Static Datasets Store - Match Stats Caching', () => {
 
   describe('updateMatchStrategy', () => {
     it('invalidates cached stats when strategy changes', async () => {
-      const stats: DatasetMatchStats = { totalTrades: 10, matchedTrades: 8, unmatchedTrades: 2, matchPercentage: 80, outsideDateRange: 2 }
+      const stats: DatasetMatchStats = { totalTrades: 10, matchedTrades: 8, matchPercentage: 80, outsideDateRange: 2 }
       const key = makeMatchStatsCacheKey('dataset-1', 'block-1', 'nearest-before')
 
       useStaticDatasetsStore.setState({

@@ -10,29 +10,15 @@ import 'fake-indexeddb/auto'
 import { useTradingCalendarStore } from '@tradeblocks/lib/stores'
 import { ReportingTrade, Trade } from '@tradeblocks/lib'
 
-// Helper to create a backtest trade
-function createBacktestTrade(overrides: Partial<ReportingTrade> = {}): ReportingTrade {
-  return {
-    strategy: 'Test Strategy',
-    dateOpened: new Date('2025-01-15T09:30:00Z'),
-    openingPrice: 100,
-    legs: 'SPY 0DTE',
-    initialPremium: 500,
-    numContracts: 1,
-    pl: 200,
-    ...overrides,
-  }
-}
-
-// Helper to create an actual trade
-function createActualTrade(overrides: Partial<Trade> = {}): Trade {
+// Helper to create a backtest trade (full Trade record)
+function createBacktestTrade(overrides: Partial<Trade> = {}): Trade {
   return {
     dateOpened: new Date('2025-01-15T00:00:00Z'),
     timeOpened: '09:30:00',
     openingPrice: 100,
     legs: 'SPY 0DTE',
     premium: 500,
-    pl: 180,
+    pl: 200,
     numContracts: 1,
     fundsAtClose: 100000,
     marginReq: 5000,
@@ -40,6 +26,20 @@ function createActualTrade(overrides: Partial<Trade> = {}): Trade {
     openingCommissionsFees: 5,
     closingCommissionsFees: 5,
     openingShortLongRatio: 0,
+    ...overrides,
+  }
+}
+
+// Helper to create an actual trade (live ReportingTrade record)
+function createActualTrade(overrides: Partial<ReportingTrade> = {}): ReportingTrade {
+  return {
+    strategy: 'Test Strategy',
+    dateOpened: new Date('2025-01-15T09:30:00Z'),
+    openingPrice: 100,
+    legs: 'SPY 0DTE',
+    initialPremium: 500,
+    numContracts: 1,
+    pl: 180,
     ...overrides,
   }
 }

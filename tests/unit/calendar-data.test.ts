@@ -29,9 +29,8 @@ import {
   ScalingContext,
   Trade,
   ReportingTrade,
-  CalendarDayData,
-  StrategyMatch,
 } from '@tradeblocks/lib'
+import type { CalendarDayData, StrategyMatch } from '@tradeblocks/lib/stores'
 
 // Helper to create a backtest trade (Trade from tradelog.csv)
 function createBacktestTrade(overrides: Partial<Trade> = {}): Trade {

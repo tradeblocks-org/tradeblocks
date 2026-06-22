@@ -65,9 +65,10 @@ describe('Unit consistency between PortfolioStatsCalculator and MonteCarloSimula
 
       const result = runMonteCarloSimulation(trades, {
         numSimulations: 100,
-        simulationPeriodDays: 252,
-        bootstrapMethod: 'iid',
-        preserveCorrelations: false,
+        simulationLength: 252,
+        resampleMethod: 'trades',
+        initialCapital: 10000,
+        tradesPerYear: 252,
       })
 
       // medianMaxDrawdown should be < 1 (decimal), not > 1 (percentage)

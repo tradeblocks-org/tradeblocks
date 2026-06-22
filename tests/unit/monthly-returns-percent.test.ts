@@ -18,6 +18,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 1',
+        premium: 0,
         pl: 5000, // +5% on 100k
         numContracts: 1,
         fundsAtClose: 105000,
@@ -33,6 +34,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 2',
+        premium: 0,
         pl: 10500, // +10% on 105k
         numContracts: 1,
         fundsAtClose: 115500,
@@ -48,6 +50,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 3',
+        premium: 0,
         pl: -5775, // -5% on 115.5k
         numContracts: 1,
         fundsAtClose: 109725,
@@ -86,6 +89,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 1',
+        premium: 0,
         pl: 5000,
         numContracts: 1,
         fundsAtClose: 105000,
@@ -101,6 +105,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 2',
+        premium: 0,
         pl: 10000,
         numContracts: 1,
         fundsAtClose: 115000,
@@ -119,6 +124,9 @@ describe('Monthly Returns Percentage Calculation', () => {
         netLiquidity: 100000,
         currentFunds: 100000,
         tradingFunds: 100000,
+        withdrawn: 0,
+        dailyPl: 0,
+        dailyPlPct: 0,
         drawdownPct: 0
       },
       {
@@ -126,6 +134,9 @@ describe('Monthly Returns Percentage Calculation', () => {
         netLiquidity: 105000,
         currentFunds: 105000,
         tradingFunds: 105000,
+        withdrawn: 0,
+        dailyPl: 0,
+        dailyPlPct: 0,
         drawdownPct: 0
       },
       {
@@ -133,6 +144,9 @@ describe('Monthly Returns Percentage Calculation', () => {
         netLiquidity: 105000,
         currentFunds: 105000,
         tradingFunds: 105000,
+        withdrawn: 0,
+        dailyPl: 0,
+        dailyPlPct: 0,
         drawdownPct: 0
       },
       {
@@ -140,6 +154,9 @@ describe('Monthly Returns Percentage Calculation', () => {
         netLiquidity: 115000,
         currentFunds: 115000,
         tradingFunds: 115000,
+        withdrawn: 0,
+        dailyPl: 0,
+        dailyPlPct: 0,
         drawdownPct: 0
       }
     ]
@@ -163,6 +180,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 1',
+        premium: 0,
         pl: 5000,
         numContracts: 1,
         fundsAtClose: 105000,
@@ -178,6 +196,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 2',
+        premium: 0,
         pl: 10000,
         numContracts: 1,
         fundsAtClose: 115000,
@@ -197,6 +216,9 @@ describe('Monthly Returns Percentage Calculation', () => {
         netLiquidity: 100000,
         currentFunds: 100000,
         tradingFunds: 100000,
+        withdrawn: 0,
+        dailyPl: 0,
+        dailyPlPct: 0,
         drawdownPct: 0
       },
       {
@@ -204,6 +226,9 @@ describe('Monthly Returns Percentage Calculation', () => {
         netLiquidity: 105000,
         currentFunds: 105000,
         tradingFunds: 105000,
+        withdrawn: 0,
+        dailyPl: 0,
+        dailyPlPct: 0,
         drawdownPct: 0
       }
     ]
@@ -229,6 +254,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 1',
+        premium: 0,
         pl: 2000,
         numContracts: 1,
         fundsAtClose: 102000,
@@ -260,6 +286,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 1',
+        premium: 0,
         pl: -3000,
         numContracts: 1,
         fundsAtClose: 97000,
@@ -286,6 +313,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 1',
+        premium: 0,
         pl: 5000,
         numContracts: 1,
         fundsAtClose: 105000,
@@ -314,6 +342,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 1',
+        premium: 0,
         pl: 2000,
         numContracts: 1,
         fundsAtClose: 102000,
@@ -329,6 +358,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 2',
+        premium: 0,
         pl: 3000,
         numContracts: 1,
         fundsAtClose: 105000,
@@ -357,6 +387,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 1',
+        premium: 0,
         pl: 2000,
         numContracts: 1,
         fundsAtClose: 102000,
@@ -372,6 +403,7 @@ describe('Monthly Returns Percentage Calculation', () => {
         timeOpened: '09:30:00',
         openingPrice: 100,
         legs: 'Trade 2',
+        premium: 0,
         pl: 3060,
         numContracts: 1,
         fundsAtClose: 105060,
