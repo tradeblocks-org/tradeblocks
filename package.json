@@ -94,7 +94,7 @@
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.9.3",
-    "@types/react": "19.2.15",
+    "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@types/react-plotly.js": "^2.6.4",
     "eslint": "^9",
@@ -113,7 +113,7 @@
     "typescript": "^5"
   },
   "overrides": {
-    "@types/react": "19.2.15",
+    "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "lodash": ">=4.18.1",
     "rollup": ">=4.59.0"
