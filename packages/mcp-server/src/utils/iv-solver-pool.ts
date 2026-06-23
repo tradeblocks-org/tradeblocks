@@ -288,37 +288,52 @@ export class IvSolverPool {
       ok: new Uint8Array(cols.count),
     };
 
-    const base = Math.floor(cols.count / shardCount);
-    const remainder = cols.count % shardCount;
-    const shardPromises: Promise<void>[] = [];
-    let cursor = 0;
-    for (let s = 0; s < shardCount; s++) {
-      const size = base + (s < remainder ? 1 : 0);
-      const lo = cursor;
-      const hi = cursor + size;
-      cursor = hi;
-      if (size === 0) continue;
-      const request = shardRequest(cols, this.nextRequestId++, lo, hi);
-      shardPromises.push(
-        this.runOnWorker(request).then((reply) => {
-          out.delta.set(reply.delta, lo);
-          out.gamma.set(reply.gamma, lo);
-          out.theta.set(reply.theta, lo);
-          out.vega.set(reply.vega, lo);
-          out.iv.set(reply.iv, lo);
-          out.ok.set(reply.ok, lo);
-        }),
-      );
-    }
+    // Ref the workers for the duration of this in-flight solve so the event
+    // loop stays alive until every shard's result is back — the process can't
+    // exit mid-solve and lose results. Idle workers are unref'd (see
+    // ensureWorkers), so once the solve completes the pool stops pinning the
+    // loop and a one-shot process exits naturally.
+    this.refPool();
+    try {
+      const base = Math.floor(cols.count / shardCount);
+      const remainder = cols.count % shardCount;
+      const shardPromises: Promise<void>[] = [];
+      let cursor = 0;
+      for (let s = 0; s < shardCount; s++) {
+        const size = base + (s < remainder ? 1 : 0);
+        const lo = cursor;
+        const hi = cursor + size;
+        cursor = hi;
+        if (size === 0) continue;
+        const request = shardRequest(cols, this.nextRequestId++, lo, hi);
+        shardPromises.push(
+          this.runOnWorker(request).then((reply) => {
+            out.delta.set(reply.delta, lo);
+            out.gamma.set(reply.gamma, lo);
+            out.theta.set(reply.theta, lo);
+            out.vega.set(reply.vega, lo);
+            out.iv.set(reply.iv, lo);
+            out.ok.set(reply.ok, lo);
+          }),
+        );
+      }
 
-    await Promise.all(shardPromises);
-    return out;
+      await Promise.all(shardPromises);
+      return out;
+    } finally {
+      this.unrefPool();
+    }
   }
 
   private ensureWorkers(target: number): void {
     while (this.pool.length < target) {
       const worker = new Worker(this.workerUrl);
       worker.setMaxListeners(0);
+      // Idle workers must not keep the libuv event loop alive — otherwise a
+      // one-shot process that uses the pool and returns normally would hang
+      // forever. solveColumnsParallel ref's the pool for the duration of an
+      // in-flight solve and unref's it again when done.
+      worker.unref();
       // Surface a worker crash by failing loud; an unhandled worker error
       // would otherwise leave the pending shard promise hanging forever.
       worker.on("error", (err) => {
@@ -326,6 +341,16 @@ export class IvSolverPool {
       });
       this.pool.push({ worker, busy: false });
     }
+  }
+
+  /** Keep the event loop alive while a solve is in flight. */
+  private refPool(): void {
+    for (const { worker } of this.pool) worker.ref();
+  }
+
+  /** Release the event loop once a solve completes so idle workers don't pin it. */
+  private unrefPool(): void {
+    for (const { worker } of this.pool) worker.unref();
   }
 
   private runOnWorker(request: IvSolveBatchRequest): Promise<IvSolveBatchReply> {
