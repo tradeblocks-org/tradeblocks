@@ -21,3 +21,8 @@ data/*.duckdb
 # (tests/global-setup.mjs) so the worker pool can spawn it under ts-jest.
 src/utils/iv-solver-worker.js
 src/utils/iv-solver-worker.js.map
+
+# Transient child entry bundled beside the pool source by the process-exit
+# safety test (tests/unit/iv-solver-pool-exit.test.ts); removed in afterAll,
+# ignored here so a crashed run never leaves it tracked.
+src/utils/iv-solver-pool-exit-child.built.mjs
