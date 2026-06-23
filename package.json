@@ -98,7 +98,7 @@
     "@types/react-dom": "19.2.3",
     "@types/react-plotly.js": "^2.6.4",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "16.2.9",
     "eslint-config-prettier": "10.1.8",
     "fake-indexeddb": "^6.2.2",
     "husky": "^9.1.7",
