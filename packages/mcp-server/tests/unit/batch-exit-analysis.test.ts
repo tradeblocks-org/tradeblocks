@@ -32,8 +32,8 @@ function buildPath(start: number, end: number, steps: number): PnlPoint[] {
   });
 }
 
-// profitTarget fires on the first bar at or above the threshold by default.
-// On buildPath(0, 300, 10) the path hits exactly 200 at i=6.
+// With requiredHits: 1 the profitTarget fires on the first bar at or above the
+// threshold. On buildPath(0, 300, 10) the path hits exactly 200 at i=6.
 const PROFIT_TARGET_PNL = 200;
 
 const DEFAULT_LEGS: ReplayLeg[] = [
@@ -58,7 +58,7 @@ function buildTradeInput(
 }
 
 const PROFIT_TARGET_CONFIG: BatchExitConfig = {
-  candidatePolicy: [{ type: "profitTarget", threshold: 200 }],
+  candidatePolicy: [{ type: "profitTarget", threshold: 200, requiredHits: 1 }],
   baselineMode: "actual",
   format: "full",
 };
@@ -87,7 +87,7 @@ describe("analyzeBatch", () => {
   // ---------------------------------------------------------------------------
 
   test("3 winning trades with profitTarget returns correct win rate and total P&L", () => {
-    // profitTarget fires on the first cross by default.
+    // With requiredHits: 1 the profitTarget fires on the first cross.
     // On a 0 -> 300 path with 10 samples, the path touches 200 at i=6 and fires there.
     const trades = [0, 1, 2].map((i) => buildTradeInput(i, 200, buildPath(0, 300, 10)));
 
