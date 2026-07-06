@@ -58,13 +58,22 @@ describe("evaluateTrigger", () => {
   const path = buildTestPath(STANDARD_PNLS, { deltas: STANDARD_DELTAS });
 
   describe("profitTarget", () => {
-    it("fires on the first bar at or above the threshold by default", () => {
-      const trigger: ExitTriggerConfig = { type: "profitTarget", threshold: 200 };
+    it("fires on the first bar at or above the threshold when requiredHits is 1", () => {
+      const trigger: ExitTriggerConfig = { type: "profitTarget", threshold: 200, requiredHits: 1 };
       const result = evaluateTrigger(trigger, path, DEFAULT_LEGS);
       expect(result).not.toBeNull();
       expect(result!.type).toBe("profitTarget");
       expect(result!.index).toBe(3); // first bar where pnl reaches 200
       expect(result!.pnlAtFire).toBe(200);
+    });
+
+    it("requires two qualifying synchronized bars by default", () => {
+      const trigger: ExitTriggerConfig = { type: "profitTarget", threshold: 200 };
+      const result = evaluateTrigger(trigger, path, DEFAULT_LEGS);
+      expect(result).not.toBeNull();
+      expect(result!.type).toBe("profitTarget");
+      expect(result!.index).toBe(4); // second qualifying bar; index 3 is only the first confirmation
+      expect(result!.pnlAtFire).toBe(300);
     });
 
     it("fires after two synchronized bars when requiredHits is 2", () => {
@@ -656,6 +665,7 @@ describe("evaluateTrigger", () => {
         threshold: 0.7,
         unit: "percent",
         entryCost: -350,
+        requiredHits: 1,
       };
       const result = evaluateTrigger(trigger, pnlPath, DEFAULT_LEGS);
       expect(result).not.toBeNull();
@@ -674,6 +684,7 @@ describe("evaluateTrigger", () => {
         threshold: 0.5,
         unit: "percent",
         entryCost: 500,
+        requiredHits: 1,
       };
       const result = evaluateTrigger(trigger, pnlPath, DEFAULT_LEGS);
       expect(result).not.toBeNull();
@@ -712,6 +723,7 @@ describe("evaluateTrigger", () => {
         type: "profitTarget",
         threshold: 200,
         unit: "dollar",
+        requiredHits: 1,
       };
       const result = evaluateTrigger(trigger, path, DEFAULT_LEGS);
       expect(result).not.toBeNull();
@@ -723,6 +735,7 @@ describe("evaluateTrigger", () => {
       const trigger: ExitTriggerConfig = {
         type: "profitTarget",
         threshold: 200,
+        requiredHits: 1,
         // unit intentionally omitted
       };
       const result = evaluateTrigger(trigger, path, DEFAULT_LEGS);
@@ -834,7 +847,7 @@ describe("analyzeExitTriggers", () => {
 
   it("identifies first-to-fire when multiple triggers fire", () => {
     const triggers: ExitTriggerConfig[] = [
-      { type: "profitTarget", threshold: 200 }, // fires at index 3 on first cross
+      { type: "profitTarget", threshold: 200, requiredHits: 1 }, // fires at index 3 on first cross
       { type: "stopLoss", threshold: 100 }, // fires at index 8
     ];
     const result = analyzeExitTriggers({ pnlPath: path, legs: DEFAULT_LEGS, triggers });
@@ -854,7 +867,7 @@ describe("analyzeExitTriggers", () => {
 
   it("computes actual exit comparison correctly", () => {
     const triggers: ExitTriggerConfig[] = [
-      { type: "profitTarget", threshold: 200 }, // fires at index 3 (pnl=200)
+      { type: "profitTarget", threshold: 200, requiredHits: 1 }, // fires at index 3 (pnl=200)
     ];
     // Actual exit at index 7 (pnl=50)
     const result = analyzeExitTriggers({
@@ -871,7 +884,7 @@ describe("analyzeExitTriggers", () => {
 
   it("handles actual exit after all path points", () => {
     const triggers: ExitTriggerConfig[] = [
-      { type: "profitTarget", threshold: 100 }, // fires at index 2 on first cross
+      { type: "profitTarget", threshold: 100, requiredHits: 1 }, // fires at index 2 on first cross
     ];
     const result = analyzeExitTriggers({
       pnlPath: path,
@@ -900,7 +913,7 @@ describe("analyzeExitTriggers", () => {
     // entryCost=-350, threshold=0.7 -> dollarThreshold=245
     const pnlPath = buildTestPath([0, 100, 200, 246, 250]);
     const triggers: ExitTriggerConfig[] = [
-      { type: "profitTarget", threshold: 0.7, unit: "percent", entryCost: -350 },
+      { type: "profitTarget", threshold: 0.7, unit: "percent", entryCost: -350, requiredHits: 1 },
     ];
     const result = analyzeExitTriggers({ pnlPath, legs: DEFAULT_LEGS, triggers });
     expect(result.overall.firstToFire).not.toBeNull();
