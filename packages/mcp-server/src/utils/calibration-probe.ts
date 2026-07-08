@@ -16,9 +16,9 @@
  * Manual-only — purposefully side-effectful (opens a live DuckDB, calls the
  * singleton provider). No unit test; exists for operator inspection.
  */
-import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { getProvider } from "./market-provider.ts";
+import { resolveDbPath } from "../db/data-root.ts";
 
 /** Per-date probe result returned alongside the summary deltas. */
 export interface CalibrationProbeDateResult {
@@ -59,7 +59,7 @@ export async function calibrateProviderFetch(
   dataRoot: string,
 ): Promise<CalibrationProbeResult> {
   const provider = getProvider();
-  const dbPath = path.join(dataRoot, "database", "market.duckdb");
+  const dbPath = resolveDbPath(dataRoot, "market");
   const instance = await DuckDBInstance.create(dbPath);
   const conn = await instance.connect();
 
