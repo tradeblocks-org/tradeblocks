@@ -14,6 +14,7 @@ import { join } from "node:path";
 // @ts-expect-error - importing from src (not bundled output)
 import {
   attachBacktestsDb,
+  ensureBacktestsSchema,
   ensureBacktestsTables,
   detachBacktestsDb,
   TEMPLATE_BLOCK_ID,
@@ -89,6 +90,44 @@ describe("backtest-schemas integration", () => {
 
     conn.closeSync();
     inst2.closeSync();
+  });
+
+  it("ensureBacktestsSchema creates the schema with NO trades catalog attached (standalone-safe)", async () => {
+    // The bootstrap guarantee for a standalone `db init` (tradeblocks-org/enterprise#983):
+    // mint a standalone backtests.duckdb with no analytics/trades catalog present.
+    // Deliberately NO setupTradesSchema() here — the pure-DDL path must not need it.
+    const inst = await DuckDBInstance.create(":memory:");
+    const conn = await inst.connect();
+
+    const dbPath = join(tmpDir, "backtests-standalone.duckdb");
+    await attachBacktestsDb(conn, dbPath, "read_write");
+    await ensureBacktestsSchema(conn);
+
+    const tables = await conn.runAndReadAll(
+      "SELECT table_name FROM information_schema.tables WHERE table_catalog = 'backtests' ORDER BY table_name",
+    );
+    const names = tables.getRows().map((r: unknown[]) => String(r[0]));
+    expect(names).toEqual(["run_metadata", "skip_log", "strategies", "trade_data"]);
+
+    // Idempotent standalone, too.
+    await ensureBacktestsSchema(conn);
+
+    conn.closeSync();
+    inst.closeSync();
+  });
+
+  it("ensureBacktestsTables (schema + purge) still throws without a trades catalog", async () => {
+    // Guards the split: the wrapper keeps its trades-dependent purge, so callers
+    // that need the standalone path must use ensureBacktestsSchema, not this.
+    const inst = await DuckDBInstance.create(":memory:");
+    const conn = await inst.connect();
+
+    const dbPath = join(tmpDir, "backtests-wrapper-notrades.duckdb");
+    await attachBacktestsDb(conn, dbPath, "read_write");
+    await expect(ensureBacktestsTables(conn)).rejects.toThrow();
+
+    conn.closeSync();
+    inst.closeSync();
   });
 
   it("detachBacktestsDb detaches cleanly", async () => {

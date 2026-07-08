@@ -78,14 +78,20 @@ export async function detachBacktestsDb(conn: DuckDBConnection): Promise<void> {
 }
 
 /**
- * Ensure backtests tables exist in the attached backtests.duckdb.
+ * Ensure the backtests schema (tables + additive migrations) exists in the
+ * attached backtests.duckdb. **Pure DDL — requires ONLY the `backtests` catalog
+ * attached, never `trades`.** This is the standalone-safe primitive a bare
+ * `backtests.duckdb` bootstrap (a `db init` step) calls to mint an empty,
+ * correctly-schema'd DB with no other catalog present.
  *
- * Must be called AFTER `ATTACH '...' AS backtests` in openReadWriteConnection.
- * Uses CREATE TABLE IF NOT EXISTS for idempotency — safe to call on every RW open.
+ * Must be called AFTER `ATTACH '...' AS backtests`. Uses CREATE TABLE IF NOT
+ * EXISTS for idempotency — safe to call on every RW open. Does NOT run the
+ * Phase-b72 trades purge (that lives in ensureBacktestsTables / the callers that
+ * hold the `trades` catalog).
  *
  * @param conn - Active DuckDB connection with backtests catalog attached
  */
-export async function ensureBacktestsTables(conn: DuckDBConnection): Promise<void> {
+export async function ensureBacktestsSchema(conn: DuckDBConnection): Promise<void> {
   // Strategy definitions: one row per (strategy_name, underlying) pair.
   // definition_json stores the full StrategyDefinition object.
   await conn.run(`
@@ -181,7 +187,23 @@ export async function ensureBacktestsTables(conn: DuckDBConnection): Promise<voi
   } catch {
     // Column already exists — idempotent
   }
+}
 
+/**
+ * Ensure the backtests schema AND run the one-time Phase-b72 purge of stale
+ * `source='tradeblocks'` rows from `trades.trade_data`. Behavior is unchanged
+ * from before the schema/purge split — every existing caller keeps the same
+ * effect. **Requires the `trades` catalog attached RW** (via the purge), as
+ * every RW engine open has.
+ *
+ * New callers that need ONLY the schema (e.g. minting a standalone
+ * `backtests.duckdb` with no `trades` catalog attached) must call
+ * ensureBacktestsSchema instead — this wrapper would throw on the purge.
+ *
+ * @param conn - Active DuckDB connection with backtests AND trades catalogs attached (RW)
+ */
+export async function ensureBacktestsTables(conn: DuckDBConnection): Promise<void> {
+  await ensureBacktestsSchema(conn);
   // Purge stale backtest rows from trades.trade_data (Phase b72 one-time migration).
   // Removes all rows written by prior backtest runs (source = 'tradeblocks').
   // Idempotent — DELETE WHERE returns 0 rows when nothing matches.
