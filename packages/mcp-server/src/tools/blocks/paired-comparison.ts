@@ -99,11 +99,17 @@ type PairedComparisonInput = z.infer<typeof pairedComparisonInputSchema>;
 // Daily attribution
 // ---------------------------------------------------------------------------
 
-/** Local calendar date (YYYY-MM-DD) preserving the trade's stored calendar day. */
+/**
+ * Calendar date (YYYY-MM-DD) for a trade timestamp.
+ *
+ * Calendar dates are derived in UTC from the stored trade timestamps; the grid,
+ * the lib tests, and the displayed overlap windows all share this convention,
+ * so the result is independent of the host machine's timezone.
+ */
 function toCalendarDateStr(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 

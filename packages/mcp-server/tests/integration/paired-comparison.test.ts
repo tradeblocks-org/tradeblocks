@@ -26,8 +26,9 @@ import type { Trade } from "@tradeblocks/lib";
 
 function makeTrade(openIdx: number, closeIdx: number, pl: number, strategy: string): Trade {
   return {
-    dateOpened: new Date(2022, 0, 1 + openIdx),
-    dateClosed: new Date(2022, 0, 1 + closeIdx),
+    // UTC-midnight instants so the derived calendar date is host-timezone independent.
+    dateOpened: new Date(Date.UTC(2022, 0, 1 + openIdx)),
+    dateClosed: new Date(Date.UTC(2022, 0, 1 + closeIdx)),
     timeOpened: "09:30:00",
     openingPrice: 0,
     legs: "",
@@ -93,6 +94,30 @@ describe("daily attribution", () => {
     const grid = buildBlockTradingDayIndex(trades);
     // Open/close days present: idx 0, 2, 5. Interior idx 1 is NOT invented.
     expect(grid).toEqual(["2022-01-01", "2022-01-03", "2022-01-06"]);
+  });
+
+  it("pins calendar dates to UTC regardless of host timezone", () => {
+    // A UTC-midnight instant reads as the previous local day on any negative-offset
+    // host under local getters; UTC getters must recover the UTC calendar day.
+    const trades: Trade[] = [
+      {
+        dateOpened: new Date("2022-03-14T00:00:00Z"),
+        dateClosed: new Date("2022-03-14T00:00:00Z"),
+        timeOpened: "00:00:00",
+        openingPrice: 0,
+        legs: "",
+        premium: 0,
+        pl: 1,
+        numContracts: 1,
+        fundsAtClose: 0,
+        marginReq: 0,
+        strategy: "A",
+        openingCommissionsFees: 0,
+        closingCommissionsFees: 0,
+        openingShortLongRatio: 0,
+      },
+    ];
+    expect(buildBlockTradingDayIndex(trades)).toEqual(["2022-03-14"]);
   });
 
   it("spreads a trade's P&L evenly across the grid days it was open", () => {
