@@ -31,6 +31,18 @@ export { PortfolioStatsCalculator } from "@tradeblocks/lib";
 // Export correlation and tail-risk utilities for testing strategy_similarity
 export { calculateCorrelationMatrix, performTailRiskAnalysis } from "@tradeblocks/lib";
 
+// Export paired_bootstrap_comparison internals for integration testing
+export {
+  registerPairedComparisonTool,
+  runPairedBootstrapComparison,
+  buildBlockTradingDayIndex,
+  buildArmDaySeries,
+  armHoldingPeriods,
+  pairedComparisonInputSchema,
+  type PairedComparisonParams,
+  type PairedComparisonReport,
+} from "./tools/blocks/paired-comparison.ts";
+
 // Export sync layer for integration testing
 export { syncAllBlocks, syncBlock, type SyncResult, type BlockSyncResult } from "./sync/index.ts";
 
