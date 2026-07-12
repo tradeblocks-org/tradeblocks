@@ -26,6 +26,7 @@ export * from "./rolling-metrics.ts";
 export * from "./mc-regime-comparison.ts";
 export * from "./walk-forward-degradation.ts";
 export * from "./trade-matching.ts";
+export * from "./trade-cost-reconciliation.ts";
 export * from "./live-alignment.ts";
 export * from "./edge-decay-synthesis.ts";
 // Re-export from cumulative-distribution excluding conflicting name
