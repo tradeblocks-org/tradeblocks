@@ -121,15 +121,17 @@ export class ReportingTradeProcessor {
       stage: "converting",
       progress: 0,
       rowsProcessed: 0,
-      totalRows: parseResult.data.length,
+      totalRows: parseResult.totalRows,
       errors: errors.length,
       validTrades: 0,
-      invalidTrades: 0,
+      invalidTrades: isTat ? 0 : parseResult.totalRows - parseResult.validRows,
     });
 
     const trades: ReportingTrade[] = [];
     let validTrades = 0;
-    let invalidTrades = 0;
+    // OO rows rejected by the raw schema never enter parseResult.data. Count
+    // them here so every nonblank source row is represented in the envelope.
+    let invalidTrades = isTat ? 0 : parseResult.totalRows - parseResult.validRows;
 
     for (let i = 0; i < parseResult.data.length; i++) {
       const rawTrade = parseResult.data[i];
@@ -239,27 +241,25 @@ export class ReportingTradeProcessor {
     });
   }
 
-  private validateRawRow(row: Record<string, string>): RawReportingTradeData | null {
-    try {
-      const sourceFields = { ...row };
-      const normalizedRow: Record<string, string> = { ...row };
-      Object.entries(REPORTING_TRADE_COLUMN_ALIASES).forEach(([alias, canonical]) => {
-        if (normalizedRow[alias] !== undefined) {
-          normalizedRow[canonical] = normalizedRow[alias];
-          delete normalizedRow[alias];
-        }
-      });
-
-      if (!normalizedRow["Strategy"] || normalizedRow["Strategy"].trim() === "") {
-        normalizedRow["Strategy"] = "Unknown";
+  private validateRawRow(row: Record<string, string>): RawReportingTradeData {
+    const sourceFields = { ...row };
+    const normalizedRow: Record<string, string> = { ...row };
+    Object.entries(REPORTING_TRADE_COLUMN_ALIASES).forEach(([alias, canonical]) => {
+      if (normalizedRow[alias] !== undefined) {
+        normalizedRow[canonical] = normalizedRow[alias];
+        delete normalizedRow[alias];
       }
+    });
 
-      const parsed = rawReportingTradeDataSchema.parse(normalizedRow);
-
-      return { ...parsed, __sourceFields: sourceFields };
-    } catch {
-      return null;
+    if (!normalizedRow["Strategy"] || normalizedRow["Strategy"].trim() === "") {
+      normalizedRow["Strategy"] = "Unknown";
     }
+
+    // Let schema errors reach CSVParser. It records the exact source line;
+    // returning null here would silently erase the rejected row.
+    const parsed = rawReportingTradeDataSchema.parse(normalizedRow);
+
+    return { ...parsed, __sourceFields: sourceFields };
   }
 
   /**

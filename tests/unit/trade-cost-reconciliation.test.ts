@@ -1,4 +1,9 @@
-import { reconcileTradeCosts, type ReportingTrade, type Trade } from "@tradeblocks/lib";
+import {
+  enrichTrades,
+  reconcileTradeCosts,
+  type ReportingTrade,
+  type Trade,
+} from "@tradeblocks/lib";
 
 function modelTrade(overrides: Partial<Trade> = {}): Trade {
   return {
@@ -49,12 +54,12 @@ describe("reconcileTradeCosts", () => {
       modelScaleFactor: 0.2,
       actualScaleFactor: 1,
     });
-    expect(result.model).toEqual({ gross: 206, fees: 6, net: 200 });
+    expect(result.model).toEqual({ gross: 200, fees: 6, net: 194 });
     expect(result.actual).toEqual({ gross: 200, inferredFees: 10, net: 190 });
-    expect(result.residuals).toEqual({ grossExecution: -6, fees: 4, net: -10 });
+    expect(result.residuals).toEqual({ grossExecution: 0, fees: 4, net: -4 });
     expect(result.arithmeticIdentity).toMatchObject({
-      derivedNetDelta: -10,
-      observedNetDelta: -10,
+      derivedNetDelta: -4,
+      observedNetDelta: -4,
       error: 0,
       holds: true,
     });
@@ -80,10 +85,25 @@ describe("reconcileTradeCosts", () => {
     expect(result.available).toBe(true);
     if (!result.available) throw new Error(result.message);
 
-    expect(result.model).toEqual({ gross: 79, fees: 4, net: 75 });
+    expect(result.model).toEqual({ gross: 75, fees: 4, net: 71 });
     expect(result.actual).toEqual({ gross: 200, inferredFees: 5, net: 195 });
-    expect(result.residuals).toEqual({ grossExecution: 121, fees: 1, net: 120 });
+    expect(result.residuals).toEqual({ grossExecution: 125, fees: 1, net: 124 });
     expect(result.arithmeticIdentity.holds).toBe(true);
+  });
+
+  it("uses the same gross-P/L invariant as enrichTrades", () => {
+    const model = modelTrade();
+    const enriched = enrichTrades([model])[0];
+    const result = reconcileTradeCosts(model, actualTrade());
+
+    expect(enriched.netPl).toBe(
+      model.pl - model.openingCommissionsFees - model.closingCommissionsFees,
+    );
+    expect(result.available).toBe(true);
+    if (!result.available) throw new Error(result.message);
+    expect(result.model.gross).toBe(model.pl * result.scaling.modelScaleFactor);
+    expect(enriched.netPl).toBeDefined();
+    expect(result.model.net).toBe(enriched.netPl! * result.scaling.modelScaleFactor);
   });
 
   it("fails closed when average closing cost is missing", () => {

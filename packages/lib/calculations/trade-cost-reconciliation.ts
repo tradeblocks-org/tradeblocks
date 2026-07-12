@@ -22,7 +22,7 @@ export type TradeCostReconciliationUnavailableReason =
   | "missing-actual-closing-cost"
   | "invalid-model-contract-count"
   | "invalid-actual-contract-count"
-  | "invalid-model-net"
+  | "invalid-model-gross"
   | "invalid-actual-net"
   | "invalid-model-opening-fees"
   | "invalid-model-closing-fees"
@@ -103,9 +103,9 @@ function isFiniteNumber(value: unknown): value is number {
 /**
  * Decompose model-vs-live P/L for a pair that the caller has already matched.
  *
- * Model gross is reconstructed from its authoritative net P/L plus recorded
- * commissions/fees. Actual gross is reconstructed from the reporting log's
- * opening premium and average closing cost:
+ * Trade.pl is the model's gross P/L (the same invariant used by enrichTrades),
+ * so model net is gross minus recorded commissions/fees. Actual gross is
+ * reconstructed from the reporting log's opening premium and average closing cost:
  * `(initialPremium + avgClosingCost) * contracts * 100`.
  */
 export function reconcileTradeCosts(
@@ -141,7 +141,7 @@ export function reconcileTradeCosts(
     );
   }
   if (!isFiniteNumber(model.pl)) {
-    return unavailable("invalid-model-net", "Model P/L must be finite");
+    return unavailable("invalid-model-gross", "Model gross P/L must be finite");
   }
   if (!isFiniteNumber(actual.pl)) {
     return unavailable("invalid-actual-net", "Actual P/L must be finite");
@@ -199,9 +199,9 @@ export function reconcileTradeCosts(
     basis === "perContract" ? 1 / model.numContracts : actual.numContracts / model.numContracts;
   const actualScaleFactor = basis === "perContract" ? 1 / actual.numContracts : 1;
 
-  const modelNet = model.pl * modelScaleFactor;
+  const modelGross = model.pl * modelScaleFactor;
   const modelFees = modelFeesTotal * modelScaleFactor;
-  const modelGross = modelNet + modelFees;
+  const modelNet = modelGross - modelFees;
   const actualGross = actualGrossTotal * actualScaleFactor;
   const actualFees = actualFeesTotal * actualScaleFactor;
   const actualNet = actual.pl * actualScaleFactor;

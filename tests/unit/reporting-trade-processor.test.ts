@@ -79,6 +79,24 @@ describe("ReportingTradeProcessor lossless Automation-log intake", () => {
     expect(result.trades[0].rawTimeOpened).toBeUndefined();
   });
 
+  it("surfaces and counts a raw row missing a required value", async () => {
+    const csv =
+      '"Strategy","Date Opened","Opening Price","Legs","Initial Premium","No. of Contracts","P/L"\n' +
+      '"Valid Strategy","2026-07-08",6100,"legs",2.5,1,10\n' +
+      '"Broken Strategy","",6100,"legs",2.5,1,20';
+
+    const result = await new ReportingTradeProcessor().processText(csv);
+
+    expect(result.totalRows).toBe(2);
+    expect(result.validTrades).toBe(1);
+    expect(result.invalidTrades).toBe(1);
+    expect(result.validTrades + result.invalidTrades).toBe(result.totalRows);
+    expect(result.trades).toHaveLength(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({ type: "parsing", line: 3 });
+    expect(result.errors[0].message).toContain("Date Opened");
+  });
+
   it("matches parsed AM display times using the lossless source timestamp", async () => {
     const csv =
       '"Strategy","Date Opened","Time Opened","Opening Price","Legs","Initial Premium","No. of Contracts","P/L"\n' +
