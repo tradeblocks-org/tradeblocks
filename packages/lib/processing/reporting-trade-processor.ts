@@ -55,12 +55,18 @@ export class ReportingTradeProcessor {
   }
 
   async processFile(file: File): Promise<ReportingTradeProcessingResult> {
+    const fileContent = await this.readFileContent(file);
+    return this.processText(fileContent);
+  }
+
+  /**
+   * Process reporting-log CSV text without a browser File/FileReader boundary.
+   * Server-side consumers use this path; processFile remains backward compatible.
+   */
+  async processText(fileContent: string): Promise<ReportingTradeProcessingResult> {
     const startTime = Date.now();
     const errors: ProcessingError[] = [];
     const warnings: string[] = [];
-
-    // Read file content first so we can detect format from headers
-    const fileContent = await this.readFileContent(file);
 
     // Extract headers from first line to detect format
     const firstLine = fileContent.split(/\r?\n/)[0] || "";
@@ -235,6 +241,7 @@ export class ReportingTradeProcessor {
 
   private validateRawRow(row: Record<string, string>): RawReportingTradeData | null {
     try {
+      const sourceFields = { ...row };
       const normalizedRow: Record<string, string> = { ...row };
       Object.entries(REPORTING_TRADE_COLUMN_ALIASES).forEach(([alias, canonical]) => {
         if (normalizedRow[alias] !== undefined) {
@@ -249,7 +256,7 @@ export class ReportingTradeProcessor {
 
       const parsed = rawReportingTradeDataSchema.parse(normalizedRow);
 
-      return parsed;
+      return { ...parsed, __sourceFields: sourceFields };
     } catch {
       return null;
     }
@@ -311,8 +318,10 @@ export class ReportingTradeProcessor {
 
     const reportingTrade = {
       strategy: raw["Strategy"].trim(),
+      account: raw["Account"]?.trim() || undefined,
       dateOpened,
       timeOpened: this.parseTimeToFormatted(raw["Time Opened"]),
+      rawTimeOpened: raw["Time Opened"]?.trim() || undefined,
       openingPrice: parseFloat(raw["Opening Price"]),
       legs: raw["Legs"].trim(),
       initialPremium: parseFloat(raw["Initial Premium"]),
@@ -321,8 +330,11 @@ export class ReportingTradeProcessor {
       closingPrice: raw["Closing Price"] ? parseFloat(raw["Closing Price"]) : undefined,
       dateClosed,
       timeClosed: this.parseTimeToFormatted(raw["Time Closed"]),
+      rawTimeClosed: raw["Time Closed"]?.trim() || undefined,
+      daysInTrade: raw["Days in Trade"] ? parseFloat(raw["Days in Trade"]) : undefined,
       avgClosingCost: raw["Avg. Closing Cost"] ? parseFloat(raw["Avg. Closing Cost"]) : undefined,
       reasonForClose: raw["Reason For Close"]?.trim() || undefined,
+      sourceFields: raw.__sourceFields,
     };
 
     return reportingTradeSchema.parse(reportingTrade);

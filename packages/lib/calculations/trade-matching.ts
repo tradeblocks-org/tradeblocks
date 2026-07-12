@@ -24,11 +24,19 @@ export function formatDateKey(d: Date): string {
  */
 export function truncateTimeToMinute(time: string | undefined): string {
   if (!time) return "00:00";
-  const parts = time.split(":");
-  if (parts.length >= 2) {
-    return `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}`;
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?\s*([AP]M)?$/i);
+  if (!match) return "00:00";
+
+  let hour = Number(match[1]);
+  const period = match[3]?.toUpperCase();
+  if (period) {
+    if (hour < 1 || hour > 12) return "00:00";
+    hour = (hour % 12) + (period === "PM" ? 12 : 0);
+  } else if (hour > 23) {
+    return "00:00";
   }
-  return "00:00";
+
+  return `${String(hour).padStart(2, "0")}:${match[2]}`;
 }
 
 /**
@@ -157,7 +165,7 @@ export function matchTrades(
   const actualByKey = new Map<string, ReportingTrade[]>();
   actualTrades.forEach((trade) => {
     const dateKey = formatDateKey(new Date(trade.dateOpened));
-    const timeKey = truncateTimeToMinute(trade.timeOpened);
+    const timeKey = truncateTimeToMinute(trade.rawTimeOpened ?? trade.timeOpened);
     const key = `${dateKey}|${trade.strategy}|${timeKey}`;
     const existing = actualByKey.get(key) || [];
     existing.push(trade);

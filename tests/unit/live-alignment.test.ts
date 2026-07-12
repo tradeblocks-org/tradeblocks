@@ -454,6 +454,11 @@ describe("analyzeLiveAlignment", () => {
 
       // Only the 2024-01-15 trade should match
       expect(result.dataQuality.matchedTradeCount).toBe(1);
+      expect(result.dataQuality.outsideOverlapBacktestCount).toBe(1);
+      expect(result.dataQuality.outsideOverlapActualCount).toBe(1);
+      expect(result.dataQuality.warnings).toContain(
+        "1 backtest trade(s) and 1 actual trade(s) fall outside the shared overlap window and are excluded from alignment metrics",
+      );
       expect(result.executionEfficiency.overallEfficiency).toBeCloseTo(0.8, 4);
     });
 
