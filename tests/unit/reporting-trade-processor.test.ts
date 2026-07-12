@@ -9,7 +9,7 @@ describe("ReportingTradeProcessor lossless Automation-log intake", () => {
   it("parses server-side text while preserving new and unknown source columns", async () => {
     const csv =
       '\ufeff"Strategy","Account","Date Opened","Time Opened","Opening Price","Legs","Initial Premium","No. of Contracts","P/L","Closing Price","Date Closed","Time Closed","Days in Trade","Avg. Closing Cost","Reason For Close","Automation Id"\n' +
-      '"Wizzy Orb EOD","Big Money","2026-07-10","15:56:07.1960624",7577.03,"1 Jul 10 7575 C STO 3.73 | 1 Jul 10 7595 C BTO 0.03",3.7,1,327.56,7575.39,"2026-07-10","16:15:01.0393019",0,-0.39,"Expired","run-42"\n';
+      '"Strategy Alpha","Demo Account","2026-07-10","15:56:07.1960624",100.25,"1 XYZ Jul 10 100 C STO 1.25 | 1 XYZ Jul 10 105 C BTO 0.25",1,1,96.56,101,"2026-07-10","16:15:01.0393019",0,-0.39,"Expired","run-42"\n';
 
     const result = await new ReportingTradeProcessor().processText(csv);
 
@@ -17,8 +17,8 @@ describe("ReportingTradeProcessor lossless Automation-log intake", () => {
     expect(result.totalRows).toBe(1);
     expect(result.validTrades).toBe(1);
     expect(result.trades[0]).toMatchObject({
-      strategy: "Wizzy Orb EOD",
-      account: "Big Money",
+      strategy: "Strategy Alpha",
+      account: "Demo Account",
       timeOpened: "3:56 PM",
       rawTimeOpened: "15:56:07.1960624",
       timeClosed: "4:15 PM",
@@ -26,7 +26,7 @@ describe("ReportingTradeProcessor lossless Automation-log intake", () => {
       daysInTrade: 0,
     });
     expect(result.trades[0].sourceFields).toMatchObject({
-      Account: "Big Money",
+      Account: "Demo Account",
       "Days in Trade": "0",
       "Automation Id": "run-42",
     });
