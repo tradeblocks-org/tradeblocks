@@ -13,12 +13,8 @@
 
 import type { Trade } from "../models/trade.ts";
 import type { ReportingTrade } from "../models/reporting-trade.ts";
-import {
-  formatDateKey,
-  truncateTimeToMinute,
-  calculateScaledPl,
-  getMonthKey,
-} from "./trade-matching.ts";
+import { formatDateKey, calculateScaledPl, getMonthKey } from "./trade-matching.ts";
+import { matchTradeSets } from "./trade-set-alignment.ts";
 import { computeTrends, type TrendResult } from "./trend-detection.ts";
 
 // ---------------------------------------------------------------------------
@@ -150,8 +146,8 @@ interface MatchedPair {
 
 /**
  * Match backtest to actual trades and return per-pair scaled P/L values.
- * Uses the same key-generation logic as matchTrades from trade-matching.ts
- * but tracks individual scaled P/L per pair for efficiency computation.
+ * Delegates matching to the single-authority matcher (matchTradeSets) and
+ * layers scaled P/L per pair for efficiency computation.
  */
 function matchTradesWithScaledPl(
   backtestTrades: Trade[],
@@ -162,70 +158,55 @@ function matchTradesWithScaledPl(
   unmatchedBacktestByStrategy: Map<string, number>;
   unmatchedActualByStrategy: Map<string, number>;
 } {
-  // Build lookup for actual trades
-  const actualByKey = new Map<string, ReportingTrade[]>();
-  for (const trade of actualTrades) {
-    const dateKey = formatDateKey(new Date(trade.dateOpened));
-    const timeKey = truncateTimeToMinute(trade.rawTimeOpened ?? trade.timeOpened);
-    const key = `${dateKey}\t${trade.strategy}\t${timeKey}`;
-    const existing = actualByKey.get(key) || [];
-    existing.push(trade);
-    actualByKey.set(key, existing);
+  const {
+    matched,
+    unmatchedBacktestIndices,
+    unmatchedActualIndices,
+    unusableBacktest,
+    unusableActual,
+  } = matchTradeSets(backtestTrades, actualTrades);
+
+  const pairs: MatchedPair[] = matched.map(({ backtestIndex, actualIndex }) => {
+    const btTrade = backtestTrades[backtestIndex];
+    const actualTrade = actualTrades[actualIndex];
+    const { scaledBtPl, scaledActualPl } = calculateScaledPl(
+      btTrade.pl,
+      actualTrade.pl,
+      btTrade.numContracts,
+      actualTrade.numContracts,
+      scaling,
+    );
+    return {
+      date: formatDateKey(new Date(btTrade.dateOpened)),
+      strategy: btTrade.strategy,
+      scaledBtPl,
+      scaledActualPl,
+      slippage: scaledActualPl - scaledBtPl,
+      btContracts: btTrade.numContracts,
+      actualContracts: actualTrade.numContracts,
+    };
+  });
+
+  // Malformed rows never match; fold them into the per-strategy unmatched
+  // tallies so counts still span every input row on each side.
+  const unmatchedBacktestByStrategy = new Map<string, number>();
+  for (const index of unmatchedBacktestIndices) {
+    const strat = backtestTrades[index].strategy;
+    unmatchedBacktestByStrategy.set(strat, (unmatchedBacktestByStrategy.get(strat) || 0) + 1);
+  }
+  for (const { index } of unusableBacktest) {
+    const strat = backtestTrades[index].strategy;
+    unmatchedBacktestByStrategy.set(strat, (unmatchedBacktestByStrategy.get(strat) || 0) + 1);
   }
 
-  const pairs: MatchedPair[] = [];
-  const unmatchedBacktestByStrategy = new Map<string, number>();
   const unmatchedActualByStrategy = new Map<string, number>();
-
-  // Count actual trades per strategy for unmatched tracking
-  for (const trade of actualTrades) {
-    const strat = trade.strategy;
+  for (const index of unmatchedActualIndices) {
+    const strat = actualTrades[index].strategy;
     unmatchedActualByStrategy.set(strat, (unmatchedActualByStrategy.get(strat) || 0) + 1);
   }
-
-  // Match backtest trades to actual trades
-  for (const btTrade of backtestTrades) {
-    const dateKey = formatDateKey(new Date(btTrade.dateOpened));
-    const timeKey = truncateTimeToMinute(btTrade.timeOpened);
-    const key = `${dateKey}\t${btTrade.strategy}\t${timeKey}`;
-
-    const actualMatches = actualByKey.get(key);
-    const actualTrade = actualMatches?.[0];
-
-    if (actualTrade) {
-      // Decrement unmatched actual count
-      const strat = actualTrade.strategy;
-      const remaining = (unmatchedActualByStrategy.get(strat) || 1) - 1;
-      unmatchedActualByStrategy.set(strat, remaining);
-
-      // Remove matched trade
-      if (actualMatches && actualMatches.length > 1) {
-        actualByKey.set(key, actualMatches.slice(1));
-      } else {
-        actualByKey.delete(key);
-      }
-
-      const { scaledBtPl, scaledActualPl } = calculateScaledPl(
-        btTrade.pl,
-        actualTrade.pl,
-        btTrade.numContracts,
-        actualTrade.numContracts,
-        scaling,
-      );
-
-      pairs.push({
-        date: dateKey,
-        strategy: btTrade.strategy,
-        scaledBtPl,
-        scaledActualPl,
-        slippage: scaledActualPl - scaledBtPl,
-        btContracts: btTrade.numContracts,
-        actualContracts: actualTrade.numContracts,
-      });
-    } else {
-      const strat = btTrade.strategy;
-      unmatchedBacktestByStrategy.set(strat, (unmatchedBacktestByStrategy.get(strat) || 0) + 1);
-    }
+  for (const { index } of unusableActual) {
+    const strat = actualTrades[index].strategy;
+    unmatchedActualByStrategy.set(strat, (unmatchedActualByStrategy.get(strat) || 0) + 1);
   }
 
   return { pairs, unmatchedBacktestByStrategy, unmatchedActualByStrategy };
