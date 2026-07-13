@@ -5,8 +5,11 @@
  */
 export interface ReportingTrade {
   strategy: string;
+  account?: string;
   dateOpened: Date;
   timeOpened?: string;
+  /** Exact source timestamp, before display formatting/truncation. */
+  rawTimeOpened?: string;
   openingPrice: number;
   legs: string;
   initialPremium: number;
@@ -15,8 +18,13 @@ export interface ReportingTrade {
   closingPrice?: number;
   dateClosed?: Date;
   timeClosed?: string;
+  /** Exact source timestamp, before display formatting/truncation. */
+  rawTimeClosed?: string;
+  daysInTrade?: number;
   avgClosingCost?: number;
   reasonForClose?: string;
+  /** Lossless source row, including columns unknown to this library version. */
+  sourceFields?: Record<string, string>;
 }
 
 /**
@@ -24,6 +32,7 @@ export interface ReportingTrade {
  */
 export interface RawReportingTradeData {
   Strategy: string;
+  Account?: string;
   "Date Opened": string;
   "Time Opened"?: string;
   "Opening Price": string;
@@ -36,6 +45,10 @@ export interface RawReportingTradeData {
   "Time Closed"?: string;
   "Avg. Closing Cost"?: string;
   "Reason For Close"?: string;
+  "Days in Trade"?: string;
+  /** Exact source row captured before alias normalization. */
+  __sourceFields?: Record<string, string>;
+  [column: string]: string | Record<string, string> | undefined;
 }
 
 /**

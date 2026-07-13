@@ -158,7 +158,9 @@ export class CSVParser {
       return {
         data,
         headers: cleanHeaders,
-        totalRows: totalRows - 1, // Excluding header
+        // Count data records actually encountered. Physical line count includes
+        // trailing blank lines, which are not CSV records when skipEmptyLines is on.
+        totalRows: processedRows,
         validRows,
         errors,
         warnings,

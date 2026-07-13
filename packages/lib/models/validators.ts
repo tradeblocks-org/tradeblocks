@@ -75,29 +75,35 @@ export const tradeSchema = z.object({
 /**
  * Zod schema for validating raw reporting trade data from strategy logs
  */
-export const rawReportingTradeDataSchema = z.object({
-  Strategy: z.string().min(1, "Strategy is required"),
-  "Date Opened": z.string().min(1, "Date Opened is required"),
-  "Time Opened": z.string().optional(),
-  "Opening Price": z.string().min(1, "Opening Price is required"),
-  Legs: z.string().min(1, "Legs description is required"),
-  "Initial Premium": z.string().min(1, "Initial Premium is required"),
-  "No. of Contracts": z.string().min(1, "Number of Contracts is required"),
-  "P/L": z.string().min(1, "P/L is required"),
-  "Closing Price": z.string().optional(),
-  "Date Closed": z.string().optional(),
-  "Time Closed": z.string().optional(),
-  "Avg. Closing Cost": z.string().optional(),
-  "Reason For Close": z.string().optional(),
-});
+export const rawReportingTradeDataSchema = z
+  .object({
+    Strategy: z.string().min(1, "Strategy is required"),
+    Account: z.string().optional(),
+    "Date Opened": z.string().min(1, "Date Opened is required"),
+    "Time Opened": z.string().optional(),
+    "Opening Price": z.string().min(1, "Opening Price is required"),
+    Legs: z.string().min(1, "Legs description is required"),
+    "Initial Premium": z.string().min(1, "Initial Premium is required"),
+    "No. of Contracts": z.string().min(1, "Number of Contracts is required"),
+    "P/L": z.string().min(1, "P/L is required"),
+    "Closing Price": z.string().optional(),
+    "Date Closed": z.string().optional(),
+    "Time Closed": z.string().optional(),
+    "Avg. Closing Cost": z.string().optional(),
+    "Reason For Close": z.string().optional(),
+    "Days in Trade": z.string().optional(),
+  })
+  .catchall(z.string());
 
 /**
  * Zod schema for validating processed reporting trade data
  */
 export const reportingTradeSchema = z.object({
   strategy: z.string().min(1),
+  account: z.string().optional(),
   dateOpened: z.date(),
   timeOpened: z.string().optional(),
+  rawTimeOpened: z.string().optional(),
   openingPrice: z.number().finite(),
   legs: z.string().min(1),
   initialPremium: z.number().finite(),
@@ -106,8 +112,11 @@ export const reportingTradeSchema = z.object({
   closingPrice: z.number().finite().optional(),
   dateClosed: z.date().optional(),
   timeClosed: z.string().optional(),
+  rawTimeClosed: z.string().optional(),
+  daysInTrade: z.number().finite().nonnegative().optional(),
   avgClosingCost: z.number().finite().optional(),
   reasonForClose: z.string().optional(),
+  sourceFields: z.record(z.string(), z.string()).optional(),
 });
 
 /**

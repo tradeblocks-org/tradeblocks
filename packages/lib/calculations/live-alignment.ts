@@ -96,6 +96,10 @@ export interface AlignmentDataQuality {
   backtestTradeCount: number;
   /** Total actual trades provided */
   actualTradeCount: number;
+  /** Backtest trades excluded because they fall outside the shared date window. */
+  outsideOverlapBacktestCount: number;
+  /** Actual trades excluded because they fall outside the shared date window. */
+  outsideOverlapActualCount: number;
   /** Total matched trade pairs */
   matchedTradeCount: number;
   /** Match rate: matched / min(backtest, actual) within overlap (0-1) */
@@ -162,7 +166,7 @@ function matchTradesWithScaledPl(
   const actualByKey = new Map<string, ReportingTrade[]>();
   for (const trade of actualTrades) {
     const dateKey = formatDateKey(new Date(trade.dateOpened));
-    const timeKey = truncateTimeToMinute(trade.timeOpened);
+    const timeKey = truncateTimeToMinute(trade.rawTimeOpened ?? trade.timeOpened);
     const key = `${dateKey}\t${trade.strategy}\t${timeKey}`;
     const existing = actualByKey.get(key) || [];
     existing.push(trade);
@@ -309,6 +313,14 @@ export function analyzeLiveAlignment(
     warnings.push("No overlapping date range between backtest and actual trades");
     filteredBacktest = [];
     filteredActual = [];
+  }
+
+  const outsideOverlapBacktestCount = backtestTrades.length - filteredBacktest.length;
+  const outsideOverlapActualCount = actualTrades.length - filteredActual.length;
+  if (overlapRange && (outsideOverlapBacktestCount > 0 || outsideOverlapActualCount > 0)) {
+    warnings.push(
+      `${outsideOverlapBacktestCount} backtest trade(s) and ${outsideOverlapActualCount} actual trade(s) fall outside the shared overlap window and are excluded from alignment metrics`,
+    );
   }
 
   if (backtestTrades.length === 0) {
@@ -543,6 +555,8 @@ export function analyzeLiveAlignment(
   const dataQuality: AlignmentDataQuality = {
     backtestTradeCount: backtestTrades.length,
     actualTradeCount: actualTrades.length,
+    outsideOverlapBacktestCount,
+    outsideOverlapActualCount,
     matchedTradeCount: pairs.length,
     matchRate,
     overlapMonths: monthlySeries.length,

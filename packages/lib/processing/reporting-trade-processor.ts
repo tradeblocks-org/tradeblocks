@@ -55,12 +55,18 @@ export class ReportingTradeProcessor {
   }
 
   async processFile(file: File): Promise<ReportingTradeProcessingResult> {
+    const fileContent = await this.readFileContent(file);
+    return this.processText(fileContent);
+  }
+
+  /**
+   * Process reporting-log CSV text without a browser File/FileReader boundary.
+   * Server-side consumers use this path; processFile remains backward compatible.
+   */
+  async processText(fileContent: string): Promise<ReportingTradeProcessingResult> {
     const startTime = Date.now();
     const errors: ProcessingError[] = [];
     const warnings: string[] = [];
-
-    // Read file content first so we can detect format from headers
-    const fileContent = await this.readFileContent(file);
 
     // Extract headers from first line to detect format
     const firstLine = fileContent.split(/\r?\n/)[0] || "";
@@ -115,15 +121,17 @@ export class ReportingTradeProcessor {
       stage: "converting",
       progress: 0,
       rowsProcessed: 0,
-      totalRows: parseResult.data.length,
+      totalRows: parseResult.totalRows,
       errors: errors.length,
       validTrades: 0,
-      invalidTrades: 0,
+      invalidTrades: isTat ? 0 : parseResult.totalRows - parseResult.validRows,
     });
 
     const trades: ReportingTrade[] = [];
     let validTrades = 0;
-    let invalidTrades = 0;
+    // OO rows rejected by the raw schema never enter parseResult.data. Count
+    // them here so every nonblank source row is represented in the envelope.
+    let invalidTrades = isTat ? 0 : parseResult.totalRows - parseResult.validRows;
 
     for (let i = 0; i < parseResult.data.length; i++) {
       const rawTrade = parseResult.data[i];
@@ -233,26 +241,25 @@ export class ReportingTradeProcessor {
     });
   }
 
-  private validateRawRow(row: Record<string, string>): RawReportingTradeData | null {
-    try {
-      const normalizedRow: Record<string, string> = { ...row };
-      Object.entries(REPORTING_TRADE_COLUMN_ALIASES).forEach(([alias, canonical]) => {
-        if (normalizedRow[alias] !== undefined) {
-          normalizedRow[canonical] = normalizedRow[alias];
-          delete normalizedRow[alias];
-        }
-      });
-
-      if (!normalizedRow["Strategy"] || normalizedRow["Strategy"].trim() === "") {
-        normalizedRow["Strategy"] = "Unknown";
+  private validateRawRow(row: Record<string, string>): RawReportingTradeData {
+    const sourceFields = { ...row };
+    const normalizedRow: Record<string, string> = { ...row };
+    Object.entries(REPORTING_TRADE_COLUMN_ALIASES).forEach(([alias, canonical]) => {
+      if (normalizedRow[alias] !== undefined) {
+        normalizedRow[canonical] = normalizedRow[alias];
+        delete normalizedRow[alias];
       }
+    });
 
-      const parsed = rawReportingTradeDataSchema.parse(normalizedRow);
-
-      return parsed;
-    } catch {
-      return null;
+    if (!normalizedRow["Strategy"] || normalizedRow["Strategy"].trim() === "") {
+      normalizedRow["Strategy"] = "Unknown";
     }
+
+    // Let schema errors reach CSVParser. It records the exact source line;
+    // returning null here would silently erase the rejected row.
+    const parsed = rawReportingTradeDataSchema.parse(normalizedRow);
+
+    return { ...parsed, __sourceFields: sourceFields };
   }
 
   /**
@@ -311,8 +318,10 @@ export class ReportingTradeProcessor {
 
     const reportingTrade = {
       strategy: raw["Strategy"].trim(),
+      account: raw["Account"]?.trim() || undefined,
       dateOpened,
       timeOpened: this.parseTimeToFormatted(raw["Time Opened"]),
+      rawTimeOpened: raw["Time Opened"]?.trim() || undefined,
       openingPrice: parseFloat(raw["Opening Price"]),
       legs: raw["Legs"].trim(),
       initialPremium: parseFloat(raw["Initial Premium"]),
@@ -321,8 +330,11 @@ export class ReportingTradeProcessor {
       closingPrice: raw["Closing Price"] ? parseFloat(raw["Closing Price"]) : undefined,
       dateClosed,
       timeClosed: this.parseTimeToFormatted(raw["Time Closed"]),
+      rawTimeClosed: raw["Time Closed"]?.trim() || undefined,
+      daysInTrade: raw["Days in Trade"] ? parseFloat(raw["Days in Trade"]) : undefined,
       avgClosingCost: raw["Avg. Closing Cost"] ? parseFloat(raw["Avg. Closing Cost"]) : undefined,
       reasonForClose: raw["Reason For Close"]?.trim() || undefined,
+      sourceFields: raw.__sourceFields,
     };
 
     return reportingTradeSchema.parse(reportingTrade);
