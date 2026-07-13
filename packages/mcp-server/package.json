@@ -1,10 +1,9 @@
 {
   "name": "tradeblocks-mcp",
-  "version": "3.0.3",
+  "version": "3.3.1",
   "description": "MCP server for options trade analysis",
   "author": "David Romeo <davidmromeo@gmail.com>",
   "type": "module",
-  "main": "dist/skill-installer.js",
   "bin": {
     "tradeblocks-mcp": "server/index.js"
   },
@@ -130,7 +129,6 @@
     "dev": "tsup --watch",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "verify:exports": "node scripts/verify-exports-surface.mjs",
-    "mcpb:pack": "npm run build && node scripts/pack-mcpb.js",
     "pack:beta": "npm run build && npm pack --pack-destination .",
     "prepublishOnly": "npm run build"
   },
@@ -151,7 +149,6 @@
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.9.3",
-    "archiver": "^7.0.1",
     "esbuild": "^0.27.2",
     "jest": "^30.3.0",
     "ts-jest": "^29.4.9",
@@ -165,8 +162,7 @@
     "server",
     "dist",
     "src",
-    "agent-skills",
-    "manifest.json"
+    "agent-skills"
   ],
   "keywords": [
     "mcp",

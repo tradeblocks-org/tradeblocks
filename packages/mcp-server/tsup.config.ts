@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig([
-  // Main MCP server entry (executable) - outputs to server/ for MCPB
+  // Main MCP server entry (executable) - outputs to server/ (the `bin` target)
   {
     entry: ["src/index.ts"],
     outDir: "server",
@@ -13,8 +13,9 @@ export default defineConfig([
     banner: {
       js: "#!/usr/bin/env node",
     },
-    // Bundle most deps for standalone MCPB distribution, but exclude DuckDB native modules
-    // DuckDB has platform-specific native bindings (.node files) that cannot be bundled
+    // npm resolves runtime dependencies from the installed node_modules, so they
+    // stay external (not inlined). DuckDB's native bindings (.node files) in
+    // particular cannot be bundled and are always resolved at runtime.
     // http-server.ts is dynamically imported - built separately below
     external: ["./http-server.js", "@duckdb/node-api", "@duckdb/node-bindings", /^@duckdb\//],
     // Bundle @tradeblocks workspace packages

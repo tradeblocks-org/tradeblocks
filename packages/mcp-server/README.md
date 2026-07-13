@@ -14,13 +14,7 @@ Model Context Protocol (MCP) server for options trading analysis. Works with Cla
 
 ## Installation
 
-### Option 1: MCPB Bundle (Claude Desktop - One Click)
-
-Download the latest `.mcpb` file from [Releases](https://github.com/tradeblocks-org/tradeblocks/releases) and double-click to install.
-
-The installer will prompt you to select your Trading Data Directory.
-
-### Option 2: npx (All Platforms)
+### Option 1: npx (All Platforms)
 
 Run directly without installation:
 
@@ -32,9 +26,9 @@ npx tradeblocks-mcp ~/Trading/backtests
 npx tradeblocks-mcp --http ~/Trading/backtests
 ```
 
-See [Configuration by Platform](#configuration-by-platform) below for platform-specific setup.
+For Claude Desktop, add the server to `claude_desktop_config.json` — see [Configuration by Platform](#configuration-by-platform) below for platform-specific setup.
 
-### Option 3: From Source
+### Option 2: From Source
 
 ```bash
 git clone https://github.com/tradeblocks-org/tradeblocks
@@ -399,9 +393,6 @@ npm run build
 
 # Run tests
 npm test
-
-# Pack MCPB bundle
-npm run mcpb:pack
 ```
 
 ## Market Data (Optional)

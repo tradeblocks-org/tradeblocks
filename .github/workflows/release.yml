@@ -48,14 +48,15 @@ jobs:
             exit 1
           fi
 
-      - name: Pack MCPB Bundle
-        run: npm run mcpb:pack -w packages/mcp-server
-
-      - name: Upload MCPB artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcpb-bundle
-          path: packages/mcp-server/*.mcpb
+      - name: Verify root and package versions are in sync
+        run: |
+          ROOT=$(node -p "require('./package.json').version")
+          PKG=$(node -p "require('./packages/mcp-server/package.json').version")
+          if [ "$ROOT" != "$PKG" ]; then
+            echo "::error::Version divergence: root package.json ($ROOT) != packages/mcp-server/package.json ($PKG). This pipeline publishes off the mcp-server version, so a mismatch silently skips the npm publish (the release no-ops green and nothing ships). Bump both in lockstep before merging."
+            exit 1
+          fi
+          echo "Versions in sync: $ROOT"
 
   publish-npm:
     name: Publish to npm
@@ -169,29 +170,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download MCPB artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mcpb-bundle
-          path: ./dist
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.build.outputs.version }}
           name: v${{ needs.build.outputs.version }}
-          files: ./dist/*.mcpb
           generate_release_notes: true
           body: |
             ## Installation
 
-            ### Claude Desktop (One-Click)
-            Download `tradeblocks-*.mcpb` below and double-click to install.
-
-            ### npm
+            ### npm (recommended)
             ```bash
             npx tradeblocks-mcp ~/path/to/backtests
             ```
+
+            For Claude Desktop, add the server to `claude_desktop_config.json` with `command: npx`, `args: ["tradeblocks-mcp", "~/path/to/backtests"]`.
 
             ### Docker
             ```bash

@@ -32,7 +32,7 @@ The server communicates via stdio and works with any MCP-compatible client:
 
 **Desktop/CLI Apps:**
 
-- **Claude Desktop** — install the .mcpb bundle or add to `claude_desktop_config.json`
+- **Claude Desktop** — add to `claude_desktop_config.json`
 - **Claude Code** — `claude mcp add tradeblocks -- npx tradeblocks-mcp ~/backtests`
 - **Codex CLI** — add to `~/.codex/config.toml`
 - **Gemini CLI** — add to `~/.gemini/settings.json`

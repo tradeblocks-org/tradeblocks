@@ -51,17 +51,8 @@ jobs:
       - name: Build MCP Server
         run: npm run build -w packages/mcp-server
 
-      - name: Pack MCPB Bundle
-        run: npm run mcpb:pack -w packages/mcp-server
-
       - name: Pack npm tarball
         run: npm pack -w packages/mcp-server --pack-destination ./packages/mcp-server
-
-      - name: Upload MCPB artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcpb-bundle
-          path: packages/mcp-server/*.mcpb
 
       - name: Upload npm tarball artifact
         uses: actions/upload-artifact@v4
@@ -169,12 +160,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download MCPB artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mcpb-bundle
-          path: ./dist
-
       - name: Download npm tarball artifact
         uses: actions/download-artifact@v4
         with:
@@ -188,7 +173,6 @@ jobs:
           name: v${{ needs.build.outputs.version }} (Beta)
           prerelease: true
           files: |
-            ./dist/*.mcpb
             ./dist/*.tgz
           body: |
             ## Beta Release
@@ -214,7 +198,7 @@ jobs:
             ```
 
             **Claude Desktop:**
-            Download `tradeblocks-*.mcpb` below and double-click to install.
+            Add the server to `claude_desktop_config.json` with `command: npx`, `args: ["tradeblocks-mcp@beta", "~/path/to/backtests"]`.
 
             ### Revert to stable
             ```bash
