@@ -8,6 +8,7 @@
 
 import type { Trade } from "../models/trade.ts";
 import type { ReportingTrade } from "../models/reporting-trade.ts";
+import { matchTradeSets } from "./trade-set-alignment.ts";
 
 /**
  * Helper to format date key for trade matching
@@ -161,67 +162,44 @@ export function matchTrades(
   unmatchedBacktestCount: number;
   unmatchedActualCount: number;
 } {
-  // Build lookup for actual trades
-  const actualByKey = new Map<string, ReportingTrade[]>();
-  actualTrades.forEach((trade) => {
-    const dateKey = formatDateKey(new Date(trade.dateOpened));
-    const timeKey = truncateTimeToMinute(trade.rawTimeOpened ?? trade.timeOpened);
-    const key = `${dateKey}|${trade.strategy}|${timeKey}`;
-    const existing = actualByKey.get(key) || [];
-    existing.push(trade);
-    actualByKey.set(key, existing);
+  const {
+    matched,
+    unmatchedBacktestIndices,
+    unmatchedActualIndices,
+    unusableBacktest,
+    unusableActual,
+  } = matchTradeSets(backtestTrades, actualTrades);
+
+  const matchedTrades: MatchedTradeData[] = matched.map(({ backtestIndex, actualIndex }) => {
+    const btTrade = backtestTrades[backtestIndex];
+    const actualTrade = actualTrades[actualIndex];
+    const { scaledBtPl, scaledActualPl } = calculateScaledPl(
+      btTrade.pl,
+      actualTrade.pl,
+      btTrade.numContracts,
+      actualTrade.numContracts,
+      scaling,
+    );
+
+    return {
+      date: formatDateKey(new Date(btTrade.dateOpened)),
+      strategy: btTrade.strategy,
+      timeOpened: truncateTimeToMinute(btTrade.timeOpened),
+      // Total slippage = actual P/L - backtest P/L (after scaling)
+      totalSlippage: scaledActualPl - scaledBtPl,
+      openingVix: btTrade.openingVix,
+      closingVix: btTrade.closingVix,
+      gap: btTrade.gap,
+      movement: btTrade.movement,
+      hourOfDay: parseHourFromTime(btTrade.timeOpened),
+      contracts: actualTrade.numContracts,
+    };
   });
 
-  const matchedTrades: MatchedTradeData[] = [];
-  let unmatchedBacktestCount = 0;
-  let unmatchedActualCount = actualTrades.length;
-
-  // Match backtest trades to actual trades by date+strategy+time
-  for (const btTrade of backtestTrades) {
-    const dateKey = formatDateKey(new Date(btTrade.dateOpened));
-    const timeKey = truncateTimeToMinute(btTrade.timeOpened);
-    const key = `${dateKey}|${btTrade.strategy}|${timeKey}`;
-
-    const actualMatches = actualByKey.get(key);
-    const actualTrade = actualMatches?.[0];
-
-    if (actualTrade) {
-      unmatchedActualCount--;
-      // Remove the matched trade from the list
-      if (actualMatches && actualMatches.length > 1) {
-        actualByKey.set(key, actualMatches.slice(1));
-      } else {
-        actualByKey.delete(key);
-      }
-
-      // Calculate scaled P/L values
-      const { scaledBtPl, scaledActualPl } = calculateScaledPl(
-        btTrade.pl,
-        actualTrade.pl,
-        btTrade.numContracts,
-        actualTrade.numContracts,
-        scaling,
-      );
-
-      // Total slippage = actual P/L - backtest P/L (after scaling)
-      const totalSlippage = scaledActualPl - scaledBtPl;
-
-      matchedTrades.push({
-        date: dateKey,
-        strategy: btTrade.strategy,
-        timeOpened: timeKey,
-        totalSlippage,
-        openingVix: btTrade.openingVix,
-        closingVix: btTrade.closingVix,
-        gap: btTrade.gap,
-        movement: btTrade.movement,
-        hourOfDay: parseHourFromTime(btTrade.timeOpened),
-        contracts: actualTrade.numContracts,
-      });
-    } else {
-      unmatchedBacktestCount++;
-    }
-  }
+  // Malformed rows never match; count them with the unmatched totals so the
+  // matched + unmatched accounting still spans every input row.
+  const unmatchedBacktestCount = unmatchedBacktestIndices.length + unusableBacktest.length;
+  const unmatchedActualCount = unmatchedActualIndices.length + unusableActual.length;
 
   return { matchedTrades, unmatchedBacktestCount, unmatchedActualCount };
 }
