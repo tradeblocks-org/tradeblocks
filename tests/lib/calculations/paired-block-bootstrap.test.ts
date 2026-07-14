@@ -1,9 +1,12 @@
 import {
   pairedBlockBootstrap,
   pairedBlockDays,
+  pairedPathBlockBootstrap,
+  pairedPathBlockDays,
   holdingPeriodBlockDays,
   type DaySeries,
   type PairedBlockBootstrapInput,
+  type PairedPathBlockBootstrapInput,
 } from "@tradeblocks/lib";
 import { describe, expect, it } from "@jest/globals";
 
@@ -42,6 +45,30 @@ function seededSeq(seed: number, n: number): number[] {
 }
 
 const mean = (d: number[]): number => d.reduce((a, b) => a + b, 0) / d.length;
+
+function maxDrawdown(dailyPnl: number[]): number {
+  let equity = 0;
+  let peak = 0;
+  let drawdown = 0;
+  for (const pnl of dailyPnl) {
+    equity += pnl;
+    peak = Math.max(peak, equity);
+    drawdown = Math.max(drawdown, peak - equity);
+  }
+  return drawdown;
+}
+
+function maxDrawdownFromFirstValue(dailyPnl: number[]): number {
+  let equity = 0;
+  let peak = Number.NEGATIVE_INFINITY;
+  let drawdown = 0;
+  for (const pnl of dailyPnl) {
+    equity += pnl;
+    peak = Math.max(peak, equity);
+    drawdown = Math.max(drawdown, peak - equity);
+  }
+  return drawdown;
+}
 
 // ---------------------------------------------------------------------------
 // 1. Intersection masking -- never zero-fill
@@ -447,5 +474,283 @@ describe("holdingPeriodBlockDays", () => {
     expect(holdingPeriodBlockDays([0.2, 0.3, 0.4])).toBe(1);
     expect(holdingPeriodBlockDays([])).toBe(1);
     expect(holdingPeriodBlockDays([10, 10, 10], 0.95)).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paired nonlinear path functionals
+// ---------------------------------------------------------------------------
+
+describe("pairedPathBlockBootstrap", () => {
+  const build = (
+    overrides: Partial<PairedPathBlockBootstrapInput> = {},
+  ): PairedPathBlockBootstrapInput => {
+    const armBValues = seededSeq(71, 48);
+    const armAValues = armBValues.map((value, i) => value + (i % 6 < 3 ? -0.4 : 0.6));
+    return {
+      armA: mkSeries(armAValues),
+      armB: mkSeries(armBValues),
+      statistic: (armA, armB) => maxDrawdown(armA) - maxDrawdown(armB),
+      holdingRule: { blockDays: 4, sensitivity: [0.5, 2] },
+      ciLevel: 0.95,
+      resamples: 400,
+      seed: 27,
+      nullValue: 0,
+      alternative: "greater",
+      ...overrides,
+    };
+  };
+
+  it("recomputes a nonlinear functional on both complete paths", () => {
+    const input = build();
+    const result = pairedPathBlockBootstrap(input);
+
+    expect(result.point).toBe(input.statistic(input.armA.values, input.armB.values));
+    expect(result.status).toBe("resolved");
+    expect(result.inference).toEqual({
+      nullValue: 0,
+      alternative: "greater",
+      pValue: expect.any(Number),
+      pValueResolution: 1 / 401,
+      bound: {
+        level: 0.95,
+        side: "lower",
+        value: expect.any(Number),
+        method: "centered-basic-paired-day-block-bound",
+      },
+      method: "centered-paired-day-block-p-value",
+    });
+    expect(result.ci.method).toBe("basic-paired-day-block");
+    expect(result.inference.pValue).toBeGreaterThan(0);
+    expect(result.inference.pValue).toBeLessThanOrEqual(1);
+    expect(result.resamples).toBe(400);
+    expect(result.sensitivity.map((entry) => entry.blockDays)).toEqual([2, 8]);
+    expect(result.sensitivity.map((entry) => entry.multiplier)).toEqual([0.5, 2]);
+    expect(result.sensitivity.every((entry) => entry.point === result.point)).toBe(true);
+    expect(result.sensitivity.every((entry) => entry.ci.method === "basic-paired-day-block")).toBe(
+      true,
+    );
+    expect(result.sensitivity.map((entry) => entry.effectiveN)).toEqual([24, 6]);
+  });
+
+  it("uses shared resample indices for the two paths", () => {
+    const armBValues = seededSeq(72, 40);
+    const input = build({
+      armA: mkSeries(armBValues.map((value) => 2 * value)),
+      armB: mkSeries(armBValues),
+      statistic: (armA, armB) => Math.max(...armA.map((value, i) => Math.abs(value - 2 * armB[i]))),
+      holdingRule: { blockDays: 5 },
+      resamples: 300,
+      nullValue: 0,
+    });
+
+    const result = pairedPathBlockBootstrap(input);
+
+    expect(result.point).toBe(0);
+    expect(result.ci.low).toBe(0);
+    expect(result.ci.high).toBe(0);
+    expect(result.inference.pValue).toBe(1);
+  });
+
+  it("does not collapse a nonlinear two-path functional to an elementwise delta", () => {
+    const armAValues = [10, -10];
+    const armBValues = [-10, 10];
+    const statistic = (armA: number[], armB: number[]): number =>
+      maxDrawdownFromFirstValue(armA) - maxDrawdownFromFirstValue(armB);
+
+    const result = pairedPathBlockBootstrap(
+      build({
+        armA: mkSeries(armAValues),
+        armB: mkSeries(armBValues),
+        statistic,
+        holdingRule: { blockDays: 1 },
+        resamples: 200,
+      }),
+    );
+    const collapsedDelta = armAValues.map((value, i) => value - armBValues[i]);
+
+    expect(result.point).toBe(10);
+    expect(maxDrawdownFromFirstValue(collapsedDelta)).toBe(20);
+    expect(result.point).not.toBe(maxDrawdownFromFirstValue(collapsedDelta));
+  });
+
+  it("returns a raw finite-resample one-sided p-value for caller-owned adjustment", () => {
+    const base = seededSeq(73, 40);
+    const resamples = 399;
+    const result = pairedPathBlockBootstrap(
+      build({
+        armA: mkSeries(base.map((value) => value + 5)),
+        armB: mkSeries(base),
+        statistic: (armA, armB) => mean(armA) - mean(armB),
+        holdingRule: { blockDays: 4 },
+        resamples,
+        nullValue: 0,
+        alternative: "greater",
+      }),
+    );
+
+    expect(result.point).toBeCloseTo(5, 12);
+    expect(result.ci.low).toBeCloseTo(5, 12);
+    expect(result.ci.high).toBeCloseTo(5, 12);
+    expect(result.inference.pValue).toBe(1 / (resamples + 1));
+    expect(result.inference.pValueResolution).toBe(1 / (resamples + 1));
+    expect(result.inference.bound.value).toBeCloseTo(5, 12);
+  });
+
+  it("keeps the greater-side bound decision coherent with the corrected p-value", () => {
+    const base = seededSeq(78, 40);
+    const common = {
+      armA: mkSeries(base.map((value) => value + 5)),
+      armB: mkSeries(base),
+      statistic: (armA: number[], armB: number[]) => mean(armA) - mean(armB),
+      holdingRule: { blockDays: 4 },
+      resamples: 399,
+      ciLevel: 0.95,
+      alternative: "greater" as const,
+    };
+    const initial = pairedPathBlockBootstrap(build(common));
+    const bound = initial.inference.bound.value!;
+
+    for (const nullValue of [bound - 1e-9, bound, bound + 1e-9]) {
+      const result = pairedPathBlockBootstrap(build({ ...common, nullValue }));
+      expect(result.inference.pValue! <= 0.05).toBe(result.inference.bound.value! > nullValue);
+    }
+  });
+
+  it("keeps the less-side bound decision coherent with the corrected p-value", () => {
+    const base = seededSeq(79, 40);
+    const common = {
+      armA: mkSeries(base.map((value) => value - 5)),
+      armB: mkSeries(base),
+      statistic: (armA: number[], armB: number[]) => mean(armA) - mean(armB),
+      holdingRule: { blockDays: 4 },
+      resamples: 399,
+      ciLevel: 0.95,
+      alternative: "less" as const,
+    };
+    const initial = pairedPathBlockBootstrap(build(common));
+    const bound = initial.inference.bound.value!;
+
+    for (const nullValue of [bound + 1e-9, bound, bound - 1e-9]) {
+      const result = pairedPathBlockBootstrap(build({ ...common, nullValue }));
+      expect(result.inference.pValue! <= 0.05).toBe(result.inference.bound.value! < nullValue);
+    }
+  });
+
+  it("reports a null decision bound when resample resolution is insufficient", () => {
+    const result = pairedPathBlockBootstrap(
+      build({
+        ciLevel: 0.99,
+        resamples: 10,
+      }),
+    );
+
+    expect(result.status).toBe("resolved");
+    expect(result.inference.pValueResolution).toBe(1 / 11);
+    expect(result.inference.bound.value).toBeNull();
+  });
+
+  it("is deterministic across the primary and sensitivity runs", () => {
+    const input = build();
+    expect(pairedPathBlockBootstrap(input)).toEqual(pairedPathBlockBootstrap(input));
+  });
+
+  it("dedupes sensitivity multipliers that round to an existing block length", () => {
+    const result = pairedPathBlockBootstrap(
+      build({
+        holdingRule: { blockDays: 1, sensitivity: [0.5, 1, 1.4, 2] },
+      }),
+    );
+
+    expect(result.blockDays).toBe(1);
+    expect(result.sensitivity.map((entry) => entry.blockDays)).toEqual([2]);
+    expect(result.sensitivity.map((entry) => entry.multiplier)).toEqual([2]);
+  });
+
+  it("never offers a candidate block that crosses a joint-observation gap", () => {
+    const armA = mkSeries(seededSeq(74, 20));
+    const observed = armA.values.map((_, i) => i !== 10);
+    const armB = mkSeries(seededSeq(75, 20), observed);
+    const gapDate = armA.index[10];
+
+    const blocks = pairedPathBlockDays({ armA, armB }, 4);
+
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const block of blocks) {
+      expect(block).toHaveLength(4);
+      expect(block.some((day) => day < gapDate) && block.some((day) => day > gapDate)).toBe(false);
+    }
+  });
+
+  it("reports null inference for a caller-calibrated effective-N refusal", () => {
+    const result = pairedPathBlockBootstrap(
+      build({
+        armA: mkSeries(seededSeq(76, 12)),
+        armB: mkSeries(seededSeq(77, 12)),
+        holdingRule: { blockDays: 4, sensitivity: [2] },
+        effectiveNFloorBlocks: 4,
+      }),
+    );
+
+    expect(result.status).toBe("notComparable");
+    expect(result.effectiveN).toBe(3);
+    expect(result.ci.low).toBeNull();
+    expect(result.inference.pValue).toBeNull();
+    expect(result.sensitivity[0].status).toBe("notComparable");
+    expect(result.sensitivity[0].inference.pValue).toBeNull();
+  });
+
+  it("rejects malformed series shapes and day ordering", () => {
+    const unequalLengths = build({
+      armA: {
+        index: ["2020-01-01"],
+        values: [1, 2],
+        observedMask: [true],
+      },
+    });
+    expect(() => pairedPathBlockBootstrap(unequalLengths)).toThrow(
+      "armA index, values, and observedMask must have equal lengths",
+    );
+
+    const duplicateDay = build({
+      armA: {
+        index: ["2020-01-01", "2020-01-01"],
+        values: [1, 2],
+        observedMask: [true, true],
+      },
+    });
+    expect(() => pairedPathBlockBootstrap(duplicateDay)).toThrow(
+      "armA.index must be strictly ascending with no duplicate days",
+    );
+
+    const invalidDay = build({
+      armA: {
+        index: ["2020-02-30"],
+        values: [1],
+        observedMask: [true],
+      },
+    });
+    expect(() => pairedPathBlockBootstrap(invalidDay)).toThrow(
+      "armA.index[0] must be a valid ISO day",
+    );
+  });
+
+  it("rejects non-finite inputs and statistic outputs", () => {
+    expect(() =>
+      pairedPathBlockBootstrap(
+        build({
+          armA: mkSeries([Number.NaN, 1, 2, 3, 4, 5]),
+          armB: mkSeries([0, 1, 2, 3, 4, 5]),
+        }),
+      ),
+    ).toThrow("armA.values[0] must be a finite number");
+
+    expect(() =>
+      pairedPathBlockBootstrap(
+        build({
+          statistic: () => Number.NaN,
+        }),
+      ),
+    ).toThrow("statistic result on observed paths must be a finite number");
   });
 });
