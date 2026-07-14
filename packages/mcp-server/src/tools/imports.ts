@@ -2,7 +2,7 @@
  * Import Tools
  *
  * MCP tools for importing CSV files into the blocks directory.
- * Designed for local filesystem access (via npx or mcpb desktop extension).
+ * Designed for local filesystem access (via npx tradeblocks-mcp).
  */
 
 import { z } from "zod";
@@ -49,7 +49,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
       description:
         "Import a CSV file from the local filesystem into the blocks directory. " +
         "Creates a new block that can be analyzed with other TradeBlocks tools. " +
-        "Requires local filesystem access (run via npx tradeblocks-mcp or mcpb desktop extension). " +
+        "Requires local filesystem access (run via npx tradeblocks-mcp). " +
         "If only a filename is provided (not full path), searches common directories (Downloads, Desktop, Documents).",
       inputSchema: z.object({
         csvPath: z

@@ -861,7 +861,7 @@ function validateCsvColumns(
  * Import a CSV file into the blocks directory
  *
  * Requires local filesystem access. The MCP server must be running locally
- * (via npx tradeblocks-mcp or mcpb desktop extension) to access files.
+ * (via npx tradeblocks-mcp) to access files.
  *
  * @param baseDir - Base directory for blocks
  * @param options - Import options: csvPath, blockName, csvType
