@@ -64,6 +64,7 @@ export type {
   MarketOnlyConnection,
   MarketParquetConnection,
   MarketReadOnlyConnection,
+  MarketConnectionOptions,
 } from "./db/connection.ts";
 export { setDataRoot, getDataRoot, resetDataRoot } from "./db/data-root.ts";
 export { yesterdayET } from "./utils/trading-dates.ts";
