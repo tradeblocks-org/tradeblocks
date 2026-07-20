@@ -1,5 +1,9 @@
 import { describe, it, expect } from "@jest/globals";
-import { quoteParquetGreekProjection } from "../../../src/utils/quote-parquet-projection.ts";
+import {
+  quoteParquetGreekProjection,
+  readWindowGreekProjection,
+  assertKnownGreeks,
+} from "../../../src/utils/quote-parquet-projection.ts";
 
 describe("quoteParquetGreekProjection", () => {
   const allColumns = new Set([
@@ -41,5 +45,41 @@ describe("quoteParquetGreekProjection", () => {
     expect(sql).toContain("NULL::DOUBLE AS theta");
     expect(sql).toContain("NULL::DOUBLE AS vega");
     expect(sql).toContain("NULL::DOUBLE AS iv");
+  });
+});
+
+describe("readWindowGreekProjection", () => {
+  it("projects every greek as-is when `needed` is omitted (byte-identical default)", () => {
+    expect(readWindowGreekProjection("q")).toBe("q.delta, q.gamma, q.theta, q.vega, q.iv");
+  });
+
+  it("references only the requested greeks and NULLs the rest, position-stable", () => {
+    expect(readWindowGreekProjection("q", ["delta", "iv"])).toBe(
+      "q.delta, NULL::DOUBLE AS gamma, NULL::DOUBLE AS theta, NULL::DOUBLE AS vega, q.iv",
+    );
+  });
+
+  it("NULLs every greek when `needed` is empty", () => {
+    expect(readWindowGreekProjection("q", [])).toBe(
+      "NULL::DOUBLE AS delta, NULL::DOUBLE AS gamma, NULL::DOUBLE AS theta, NULL::DOUBLE AS vega, NULL::DOUBLE AS iv",
+    );
+  });
+
+  it("throws a clear error on an unknown greek name", () => {
+    expect(() => readWindowGreekProjection("q", ["banana"] as never)).toThrow(
+      /Unknown greek "banana"/,
+    );
+  });
+});
+
+describe("assertKnownGreeks", () => {
+  it("passes for the valid greek names", () => {
+    expect(() => assertKnownGreeks(["delta", "gamma", "theta", "vega", "iv"])).not.toThrow();
+  });
+
+  it("throws naming the offending value and the valid set", () => {
+    expect(() => assertKnownGreeks(["delta", "rho"])).toThrow(
+      /Unknown greek "rho" — valid greeks are: delta, gamma, theta, vega, iv\./,
+    );
   });
 });

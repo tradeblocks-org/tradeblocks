@@ -64,7 +64,56 @@ export function quoteParquetMidExpr(columns: ParquetColumnSet, alias: string): s
 
 export type GreekColumn = "delta" | "gamma" | "theta" | "vega" | "iv";
 
-const ALL_GREEKS: readonly GreekColumn[] = ["delta", "gamma", "theta", "vega", "iv"] as const;
+export const ALL_GREEKS: readonly GreekColumn[] = [
+  "delta",
+  "gamma",
+  "theta",
+  "vega",
+  "iv",
+] as const;
+
+const ALL_GREEK_SET: ReadonlySet<string> = new Set(ALL_GREEKS);
+
+/**
+ * Single validation gate for caller-supplied greek names. TypeScript pins the
+ * `GreekColumn` union at compile time, but a name arriving from JSON / config
+ * (e.g. a strategy definition) bypasses that check — so anything selecting a
+ * projected subset routes through here first and throws a clear error naming
+ * both the offending value and the valid set.
+ */
+export function assertKnownGreeks(
+  needed: readonly string[],
+): asserts needed is readonly GreekColumn[] {
+  for (const name of needed) {
+    if (!ALL_GREEK_SET.has(name)) {
+      throw new Error(`Unknown greek "${name}" — valid greeks are: ${ALL_GREEKS.join(", ")}.`);
+    }
+  }
+}
+
+/**
+ * Greek SELECT list for `QuoteStore.readWindow`. readWindow targets a single
+ * known (underlying, date) partition, so it references the greek columns
+ * directly (`q.delta`) rather than guarding on column existence the way the
+ * canonical projection does.
+ *
+ * `needed` omitted ⇒ every greek projects as-is, byte-identical to the historic
+ * full projection. `needed` supplied ⇒ only those greeks project from the
+ * partition; the rest emit `NULL::DOUBLE` so the row stays position-stable. The
+ * NULL emitted for a trimmed greek is indistinguishable at the SQL level from a
+ * stored NULL — the "not requested" vs "genuinely missing" distinction is
+ * carried out-of-band by `WindowQuoteRow.projectedGreeks`, never by the value.
+ */
+export function readWindowGreekProjection(alias: string, needed?: readonly GreekColumn[]): string {
+  if (needed === undefined) {
+    return ALL_GREEKS.map((name) => `${alias}.${name}`).join(", ");
+  }
+  assertKnownGreeks(needed);
+  const want = new Set<GreekColumn>(needed);
+  return ALL_GREEKS.map((name) =>
+    want.has(name) ? `${alias}.${name}` : `NULL::DOUBLE AS ${name}`,
+  ).join(", ");
+}
 
 export function quoteParquetGreekProjection(
   columns: ParquetColumnSet,
