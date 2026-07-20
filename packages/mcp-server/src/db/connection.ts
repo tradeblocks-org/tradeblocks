@@ -28,6 +28,10 @@
  *   DUCKDB_LOCK_RECOVERY   - Force-kill ANY lock-holding tradeblocks-mcp (default: false)
  *   DUCKDB_LOCK_RECOVERY_TIMEOUT_MS - Wait time for SIGTERM (default: 1500)
  *   MARKET_DB_PATH         - Path to market.duckdb (overrides default, overridden by --market-db)
+ *   TRADEBLOCKS_DUCKDB_MEMORY_LIMIT - Resource cap for the parquet market connection
+ *                            (openMarketParquetConnection); unset = DuckDB native default
+ *   TRADEBLOCKS_DUCKDB_THREADS      - Thread cap for the parquet market connection
+ *                            (openMarketParquetConnection); unset = DuckDB native default
  *
  * Security:
  *   - enable_external_access: "true" at DuckDBInstance creation allows local ATTACH
@@ -815,6 +819,126 @@ export async function openMarketOnlyConnection(baseDir: string): Promise<MarketO
  *   fallback for `getDataRoot()` when neither `--data-root` nor the data-root
  *   env var is set.
  */
+/**
+ * Optional DuckDB resource bounds for a parquet market connection.
+ *
+ * Both fields are additive and OFF by default. When a field is omitted AND its
+ * environment override is unset, that resource is left at DuckDB's native
+ * default — i.e. today's behavior, unchanged. This is the backwards-compatible
+ * contract: an existing caller that passes no options and sets no env var gets a
+ * connection that is byte- and perf-identical to before this option existed.
+ *
+ * Per-field precedence: explicit option > environment variable > native default.
+ *   - memoryLimit ← TRADEBLOCKS_DUCKDB_MEMORY_LIMIT
+ *   - threads     ← TRADEBLOCKS_DUCKDB_THREADS
+ *
+ * When set, the bounds are applied via `SET memory_limit=...` / `SET threads=...`
+ * immediately after the connection opens, before any consumer statement (schema
+ * creation, view registration, or caller query) runs.
+ */
+export interface MarketConnectionOptions {
+  /**
+   * DuckDB `memory_limit` for the connection, e.g. "4GB", "512MB", "8GiB".
+   * Accepts a number followed by a DuckDB memory unit (KB/MB/GB/TB decimal or
+   * KiB/MiB/GiB/TiB binary). Malformed values throw before any connection is
+   * opened — they never reach DuckDB as SQL.
+   */
+  memoryLimit?: string;
+  /**
+   * DuckDB `threads` for the connection, a positive integer. The analytics
+   * connection defaults to 2 threads (see defaultThreads() above) because higher
+   * thread counts trigger intermittent prepared-statement failures on long
+   * reads. NOTE: this parquet path's UNSET default is DuckDB native (all
+   * cores), not 2 — set this option (or the env var) to bound it. Non-integer
+   * or non-positive values throw before any connection is opened.
+   */
+  threads?: number;
+}
+
+// DuckDB `SET memory_limit` accepts a number + a memory unit only: KB/MB/GB/TB
+// (decimal, 1000^i) or KiB/MiB/GiB/TiB (binary, 1024^i). Note it rejects the
+// `%` form here even though instance-creation config accepts it — so this
+// pattern deliberately excludes `%`. Validating against this closed grammar is
+// what makes the value safe to interpolate into the SET statement: a passing
+// value cannot contain a quote or any other SQL metacharacter.
+const DUCKDB_MEMORY_LIMIT_PATTERN = /^\d+(\.\d+)?(KB|MB|GB|TB|KiB|MiB|GiB|TiB)$/i;
+
+function validateMemoryLimit(value: string): string {
+  const trimmed = value.trim();
+  if (!DUCKDB_MEMORY_LIMIT_PATTERN.test(trimmed)) {
+    throw new Error(
+      `Invalid DuckDB memory_limit ${JSON.stringify(value)}. ` +
+        `Expected a number followed by a unit, e.g. "4GB", "512MB", or "8GiB" ` +
+        `(units: KB, MB, GB, TB, KiB, MiB, GiB, TiB).`,
+    );
+  }
+  return trimmed;
+}
+
+function validateThreads(value: number): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `Invalid DuckDB threads ${JSON.stringify(value)}. Expected a positive integer.`,
+    );
+  }
+  return value;
+}
+
+/**
+ * Resolve the effective resource bounds from an options object and the
+ * environment, applying the explicit-option > env > native-default precedence
+ * and validating both fields. Returns only the fields that are set; an unset
+ * field means "leave DuckDB at its native default" (issue no SET for it).
+ *
+ * Validation happens here — before any DuckDBInstance is created — so malformed
+ * input throws cleanly without leaking a native handle.
+ */
+function resolveResourceBounds(options?: MarketConnectionOptions): {
+  memoryLimit?: string;
+  threads?: number;
+} {
+  const resolved: { memoryLimit?: string; threads?: number } = {};
+
+  const memoryLimitRaw = options?.memoryLimit ?? envValue("TRADEBLOCKS_DUCKDB_MEMORY_LIMIT");
+  if (memoryLimitRaw !== undefined) {
+    resolved.memoryLimit = validateMemoryLimit(memoryLimitRaw);
+  }
+
+  const threadsEnv = envValue("TRADEBLOCKS_DUCKDB_THREADS");
+  const threadsRaw =
+    options?.threads ?? (threadsEnv !== undefined ? Number(threadsEnv) : undefined);
+  if (threadsRaw !== undefined) {
+    resolved.threads = validateThreads(threadsRaw);
+  }
+
+  return resolved;
+}
+
+/** Read an env var, treating unset or all-whitespace as absent (matches the `|| default` idiom elsewhere in this module). */
+function envValue(name: string): string | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return undefined;
+  return raw;
+}
+
+/**
+ * Apply already-resolved resource bounds to an open connection via runtime SET
+ * statements. Interpolation is safe: memoryLimit has passed the closed-grammar
+ * validator (no quote/metacharacter can survive) and threads is a validated
+ * integer.
+ */
+async function applyResourceBounds(
+  conn: DuckDBConnection,
+  bounds: { memoryLimit?: string; threads?: number },
+): Promise<void> {
+  if (bounds.memoryLimit !== undefined) {
+    await conn.run(`SET memory_limit='${bounds.memoryLimit}'`);
+  }
+  if (bounds.threads !== undefined) {
+    await conn.run(`SET threads=${bounds.threads}`);
+  }
+}
+
 export interface MarketParquetConnection {
   /** The active DuckDB connection. Backed by a `:memory:` host with `market.*` parquet views. */
   conn: DuckDBConnection;
@@ -831,7 +955,14 @@ export interface MarketParquetConnection {
 
 export async function openMarketParquetConnection(
   baseDir: string,
+  options?: MarketConnectionOptions,
 ): Promise<MarketParquetConnection> {
+  // Resolve + validate resource bounds BEFORE allocating any native handle, so
+  // malformed input (e.g. a bad memory_limit string) throws cleanly without
+  // leaking a DuckDBInstance. Unset option + unset env = empty bounds = no SET
+  // issued = DuckDB native defaults (the backwards-compatible path).
+  const bounds = resolveResourceBounds(options);
+
   // `:memory:` host means the connection does not open any on-disk database as
   // the catalog root — neither the analytics database nor the shared market
   // database file is touched by this code path. `enable_external_access:
@@ -842,6 +973,10 @@ export async function openMarketParquetConnection(
     enable_external_access: "true",
   });
   const conn = await memoryInstance.connect();
+
+  // Apply resource bounds first — before schema creation, view registration, or
+  // any caller query — so every statement on this connection runs under the cap.
+  await applyResourceBounds(conn, bounds);
 
   // The `market.*` views target the `market` schema. On the attach-based
   // paths the ATTACH creates that schema; here there is no attach, so we must
@@ -880,12 +1015,16 @@ export async function openMarketParquetConnection(
  * Read-side name for {@link openMarketParquetConnection}. Retained as the
  * canonical handle for read-only parquet consumers; the underlying connection
  * is identical (parquet has no read/write distinction once the shared market
- * database file is out of the picture).
+ * database file is out of the picture). Accepts the same optional resource
+ * bounds ({@link MarketConnectionOptions}), forwarded verbatim.
  */
 export type MarketReadOnlyConnection = MarketParquetConnection;
 
-export function openMarketReadOnlyConnection(baseDir: string): Promise<MarketReadOnlyConnection> {
-  return openMarketParquetConnection(baseDir);
+export function openMarketReadOnlyConnection(
+  baseDir: string,
+  options?: MarketConnectionOptions,
+): Promise<MarketReadOnlyConnection> {
+  return openMarketParquetConnection(baseDir, options);
 }
 
 /**

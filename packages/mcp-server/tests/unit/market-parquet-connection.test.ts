@@ -168,3 +168,158 @@ describe("openMarketParquetConnection (write-side)", () => {
     }
   });
 });
+
+/**
+ * Tests for the optional resource-bounds parameter on the parquet market
+ * connection. Proves: options are applied to the live connection,
+ * env overrides work with the documented precedence, the UNSET path issues no
+ * SET (native defaults untouched — the backwards-compatibility guarantee), and
+ * malformed input is rejected before any connection opens.
+ */
+describe("openMarketParquetConnection (resource bounds)", () => {
+  let baseDir: string;
+  let savedMemoryLimitEnv: string | undefined;
+  let savedThreadsEnv: string | undefined;
+
+  const MEM_ENV = "TRADEBLOCKS_DUCKDB_MEMORY_LIMIT";
+  const THREADS_ENV = "TRADEBLOCKS_DUCKDB_THREADS";
+
+  async function currentSetting(
+    conn: MarketParquetConnection["conn"],
+    key: string,
+  ): Promise<unknown> {
+    const r = await conn.runAndReadAll(`SELECT current_setting('${key}') AS v`);
+    return (r.getRows() as Array<Array<unknown>>)[0][0];
+  }
+
+  // Parse DuckDB's normalized memory display ("96.9 GiB", "244.1 MiB") to bytes.
+  function parseMemBytes(s: string): number {
+    const m = /^([\d.]+)\s*(KB|MB|GB|TB|KiB|MiB|GiB|TiB)$/.exec(s.trim());
+    if (!m) throw new Error(`unparseable memory setting: ${s}`);
+    const factors: Record<string, number> = {
+      KB: 1e3,
+      MB: 1e6,
+      GB: 1e9,
+      TB: 1e12,
+      KiB: 2 ** 10,
+      MiB: 2 ** 20,
+      GiB: 2 ** 30,
+      TiB: 2 ** 40,
+    };
+    return parseFloat(m[1]) * factors[m[2]];
+  }
+
+  beforeEach(() => {
+    baseDir = join(tmpdir(), `market-bounds-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(baseDir, { recursive: true });
+    // Isolate from any ambient env so "unset" tests are meaningful and env-override
+    // tests are deterministic.
+    savedMemoryLimitEnv = process.env[MEM_ENV];
+    savedThreadsEnv = process.env[THREADS_ENV];
+    delete process.env[MEM_ENV];
+    delete process.env[THREADS_ENV];
+  });
+
+  afterEach(() => {
+    if (savedMemoryLimitEnv === undefined) delete process.env[MEM_ENV];
+    else process.env[MEM_ENV] = savedMemoryLimitEnv;
+    if (savedThreadsEnv === undefined) delete process.env[THREADS_ENV];
+    else process.env[THREADS_ENV] = savedThreadsEnv;
+    try {
+      rmSync(baseDir, { recursive: true, force: true });
+    } catch {
+      /* non-fatal */
+    }
+  });
+
+  it("applies explicit memoryLimit + threads options to the live connection", async () => {
+    const mp = await openMarketParquetConnection(baseDir, { memoryLimit: "256MB", threads: 1 });
+    try {
+      expect(Number(await currentSetting(mp.conn, "threads"))).toBe(1);
+      const mem = String(await currentSetting(mp.conn, "memory_limit"));
+      // 256MB (decimal) == 244.14 MiB — well under the multi-GiB native default.
+      expect(parseMemBytes(mem)).toBeLessThan(512 * 1e6);
+    } finally {
+      await mp.close();
+    }
+  });
+
+  it("issues NO SET when unset — native defaults untouched (compat guarantee)", async () => {
+    // Native baseline: a raw :memory: instance is exactly what the previous code
+    // produced (create + connect, no SETs).
+    const raw = await DuckDBInstance.create(":memory:", { enable_external_access: "true" });
+    const rawConn = await raw.connect();
+    const nativeThreads = Number(await currentSetting(rawConn, "threads"));
+    const nativeMem = String(await currentSetting(rawConn, "memory_limit"));
+    rawConn.closeSync();
+    raw.closeSync();
+
+    const mp = await openMarketParquetConnection(baseDir); // no options, env cleared
+    try {
+      expect(Number(await currentSetting(mp.conn, "threads"))).toBe(nativeThreads);
+      expect(String(await currentSetting(mp.conn, "memory_limit"))).toBe(nativeMem);
+    } finally {
+      await mp.close();
+    }
+  });
+
+  it("applies bounds from environment variables when no option is passed", async () => {
+    process.env[MEM_ENV] = "256MB";
+    process.env[THREADS_ENV] = "1";
+    const mp = await openMarketParquetConnection(baseDir);
+    try {
+      expect(Number(await currentSetting(mp.conn, "threads"))).toBe(1);
+      expect(parseMemBytes(String(await currentSetting(mp.conn, "memory_limit")))).toBeLessThan(
+        512 * 1e6,
+      );
+    } finally {
+      await mp.close();
+    }
+  });
+
+  it("explicit option takes precedence over the environment variable", async () => {
+    process.env[THREADS_ENV] = "1";
+    const mp = await openMarketParquetConnection(baseDir, { threads: 3 });
+    try {
+      expect(Number(await currentSetting(mp.conn, "threads"))).toBe(3);
+    } finally {
+      await mp.close();
+    }
+  });
+
+  it("read-only alias forwards the options", async () => {
+    const ro = await openMarketReadOnlyConnection(baseDir, { threads: 1 });
+    try {
+      expect(Number(await currentSetting(ro.conn, "threads"))).toBe(1);
+    } finally {
+      await ro.close();
+    }
+  });
+
+  it("rejects a malformed memoryLimit before opening a connection", async () => {
+    await expect(openMarketParquetConnection(baseDir, { memoryLimit: "lots" })).rejects.toThrow(
+      /memory_limit/,
+    );
+    // A percentage is valid at instance-creation but NOT via SET — reject it here.
+    await expect(openMarketParquetConnection(baseDir, { memoryLimit: "80%" })).rejects.toThrow(
+      /memory_limit/,
+    );
+  });
+
+  it("rejects a SQL-injection attempt in memoryLimit (never reaches DuckDB as SQL)", async () => {
+    await expect(
+      openMarketParquetConnection(baseDir, { memoryLimit: "4GB'; DROP TABLE market.spot;--" }),
+    ).rejects.toThrow(/memory_limit/);
+  });
+
+  it("rejects non-integer / non-positive threads", async () => {
+    await expect(openMarketParquetConnection(baseDir, { threads: 2.5 })).rejects.toThrow(/threads/);
+    await expect(openMarketParquetConnection(baseDir, { threads: 0 })).rejects.toThrow(/threads/);
+    await expect(openMarketParquetConnection(baseDir, { threads: -4 })).rejects.toThrow(/threads/);
+  });
+
+  it("rejects a malformed threads environment variable", async () => {
+    process.env[THREADS_ENV] = "notanumber";
+    await expect(openMarketParquetConnection(baseDir)).rejects.toThrow(/threads/);
+  });
+});
