@@ -171,7 +171,7 @@ describe("openMarketParquetConnection (write-side)", () => {
 
 /**
  * Tests for the optional resource-bounds parameter on the parquet market
- * connection (issue #669). Proves: options are applied to the live connection,
+ * connection. Proves: options are applied to the live connection,
  * env overrides work with the documented precedence, the UNSET path issues no
  * SET (native defaults untouched — the backwards-compatibility guarantee), and
  * malformed input is rejected before any connection opens.
@@ -245,7 +245,7 @@ describe("openMarketParquetConnection (resource bounds)", () => {
   });
 
   it("issues NO SET when unset — native defaults untouched (compat guarantee)", async () => {
-    // Native baseline: a raw :memory: instance is exactly what the pre-#669 code
+    // Native baseline: a raw :memory: instance is exactly what the previous code
     // produced (create + connect, no SETs).
     const raw = await DuckDBInstance.create(":memory:", { enable_external_access: "true" });
     const rawConn = await raw.connect();

@@ -845,11 +845,12 @@ export interface MarketConnectionOptions {
    */
   memoryLimit?: string;
   /**
-   * DuckDB `threads` for the connection, a positive integer. The parquet-read
-   * hot path is I/O-bound, and higher thread counts trigger intermittent
-   * prepared-statement failures on long reads — the library-wide default thread
-   * count is 2 for this reason (see defaultThreads() above). Non-integer or
-   * non-positive values throw before any connection is opened.
+   * DuckDB `threads` for the connection, a positive integer. The analytics
+   * connection defaults to 2 threads (see defaultThreads() above) because higher
+   * thread counts trigger intermittent prepared-statement failures on long
+   * reads. NOTE: this parquet path's UNSET default is DuckDB native (all
+   * cores), not 2 — set this option (or the env var) to bound it. Non-integer
+   * or non-positive values throw before any connection is opened.
    */
   threads?: number;
 }
