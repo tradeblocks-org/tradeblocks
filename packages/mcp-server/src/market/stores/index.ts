@@ -74,4 +74,13 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
 export { SpotStore, EnrichedStore, ChainStore, QuoteStore };
 export type { StoreContext };
 export type { EnrichedReadOpts } from "./enriched-store.ts";
-export type { BarRow, ContractRow, QuoteRow, CoverageReport } from "./types.ts";
+export type {
+  BarRow,
+  ContractRow,
+  QuoteRow,
+  CoverageReport,
+  LegEnvelope,
+  ReadWindowParams,
+  WindowQuoteRow,
+  GreekColumn,
+} from "./types.ts";

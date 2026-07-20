@@ -315,8 +315,13 @@ export {
 export {
   describeReadParquetColumns,
   quoteParquetCanonicalProjection,
+  quoteParquetGreekProjection,
+  readWindowGreekProjection,
+  assertKnownGreeks,
+  ALL_GREEKS,
   readParquetFilesSql,
 } from "./utils/quote-parquet-projection.ts";
+export type { GreekColumn } from "./utils/quote-parquet-projection.ts";
 
 // Export parquet-writer utility functions for unit testing
 export {

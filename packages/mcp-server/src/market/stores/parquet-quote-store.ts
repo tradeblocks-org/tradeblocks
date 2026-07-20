@@ -28,6 +28,7 @@ import {
   quoteParquetCanonicalProjection,
   quoteParquetCanonicalWriteProjection,
   readParquetFilesSql,
+  readWindowGreekProjection,
 } from "../../utils/quote-parquet-projection.ts";
 
 function parseQuoteRow(row: unknown[]): QuoteRow {
@@ -307,7 +308,7 @@ export class ParquetQuoteStore extends QuoteStore {
    * pipeline assumes chain coverage.
    */
   async readWindow(params: ReadWindowParams): Promise<WindowQuoteRow[]> {
-    const { underlying, date, timeStart, timeEnd, legEnvelopes } = params;
+    const { underlying, date, timeStart, timeEnd, legEnvelopes, neededGreeks } = params;
     if (legEnvelopes.length === 0) return [];
 
     const marketDir = resolveMarketDir(this.ctx.dataDir);
@@ -361,6 +362,13 @@ export class ParquetQuoteStore extends QuoteStore {
       return clause;
     });
 
+    // Opt-in greek trim: when `neededGreeks` is present the projection emits
+    // NULL::DOUBLE for the unrequested greeks so DuckDB neither scans them from
+    // Parquet nor marshals real values across to JS; row positions are
+    // unchanged. Absent ⇒ `q.delta, q.gamma, q.theta, q.vega, q.iv`, identical
+    // to the historic full read.
+    const greekProjection = readWindowGreekProjection("q", neededGreeks);
+
     const sql = `
       WITH band AS (
         SELECT DISTINCT ticker, contract_type, strike, expiration, dte
@@ -370,29 +378,33 @@ export class ParquetQuoteStore extends QuoteStore {
       SELECT q.ticker, q.time,
              b.contract_type, b.strike, b.expiration, b.dte,
              q.bid, q.ask,
-             q.delta, q.gamma, q.theta, q.vega, q.iv, q.greeks_source
+             ${greekProjection}, q.greeks_source
         FROM ${quoteSrc} AS q
         JOIN band b ON q.ticker = b.ticker
        WHERE q.time BETWEEN ${safeTimeStart} AND ${safeTimeEnd}
     `;
 
     const reader = await this.ctx.conn.runAndReadAll(sql);
-    return reader.getRows().map((r) => ({
-      ticker: String(r[0]),
-      time: String(r[1]),
-      contract_type: String(r[2]) as "call" | "put",
-      strike: Number(r[3]),
-      expiration: String(r[4]),
-      dte: Number(r[5]),
-      bid: Number(r[6]),
-      ask: Number(r[7]),
-      delta: r[8] == null ? null : Number(r[8]),
-      gamma: r[9] == null ? null : Number(r[9]),
-      theta: r[10] == null ? null : Number(r[10]),
-      vega: r[11] == null ? null : Number(r[11]),
-      iv: r[12] == null ? null : Number(r[12]),
-      greeks_source: r[13] == null ? null : (String(r[13]) as WindowQuoteRow["greeks_source"]),
-    }));
+    return reader.getRows().map((r) => {
+      const row: WindowQuoteRow = {
+        ticker: String(r[0]),
+        time: String(r[1]),
+        contract_type: String(r[2]) as "call" | "put",
+        strike: Number(r[3]),
+        expiration: String(r[4]),
+        dte: Number(r[5]),
+        bid: Number(r[6]),
+        ask: Number(r[7]),
+        delta: r[8] == null ? null : Number(r[8]),
+        gamma: r[9] == null ? null : Number(r[9]),
+        theta: r[10] == null ? null : Number(r[10]),
+        vega: r[11] == null ? null : Number(r[11]),
+        iv: r[12] == null ? null : Number(r[12]),
+        greeks_source: r[13] == null ? null : (String(r[13]) as WindowQuoteRow["greeks_source"]),
+      };
+      if (neededGreeks !== undefined) row.projectedGreeks = neededGreeks;
+      return row;
+    });
   }
 
   async getCoverage(underlying: string, from: string, to: string): Promise<CoverageReport> {
