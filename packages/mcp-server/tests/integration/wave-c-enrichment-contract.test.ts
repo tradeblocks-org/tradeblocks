@@ -21,6 +21,7 @@ import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import { createMarketStores, type MarketStores } from "../../src/test-exports.ts";
 import { registerMarketEnrichmentTools } from "../../src/tools/market-enrichment.ts";
 import { getEnrichedThrough } from "../../src/db/json-adapters.ts";
+import { isXnysSessionDate } from "../../src/market/provenance/xnys-session-calendar.ts";
 
 // Direct module import so the absence-of-symbols assertions can inspect
 // the live module shape.
@@ -44,12 +45,11 @@ async function seedSpotBars(
   count: number,
 ): Promise<string[]> {
   const dates: string[] = [];
-  // Walk forward day-by-day skipping weekends so trading-day semantics hold.
+  // Walk forward day-by-day using the canonical exchange calendar.
   const cursor = new Date(`${startDate}T00:00:00Z`);
   while (dates.length < count) {
-    const dow = cursor.getUTCDay();
-    if (dow !== 0 && dow !== 6) {
-      const dateStr = cursor.toISOString().slice(0, 10);
+    const dateStr = cursor.toISOString().slice(0, 10);
+    if (isXnysSessionDate(dateStr)) {
       await stores.spot.writeBars(ticker, dateStr, makeBars(ticker, dateStr));
       dates.push(dateStr);
     }
@@ -110,9 +110,9 @@ describe("stores.enriched.compute — Tier 1/2/3 output shape", () => {
     const dates: string[] = [];
     const cursor = new Date("2025-01-02T00:00:00Z");
     for (let i = 0; i < 25; i++) {
-      const dow = cursor.getUTCDay();
-      if (dow !== 0 && dow !== 6) {
-        dates.push(cursor.toISOString().slice(0, 10));
+      const date = cursor.toISOString().slice(0, 10);
+      if (isXnysSessionDate(date)) {
+        dates.push(date);
       } else {
         i--; // back up so we get exactly 25 trading days
       }
@@ -223,9 +223,9 @@ describe("tools/market-enrichment.ts handler — delegates to stores", () => {
     const dates: string[] = [];
     const cursor = new Date("2025-02-03T00:00:00Z");
     for (let i = 0; i < 16; i++) {
-      const dow = cursor.getUTCDay();
-      if (dow !== 0 && dow !== 6) {
-        dates.push(cursor.toISOString().slice(0, 10));
+      const date = cursor.toISOString().slice(0, 10);
+      if (isXnysSessionDate(date)) {
+        dates.push(date);
       } else {
         i--;
       }
@@ -288,9 +288,9 @@ describe("tools/market-enrichment.ts handler — delegates to stores", () => {
     const dates: string[] = [];
     const cursor = new Date("2025-03-03T00:00:00Z");
     for (let i = 0; i < 16; i++) {
-      const dow = cursor.getUTCDay();
-      if (dow !== 0 && dow !== 6) {
-        dates.push(cursor.toISOString().slice(0, 10));
+      const date = cursor.toISOString().slice(0, 10);
+      if (isXnysSessionDate(date)) {
+        dates.push(date);
       } else {
         i--;
       }
