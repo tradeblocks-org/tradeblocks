@@ -53,6 +53,35 @@ export interface MarketStoresAuthority {
 const marketStoresAuthorities = new WeakMap<MarketStores, MarketStoresAuthority>();
 
 /**
+ * Give an authority-bearing store immutable own method slots. Merely freezing
+ * the outer bundle is insufficient: an instance or prototype method could be
+ * replaced after branding and return rows that never came from the canonical
+ * root. Shadowing every prototype method before freezing also makes later
+ * prototype mutation irrelevant to this instance.
+ */
+function lockAuthorityStore<T extends object>(store: T): T {
+  const methods = new Map<string, CallableFunction>();
+  let prototype = Object.getPrototypeOf(store) as object | null;
+  while (prototype && prototype !== Object.prototype) {
+    for (const name of Object.getOwnPropertyNames(prototype)) {
+      if (name === "constructor" || methods.has(name)) continue;
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+      if (typeof descriptor?.value === "function") methods.set(name, descriptor.value);
+    }
+    prototype = Object.getPrototypeOf(prototype) as object | null;
+  }
+  for (const [name, method] of methods) {
+    Object.defineProperty(store, name, {
+      value: method,
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+  }
+  return Object.freeze(store);
+}
+
+/**
  * Return the unforgeable factory authority for a canonical MarketStores bundle.
  * Structurally compatible custom stores are intentionally unrecognized.
  */
@@ -81,7 +110,15 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
     const enriched = new ParquetEnrichedStore(ctx, spot);
     const chain = new ParquetChainStore(ctx);
     const quote = new ParquetQuoteStore(ctx);
-    stores = { spot, enriched, chain, quote, oiDaily };
+    // Only the Parquet bundle can carry exact-byte authority. DuckDB stores
+    // retain their legacy mutable caches and are rejected by the consumer.
+    stores = {
+      spot: lockAuthorityStore(spot),
+      enriched: lockAuthorityStore(enriched),
+      chain: lockAuthorityStore(chain),
+      quote: lockAuthorityStore(quote),
+      oiDaily: lockAuthorityStore(oiDaily),
+    };
   } else {
     const spot = new DuckdbSpotStore(ctx);
     const enriched = new DuckdbEnrichedStore(ctx, spot);

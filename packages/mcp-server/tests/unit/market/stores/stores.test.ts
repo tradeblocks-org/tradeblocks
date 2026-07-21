@@ -100,6 +100,20 @@ describe("createMarketStores factory (Pitfall 6 resolution — real DuckDB fixtu
         parquetMode: true,
       });
       expect(Object.isFrozen(stores)).toBe(true);
+      for (const store of Object.values(stores)) expect(Object.isFrozen(store)).toBe(true);
+      expect(Object.getOwnPropertyDescriptor(stores.spot, "readBars")).toMatchObject({
+        writable: false,
+        configurable: false,
+      });
+      expect(() =>
+        Object.defineProperty(stores.spot, "readBars", {
+          value: async () => [{ close: 9_999 }],
+        }),
+      ).toThrow();
+      expect(getMarketStoresAuthority(stores)).toEqual({
+        dataRoot: path.resolve(fixture.ctx.dataDir),
+        parquetMode: true,
+      });
       expect(getMarketStoresAuthority({ ...stores })).toBeNull();
     } finally {
       fixture.cleanup();
