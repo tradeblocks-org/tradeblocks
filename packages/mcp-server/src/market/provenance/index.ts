@@ -20,6 +20,7 @@ export {
   PARTITION_COMMIT_EVENT_KIND,
   PARTITION_COMMIT_EVENT_VERSION,
   FilePartitionCommitStore,
+  PartitionFileIntegrityError,
   PartitionFilePublicationError,
   type ExactFileFingerprint,
   type LogicalCoverage,

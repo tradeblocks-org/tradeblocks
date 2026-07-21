@@ -4,10 +4,13 @@ import {
   chmodSync,
   existsSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -18,6 +21,8 @@ import {
   ContentObjectCollisionError,
   ContentObjectStore,
   FilePartitionCommitStore,
+  PartitionFileIntegrityError,
+  PartitionFilePublicationError,
   addressBytes,
   addressCanonicalJson,
   canonicalJson,
@@ -27,17 +32,21 @@ import {
 
 describe("market-data provenance foundation", () => {
   let rootDir: string;
+  let externalDir: string;
 
   beforeEach(() => {
     rootDir = join(
       tmpdir(),
       `market-provenance-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
+    externalDir = `${rootDir}-external`;
     mkdirSync(rootDir, { recursive: true });
+    mkdirSync(externalDir, { recursive: true });
   });
 
   afterEach(() => {
     rmSync(rootDir, { recursive: true, force: true });
+    rmSync(externalDir, { recursive: true, force: true });
   });
 
   describe("canonical JSON v1", () => {
@@ -148,6 +157,15 @@ describe("market-data provenance foundation", () => {
 
     const targetFor = (partition: Record<string, string>) =>
       join(rootDir, "spot", `ticker=${partition.ticker}`, `date=${partition.date}`, "data.parquet");
+
+    const publicationInput = (preparedPath: string, targetPath: string, bytes: Buffer) => ({
+      ...identity,
+      relativePath,
+      ...metadata(1),
+      file: { address: addressBytes(bytes), bytes: bytes.byteLength, rows: 1 },
+      preparedPath,
+      expectedTargetPath: targetPath,
+    });
 
     const publish = async (
       store: FilePartitionCommitStore,
@@ -445,6 +463,158 @@ describe("market-data provenance foundation", () => {
       expect(Object.isFrozen(stored.receipt)).toBe(true);
       expect(Object.isFrozen(stored.receipt.partition)).toBe(true);
       await expect(store.inspectPartition(identity)).resolves.toMatchObject({ status: "match" });
+    });
+
+    it("refuses a prepared symlink without installing or changing its external target", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const bytes = Buffer.from("external-symlink-content");
+      const externalPath = join(externalDir, "external.parquet");
+      const targetPath = targetFor(identity.partition);
+      const preparedPath = `${targetPath}.prepared-symlink`;
+      mkdirSync(dirname(targetPath), { recursive: true });
+      writeFileSync(externalPath, bytes);
+      symlinkSync(externalPath, preparedPath);
+
+      await expect(
+        store.publishFileCommit(publicationInput(preparedPath, targetPath, bytes)),
+      ).rejects.toBeInstanceOf(PartitionFileIntegrityError);
+
+      expect(existsSync(targetPath)).toBe(false);
+      expect(readFileSync(externalPath)).toEqual(bytes);
+      expect(existsSync(preparedPath)).toBe(true);
+    });
+
+    it("refuses a prepared hard link whose inode remains externally mutable", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const bytes = Buffer.from("external-hard-link-content");
+      const externalPath = join(externalDir, "external-hardlink.parquet");
+      const targetPath = targetFor(identity.partition);
+      const preparedPath = `${targetPath}.prepared-hardlink`;
+      mkdirSync(dirname(targetPath), { recursive: true });
+      writeFileSync(externalPath, bytes);
+      linkSync(externalPath, preparedPath);
+
+      await expect(
+        store.publishFileCommit(publicationInput(preparedPath, targetPath, bytes)),
+      ).rejects.toBeInstanceOf(PartitionFileIntegrityError);
+
+      writeFileSync(externalPath, "mutated-after-refusal");
+      expect(existsSync(targetPath)).toBe(false);
+      expect(readFileSync(preparedPath, "utf8")).toBe("mutated-after-refusal");
+    });
+
+    it("quarantines an invalid prepared directory without recursively deleting caller data", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const bytes = Buffer.from("directory-is-not-a-file");
+      const targetPath = targetFor(identity.partition);
+      const preparedPath = `${targetPath}.prepared-directory`;
+      mkdirSync(preparedPath, { recursive: true });
+      writeFileSync(join(preparedPath, "sentinel.txt"), "preserve-me");
+
+      await expect(
+        store.publishFileCommit(publicationInput(preparedPath, targetPath, bytes)),
+      ).rejects.toBeInstanceOf(PartitionFileIntegrityError);
+
+      const quarantineDir = join(rootDir, ".provenance", "rejected-prepared");
+      const quarantined = readdirSync(quarantineDir);
+      expect(quarantined).toHaveLength(1);
+      expect(readFileSync(join(quarantineDir, quarantined[0], "sentinel.txt"), "utf8")).toBe(
+        "preserve-me",
+      );
+      expect(existsSync(targetPath)).toBe(false);
+    });
+
+    it("rejects a symlinked target parent before claiming the external prepared entry", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const bytes = Buffer.from("escaped-parent-content");
+      const externalTickerDir = join(externalDir, "ticker=IWM");
+      const externalDateDir = join(externalTickerDir, "date=2026-07-20");
+      const linkedTickerDir = join(rootDir, "spot", "ticker=IWM");
+      mkdirSync(externalDateDir, { recursive: true });
+      mkdirSync(dirname(linkedTickerDir), { recursive: true });
+      symlinkSync(externalTickerDir, linkedTickerDir, "dir");
+      const targetPath = targetFor(identity.partition);
+      const preparedPath = `${targetPath}.prepared-parent-link`;
+      writeFileSync(preparedPath, bytes);
+
+      await expect(
+        store.publishFileCommit(publicationInput(preparedPath, targetPath, bytes)),
+      ).rejects.toBeInstanceOf(PartitionFileIntegrityError);
+
+      expect(existsSync(preparedPath)).toBe(true);
+      expect(existsSync(targetPath)).toBe(false);
+      expect(existsSync(join(rootDir, ".provenance", "rejected-prepared"))).toBe(false);
+    });
+
+    it("detects a claimed-name swap before a regular inode can be installed", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const bytes = Buffer.from("claimed-regular-inode");
+      const targetPath = targetFor(identity.partition);
+      const preparedPath = `${targetPath}.prepared-swap`;
+      const displacedPath = join(externalDir, "displaced-claim.parquet");
+      mkdirSync(dirname(targetPath), { recursive: true });
+      writeFileSync(preparedPath, bytes);
+      setPartitionCommitTestFault(store, (point) => {
+        if (point !== "after-claim-open") return;
+        const claimedName = readdirSync(dirname(targetPath)).find((entry) =>
+          entry.startsWith(".provenance-claim-"),
+        );
+        if (!claimedName) throw new Error("expected claimed entry");
+        const claimedPath = join(dirname(targetPath), claimedName);
+        renameSync(claimedPath, displacedPath);
+        symlinkSync(displacedPath, claimedPath);
+      });
+
+      await expect(
+        store.publishFileCommit(publicationInput(preparedPath, targetPath, bytes)),
+      ).rejects.toBeInstanceOf(PartitionFileIntegrityError);
+      setPartitionCommitTestFault(store);
+
+      expect(existsSync(targetPath)).toBe(false);
+      expect(readFileSync(displacedPath)).toEqual(bytes);
+    });
+
+    it("fails publication without moving an attacker-swapped target parent", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const bytes = Buffer.from("installed-before-parent-swap");
+      const targetPath = targetFor(identity.partition);
+      const targetParent = dirname(targetPath);
+      const movedParent = join(externalDir, "moved-target-parent");
+      setPartitionCommitTestFault(store, (point) => {
+        if (point !== "after-event-before-head") return;
+        renameSync(targetParent, movedParent);
+        symlinkSync(movedParent, targetParent, "dir");
+      });
+
+      await expect(publish(store, { bytes, rows: 1 })).rejects.toBeInstanceOf(
+        PartitionFilePublicationError,
+      );
+      setPartitionCommitTestFault(store);
+
+      expect(lstatSync(targetParent).isSymbolicLink()).toBe(true);
+      expect(readFileSync(targetPath)).toEqual(bytes);
+      expect(readFileSync(join(movedParent, "data.parquet"))).toEqual(bytes);
+      expect(existsSync(join(rootDir, ".provenance", "rejected-prepared"))).toBe(false);
+    });
+
+    it("inspection refuses byte-identical symlink and hard-link replacements", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const bytes = Buffer.from("committed-regular-inode");
+      const targetPath = targetFor(identity.partition);
+      await publish(store, { bytes, rows: 1 });
+      const externalPath = join(externalDir, "moved-committed.parquet");
+      renameSync(targetPath, externalPath);
+      symlinkSync(externalPath, targetPath);
+
+      await expect(store.inspectPartition(identity)).rejects.toBeInstanceOf(
+        PartitionFileIntegrityError,
+      );
+
+      unlinkSync(targetPath);
+      linkSync(externalPath, targetPath);
+      await expect(store.inspectPartition(identity)).rejects.toBeInstanceOf(
+        PartitionFileIntegrityError,
+      );
     });
 
     it("refuses malformed and remote lock claims without moving their unique paths", async () => {

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream, readFileSync } from "node:fs";
+import { constants, readFileSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { hostname } from "node:os";
 import * as path from "node:path";
@@ -126,7 +126,7 @@ interface AuthorityTip {
   commit: StoredPartitionCommit;
 }
 
-type PartitionCommitTestFaultPoint = "after-event-before-head";
+type PartitionCommitTestFaultPoint = "after-claim-open" | "after-event-before-head";
 const partitionCommitTestFaults = new WeakMap<
   FilePartitionCommitStore,
   (point: PartitionCommitTestFaultPoint) => void | Promise<void>
@@ -151,6 +151,20 @@ export type PartitionInspection =
       observed: Omit<ExactFileFingerprint, "rows">;
     }
   | { status: "match"; receipt: StoredPartitionCommit };
+
+/** A canonical partition path does not name the regular file inode being verified. */
+export class PartitionFileIntegrityError extends Error {
+  constructor(
+    readonly filePath: string,
+    reason: string,
+    cause?: unknown,
+  ) {
+    super(`Invalid partition file (${reason}): ${filePath}`, {
+      ...(cause === undefined ? {} : { cause }),
+    });
+    this.name = "PartitionFileIntegrityError";
+  }
+}
 
 const TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -333,15 +347,99 @@ function identityAddress(identity: PartitionIdentity): CanonicalJsonAddress {
   });
 }
 
-async function exactFileAddress(targetPath: string): Promise<Omit<ExactFileFingerprint, "rows">> {
+interface OpenRegularFile {
+  handle: fs.FileHandle;
+  stat: Awaited<ReturnType<fs.FileHandle["stat"]>>;
+}
+
+function sameInode(
+  left: Awaited<ReturnType<fs.FileHandle["stat"]>>,
+  right: Awaited<ReturnType<fs.FileHandle["stat"]>>,
+): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+async function openRegularFileNoFollow(filePath: string): Promise<OpenRegularFile> {
+  let handle: fs.FileHandle;
+  try {
+    handle = await fs.open(
+      filePath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+      throw new PartitionFileIntegrityError(filePath, "symbolic links are not allowed", error);
+    }
+    throw error;
+  }
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) {
+      throw new PartitionFileIntegrityError(filePath, "expected a regular file");
+    }
+    if (stat.nlink !== 1) {
+      throw new PartitionFileIntegrityError(filePath, "expected an unshared regular file inode");
+    }
+    return { handle, stat };
+  } catch (error) {
+    await handle.close();
+    throw error;
+  }
+}
+
+async function exactOpenFileAddress(
+  handle: fs.FileHandle,
+): Promise<Omit<ExactFileFingerprint, "rows">> {
   const hash = createHash("sha256");
   let bytes = 0;
-  for await (const chunk of createReadStream(targetPath)) {
-    const buffer = chunk as Buffer;
-    bytes += buffer.byteLength;
-    hash.update(buffer);
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  while (true) {
+    const read = await handle.read(buffer, 0, buffer.byteLength, bytes);
+    if (read.bytesRead === 0) break;
+    hash.update(buffer.subarray(0, read.bytesRead));
+    bytes += read.bytesRead;
   }
   return { address: `sha256:${hash.digest("hex")}`, bytes };
+}
+
+async function requireNamedRegularInode(
+  filePath: string,
+  expected: Awaited<ReturnType<fs.FileHandle["stat"]>>,
+): Promise<void> {
+  let named: Awaited<ReturnType<typeof fs.lstat>>;
+  try {
+    named = await fs.lstat(filePath);
+  } catch (error) {
+    throw new PartitionFileIntegrityError(
+      filePath,
+      "verified inode is no longer named here",
+      error,
+    );
+  }
+  if (!named.isFile()) {
+    throw new PartitionFileIntegrityError(filePath, "canonical entry is not a regular file");
+  }
+  if (named.nlink !== 1 || expected.nlink !== 1) {
+    throw new PartitionFileIntegrityError(filePath, "canonical inode has multiple hard links");
+  }
+  if (!sameInode(expected, named)) {
+    throw new PartitionFileIntegrityError(filePath, "canonical entry changed during verification");
+  }
+}
+
+async function exactFileAddress(filePath: string): Promise<Omit<ExactFileFingerprint, "rows">> {
+  const opened = await openRegularFileNoFollow(filePath);
+  try {
+    const fingerprint = await exactOpenFileAddress(opened.handle);
+    const after = await opened.handle.stat();
+    if (!after.isFile() || after.nlink !== 1 || !sameInode(opened.stat, after)) {
+      throw new PartitionFileIntegrityError(filePath, "open inode changed during verification");
+    }
+    await requireNamedRegularInode(filePath, opened.stat);
+    return fingerprint;
+  } finally {
+    await opened.handle.close();
+  }
 }
 
 function sameCommitContent(
@@ -432,6 +530,87 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
   private targetPath(relativePath: string): string {
     validateRelativePath(relativePath);
     return path.join(this.marketRootDir, ...relativePath.split("/"));
+  }
+
+  private async validateMarketRoot(): Promise<string> {
+    const root = path.resolve(this.marketRootDir);
+    const rootStat = await fs.lstat(root);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+      throw new PartitionFileIntegrityError(root, "market root must be a real directory");
+    }
+    return fs.realpath(root);
+  }
+
+  private async validatedTargetPath(
+    relativePath: string,
+    expectedRealRoot: string,
+  ): Promise<string> {
+    validateRelativePath(relativePath);
+    const root = path.resolve(this.marketRootDir);
+    const realRoot = await this.validateMarketRoot();
+    if (realRoot !== expectedRealRoot) {
+      throw new PartitionFileIntegrityError(root, "market root changed during publication");
+    }
+    const components = relativePath.split("/");
+    let current = root;
+    for (const component of components.slice(0, -1)) {
+      current = path.join(current, component);
+      const stat = await fs.lstat(current);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) {
+        throw new PartitionFileIntegrityError(
+          current,
+          "target path components must be real directories",
+        );
+      }
+    }
+    const realParent = await fs.realpath(current);
+    const containment = path.relative(realRoot, realParent);
+    if (
+      containment === ".." ||
+      containment.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(containment)
+    ) {
+      throw new PartitionFileIntegrityError(
+        current,
+        "target parent escapes the configured market root",
+      );
+    }
+    return path.join(current, components.at(-1) as string);
+  }
+
+  private async quarantineClaim(claimedPath: string): Promise<void> {
+    try {
+      await fs.lstat(claimedPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+    const quarantineDir = path.join(this.provenanceRootDir, "rejected-prepared");
+    await this.ensureDurableDirectory(quarantineDir);
+    const quarantinePath = path.join(quarantineDir, randomUUID());
+    await fs.rename(claimedPath, quarantinePath);
+    await this.syncDirectory(path.dirname(claimedPath));
+    await this.syncDirectory(quarantineDir);
+  }
+
+  private async restoreOrQuarantineClaim(claimedPath: string, preparedPath: string): Promise<void> {
+    let restored = false;
+    let claimedRemoved = false;
+    try {
+      // link(2) is no-replace at the destination and preserves a symlink as a
+      // symlink. It safely restores regular files, hard links, and symlinks;
+      // directories fall through to quarantine without recursive deletion.
+      await fs.link(claimedPath, preparedPath);
+      restored = true;
+      await fs.unlink(claimedPath);
+      claimedRemoved = true;
+      await this.syncDirectory(path.dirname(preparedPath));
+      return;
+    } catch (error) {
+      if (claimedRemoved) throw error;
+      if (restored) await fs.unlink(preparedPath).catch(() => undefined);
+      await this.quarantineClaim(claimedPath);
+    }
   }
 
   private async syncDirectory(directory: string): Promise<void> {
@@ -940,35 +1119,64 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
     // and mutate their input object; those mutations cannot change the lock,
     // target, receipt, event, or comparison after publication begins.
     const captured = captureInput(input);
-    const preparedPath = String(input.preparedPath);
-    const expectedTargetPath = String(input.expectedTargetPath);
-    const targetPath = this.targetPath(captured.relativePath);
-    if (path.resolve(expectedTargetPath) !== path.resolve(targetPath)) {
+    const preparedPath = path.resolve(String(input.preparedPath));
+    const expectedTargetPath = path.resolve(String(input.expectedTargetPath));
+    const targetPath = path.resolve(this.targetPath(captured.relativePath));
+    if (expectedTargetPath !== targetPath) {
       throw new TypeError(
         `Provenance target does not match the store-owned market path: ${JSON.stringify({ expected: targetPath, observed: expectedTargetPath })}`,
       );
     }
-    if (
-      path.resolve(preparedPath) === path.resolve(targetPath) ||
-      path.dirname(path.resolve(preparedPath)) !== path.dirname(path.resolve(targetPath))
-    ) {
+    if (preparedPath === targetPath || path.dirname(preparedPath) !== path.dirname(targetPath)) {
       throw new TypeError("Prepared partition file must be a distinct sibling of its target");
     }
+    // Reject an aliased or invalid configured root before lock acquisition can
+    // create any authority directories through it.
+    const realMarketRoot = await this.validateMarketRoot();
     return this.withPartitionLock(captured, async () => {
-      const prepared = await exactFileAddress(preparedPath);
-      if (prepared.address !== captured.file.address || prepared.bytes !== captured.file.bytes) {
-        throw new Error("Prepared partition bytes do not match the supplied fingerprint");
+      const validatedTargetPath = await this.validatedTargetPath(
+        captured.relativePath,
+        realMarketRoot,
+      );
+      if (validatedTargetPath !== targetPath) {
+        throw new PartitionFileIntegrityError(
+          validatedTargetPath,
+          "validated target differs from the registered path",
+        );
       }
-      const preparedHandle = await fs.open(preparedPath, "r");
+      const targetDirectory = path.dirname(targetPath);
+      const claimedPath = path.join(targetDirectory, `.provenance-claim-${randomUUID()}`);
+      let claimed = false;
+      let targetTouched = false;
+      let claimedHandle: fs.FileHandle | undefined;
+      let claimedStat: Awaited<ReturnType<fs.FileHandle["stat"]>> | undefined;
       try {
-        await preparedHandle.sync();
-      } finally {
-        await preparedHandle.close();
-      }
-      await this.syncDirectory(path.dirname(preparedPath));
-      await this.ensureDurableDirectory(path.dirname(targetPath));
-      let installed = false;
-      try {
+        // Move the caller-controlled directory entry out of its known name
+        // before following or reading anything. The random sibling is then
+        // opened no-follow and pinned by file descriptor through install.
+        await fs.rename(preparedPath, claimedPath);
+        claimed = true;
+        await this.syncDirectory(targetDirectory);
+        const opened = await openRegularFileNoFollow(claimedPath);
+        claimedHandle = opened.handle;
+        claimedStat = opened.stat;
+        await partitionCommitTestFaults.get(this)?.("after-claim-open");
+        const prepared = await exactOpenFileAddress(claimedHandle);
+        const afterPreparedHash = await claimedHandle.stat();
+        if (
+          !afterPreparedHash.isFile() ||
+          afterPreparedHash.nlink !== 1 ||
+          !sameInode(claimedStat, afterPreparedHash)
+        ) {
+          throw new PartitionFileIntegrityError(claimedPath, "claimed inode changed while hashing");
+        }
+        await requireNamedRegularInode(claimedPath, claimedStat);
+        if (prepared.address !== captured.file.address || prepared.bytes !== captured.file.bytes) {
+          throw new Error("Prepared partition bytes do not match the supplied fingerprint");
+        }
+        await claimedHandle.sync();
+        await this.syncDirectory(targetDirectory);
+
         const previous = await this.authorityWithRebuiltHead(captured);
         let stored: StoredPartitionCommit;
         let pendingEvent:
@@ -1002,9 +1210,61 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
           Object.freeze(stored);
           pendingEvent = { receipt: stored, previousEvent: previous?.eventAddress };
         }
-        await fs.rename(preparedPath, targetPath);
-        installed = true;
-        await this.syncDirectory(path.dirname(targetPath));
+
+        // Revalidate the directory chain and the claimed name immediately
+        // before rename. Node has no renameat(2), so the post-rename inode
+        // comparison below is the final fail-closed path-swap check.
+        if (
+          (await this.validatedTargetPath(captured.relativePath, realMarketRoot)) !== targetPath
+        ) {
+          throw new PartitionFileIntegrityError(targetPath, "target parent changed before install");
+        }
+        const beforeInstall = await claimedHandle.stat();
+        if (
+          !beforeInstall.isFile() ||
+          beforeInstall.nlink !== 1 ||
+          !sameInode(claimedStat, beforeInstall)
+        ) {
+          throw new PartitionFileIntegrityError(
+            claimedPath,
+            "claimed inode changed before install",
+          );
+        }
+        await requireNamedRegularInode(claimedPath, claimedStat);
+        await fs.rename(claimedPath, targetPath);
+        claimed = false;
+        targetTouched = true;
+        await this.syncDirectory(targetDirectory);
+        await requireNamedRegularInode(targetPath, claimedStat);
+        const afterInstall = await claimedHandle.stat();
+        if (
+          !afterInstall.isFile() ||
+          afterInstall.nlink !== 1 ||
+          !sameInode(claimedStat, afterInstall)
+        ) {
+          throw new PartitionFileIntegrityError(targetPath, "installed inode changed");
+        }
+        const observed = await exactOpenFileAddress(claimedHandle);
+        const afterInstalledHash = await claimedHandle.stat();
+        if (
+          !afterInstalledHash.isFile() ||
+          afterInstalledHash.nlink !== 1 ||
+          !sameInode(claimedStat, afterInstalledHash)
+        ) {
+          throw new PartitionFileIntegrityError(
+            targetPath,
+            "installed inode changed while hashing",
+          );
+        }
+        await requireNamedRegularInode(targetPath, claimedStat);
+        await claimedHandle.sync();
+        if (
+          observed.address !== stored.receipt.file.address ||
+          observed.bytes !== stored.receipt.file.bytes
+        ) {
+          throw new Error("Installed partition bytes disagree with immutable commit authority");
+        }
+
         if (pendingEvent) {
           const eventAddress = await this.appendEvent(
             captured,
@@ -1014,36 +1274,72 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
           await partitionCommitTestFaults.get(this)?.("after-event-before-head");
           await this.writeHead(captured, { eventAddress, commit: pendingEvent.receipt });
         }
-        const observed = await exactFileAddress(targetPath);
-        if (
-          observed.address !== stored.receipt.file.address ||
-          observed.bytes !== stored.receipt.file.bytes
-        ) {
-          throw new Error("Installed partition bytes disagree with immutable commit authority");
-        }
         const tip = await this.authorityWithRebuiltHead(captured);
         if (!tip || tip.commit.address !== stored.address) {
           throw new Error("Installed partition and authoritative head disagree");
         }
+        if (
+          (await this.validatedTargetPath(captured.relativePath, realMarketRoot)) !== targetPath
+        ) {
+          throw new PartitionFileIntegrityError(
+            targetPath,
+            "target parent changed before publication completed",
+          );
+        }
+        const beforeReturn = await claimedHandle.stat();
+        if (
+          !beforeReturn.isFile() ||
+          beforeReturn.nlink !== 1 ||
+          !sameInode(claimedStat, beforeReturn)
+        ) {
+          throw new PartitionFileIntegrityError(
+            targetPath,
+            "installed inode changed before publication completed",
+          );
+        }
+        await requireNamedRegularInode(targetPath, claimedStat);
+        const finalObserved = await exactOpenFileAddress(claimedHandle);
+        const afterFinalHash = await claimedHandle.stat();
+        if (
+          !afterFinalHash.isFile() ||
+          afterFinalHash.nlink !== 1 ||
+          !sameInode(claimedStat, afterFinalHash)
+        ) {
+          throw new PartitionFileIntegrityError(
+            targetPath,
+            "installed inode changed during final verification",
+          );
+        }
+        await requireNamedRegularInode(targetPath, claimedStat);
+        if (
+          finalObserved.address !== stored.receipt.file.address ||
+          finalObserved.bytes !== stored.receipt.file.bytes
+        ) {
+          throw new Error("Installed partition changed before publication completed");
+        }
         return stored;
       } catch (error) {
-        if (installed) {
+        if (targetTouched) {
           throw new PartitionFilePublicationError(targetPath, captured.file, error);
         }
         throw error;
+      } finally {
+        await claimedHandle?.close();
+        if (claimed) await this.restoreOrQuarantineClaim(claimedPath, preparedPath);
       }
     });
   }
 
   async inspectPartition(identity: PartitionIdentity): Promise<PartitionInspection> {
     const captured = captureIdentity(identity);
+    const realMarketRoot = await this.validateMarketRoot();
     return this.withPartitionLock(captured, async () => {
       const tip = await this.authorityWithRebuiltHead(captured);
       const relativePath = tip?.commit.receipt.relativePath ?? canonicalRelativePath(captured);
       validateRegistryPath(captured, relativePath);
-      const targetPath = this.targetPath(relativePath);
       let observed: Omit<ExactFileFingerprint, "rows">;
       try {
+        const targetPath = await this.validatedTargetPath(relativePath, realMarketRoot);
         observed = await exactFileAddress(targetPath);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {

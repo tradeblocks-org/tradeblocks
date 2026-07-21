@@ -351,6 +351,7 @@ export {
   PARTITION_COMMIT_EVENT_KIND,
   PARTITION_COMMIT_EVENT_VERSION,
   FilePartitionCommitStore,
+  PartitionFileIntegrityError,
   PartitionFilePublicationError,
   runPartitionCommitAttempt,
 } from "./market/provenance/index.ts";

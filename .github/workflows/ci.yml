@@ -105,6 +105,9 @@ jobs:
       - name: Build MCP Server
         run: npm run build -w packages/mcp-server
 
+      - name: Verify packed provenance runtime
+        run: node packages/mcp-server/scripts/verify-packed-provenance-runtime.mjs
+
       # Heap ceiling is 6144 MB per worker as headroom for `workerIdleMemoryLimit`
       # (set in packages/mcp-server/jest.config.js) to recycle workers cleanly
       # before V8 aborts under the Jest suite's peak memory.
