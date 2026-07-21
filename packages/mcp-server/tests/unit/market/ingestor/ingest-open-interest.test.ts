@@ -78,7 +78,7 @@ describe("MarketIngestor.ingestOpenInterest", () => {
       {
         ticker: "SPXW240123P04700000",
         underlying: "SPX",
-        date: "2024-01-15",
+        date: "2024-01-16",
         expiration: "2024-01-23",
         strike: 4700,
         right: "put",
@@ -87,7 +87,7 @@ describe("MarketIngestor.ingestOpenInterest", () => {
       {
         ticker: "SPXW240123C04800000",
         underlying: "SPX",
-        date: "2024-01-15",
+        date: "2024-01-16",
         expiration: "2024-01-23",
         strike: 4800,
         right: "call",
@@ -114,14 +114,14 @@ describe("MarketIngestor.ingestOpenInterest", () => {
 
     const result = await ingestor.ingestOpenInterest({
       underlyings: ["SPX"],
-      from: "2024-01-15",
-      to: "2024-01-15",
+      from: "2024-01-16",
+      to: "2024-01-16",
     });
 
     expect(result.status).toBe("ok");
     expect(result.rowsWritten).toBe(2);
 
-    const readBack = await stores.oiDaily.readOiDaily("SPX", "2024-01-15", "2024-01-15");
+    const readBack = await stores.oiDaily.readOiDaily("SPX", "2024-01-16", "2024-01-16");
     expect(readBack).toHaveLength(2);
     expect(readBack.map((r) => r.occ_ticker).sort()).toEqual([
       "SPXW240123C04800000",

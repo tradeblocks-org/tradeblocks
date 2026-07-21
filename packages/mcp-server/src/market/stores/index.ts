@@ -16,6 +16,7 @@
  * import from this barrel so only `./index.js` depends on the concrete file
  * layout.
  */
+import { resolve } from "node:path";
 import { SpotStore } from "./spot-store.ts";
 import { EnrichedStore } from "./enriched-store.ts";
 import { ChainStore } from "./chain-store.ts";
@@ -42,6 +43,23 @@ export interface MarketStores {
   oiDaily: ParquetOiDailyStore;
 }
 
+export interface MarketStoresAuthority {
+  /** Absolute data root supplied to the canonical store factory. */
+  readonly dataRoot: string;
+  /** Canonical provenance is available only for direct Parquet-backed reads. */
+  readonly parquetMode: boolean;
+}
+
+const marketStoresAuthorities = new WeakMap<MarketStores, MarketStoresAuthority>();
+
+/**
+ * Return the unforgeable factory authority for a canonical MarketStores bundle.
+ * Structurally compatible custom stores are intentionally unrecognized.
+ */
+export function getMarketStoresAuthority(stores: MarketStores): MarketStoresAuthority | null {
+  return marketStoresAuthorities.get(stores) ?? null;
+}
+
 /**
  * Construct a MarketStores bundle using backend-appropriate concrete classes.
  *
@@ -57,18 +75,26 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
   // modes — it always writes/reads Hive-partitioned Parquet under the data
   // archive, like the option-quote and option-chain partitions.
   const oiDaily = new ParquetOiDailyStore(ctx);
+  let stores: MarketStores;
   if (ctx.parquetMode) {
     const spot = new ParquetSpotStore(ctx);
     const enriched = new ParquetEnrichedStore(ctx, spot);
     const chain = new ParquetChainStore(ctx);
     const quote = new ParquetQuoteStore(ctx);
-    return { spot, enriched, chain, quote, oiDaily };
+    stores = { spot, enriched, chain, quote, oiDaily };
+  } else {
+    const spot = new DuckdbSpotStore(ctx);
+    const enriched = new DuckdbEnrichedStore(ctx, spot);
+    const chain = new DuckdbChainStore(ctx);
+    const quote = new DuckdbQuoteStore(ctx);
+    stores = { spot, enriched, chain, quote, oiDaily };
   }
-  const spot = new DuckdbSpotStore(ctx);
-  const enriched = new DuckdbEnrichedStore(ctx, spot);
-  const chain = new DuckdbChainStore(ctx);
-  const quote = new DuckdbQuoteStore(ctx);
-  return { spot, enriched, chain, quote, oiDaily };
+  const brandedStores = Object.freeze(stores);
+  marketStoresAuthorities.set(
+    brandedStores,
+    Object.freeze({ dataRoot: resolve(ctx.dataDir), parquetMode: ctx.parquetMode }),
+  );
+  return brandedStores;
 }
 
 export { SpotStore, EnrichedStore, ChainStore, QuoteStore };

@@ -655,6 +655,7 @@ export {
   ChainStore,
   QuoteStore,
   createMarketStores,
+  getMarketStoresAuthority,
 } from "./market/stores/index.ts";
 export type {
   StoreContext,

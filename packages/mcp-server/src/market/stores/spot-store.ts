@@ -10,7 +10,7 @@ import { existsSync } from "fs";
 import * as path from "path";
 import type { StoreContext, BarRow, CoverageReport } from "./types.ts";
 import { resolveMarketDir } from "../../db/market-datasets.ts";
-import { listPartitionValues } from "./coverage.ts";
+import { listXnysSessionPartitionValues } from "./coverage.ts";
 
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");
@@ -35,8 +35,7 @@ export abstract class SpotStore {
   ): { sql: string } | null {
     const tickerDir = path.join(resolveMarketDir(this.ctx.dataDir), "spot", `ticker=${ticker}`);
     if (!existsSync(tickerDir)) return null;
-    const allDates = listPartitionValues(tickerDir, "date");
-    const dates = allDates.filter((d) => d >= from && d <= to);
+    const dates = listXnysSessionPartitionValues(tickerDir, from, to);
     if (dates.length === 0) return null;
     const paths: string[] = [];
     for (const d of dates) {

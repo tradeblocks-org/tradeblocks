@@ -20,9 +20,36 @@ import {
 import { SpotStore } from "./spot-store.ts";
 import type { StoreContext, CoverageReport } from "./types.ts";
 import { buildReadEnrichedSQL } from "./enriched-sql.ts";
+import { listXnysSessionPartitionValues } from "./coverage.ts";
 import { resolveMarketDir } from "../../db/market-datasets.ts";
 import { runEnrichment } from "../../utils/market-enricher.ts";
 import { getEnrichedThrough, upsertEnrichedThrough } from "../../db/json-adapters.ts";
+import { readParquetFilesSql } from "../../utils/quote-parquet-projection.ts";
+
+const EMPTY_SPOT_SOURCE = `(SELECT
+  NULL::VARCHAR AS ticker,
+  NULL::VARCHAR AS date,
+  NULL::VARCHAR AS time,
+  NULL::DOUBLE AS open,
+  NULL::DOUBLE AS high,
+  NULL::DOUBLE AS low,
+  NULL::DOUBLE AS close
+  WHERE FALSE)`;
+
+const EMPTY_CONTEXT_SOURCE = `(SELECT
+  NULL::VARCHAR AS date,
+  NULL::INTEGER AS Vol_Regime,
+  NULL::INTEGER AS Term_Structure_State,
+  NULL::VARCHAR AS Trend_Direction,
+  NULL::DOUBLE AS VIX_Spike_Pct,
+  NULL::DOUBLE AS VIX_Gap_Pct
+  WHERE FALSE)`;
+
+function sessionPartitionFiles(dir: string, from: string, to: string): string[] {
+  return listXnysSessionPartitionValues(dir, from, to)
+    .map((date) => path.join(dir, `date=${date}`, "data.parquet"))
+    .filter((filePath) => existsSync(filePath));
+}
 
 export class ParquetEnrichedStore extends EnrichedStore {
   private readonly spotStore: SpotStore;
@@ -99,39 +126,37 @@ export class ParquetEnrichedStore extends EnrichedStore {
   }
 
   async read(opts: EnrichedReadOpts): Promise<Record<string, unknown>[]> {
-    // Fast path: when the caller doesn't need cross-ticker context or RTH
-    // OHLCV joins, read directly from the ticker's parquet file. Avoids
-    // the `market.enriched` view glob (~430ms) AND the extract_statements
-    // GC handle leak (see parquet-quote-store.ts:327). Hit on every
-    // entry-pipeline date when an RSI / vol-regime filter is configured.
+    // Canonical reads always bind explicit XNYS-session partition files.
+    // Global view globs can include a manually-created weekday holiday file,
+    // which is intentionally outside the provenance manifest authority.
     const wantsJoins = !!opts.includeContext || !!opts.includeOhlcv;
+    const marketDir = resolveMarketDir(this.ctx.dataDir);
+    const tickerDir = path.join(marketDir, "enriched", `ticker=${opts.ticker}`);
+    if (!existsSync(tickerDir)) return [];
+    const files = sessionPartitionFiles(tickerDir, opts.from, opts.to);
+    if (files.length === 0) return [];
+    const enrichedSource = readParquetFilesSql(files);
+
     if (!wantsJoins) {
-      const tickerDir = path.join(
-        resolveMarketDir(this.ctx.dataDir),
-        "enriched",
-        `ticker=${opts.ticker}`,
-      );
-      if (existsSync(tickerDir)) {
-        const files = readdirSync(tickerDir)
-          .filter((entry) => entry.startsWith("date="))
-          .map((entry) => ({
-            date: entry.slice("date=".length),
-            file: path.join(tickerDir, entry, "data.parquet"),
-          }))
-          .filter(({ date, file }) => date >= opts.from && date <= opts.to && existsSync(file))
-          .sort((left, right) => left.date.localeCompare(right.date));
-        if (files.length === 0) return [];
-        const sources = files.map(({ file }) => `'${file.replace(/'/g, "''")}'`).join(", ");
-        const fromLit = opts.from.replace(/'/g, "''");
-        const toLit = opts.to.replace(/'/g, "''");
-        const sql = `SELECT * FROM read_parquet([${sources}], hive_partitioning=true)
+      const fromLit = opts.from.replace(/'/g, "''");
+      const toLit = opts.to.replace(/'/g, "''");
+      const sql = `SELECT * FROM ${enrichedSource}
                      WHERE date >= '${fromLit}' AND date <= '${toLit}'
                      ORDER BY date`;
-        const reader = await this.ctx.conn.runAndReadAll(sql);
-        const names = reader.columnNames();
-        return reader.getRows().map((row) => Object.fromEntries(names.map((n, i) => [n, row[i]])));
-      }
+      const reader = await this.ctx.conn.runAndReadAll(sql);
+      const names = reader.columnNames();
+      return reader.getRows().map((row) => Object.fromEntries(names.map((n, i) => [n, row[i]])));
     }
+
+    const spotDir = path.join(marketDir, "spot", `ticker=${opts.ticker}`);
+    const spotFiles = sessionPartitionFiles(spotDir, opts.from, opts.to);
+    const spotSource = spotFiles.length > 0 ? readParquetFilesSql(spotFiles) : EMPTY_SPOT_SOURCE;
+
+    const contextDir = path.join(marketDir, "enriched", "context");
+    const contextFiles = sessionPartitionFiles(contextDir, opts.from, opts.to);
+    const contextSource =
+      contextFiles.length > 0 ? readParquetFilesSql(contextFiles) : EMPTY_CONTEXT_SOURCE;
+
     // Builder inlines values; unbound runAndReadAll(sql) bypasses extract_statements.
     const { sql } = buildReadEnrichedSQL({
       ticker: opts.ticker,
@@ -139,6 +164,9 @@ export class ParquetEnrichedStore extends EnrichedStore {
       to: opts.to,
       includeContext: !!opts.includeContext,
       includeOhlcv: !!opts.includeOhlcv,
+      enrichedSource,
+      contextSource,
+      spotSource,
     });
     const reader = await this.ctx.conn.runAndReadAll(sql);
     const names = reader.columnNames();

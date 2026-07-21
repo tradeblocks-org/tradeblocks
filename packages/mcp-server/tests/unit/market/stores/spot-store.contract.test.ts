@@ -171,3 +171,24 @@ describe("SpotStore backend parity", () => {
     }
   });
 });
+
+describe("ParquetSpotStore XNYS partition boundary", () => {
+  it("excludes a 2026-07-03 holiday partition from minute and daily range reads", async () => {
+    const { store, fixture } = await makeParquetSpot();
+    try {
+      await store.writeBars("SPX", "2026-07-02", makeBars("SPX", "2026-07-02"));
+      // July 3 is a weekday-shaped directory, but XNYS is closed for the
+      // observed Independence Day holiday in 2026.
+      await store.writeBars("SPX", "2026-07-03", makeBars("SPX", "2026-07-03"));
+      await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
+
+      const minute = await store.readBars("SPX", "2026-07-02", "2026-07-06");
+      expect(new Set(minute.map((row) => row.date))).toEqual(new Set(["2026-07-02"]));
+
+      const daily = await store.readDailyBars("SPX", "2026-07-02", "2026-07-06");
+      expect(daily.map((row) => row.date)).toEqual(["2026-07-02"]);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+});

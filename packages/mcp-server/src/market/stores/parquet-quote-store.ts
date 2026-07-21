@@ -18,7 +18,7 @@ import { existsSync } from "fs";
 import * as path from "path";
 import { QuoteStore } from "./quote-store.ts";
 import type { QuoteRow, CoverageReport, ReadWindowParams, WindowQuoteRow } from "./types.ts";
-import { listPartitionValues } from "./coverage.ts";
+import { listXnysSessionPartitionValues } from "./coverage.ts";
 import { resolveMarketDir, writeQuoteMinutesPartition } from "../../db/market-datasets.ts";
 import { extractRoot } from "../tickers/resolver.ts";
 import {
@@ -182,8 +182,7 @@ export class ParquetQuoteStore extends QuoteStore {
       `underlying=${firstUnderlying}`,
     );
     if (!existsSync(underlyingDir)) return new Map();
-    const files = listPartitionValues(underlyingDir, "date")
-      .filter((date) => date >= from && date <= to)
+    const files = listXnysSessionPartitionValues(underlyingDir, from, to)
       .map((date) => path.join(underlyingDir, `date=${date}`, "data.parquet"))
       .filter((filePath) => existsSync(filePath));
     if (files.length === 0) return new Map();
@@ -419,8 +418,7 @@ export class ParquetQuoteStore extends QuoteStore {
     if (!existsSync(dir)) {
       return { earliest: null, latest: null, missingDates: [], totalDates: 0 };
     }
-    const allDates = listPartitionValues(dir, "date");
-    const dates = allDates.filter((d) => d >= from && d <= to);
+    const dates = listXnysSessionPartitionValues(dir, from, to);
     return {
       earliest: dates[0] ?? null,
       latest: dates[dates.length - 1] ?? null,

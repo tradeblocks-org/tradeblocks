@@ -43,11 +43,12 @@ async function seedEnriched(
   ticker: string,
   dataDir: string,
   parquetMode: boolean,
-): Promise<void> {
-  for (const [date, priorClose, gap, rsi] of [
+  rows: ReadonlyArray<readonly [string, number, number, number]> = [
     ["2025-01-06", 100.0, 0.5, 55.0],
     ["2025-01-07", 100.5, 1.0, 60.0],
-  ] as const) {
+  ],
+): Promise<void> {
+  for (const [date, priorClose, gap, rsi] of rows) {
     await conn.run(
       `INSERT OR REPLACE INTO market.enriched (ticker, date, Prior_Close, Gap_Pct, RSI_14)
        VALUES ($1, $2, $3, $4, $5)`,
@@ -70,11 +71,12 @@ async function seedContext(
   conn: DuckDBConnection,
   dataDir: string,
   parquetMode: boolean,
-): Promise<void> {
-  for (const [date, volRegime, tss, trendDir] of [
+  rows: ReadonlyArray<readonly [string, number, number, string]> = [
     ["2025-01-06", 1, 0, "up"],
     ["2025-01-07", 2, 1, "down"],
-  ] as const) {
+  ],
+): Promise<void> {
+  for (const [date, volRegime, tss, trendDir] of rows) {
     await conn.run(
       `INSERT OR REPLACE INTO market.enriched_context
          (date, Vol_Regime, Term_Structure_State, Trend_Direction, VIX_Spike_Pct, VIX_Gap_Pct)
@@ -285,6 +287,43 @@ describe("EnrichedStore backend parity", () => {
     } finally {
       p.fixture.cleanup();
       d.fixture.cleanup();
+    }
+  });
+});
+
+describe("ParquetEnrichedStore XNYS partition boundary", () => {
+  it("excludes 2026-07-03 from enriched, context, and OHLCV range sources", async () => {
+    const { store, spot, fixture } = await makeParquetEnriched();
+    try {
+      const enrichedRows = [
+        ["2026-07-02", 100.0, 0.5, 55.0],
+        ["2026-07-03", 999.0, 9.9, 99.0],
+      ] as const;
+      const contextRows = [
+        ["2026-07-02", 1, 0, "up"],
+        ["2026-07-03", 6, 1, "down"],
+      ] as const;
+      await seedEnriched(fixture.ctx.conn, "SPX", fixture.ctx.dataDir, true, enrichedRows);
+      await seedContext(fixture.ctx.conn, fixture.ctx.dataDir, true, contextRows);
+      await spot.writeBars("SPX", "2026-07-02", makeBars("SPX", "2026-07-02"));
+      await spot.writeBars("SPX", "2026-07-03", makeBars("SPX", "2026-07-03"));
+      await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
+
+      const rows = await store.read({
+        ticker: "SPX",
+        from: "2026-07-02",
+        to: "2026-07-06",
+        includeOhlcv: true,
+        includeContext: true,
+      });
+      expect(rows).toHaveLength(1);
+      expect(String(rows[0].date)).toBe("2026-07-02");
+      expect(rows[0]).toMatchObject({
+        Prior_Close: 100,
+        Vol_Regime: 1,
+      });
+    } finally {
+      fixture.cleanup();
     }
   });
 });

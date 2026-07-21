@@ -14,8 +14,7 @@ import { existsSync } from "fs";
 import * as path from "path";
 import { SpotStore } from "./spot-store.ts";
 import type { BarRow, CoverageReport } from "./types.ts";
-import { buildReadBarsSQL, buildReadDailyBarsSQL } from "./spot-sql.ts";
-import { listPartitionValues } from "./coverage.ts";
+import { listXnysSessionPartitionValues } from "./coverage.ts";
 import { resolveMarketDir, writeSpotPartition } from "../../db/market-datasets.ts";
 
 export class ParquetSpotStore extends SpotStore {
@@ -135,9 +134,11 @@ export class ParquetSpotStore extends SpotStore {
 
   async readBars(ticker: string, from: string, to: string): Promise<BarRow[]> {
     const direct = this.buildDirectParquetReadBarsSQL(ticker, from, to);
-    // Both paths inline values — bound-param runAndReadAll(sql, values) leaks
-    // extract_statements handles (parquet-quote-store.ts:327, spot-sql.ts).
-    const { sql } = direct ?? buildReadBarsSQL(ticker, from, to);
+    // Canonical Parquet reads must never fall back to the global view glob:
+    // that glob can include a weekday holiday partition which is outside the
+    // XNYS manifest authority. No eligible file means no canonical rows.
+    if (direct === null) return [];
+    const { sql } = direct;
     const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       ticker: String(r[0]),
@@ -155,8 +156,8 @@ export class ParquetSpotStore extends SpotStore {
 
   async readDailyBars(ticker: string, from: string, to: string): Promise<BarRow[]> {
     const direct = this.buildDirectParquetReadBarsSQL(ticker, from, to, { dailyAgg: true });
-    // Same leak rationale as readBars — both paths run via unbound query().
-    const { sql } = direct ?? buildReadDailyBarsSQL(ticker, from, to);
+    if (direct === null) return [];
+    const { sql } = direct;
     const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       ticker: String(r[0]),
@@ -177,8 +178,7 @@ export class ParquetSpotStore extends SpotStore {
     if (!existsSync(tickerDir)) {
       return { earliest: null, latest: null, missingDates: [], totalDates: 0 };
     }
-    const allDates = listPartitionValues(tickerDir, "date");
-    const dates = allDates.filter((d) => d >= from && d <= to);
+    const dates = listXnysSessionPartitionValues(tickerDir, from, to);
     return {
       earliest: dates[0] ?? null,
       latest: dates[dates.length - 1] ?? null,

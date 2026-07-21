@@ -16,7 +16,7 @@ import {
 } from "../../../fixtures/market-stores/build-fixture.ts";
 import type { OiDailyRow } from "../../../../src/market/stores/types.ts";
 
-const DATE = "2024-01-15";
+const DATE = "2024-01-16";
 const EXPIRATION = "2024-01-23";
 
 function buildRows(): OiDailyRow[] {
@@ -118,6 +118,22 @@ describe("ParquetOiDailyStore", () => {
 
     const both = await store.readOiDaily("SPX", DATE, "2024-02-01");
     expect(both).toHaveLength(3);
+
+    fixture.cleanup();
+  });
+
+  it("excludes a 2026-07-03 holiday partition from range reads", async () => {
+    const { store, fixture } = await setUp();
+    const row = buildRows()[0];
+    await store.writeOiDaily("SPX", "2026-07-02", [
+      { ...row, date: "2026-07-02", expiration: "2026-07-10" },
+    ]);
+    await store.writeOiDaily("SPX", "2026-07-03", [
+      { ...row, date: "2026-07-03", expiration: "2026-07-10" },
+    ]);
+
+    const rows = await store.readOiDaily("SPX", "2026-07-02", "2026-07-06");
+    expect(rows.map((value) => value.date)).toEqual(["2026-07-02"]);
 
     fixture.cleanup();
   });

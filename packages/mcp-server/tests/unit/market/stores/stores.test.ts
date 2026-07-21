@@ -21,6 +21,7 @@ import {
   ChainStore,
   QuoteStore,
   createMarketStores,
+  getMarketStoresAuthority,
   ParquetSpotStore,
   DuckdbSpotStore,
   ParquetEnrichedStore,
@@ -90,6 +91,21 @@ describe("EnrichedStore / ChainStore / QuoteStore abstract shape", () => {
 });
 
 describe("createMarketStores factory (Pitfall 6 resolution — real DuckDB fixture)", () => {
+  it("brands only factory-created bundles with their resolved root and backend", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      const stores = createMarketStores(fixture.ctx);
+      expect(getMarketStoresAuthority(stores)).toEqual({
+        dataRoot: path.resolve(fixture.ctx.dataDir),
+        parquetMode: true,
+      });
+      expect(Object.isFrozen(stores)).toBe(true);
+      expect(getMarketStoresAuthority({ ...stores })).toBeNull();
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
   it("returns real instances extending each abstract base (DuckDB backend)", async () => {
     const fixture = await buildStoreFixture({ parquetMode: false });
     try {

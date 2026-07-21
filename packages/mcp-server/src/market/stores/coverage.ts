@@ -15,6 +15,7 @@
  */
 import { existsSync, readdirSync } from "fs";
 import * as path from "path";
+import { isXnysSessionDate } from "../provenance/xnys-session-calendar.ts";
 
 /**
  * Enumerate Hive-partition values present under `dir`. Each matching
@@ -41,4 +42,19 @@ export function listPartitionValues(dir: string, partitionKey: string): string[]
   } catch {
     return [];
   }
+}
+
+/**
+ * Enumerate canonical daily market partitions inside an inclusive date range.
+ *
+ * A weekday-shaped `date=...` directory is not sufficient authority: XNYS
+ * full-day closures (for example 2026-07-03) must never become an implicit
+ * input merely because a stale or manually-created Parquet file exists.
+ * Invalid and calendar-unsupported dates deliberately retain the calendar's
+ * named refusal instead of being guessed from weekday arithmetic.
+ */
+export function listXnysSessionPartitionValues(dir: string, from: string, to: string): string[] {
+  return listPartitionValues(dir, "date")
+    .filter((date) => date >= from && date <= to)
+    .filter((date) => isXnysSessionDate(date));
 }
