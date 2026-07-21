@@ -95,8 +95,9 @@ describe("createMarketStores factory (Pitfall 6 resolution — real DuckDB fixtu
     const fixture = await buildStoreFixture({ parquetMode: true });
     try {
       const stores = createMarketStores(fixture.ctx);
+      const originalDataDir = stores.spot.dataDir;
       expect(getMarketStoresAuthority(stores)).toEqual({
-        dataRoot: path.resolve(fixture.ctx.dataDir),
+        dataRoot: originalDataDir,
         parquetMode: true,
       });
       expect(Object.isFrozen(stores)).toBe(true);
@@ -105,13 +106,25 @@ describe("createMarketStores factory (Pitfall 6 resolution — real DuckDB fixtu
         writable: false,
         configurable: false,
       });
+      expect(Object.getOwnPropertyDescriptor(stores.spot, "dataDir")).toMatchObject({
+        value: path.resolve(fixture.ctx.dataDir),
+        writable: false,
+        configurable: false,
+      });
+      fixture.ctx.dataDir = path.resolve(fixture.ctx.dataDir, "redirected");
+      fixture.ctx.tickers.register({ underlying: "MUT", roots: ["MUTX"] });
+      expect(stores.spot.dataDir).toBe(originalDataDir);
+      expect(stores.quote.tickers.resolve("MUTX")).toBe("MUTX");
+      expect(() => stores.quote.tickers.register({ underlying: "BAD", roots: ["BAD"] })).toThrow(
+        /immutable snapshots/,
+      );
       expect(() =>
         Object.defineProperty(stores.spot, "readBars", {
           value: async () => [{ close: 9_999 }],
         }),
       ).toThrow();
       expect(getMarketStoresAuthority(stores)).toEqual({
-        dataRoot: path.resolve(fixture.ctx.dataDir),
+        dataRoot: originalDataDir,
         parquetMode: true,
       });
       expect(getMarketStoresAuthority({ ...stores })).toBeNull();

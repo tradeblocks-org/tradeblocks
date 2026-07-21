@@ -32,6 +32,7 @@ import { DuckdbChainStore } from "./duckdb-chain-store.ts";
 import { ParquetQuoteStore } from "./parquet-quote-store.ts";
 import { DuckdbQuoteStore } from "./duckdb-quote-store.ts";
 import { ParquetOiDailyStore } from "./parquet-oi-daily-store.ts";
+import { TickerRegistry } from "../tickers/registry.ts";
 
 import type { StoreContext } from "./types.ts";
 
@@ -61,12 +62,14 @@ const marketStoresAuthorities = new WeakMap<MarketStores, MarketStoresAuthority>
  */
 function lockAuthorityStore<T extends object>(store: T): T {
   const methods = new Map<string, CallableFunction>();
+  const accessors = new Set<string>();
   let prototype = Object.getPrototypeOf(store) as object | null;
   while (prototype && prototype !== Object.prototype) {
     for (const name of Object.getOwnPropertyNames(prototype)) {
       if (name === "constructor" || methods.has(name)) continue;
       const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
       if (typeof descriptor?.value === "function") methods.set(name, descriptor.value);
+      if (typeof descriptor?.get === "function") accessors.add(name);
     }
     prototype = Object.getPrototypeOf(prototype) as object | null;
   }
@@ -78,7 +81,59 @@ function lockAuthorityStore<T extends object>(store: T): T {
       enumerable: false,
     });
   }
+  for (const name of accessors) {
+    Object.defineProperty(store, name, {
+      value: Reflect.get(store, name),
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+  }
   return Object.freeze(store);
+}
+
+function snapshotAuthorityContext(ctx: StoreContext): StoreContext {
+  const connection = ctx.conn as unknown as Record<string, unknown> | null;
+  const bindConnectionMethod = (name: string): CallableFunction => {
+    const method = connection?.[name];
+    if (typeof method !== "function") {
+      return () => {
+        throw new TypeError(`Canonical market connection has no ${name} method`);
+      };
+    }
+    return method.bind(ctx.conn);
+  };
+  const conn = Object.freeze({
+    run: bindConnectionMethod("run"),
+    runAndReadAll: bindConnectionMethod("runAndReadAll"),
+    createAppender: bindConnectionMethod("createAppender"),
+  }) as unknown as StoreContext["conn"];
+  const tickers = new TickerRegistry(
+    ctx.tickers.list().map(({ underlying, roots }) => ({ underlying, roots })),
+  );
+  for (const name of ["resolve", "list", "toJSON"] as const) {
+    Object.defineProperty(tickers, name, {
+      value: tickers[name].bind(tickers),
+      writable: false,
+      configurable: false,
+    });
+  }
+  for (const name of ["register", "unregister"] as const) {
+    Object.defineProperty(tickers, name, {
+      value: () => {
+        throw new TypeError("Authority-bearing ticker registries are immutable snapshots");
+      },
+      writable: false,
+      configurable: false,
+    });
+  }
+  Object.freeze(tickers);
+  return Object.freeze({
+    conn,
+    dataDir: resolve(ctx.dataDir),
+    parquetMode: true,
+    tickers,
+  });
 }
 
 /**
@@ -103,13 +158,14 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
   // native (one row per contract per day), so the same store serves both
   // modes — it always writes/reads Hive-partitioned Parquet under the data
   // archive, like the option-quote and option-chain partitions.
-  const oiDaily = new ParquetOiDailyStore(ctx);
   let stores: MarketStores;
   if (ctx.parquetMode) {
-    const spot = new ParquetSpotStore(ctx);
-    const enriched = new ParquetEnrichedStore(ctx, spot);
-    const chain = new ParquetChainStore(ctx);
-    const quote = new ParquetQuoteStore(ctx);
+    const authorityContext = snapshotAuthorityContext(ctx);
+    const oiDaily = new ParquetOiDailyStore(authorityContext);
+    const spot = new ParquetSpotStore(authorityContext);
+    const enriched = new ParquetEnrichedStore(authorityContext, spot);
+    const chain = new ParquetChainStore(authorityContext);
+    const quote = new ParquetQuoteStore(authorityContext);
     // Only the Parquet bundle can carry exact-byte authority. DuckDB stores
     // retain their legacy mutable caches and are rejected by the consumer.
     stores = {
@@ -120,6 +176,7 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
       oiDaily: lockAuthorityStore(oiDaily),
     };
   } else {
+    const oiDaily = new ParquetOiDailyStore(ctx);
     const spot = new DuckdbSpotStore(ctx);
     const enriched = new DuckdbEnrichedStore(ctx, spot);
     const chain = new DuckdbChainStore(ctx);
