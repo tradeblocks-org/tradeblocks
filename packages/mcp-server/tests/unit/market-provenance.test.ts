@@ -210,6 +210,39 @@ describe("market-data provenance foundation", () => {
       expect(repair.address).not.toBe(first.address);
     });
 
+    it("adopts exact historical bytes without replacing the canonical file", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const targetPath = targetFor(identity.partition);
+      const bytes = Buffer.from("historical parquet stand-in");
+      mkdirSync(dirname(targetPath), { recursive: true });
+      writeFileSync(targetPath, bytes);
+      const before = lstatSync(targetPath);
+      const input = {
+        ...identity,
+        relativePath,
+        ...metadata(4),
+        file: { address: addressBytes(bytes), bytes: bytes.byteLength, rows: 4 },
+      };
+
+      const adopted = await store.adoptExistingFileCommit(input);
+      const retry = await store.adoptExistingFileCommit(input);
+      const after = lstatSync(targetPath);
+
+      expect(adopted.receipt.classification).toBe("append");
+      expect(retry.address).toBe(adopted.address);
+      expect(after.ino).toBe(before.ino);
+      await expect(store.inspectPartition(identity)).resolves.toMatchObject({
+        status: "match",
+        receipt: { address: adopted.address },
+      });
+      await expect(
+        store.adoptExistingFileCommit({
+          ...input,
+          file: { ...input.file, address: addressBytes(Buffer.from("wrong")) },
+        }),
+      ).rejects.toThrow(/do not match/);
+    });
+
     it("detects matching, missing, modified, and untracked files", async () => {
       const store = new FilePartitionCommitStore(rootDir);
       const bytes = Buffer.from("exact parquet stand-in");

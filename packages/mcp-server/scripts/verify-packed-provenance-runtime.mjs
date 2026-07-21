@@ -57,7 +57,9 @@ try {
       canonicalJson,
       createInputClosureDescriptor,
       dependencyKeyAddress,
-      publishInputResolverRegistry,
+      finalizeCanonicalMarketDataCutoff,
+      isXnysSessionDate,
+      publishCanonicalMarketResolverRegistry,
     } from "tradeblocks-mcp/market/provenance";
     const resolved = import.meta.resolve("tradeblocks-mcp/market/provenance");
     if (!resolved.includes("/dist/market/provenance/index.js")) throw new Error("not built dist: " + resolved);
@@ -66,21 +68,7 @@ try {
       const store = new ContentObjectStore(root);
       const stored = await store.put({ b: 1, a: 2 });
       if (canonicalJson(await store.get(stored.address)) !== '{"a":2,"b":1}') throw new Error("API round trip failed");
-      const registry = await publishInputResolverRegistry(store, {
-        revision: "packed-runtime-v1",
-        classes: [{
-          kind: "partitioned",
-          dataClass: "spot",
-          dataset: "spot",
-          selectorKeys: ["ticker", "date"],
-          sessionKey: "date",
-          pathPrefix: "spot",
-          filename: "data.parquet",
-          supportedSchemaRevisions: [1],
-          resolverRevision: "spot-resolver-v1",
-          calendarRevision: "xnys-packed-v1",
-        }],
-      });
+      const registry = await publishCanonicalMarketResolverRegistry(store);
       const closure = createInputClosureDescriptor(registry.address, [{
         kind: "range",
         dataClass: "spot",
@@ -90,6 +78,12 @@ try {
       }]);
       if (!dependencyKeyAddress(registry.address, closure.observations[0]).startsWith("sha256:")) {
         throw new Error("content-manifest API round trip failed");
+      }
+      if (!isXnysSessionDate("2026-07-02") || isXnysSessionDate("2026-07-03")) {
+        throw new Error("canonical XNYS calendar API failed");
+      }
+      if (typeof finalizeCanonicalMarketDataCutoff !== "function") {
+        throw new Error("canonical finalizer API is missing");
       }
 
       const marketRoot = join(root, "market");
@@ -191,12 +185,12 @@ try {
 
   writeFileSync(
     join(consumerDir, "consumer.ts"),
-    `import { ContentObjectStore, PartitionFileIntegrityError, publishCutoffManifest, type CanonicalJsonAddress, type CutoffManifestV1 } from "tradeblocks-mcp/market/provenance";\n` +
+    `import { ContentObjectStore, PartitionFileIntegrityError, finalizeCanonicalMarketDataCutoff, type CanonicalJsonAddress, type CutoffManifestV1 } from "tradeblocks-mcp/market/provenance";\n` +
       `const store = new ContentObjectStore("/tmp/provenance-types");\n` +
       `const address: CanonicalJsonAddress = "sha256:${"0".repeat(64)}";\n` +
       `const manifest: CutoffManifestV1 | undefined = undefined;\n` +
       `void PartitionFileIntegrityError;\n` +
-      `void publishCutoffManifest;\n` +
+      `void finalizeCanonicalMarketDataCutoff;\n` +
       `void manifest;\n` +
       `void store.get(address);\n`,
   );

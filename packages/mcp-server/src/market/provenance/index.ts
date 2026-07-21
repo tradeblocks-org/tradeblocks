@@ -42,6 +42,26 @@ export {
   type PartitionCommitAttemptResult,
 } from "./partition-commit-attempt.ts";
 export {
+  XNYS_SESSION_CALENDAR_REVISION,
+  XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
+  XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
+  isXnysSessionDate,
+  enumerateXnysSessions,
+} from "./xnys-session-calendar.ts";
+export {
+  CANONICAL_MARKET_RESOLVER_REVISION,
+  BLACKOUT_SLICE_KIND,
+  BLACKOUT_SLICE_VERSION,
+  canonicalControlIdentity,
+  publishCanonicalMarketResolverRegistry,
+  CanonicalMarketInputResolver,
+  finalizeCanonicalMarketDataCutoff,
+  verifyCanonicalMarketDataCutoff,
+  proveCanonicalMarketDataPrefix,
+  type CanonicalControlIdentity,
+  type PublishCanonicalMarketRegistryInput,
+} from "./canonical-market-resolver.ts";
+export {
   INPUT_RESOLVER_REGISTRY_KIND,
   INPUT_RESOLVER_REGISTRY_VERSION,
   INPUT_CLOSURE_DESCRIPTOR_KIND,

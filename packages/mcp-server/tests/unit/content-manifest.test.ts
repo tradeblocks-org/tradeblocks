@@ -586,6 +586,70 @@ describe("market-data content manifests", () => {
     ).resolves.toMatchObject({ valid: false, reason: "closure-restriction-mismatch" });
   });
 
+  it("does not treat a cutoff-sensitive static replacement as descendant history", async () => {
+    const registry = await publishInputResolverRegistry(partitions.objects, registryInput);
+    const closure = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [control],
+    });
+    const olderObject = await partitions.objects.put({ rateBps: 433 });
+    const newerObject = await partitions.objects.put({ rateBps: 434 });
+    const olderLeaf = await publishSemanticInputLeaf(partitions.objects, {
+      registry: registry.address,
+      observation: control,
+      source: {
+        kind: "control-file",
+        role: "risk-free-rates",
+        relativePath: "control/rates.json",
+        schemaRevision: 1,
+        object: { address: olderObject.address, bytes: olderObject.bytes },
+      },
+    });
+    const newerLeaf = await publishSemanticInputLeaf(partitions.objects, {
+      registry: registry.address,
+      observation: control,
+      source: {
+        kind: "control-file",
+        role: "risk-free-rates",
+        relativePath: "control/rates.json",
+        schemaRevision: 1,
+        object: { address: newerObject.address, bytes: newerObject.bytes },
+      },
+    });
+    const resolver: ManifestInputResolver = {
+      resolve: async ({ completeThrough }) => ({
+        kind: "resolved",
+        completeThrough,
+        entries: [
+          completeThrough === "2026-07-20"
+            ? {
+                leaf: olderLeaf.address,
+                evidence: { kind: "content-object", object: olderObject.address },
+              }
+            : {
+                leaf: newerLeaf.address,
+                evidence: { kind: "content-object", object: newerObject.address },
+              },
+        ],
+      }),
+    };
+    const ancestor = await publishCutoffManifest(partitions, {
+      closure: closure.address,
+      completeThrough: "2026-07-20",
+      resolver,
+    });
+    const descendant = await publishCutoffManifest(partitions, {
+      closure: closure.address,
+      completeThrough: "2026-07-21",
+      resolver,
+      predecessor: { manifest: ancestor.address, aggregateRoot: ancestor.value.aggregateRoot },
+    });
+
+    await expect(
+      proveCutoffManifestPrefix(partitions, ancestor.address, descendant.address, resolver),
+    ).resolves.toMatchObject({ valid: false, reason: "historical-leaf-mismatch" });
+  });
+
   it("rejects raw object tampering even when parsed content remains plausible", async () => {
     const registry = await publishInputResolverRegistry(partitions.objects, registryInput);
     const closure = await publishInputClosure(partitions.objects, {

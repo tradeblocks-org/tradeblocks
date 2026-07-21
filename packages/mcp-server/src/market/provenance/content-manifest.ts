@@ -206,6 +206,22 @@ export interface ManifestInputResolver {
     dependency: CanonicalJsonAddress;
     completeThrough: string;
   }): Promise<ManifestResolution>;
+  /**
+   * Project immutable descendant static leaves back to an older cutoff.
+   *
+   * Partition/session leaves are always checked directly from the descendant
+   * manifest. A static class may opt into cutoff projection only when its
+   * producer can derive the older value from the descendant's immutable
+   * content object; re-reading mutable live state is not a valid projection.
+   */
+  projectStaticPrefix?(input: {
+    registry: InputResolverRegistryV1;
+    registryAddress: CanonicalJsonAddress;
+    dataClass: string;
+    ancestorCompleteThrough: string;
+    descendantCompleteThrough: string;
+    descendantEntries: readonly ManifestLeafReferenceV1[];
+  }): Promise<readonly ManifestLeafReferenceV1[]>;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -1747,19 +1763,49 @@ export async function proveCutoffManifestPrefix(
   if (!sameStringSet([...ancestorByClass.keys()], [...descendantByClass.keys()])) {
     return { valid: false, reason: "class-set-mismatch" };
   }
+  const registry = await verifyInputResolverRegistry(
+    partitions.objects,
+    ancestorClosure.value.registry,
+  );
   for (const [dataClass, ancestorClass] of ancestorByClass) {
     const descendantClass = descendantByClass.get(dataClass) as ManifestClassV1;
-    const retained: ManifestLeafReferenceV1[] = [];
-    for (const reference of descendantClass.entries) {
-      const leaf = await verifySemanticInputLeaf(partitions.objects, reference.leaf);
-      if (
-        leaf.value.scope.kind === "static" ||
-        leaf.value.scope.session <= ancestor.manifest.completeThrough
-      ) {
-        retained.push(reference);
+    const resolverClass = registryClass(registry.value, dataClass);
+    let retained: readonly ManifestLeafReferenceV1[];
+    if (resolverClass.kind === "static" && resolver.projectStaticPrefix) {
+      retained = await resolver.projectStaticPrefix({
+        registry: registry.value,
+        registryAddress: ancestorClosure.value.registry,
+        dataClass,
+        ancestorCompleteThrough: ancestor.manifest.completeThrough,
+        descendantCompleteThrough: descendant.manifest.completeThrough,
+        descendantEntries: descendantClass.entries,
+      });
+    } else {
+      const historical: ManifestLeafReferenceV1[] = [];
+      for (const reference of descendantClass.entries) {
+        const leaf = await verifySemanticInputLeaf(partitions.objects, reference.leaf);
+        if (
+          leaf.value.scope.kind === "static" ||
+          leaf.value.scope.session <= ancestor.manifest.completeThrough
+        ) {
+          historical.push(reference);
+        }
       }
+      retained = historical;
     }
     const normalizedRetained = normalizeLeafReferences(retained, `prefix ${dataClass} entries`);
+    for (const reference of normalizedRetained) {
+      const leaf = await verifySemanticInputLeaf(partitions.objects, reference.leaf);
+      if (
+        leaf.value.registry !== ancestorClosure.value.registry ||
+        leaf.value.dataClass !== dataClass
+      ) {
+        fail("prefix projection returned a leaf outside the manifest class");
+      }
+      if (resolverClass.kind === "static" && leaf.value.scope.kind !== "static") {
+        fail("static prefix projection returned a session-scoped leaf");
+      }
+    }
     if (
       canonicalJson(normalizedRetained.map((entry) => entry.leaf)) !==
       canonicalJson(ancestorClass.entries.map((entry) => entry.leaf))

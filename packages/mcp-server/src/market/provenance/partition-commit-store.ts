@@ -1070,6 +1070,131 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
     return Object.freeze({ address, receipt, created: false });
   }
 
+  /**
+   * Establish immutable authority for a canonical file that predates receipt
+   * publication. This never replaces the data file: it pins and hashes the
+   * existing regular inode under the partition lock, then appends authority
+   * only when the caller-supplied rows/coverage/fingerprint agree exactly.
+   */
+  async adoptExistingFileCommit(input: RecordPartitionCommitInput): Promise<StoredPartitionCommit> {
+    const captured = captureInput(input);
+    const targetPath = path.resolve(this.targetPath(captured.relativePath));
+    const realMarketRoot = await this.validateMarketRoot();
+    return this.withPartitionLock(captured, async () => {
+      const validatedTargetPath = await this.validatedTargetPath(
+        captured.relativePath,
+        realMarketRoot,
+      );
+      if (validatedTargetPath !== targetPath) {
+        throw new PartitionFileIntegrityError(
+          validatedTargetPath,
+          "validated target differs from the registered path",
+        );
+      }
+      const opened = await openRegularFileNoFollow(targetPath);
+      const handle = opened.handle;
+      const pinnedStat = opened.stat;
+      try {
+        if (
+          (await this.validatedTargetPath(captured.relativePath, realMarketRoot)) !== targetPath
+        ) {
+          throw new PartitionFileIntegrityError(
+            targetPath,
+            "target parent changed before existing-file adoption",
+          );
+        }
+        const observed = await exactOpenFileAddress(handle);
+        const afterHash = await handle.stat();
+        if (!afterHash.isFile() || afterHash.nlink !== 1 || !sameInode(pinnedStat, afterHash)) {
+          throw new PartitionFileIntegrityError(targetPath, "existing inode changed while hashing");
+        }
+        await requireNamedRegularInode(targetPath, pinnedStat);
+        if (observed.address !== captured.file.address || observed.bytes !== captured.file.bytes) {
+          throw new Error("Existing partition bytes do not match the supplied fingerprint");
+        }
+        const previous = await this.authorityWithRebuiltHead(captured);
+        if (previous && sameCommitContent(previous.commit.receipt, captured)) {
+          return previous.commit;
+        }
+        const receipt: PartitionCommitReceiptV1 = {
+          kind: PARTITION_COMMIT_RECEIPT_KIND,
+          version: PARTITION_COMMIT_RECEIPT_VERSION,
+          schemaRevision: captured.schemaRevision,
+          dataset: captured.dataset,
+          partition: captured.partition,
+          relativePath: captured.relativePath,
+          coverage: captured.coverage,
+          quality: captured.quality,
+          file: captured.file,
+          classification: previous ? "repair" : "append",
+          ...(previous ? { parent: previous.commit.address } : {}),
+        };
+        const published = await this.objects.put(receipt);
+        const stored = Object.freeze({
+          address: published.address,
+          receipt: published.value,
+          created: published.created,
+        });
+        // Establish the linearization point immediately before making the
+        // receipt discoverable. Out-of-band mutation after this point is an
+        // ordinary repair/mismatch that inspectPartition will refuse.
+        if (
+          (await this.validatedTargetPath(captured.relativePath, realMarketRoot)) !== targetPath
+        ) {
+          throw new PartitionFileIntegrityError(
+            targetPath,
+            "target parent changed before authority publication",
+          );
+        }
+        await requireNamedRegularInode(targetPath, pinnedStat);
+        const beforeEvent = await exactOpenFileAddress(handle);
+        if (
+          beforeEvent.address !== stored.receipt.file.address ||
+          beforeEvent.bytes !== stored.receipt.file.bytes
+        ) {
+          throw new Error("Existing partition changed before authority publication");
+        }
+        const eventAddress = await this.appendEvent(
+          captured,
+          stored.address,
+          previous?.eventAddress,
+        );
+        await this.writeHead(captured, { eventAddress, commit: stored });
+        if (
+          (await this.validatedTargetPath(captured.relativePath, realMarketRoot)) !== targetPath
+        ) {
+          throw new PartitionFileIntegrityError(
+            targetPath,
+            "target parent changed during authority publication",
+          );
+        }
+        await requireNamedRegularInode(targetPath, pinnedStat);
+        const finalObserved = await exactOpenFileAddress(handle);
+        const afterFinalHash = await handle.stat();
+        if (
+          !afterFinalHash.isFile() ||
+          afterFinalHash.nlink !== 1 ||
+          !sameInode(pinnedStat, afterFinalHash)
+        ) {
+          throw new PartitionFileIntegrityError(
+            targetPath,
+            "existing inode changed during final verification",
+          );
+        }
+        await requireNamedRegularInode(targetPath, pinnedStat);
+        if (
+          finalObserved.address !== stored.receipt.file.address ||
+          finalObserved.bytes !== stored.receipt.file.bytes
+        ) {
+          throw new Error("Existing partition changed during authority publication");
+        }
+        return stored;
+      } finally {
+        await handle.close();
+      }
+    });
+  }
+
   async publishFileCommit(input: PublishPartitionFileInput): Promise<StoredPartitionCommit> {
     // Snapshot every semantic field before the first await. Callers may retain
     // and mutate their input object; those mutations cannot change the lock,
