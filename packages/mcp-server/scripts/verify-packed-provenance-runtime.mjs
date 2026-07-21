@@ -196,11 +196,11 @@ try {
 
   writeFileSync(
     join(consumerDir, "consumer.ts"),
-    `import { ContentObjectStore, PartitionFileIntegrityError, publishCanonicalRateSlice, verifyCanonicalRefreshCompletion, type CanonicalJsonAddress, type CanonicalRateSliceV1, type CanonicalRefreshCompletionV1, type CutoffManifestV1, type MaterializedResolverClassV1 } from "tradeblocks-mcp/market/provenance";\n` +
+    `import { ContentObjectStore, PartitionFileIntegrityError, publishCanonicalRateSlice, verifyCanonicalRefreshCompletion, type CanonicalJsonAddress, type CanonicalRateSliceV1, type CanonicalRefreshCompletionV2, type CutoffManifestV1, type MaterializedResolverClassV1 } from "tradeblocks-mcp/market/provenance";\n` +
       `const store = new ContentObjectStore("/tmp/provenance-types");\n` +
       `const address: CanonicalJsonAddress = "sha256:${"0".repeat(64)}";\n` +
       `const manifest: CutoffManifestV1 | undefined = undefined;\n` +
-      `const completion: CanonicalRefreshCompletionV1 | undefined = undefined;\n` +
+      `const completion: CanonicalRefreshCompletionV2 | undefined = undefined;\n` +
       `const rate: CanonicalRateSliceV1 | undefined = undefined;\n` +
       `const materialized: MaterializedResolverClassV1 | undefined = undefined;\n` +
       `void PartitionFileIntegrityError;\n` +

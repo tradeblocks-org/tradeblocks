@@ -15,6 +15,7 @@ import {
   publishCanonicalRateSlice,
   publishRefreshCompletionAuthority,
   publishInputClosure,
+  verifyCanonicalRefreshCompletion,
   verifySemanticInputLeaf,
   verifyCanonicalMarketDataCutoff,
   type CanonicalJsonAddress,
@@ -61,6 +62,27 @@ describe("producer-owned canonical market resolver", () => {
     });
   }
 
+  async function adoptEnriched(session: string, ticker: string) {
+    const partition = { ticker, date: session };
+    const relativePath = `enriched/ticker=${ticker}/date=${session}/data.parquet`;
+    const targetPath = join(marketRoot, ...relativePath.split("/"));
+    const preparedPath = `${targetPath}.prepared-${Math.random().toString(36).slice(2)}`;
+    const bytes = Buffer.from(canonicalJson({ ticker, session, RSI_14: 50 }));
+    mkdirSync(dirname(targetPath), { recursive: true });
+    writeFileSync(preparedPath, bytes);
+    return partitions.publishFileCommit({
+      dataset: "enriched",
+      partition,
+      schemaRevision: 1,
+      relativePath,
+      coverage: { kind: "date-range", from: session, through: session },
+      quality: { inputRows: 1, writtenRows: 1, droppedRows: 0 },
+      file: { address: addressBytes(bytes), bytes: bytes.byteLength, rows: 1 },
+      preparedPath,
+      expectedTargetPath: targetPath,
+    });
+  }
+
   async function publishCompletion(
     closure: CanonicalJsonAddress,
     session: string,
@@ -78,6 +100,8 @@ describe("producer-owned canonical market resolver", () => {
       plan: {
         asOf: session,
         spotTickers,
+        enrichedTickers: [],
+        includeEnrichedContext: false,
         chainUnderlyings: [],
         quoteUnderlyings: [],
         openInterestUnderlyings: [],
@@ -135,6 +159,57 @@ describe("producer-owned canonical market resolver", () => {
 
     expect(verified.manifest.classes).toHaveLength(1);
     expect(verified.manifest.classes[0]).toMatchObject({ dataClass: "spot", leafCount: 2 });
+  });
+
+  it("refuses a forged derived plan without its same-session raw input", async () => {
+    const registry = await publishCanonicalMarketResolverRegistry(partitions.objects);
+    const session = "2026-07-06";
+    const closure = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [
+        {
+          kind: "exact",
+          dataClass: "enriched",
+          selector: { ticker: "IWM", date: session },
+          session,
+        },
+        {
+          kind: "exact",
+          dataClass: "spot",
+          selector: { ticker: "SPY", date: session },
+          session,
+        },
+      ],
+    });
+    const enriched = await adoptEnriched(session, "IWM");
+    const spot = await adoptSpot(session, { closeCents: 60_000 }, "SPY");
+    const completion = await partitions.objects.put({
+      kind: CANONICAL_REFRESH_COMPLETION_KIND,
+      version: CANONICAL_REFRESH_COMPLETION_VERSION,
+      attemptId: "forged-derived-plan",
+      closure: closure.address,
+      plan: {
+        asOf: session,
+        spotTickers: ["SPY"],
+        enrichedTickers: ["IWM"],
+        includeEnrichedContext: false,
+        chainUnderlyings: [],
+        quoteUnderlyings: [],
+        openInterestUnderlyings: [],
+      },
+      operations: [{ kind: "spot", target: "SPY", status: "ok", rowsWritten: 1 }],
+      quoteGroups: [],
+      receipts: [enriched, spot].map((commit) => ({
+        dataset: commit.receipt.dataset,
+        partition: commit.receipt.partition,
+        receipt: commit.address,
+      })),
+    });
+    await publishRefreshCompletionAuthority(partitions, completion.address);
+
+    await expect(verifyCanonicalRefreshCompletion(partitions, completion.address)).rejects.toThrow(
+      /same-session spot refresh/,
+    );
   });
 
   it("materializes distinct bounded SOFR and Treasury rate leaves", async () => {
@@ -445,22 +520,21 @@ describe("producer-owned canonical market resolver", () => {
     ).rejects.toThrow(/missing-probe cannot satisfy refresh completion/);
   });
 
-  it("refuses unbounded enriched reads and unsupported cutoff dates", async () => {
+  it("registers bounded enriched reads and refuses unsupported cutoff dates", async () => {
     const registry = await publishCanonicalMarketResolverRegistry(partitions.objects);
-    await expect(
-      publishInputClosure(partitions.objects, {
-        registry: registry.address,
-        observations: [
-          {
-            kind: "range",
-            dataClass: "enriched",
-            selectorPrefix: { ticker: "IWM" },
-            fromSession: "2026-07-02",
-            throughSession: "2026-07-06",
-          },
-        ],
-      }),
-    ).rejects.toThrow(/unknown data class/);
+    const enriched = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [
+        {
+          kind: "range",
+          dataClass: "enriched",
+          selectorPrefix: { ticker: "IWM" },
+          fromSession: "2026-07-02",
+          throughSession: "2026-07-06",
+        },
+      ],
+    });
+    expect(enriched.value.observations).toHaveLength(1);
 
     const closure = await publishInputClosure(partitions.objects, {
       registry: registry.address,

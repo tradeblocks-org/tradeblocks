@@ -10,9 +10,13 @@
  * D-02 reminder: no method body inspects `ctx.parquetMode` — the factory
  * chooses the backend once at construction, every method is monomorphic.
  */
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import * as path from "path";
-import { EnrichedStore, type EnrichedReadOpts } from "./enriched-store.ts";
+import {
+  EnrichedStore,
+  type EnrichedComputeOptions,
+  type EnrichedReadOpts,
+} from "./enriched-store.ts";
 import { SpotStore } from "./spot-store.ts";
 import type { StoreContext, CoverageReport } from "./types.ts";
 import { buildReadEnrichedSQL } from "./enriched-sql.ts";
@@ -27,14 +31,26 @@ export class ParquetEnrichedStore extends EnrichedStore {
     this.spotStore = spotStore;
   }
 
-  async compute(ticker: string, _from: string, _to: string): Promise<void> {
-    // _from/_to are informational — the enricher uses its own watermark plus
-    // a 200-day lookback. The thin wrapper only injects IO; math stays in
-    // `market-enricher.ts` (D-14).
+  async compute(
+    ticker: string,
+    from: string,
+    to: string,
+    options: EnrichedComputeOptions = {},
+  ): Promise<void> {
+    // Indicator math still uses its watermark plus a 200-day lookback, while
+    // publication is bounded to this requested logical session window.
     await runEnrichment(
       this.ctx.conn,
       ticker,
-      { dataDir: this.ctx.dataDir, parquetMode: true },
+      {
+        dataDir: this.ctx.dataDir,
+        parquetMode: true,
+        from,
+        to,
+        publishTicker: true,
+        publishContext: false,
+        persistWatermark: options.persistWatermark,
+      },
       {
         spotStore: this.spotStore,
         watermarkStore: {
@@ -45,17 +61,32 @@ export class ParquetEnrichedStore extends EnrichedStore {
     );
   }
 
-  async computeContext(_from: string, _to: string): Promise<void> {
+  async computeContext(
+    from: string,
+    to: string,
+    _options: EnrichedComputeOptions = {},
+  ): Promise<void> {
     // D-16: wraps the existing Tier 2 context computation. Running
     // runEnrichment for each VIX-family ticker triggers Tier 2 internally
     // (it runs after every Tier 1 pass and is idempotent at date granularity).
     // If a ticker has no daily data yet, runEnrichment returns a skipped
     // Tier 1 status and skips Tier 2 — safe no-op.
-    for (const ticker of ["VIX", "VIX9D", "VIX3M"]) {
+    const contextTickers = ["VIX", "VIX9D", "VIX3M"];
+    for (const [index, ticker] of contextTickers.entries()) {
       await runEnrichment(
         this.ctx.conn,
         ticker,
-        { dataDir: this.ctx.dataDir, parquetMode: true },
+        {
+          dataDir: this.ctx.dataDir,
+          parquetMode: true,
+          from,
+          to,
+          publishTicker: false,
+          publishContext: index === contextTickers.length - 1,
+          // Context publication does not publish any VIX-family ticker
+          // partition, so it must never advance those ticker watermarks.
+          persistWatermark: false,
+        },
         {
           spotStore: this.spotStore,
           watermarkStore: {
@@ -75,17 +106,25 @@ export class ParquetEnrichedStore extends EnrichedStore {
     // entry-pipeline date when an RSI / vol-regime filter is configured.
     const wantsJoins = !!opts.includeContext || !!opts.includeOhlcv;
     if (!wantsJoins) {
-      const filePath = path.join(
+      const tickerDir = path.join(
         resolveMarketDir(this.ctx.dataDir),
         "enriched",
         `ticker=${opts.ticker}`,
-        "data.parquet",
       );
-      if (existsSync(filePath)) {
-        const escaped = filePath.replace(/'/g, "''");
+      if (existsSync(tickerDir)) {
+        const files = readdirSync(tickerDir)
+          .filter((entry) => entry.startsWith("date="))
+          .map((entry) => ({
+            date: entry.slice("date=".length),
+            file: path.join(tickerDir, entry, "data.parquet"),
+          }))
+          .filter(({ date, file }) => date >= opts.from && date <= opts.to && existsSync(file))
+          .sort((left, right) => left.date.localeCompare(right.date));
+        if (files.length === 0) return [];
+        const sources = files.map(({ file }) => `'${file.replace(/'/g, "''")}'`).join(", ");
         const fromLit = opts.from.replace(/'/g, "''");
         const toLit = opts.to.replace(/'/g, "''");
-        const sql = `SELECT * FROM read_parquet('${escaped}', hive_partitioning=true)
+        const sql = `SELECT * FROM read_parquet([${sources}], hive_partitioning=true)
                      WHERE date >= '${fromLit}' AND date <= '${toLit}'
                      ORDER BY date`;
         const reader = await this.ctx.conn.runAndReadAll(sql);
@@ -109,23 +148,20 @@ export class ParquetEnrichedStore extends EnrichedStore {
   async getCoverage(ticker: string): Promise<CoverageReport> {
     // D-27: coverage comes from the enriched data itself (not the watermark
     // JSON) — "what rows exist" is independent of "where did enrichment stop".
-    const filePath = path.join(
-      resolveMarketDir(this.ctx.dataDir),
-      "enriched",
-      `ticker=${ticker}`,
-      "data.parquet",
-    );
-    if (!existsSync(filePath)) {
+    const tickerDir = path.join(resolveMarketDir(this.ctx.dataDir), "enriched", `ticker=${ticker}`);
+    if (!existsSync(tickerDir)) {
       // No enriched Parquet file for this ticker — empty report. Querying
       // market.enriched here would surface rows from other tickers (the view
       // is a union), so we return empty early to match Parquet reality.
       return { earliest: null, latest: null, missingDates: [], totalDates: 0 };
     }
-    const tickerLit = ticker.replace(/'/g, "''");
-    const reader = await this.ctx.conn.runAndReadAll(
-      `SELECT DISTINCT date FROM market.enriched WHERE ticker = '${tickerLit}' ORDER BY date`,
-    );
-    const dates = reader.getRows().map((r) => String(r[0]));
+    const dates = readdirSync(tickerDir)
+      .filter(
+        (entry) =>
+          entry.startsWith("date=") && existsSync(path.join(tickerDir, entry, "data.parquet")),
+      )
+      .map((entry) => entry.slice("date=".length))
+      .sort();
     return {
       earliest: dates[0] ?? null,
       latest: dates[dates.length - 1] ?? null,

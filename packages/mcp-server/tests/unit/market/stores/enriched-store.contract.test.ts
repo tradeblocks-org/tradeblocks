@@ -53,15 +53,16 @@ async function seedEnriched(
        VALUES ($1, $2, $3, $4, $5)`,
       [ticker, date, priorClose, gap, rsi],
     );
-  }
-  if (parquetMode) {
-    // Escape single quotes defensively for the filter literal
-    const safe = ticker.replace(/'/g, "''");
-    await writeEnrichedTickerFile(conn, {
-      dataDir,
-      ticker,
-      selectQuery: `SELECT * FROM market.enriched WHERE ticker = '${safe}'`,
-    });
+    if (parquetMode) {
+      const safe = ticker.replace(/'/g, "''");
+      await writeEnrichedTickerFile(conn, {
+        dataDir,
+        ticker,
+        date,
+        selectQuery:
+          `SELECT * FROM market.enriched WHERE ticker = '${safe}' ` + `AND date = '${date}'`,
+      });
+    }
   }
 }
 
@@ -71,8 +72,8 @@ async function seedContext(
   parquetMode: boolean,
 ): Promise<void> {
   for (const [date, volRegime, tss, trendDir] of [
-    ["2025-01-06", 1, 0, "UP"],
-    ["2025-01-07", 2, 1, "DOWN"],
+    ["2025-01-06", 1, 0, "up"],
+    ["2025-01-07", 2, 1, "down"],
   ] as const) {
     await conn.run(
       `INSERT OR REPLACE INTO market.enriched_context
@@ -80,12 +81,13 @@ async function seedContext(
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [date, volRegime, tss, trendDir, 0.1, 0.2],
     );
-  }
-  if (parquetMode) {
-    await writeEnrichedContext(conn, {
-      dataDir,
-      selectQuery: `SELECT * FROM market.enriched_context`,
-    });
+    if (parquetMode) {
+      await writeEnrichedContext(conn, {
+        dataDir,
+        date,
+        selectQuery: `SELECT * FROM market.enriched_context WHERE date = '${date}'`,
+      });
+    }
   }
 }
 

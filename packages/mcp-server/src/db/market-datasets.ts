@@ -1,11 +1,7 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as path from "path";
 import { getDataRoot } from "./data-root.ts";
-import {
-  writeParquetAtomic,
-  writeParquetPartition,
-  type ParquetWriteResult,
-} from "./parquet-writer.ts";
+import { writeParquetPartition, type ParquetWriteResult } from "./parquet-writer.ts";
 import {
   MARKET_DATASETS,
   type MarketDatasetDefinition,
@@ -68,8 +64,8 @@ export function canonicalMarketTableName(dataset: CanonicalMarketDataset): strin
 // Declarative dataset registry — canonical Parquet layout
 //
 //   spot:                 spot/ticker=X/date=Y/data.parquet
-//   enriched:             enriched/ticker=X/data.parquet
-//   enriched_context:     enriched/context/data.parquet
+//   enriched:             enriched/ticker=X/date=Y/data.parquet
+//   enriched_context:     enriched/context/date=Y/data.parquet
 //   option_chain:         option_chain/underlying=X/date=Y/data.parquet
 //   option_quote_minutes: option_quote_minutes/underlying=X/date=Y/data.parquet
 //
@@ -264,14 +260,15 @@ export async function writeOiDailyPartition(
 }
 
 /**
- * Writes the single file for a ticker: enriched/ticker=X/data.parquet.
- * Single-level partitioning (only `ticker`).
+ * Writes one bounded ticker/session slice:
+ * enriched/ticker=X/date=Y/data.parquet.
  */
 export async function writeEnrichedTickerFile(
   conn: DuckDBConnection,
   args: {
     dataDir: string;
     ticker: string;
+    date: string;
     selectQuery: string;
     compression?: string;
     quality?: DatasetWriteQuality;
@@ -280,38 +277,81 @@ export async function writeEnrichedTickerFile(
   const def = DATASETS_V3.enriched;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
-    partitions: { ticker: args.ticker },
+    partitions: { ticker: args.ticker, date: args.date },
     selectQuery: args.selectQuery,
     compression: args.compression,
     filename: def.filename,
-    // This legacy whole-history file is not a bounded logical-date partition.
-    // An active provenance attempt therefore refuses it in writeParquetAtomic;
-    // outside an attempt it retains legacy write behavior without a receipt.
+    provenance: provenanceOptions(
+      "enriched",
+      { ticker: args.ticker, date: args.date },
+      def.schemaRevision,
+      path.posix.join(def.subdir, `ticker=${args.ticker}`, `date=${args.date}`, def.filename),
+      { kind: "prepared-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
 /**
- * Writes the zero-partition enriched context file: enriched/context/data.parquet.
- *
- * SPECIAL CASE: partitionKeys=[] would cause writeParquetPartition's partition
- * loop to no-op and compose {baseDir}/data.parquet (one directory too shallow).
- * Bypass the generic writer and call writeParquetAtomic directly with the full target path.
+ * Writes one bounded cross-ticker context session:
+ * enriched/context/date=Y/data.parquet.
  */
 export async function writeEnrichedContext(
   conn: DuckDBConnection,
   args: {
     dataDir: string;
+    date: string;
     selectQuery: string;
     compression?: string;
     quality?: DatasetWriteQuality;
   },
 ): Promise<ParquetWriteResult> {
+  const completeness = await conn.runAndReadAll(
+    `SELECT date, Vol_Regime, Term_Structure_State, Trend_Direction,
+            VIX_Spike_Pct, VIX_Gap_Pct
+     FROM (${args.selectQuery}) AS bounded_enriched_context`,
+  );
+  const rows = completeness.getRows();
+  if (rows.length !== 1) {
+    throw new Error(
+      `Enriched context partition ${args.date} must contain exactly one logical session row`,
+    );
+  }
+  const [date, volRegime, termStructure, trendDirection, vixSpikePct, vixGapPct] = rows[0];
+  if (String(date) !== args.date) {
+    throw new Error(`Enriched context partition ${args.date} contains a different logical date`);
+  }
+  if (
+    !Number.isInteger(volRegime) ||
+    Number(volRegime) < 1 ||
+    Number(volRegime) > 6 ||
+    !Number.isInteger(termStructure) ||
+    ![-1, 0, 1].includes(Number(termStructure)) ||
+    typeof trendDirection !== "string" ||
+    !["up", "down", "flat"].includes(trendDirection) ||
+    typeof vixSpikePct !== "number" ||
+    !Number.isFinite(vixSpikePct) ||
+    typeof vixGapPct !== "number" ||
+    !Number.isFinite(vixGapPct)
+  ) {
+    throw new Error(
+      `Enriched context partition ${args.date} is missing required VIX completeness fields`,
+    );
+  }
   const def = DATASETS_V3.enriched_context;
-  const targetPath = path.join(resolveMarketDir(args.dataDir), def.subdir, def.filename);
-  return writeParquetAtomic(conn, {
-    targetPath,
+  return writeParquetPartition(conn, {
+    baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
+    partitions: { date: args.date },
     selectQuery: args.selectQuery,
     compression: args.compression,
-    // See writeEnrichedTickerFile: context is also an unbounded legacy file.
+    filename: def.filename,
+    provenance: provenanceOptions(
+      "enriched_context",
+      { date: args.date },
+      def.schemaRevision,
+      path.posix.join(def.subdir, `date=${args.date}`, def.filename),
+      { kind: "prepared-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }

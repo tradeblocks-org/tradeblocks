@@ -64,11 +64,11 @@ export {
   CANONICAL_REFRESH_COMPLETION_KIND,
   CANONICAL_REFRESH_COMPLETION_VERSION,
   verifyCanonicalRefreshCompletion,
-  type CanonicalRefreshPlanV1,
+  type CanonicalRefreshPlanV2,
   type CanonicalRefreshReceiptV1,
   type CanonicalRefreshOperationV1,
   type CanonicalRefreshQuoteGroupV1,
-  type CanonicalRefreshCompletionV1,
+  type CanonicalRefreshCompletionV2,
 } from "./refresh-completion.ts";
 export {
   CANONICAL_RATE_SLICE_KIND,

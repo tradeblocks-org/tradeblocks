@@ -1167,7 +1167,14 @@ describe("runEnrichment injected IO path", () => {
     const result = await runEnrichment(conn, "SPX", { dataDir: tmpDir, parquetMode: true });
     expect(result.tier1.status).toBe("complete");
 
-    const enrichedPath = join(tmpDir, "market", "enriched", "ticker=SPX", "data.parquet");
+    const enrichedPath = join(
+      tmpDir,
+      "market",
+      "enriched",
+      "ticker=SPX",
+      "date=2025-01-08",
+      "data.parquet",
+    );
     expect(existsSync(enrichedPath)).toBe(true);
   });
 });
@@ -1341,16 +1348,18 @@ describe("io.spotStore is the canonical OHLCV read path", () => {
   // catalog; io.spotStore is the canonical read path.
 
   test("Tier 2: uses spotStore for VIX-family daily when io.spotStore is provided (no daily.parquet)", async () => {
-    // Synthesize VIX/VIX9D/VIX3M daily bars in the fake spotStore. market.spot has no VIX data.
+    // Synthesize VIX-family and SPX daily bars in the fake spotStore. market.spot has no VIX data.
     // Without the Tier 2 rewire, Tier 2 would skip with "no VIX data — import VIX ticker first".
     // With the rewire, Tier 2 reads VIX-family OHLCV from spotStore via the TEMP seed.
     const vixBars = syntheticDailyBars(15, "2025-01-02", 60);
     const vix9dBars = syntheticDailyBars(14, "2025-01-02", 60);
     const vix3mBars = syntheticDailyBars(16, "2025-01-02", 60);
+    const spxBars = syntheticDailyBars(4500, "2025-01-02", 60);
     const fakeSpot = buildFakeSpotStoreWithDailyBars({
       VIX: vixBars,
       VIX9D: vix9dBars,
       VIX3M: vix3mBars,
+      SPX: spxBars,
     });
     const io = {
       spotStore: fakeSpot,
@@ -1373,6 +1382,41 @@ describe("io.spotStore is the canonical OHLCV read path", () => {
     // Tier 2 should have asked spotStore for VIX9D and VIX3M too (TEMP seed pass)
     expect(fakeSpot.readDailyBarsCalls).toContain("VIX9D");
     expect(fakeSpot.readDailyBarsCalls).toContain("VIX3M");
+    expect(fakeSpot.readDailyBarsCalls).toContain("SPX");
+    const context = await conn.runAndReadAll(
+      `SELECT Trend_Direction FROM market.enriched_context WHERE date = $1`,
+      [spxBars[spxBars.length - 1].date],
+    );
+    expect(context.getRows()[0]?.[0]).toBe("flat");
+  });
+
+  test("Tier 2 refuses derived lookbacks that jump a required XNYS session", async () => {
+    const vixBars = syntheticDailyBars(15, "2025-01-02", 60);
+    const vix9dBars = syntheticDailyBars(14, "2025-01-02", 60);
+    const vix3mBars = syntheticDailyBars(16, "2025-01-02", 60);
+    const spxBars = syntheticDailyBars(4500, "2025-01-02", 60);
+    const targetDate = vixBars[vixBars.length - 1].date;
+    const fakeSpot = buildFakeSpotStoreWithDailyBars({
+      VIX: vixBars.filter((_, index) => index !== vixBars.length - 2),
+      VIX9D: vix9dBars,
+      VIX3M: vix3mBars,
+      SPX: spxBars.filter((_, index) => index !== spxBars.length - 10),
+    });
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: {
+        get: async () => null,
+        upsert: async () => undefined,
+      },
+    };
+
+    await runEnrichment(conn, "VIX", { dataDir: tmpDir }, io);
+    const context = await conn.runAndReadAll(
+      `SELECT Trend_Direction, VIX_Gap_Pct
+       FROM market.enriched_context WHERE date = $1`,
+      [targetDate],
+    );
+    expect(context.getRows()[0]).toEqual([null, null]);
   });
 
   test('Tier 1: returns "no data from spotStore" skip reason when spotStore has no data for ticker', async () => {

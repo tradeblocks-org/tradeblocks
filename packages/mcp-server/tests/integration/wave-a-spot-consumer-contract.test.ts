@@ -35,7 +35,8 @@ async function seedEnriched(fixture: FixtureHandle, ticker: string, date: string
   await writeEnrichedTickerFile(fixture.ctx.conn, {
     dataDir: fixture.ctx.dataDir,
     ticker,
-    selectQuery: `SELECT * FROM market.enriched WHERE ticker = '${safe}'`,
+    date,
+    selectQuery: `SELECT * FROM market.enriched WHERE ticker = '${safe}' ` + `AND date = '${date}'`,
   });
 }
 

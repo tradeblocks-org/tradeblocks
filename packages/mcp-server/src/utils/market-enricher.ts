@@ -18,11 +18,22 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import { existsSync, readdirSync } from "fs";
 import * as path from "path";
-import { isParquetMode, writeParquetAtomic } from "../db/parquet-writer.ts";
-import { resolveCanonicalMarketFile, resolveMarketDir } from "../db/market-datasets.ts";
+import { isParquetMode } from "../db/parquet-writer.ts";
+import {
+  resolveCanonicalMarketFile,
+  resolveMarketDir,
+  writeEnrichedContext,
+  writeEnrichedTickerFile,
+} from "../db/market-datasets.ts";
 import { getEnrichedThrough, upsertEnrichedThrough } from "../db/json-adapters.ts";
 import { DEFAULT_MARKET_TICKER } from "./ticker.ts";
 import type { SpotStore } from "../market/stores/spot-store.ts";
+import { isRealMarketSessionDate } from "../market/provenance/dataset-registry.ts";
+import {
+  enumerateXnysSessions,
+  XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
+  XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
+} from "../market/provenance/xnys-session-calendar.ts";
 
 // =============================================================================
 // Interfaces
@@ -503,6 +514,13 @@ export interface EnrichmentOptions {
   forceFull?: boolean;
   dataDir?: string; // Required in Parquet mode for file paths
   parquetMode?: boolean;
+  /** Inclusive logical publication window. Omit to migrate/publish all computed rows. */
+  from?: string;
+  to?: string;
+  /** Internal publication split used by the store's ticker/context methods. */
+  publishTicker?: boolean;
+  publishContext?: boolean;
+  persistWatermark?: boolean;
 }
 
 /**
@@ -551,6 +569,29 @@ function subtractDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().split("T")[0];
+}
+
+function isCompleteXnysWindow(dates: readonly string[], requiredSessions: number): boolean {
+  if (dates.length !== requiredSessions) return false;
+  const through = dates[dates.length - 1];
+  // The canonical cutoff authority is deliberately calendar-bounded. Keep
+  // legacy physical enrichment usable outside that authority's date range;
+  // supported cutoff dates get the strict session-continuity proof.
+  if (
+    through < XNYS_SESSION_CALENDAR_SUPPORTED_FROM ||
+    through > XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH
+  ) {
+    return true;
+  }
+  try {
+    const expected = enumerateXnysSessions(dates[0], through);
+    return (
+      expected.length === requiredSessions &&
+      expected.every((session, index) => session === dates[index])
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Parse YYYY-MM-DD to a local Date without timezone conversion */
@@ -631,15 +672,15 @@ async function alignDailyWorkingTableColumns(
  *   1. Legacy `daily.parquet` / `date_context.parquet` — the pre-migration
  *      single-file layout, still supported for data roots that have not yet
  *      been rebuilt.
- *   2. New `enriched/ticker=*\/data.parquet` + `enriched/context/data.parquet`
- *      — the canonical per-ticker enriched layout. The working table is
- *      seeded from a UNION ALL across the existing per-ticker files; OHLCV
+ *   2. New `enriched/ticker=*\/date=*\/data.parquet` and bounded context
+ *      partitions — the canonical logical-date layout. The working table is
+ *      seeded from a UNION ALL across the existing slice files; OHLCV
  *      columns are NULL in the seed (the working table only needs OHLCV
  *      for legacy callers without io.spotStore; Tier 2 with io.spotStore
  *      reads VIX OHLCV from a separate temp seeded from spot/, so SPX
  *      historical Return_20D is the only enrichment field the SPX JOIN
  *      actually needs from the working table — and that lives in
- *      enriched/ticker=SPX/data.parquet).
+ *      enriched/ticker=SPX/date=Y/data.parquet).
  *   3. Empty fallback (`market.enriched WHERE 1=0`) when neither source
  *      exists — preserves fresh-clone behavior unchanged.
  */
@@ -654,8 +695,8 @@ async function setupParquetWorkingTables(
   const dailyPath = resolveCanonicalMarketFile(dataDir, "daily");
   const dateContextPath = resolveCanonicalMarketFile(dataDir, "date_context");
   const enrichedDir = path.join(resolveMarketDir(dataDir), "enriched");
-  const enrichedTickerGlob = path.join(enrichedDir, "ticker=*", "data.parquet");
-  const enrichedContextPath = path.join(enrichedDir, "context", "data.parquet");
+  const enrichedTickerGlob = path.join(enrichedDir, "ticker=*", "date=*", "data.parquet");
+  const enrichedContextGlob = path.join(enrichedDir, "context", "date=*", "data.parquet");
 
   // ---- Daily working table seed ---------------------------------------------
   if (existsSync(dailyPath)) {
@@ -666,7 +707,7 @@ async function setupParquetWorkingTables(
     // Parquet files from fresh imports may lack enrichment columns — add them
     await alignDailyWorkingTableColumns(conn, dailyTable);
   } else if (hasEnrichedTickerFiles(enrichedDir)) {
-    // Per-ticker seed: union the existing enriched/ticker=*/data.parquet files.
+    // Per-session seed: union existing enriched/ticker=*/date=*/data.parquet files.
     // These contain (ticker, date, 28 enrichment cols) — no OHLCV. We add NULL
     // OHLCV columns via ALTER TABLE below so that:
     //   - Callers without io.spotStore reading OHLCV from the working table get
@@ -714,14 +755,14 @@ async function setupParquetWorkingTables(
   //     market.spot_daily that isn't in the seed needs to be inserted before
   //     enrichment. Usually a no-op when inventories already agree.
   //   - Per-ticker enriched-files branch: the seed only contains tickers with
-  //     an enriched/ticker=X/data.parquet file. Tickers that have spot data
+  //     any enriched/ticker=X/date=Y/data.parquet slices. Tickers that have spot data
   //     but no enriched file yet (e.g. after a partial re-enrichment delete)
   //     would otherwise be missed.
   //   - Fresh branch: the working table is empty, so every (ticker, date) in
   //     market.spot_daily is new.
   //
   // Without this backfill, UPDATE ... WHERE (ticker, date) matches 0 rows and
-  // the enricher silently writes an empty enriched/ticker=X/data.parquet
+  // the enricher silently writes empty enriched/ticker=X/date=Y/data.parquet slices
   // file — corrupting historical enrichment on the first run after
   // enriched/ is deleted. OHLCV columns stay NULL (io.spotStore is the
   // canonical OHLCV source; the Tier 2 SPX JOIN uses enrichment fields,
@@ -754,14 +795,14 @@ async function setupParquetWorkingTables(
     await conn.run(
       `CREATE TEMP TABLE "${dateContextTable}" AS SELECT * FROM read_parquet('${dateContextPath}')`,
     );
-  } else if (existsSync(enrichedContextPath)) {
-    // Seed from the per-ticker enriched/context/data.parquet file
+  } else if (hasEnrichedContextFiles(enrichedDir)) {
+    // Seed from bounded enriched/context/date=*/data.parquet files.
     await conn.run(
-      `CREATE TEMP TABLE "${dateContextTable}" AS SELECT * FROM read_parquet('${enrichedContextPath}')`,
+      `CREATE TEMP TABLE "${dateContextTable}" AS SELECT * FROM read_parquet('${enrichedContextGlob}', hive_partitioning=true)`,
     );
   } else {
     await conn.run(`CREATE TEMP TABLE "${dateContextTable}" (
-      date VARCHAR, Vol_Regime VARCHAR, Term_Structure_State VARCHAR,
+      date VARCHAR, Vol_Regime INTEGER, Term_Structure_State INTEGER,
       Trend_Direction VARCHAR, VIX_Spike_Pct DOUBLE, VIX_Gap_Pct DOUBLE
     )`);
   }
@@ -782,7 +823,7 @@ async function setupParquetWorkingTables(
 }
 
 /**
- * True if `<dir>/ticker=<X>/data.parquet` exists for at least one ticker.
+ * True if `<dir>/ticker=<X>/date=<Y>/data.parquet` exists for at least one slice.
  * Mirrors the helper of the same name in db/market-views.ts; copied locally to
  * avoid pulling the view layer as a dependency of the enricher.
  */
@@ -791,8 +832,30 @@ function hasEnrichedTickerFiles(dir: string): boolean {
   try {
     return readdirSync(dir).some((entry: string) => {
       if (!entry.startsWith("ticker=")) return false;
-      return existsSync(path.join(dir, entry, "data.parquet"));
+      const tickerDir = path.join(dir, entry);
+      try {
+        return readdirSync(tickerDir).some(
+          (dateEntry) =>
+            dateEntry.startsWith("date=") &&
+            existsSync(path.join(tickerDir, dateEntry, "data.parquet")),
+        );
+      } catch {
+        return false;
+      }
     });
+  } catch {
+    return false;
+  }
+}
+
+function hasEnrichedContextFiles(dir: string): boolean {
+  const contextDir = path.join(dir, "context");
+  if (!existsSync(contextDir)) return false;
+  try {
+    return readdirSync(contextDir).some(
+      (entry) =>
+        entry.startsWith("date=") && existsSync(path.join(contextDir, entry, "data.parquet")),
+    );
   } catch {
     return false;
   }
@@ -800,8 +863,9 @@ function hasEnrichedTickerFiles(dir: string): boolean {
 
 /**
  * Write working-table contents to the `enriched/` partition layout —
- * `enriched/ticker={ticker}/data.parquet` for per-ticker enrichment columns
- * and `enriched/context/data.parquet` for the cross-ticker context.
+ * `enriched/ticker={ticker}/date={date}/data.parquet` for per-ticker
+ * enrichment columns and `enriched/context/date={date}/data.parquet` for
+ * cross-ticker context.
  *
  * This function does NOT write `daily.parquet` or `date_context.parquet`;
  * those legacy single-file outputs are retired. The `market.enriched` and
@@ -826,24 +890,62 @@ async function flushEnrichedToParquet(
   dataDir: string,
   ticker: string,
   tables: { dailyTable: string; dateContextTable: string },
+  from?: string,
+  to?: string,
+  publication: { ticker: boolean; context: boolean } = { ticker: true, context: true },
 ): Promise<void> {
   const enrichedColList = DAILY_ENRICHMENT_COLUMNS.map((c) => `"${c.name}"`).join(", ");
-  const tickerFile = path.join(
-    resolveMarketDir(dataDir),
-    "enriched",
-    `ticker=${ticker}`,
-    "data.parquet",
-  );
-  await writeParquetAtomic(conn, {
-    targetPath: tickerFile,
-    selectQuery: `SELECT ticker, date, ${enrichedColList} FROM "${tables.dailyTable}" WHERE ticker = '${ticker}' ORDER BY date`,
-  });
+  const bounds = [from ? `date >= '${from}'` : null, to ? `date <= '${to}'` : null]
+    .filter((predicate): predicate is string => predicate !== null)
+    .join(" AND ");
+  const bounded = bounds.length > 0 ? ` AND ${bounds}` : "";
+  if (publication.ticker) {
+    const tickerDatesReader = await conn.runAndReadAll(
+      `SELECT DISTINCT date FROM "${tables.dailyTable}"
+       WHERE ticker = '${ticker}'${bounded} ORDER BY date`,
+    );
+    const tickerDates = tickerDatesReader.getRows().map((row) => String(row[0]));
+    for (const date of tickerDates) {
+      if (!isRealMarketSessionDate(date)) {
+        throw new Error(`Enriched slice has invalid logical date: ${JSON.stringify(date)}`);
+      }
+      await writeEnrichedTickerFile(conn, {
+        dataDir,
+        ticker,
+        date,
+        selectQuery:
+          `SELECT ticker, date, ${enrichedColList} FROM "${tables.dailyTable}" ` +
+          `WHERE ticker = '${ticker}' AND date = '${date}'`,
+        quality: { kind: "writer-input-complete" },
+      });
+    }
+  }
 
-  const contextFile = path.join(resolveMarketDir(dataDir), "enriched", "context", "data.parquet");
-  await writeParquetAtomic(conn, {
-    targetPath: contextFile,
-    selectQuery: `SELECT * FROM "${tables.dateContextTable}" ORDER BY date`,
-  });
+  if (publication.context) {
+    const contextDatesReader = await conn.runAndReadAll(
+      `SELECT DISTINCT date FROM "${tables.dateContextTable}"
+       WHERE Vol_Regime IS NOT NULL
+         AND Term_Structure_State IS NOT NULL
+         AND Trend_Direction IS NOT NULL
+         AND VIX_Spike_Pct IS NOT NULL
+         AND VIX_Gap_Pct IS NOT NULL${bounded}
+       ORDER BY date`,
+    );
+    const contextDates = contextDatesReader.getRows().map((row) => String(row[0]));
+    for (const date of contextDates) {
+      if (!isRealMarketSessionDate(date)) {
+        throw new Error(`Enriched context slice has invalid logical date: ${JSON.stringify(date)}`);
+      }
+      await writeEnrichedContext(conn, {
+        dataDir,
+        date,
+        selectQuery:
+          `SELECT date, Vol_Regime, Term_Structure_State, Trend_Direction, ` +
+          `VIX_Spike_Pct, VIX_Gap_Pct FROM "${tables.dateContextTable}" WHERE date = '${date}'`,
+        quality: { kind: "writer-input-complete" },
+      });
+    }
+  }
 
   // NOTE: Working tables are NOT dropped here — cleanup is owned by the finally
   // block in runEnrichment(). This ensures tables survive for error recovery if
@@ -904,14 +1006,32 @@ async function runTier2(
   // persisted; the legacy write path is scheduled for removal.
   let effectiveDailyTarget = dailyTarget;
   let vixTempTable: string | null = null;
+  const spotReturn20dByDate = new Map<string, number | null>();
   if (spotStore) {
     vixTempTable = `_phase5_tier2_daily_${Date.now()}`;
     await conn.run(
       `CREATE TEMP TABLE "${vixTempTable}" (ticker VARCHAR, date VARCHAR, open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE)`,
     );
-    for (const vixTicker of ["VIX", "VIX9D", "VIX3M"]) {
-      const bars = await spotStore.readDailyBars(vixTicker, "1970-01-01", "9999-12-31");
+    for (const contextTicker of ["VIX", "VIX9D", "VIX3M", DEFAULT_MARKET_TICKER]) {
+      const bars = await spotStore.readDailyBars(contextTicker, "1970-01-01", "9999-12-31");
       if (bars.length === 0) continue;
+      if (contextTicker === DEFAULT_MARKET_TICKER) {
+        for (let index = 0; index < bars.length; index += 1) {
+          const window = index >= 20 ? bars.slice(index - 20, index + 1) : [];
+          const priorClose = isCompleteXnysWindow(
+            window.map((bar) => bar.date),
+            21,
+          )
+            ? window[0].close
+            : null;
+          spotReturn20dByDate.set(
+            bars[index].date,
+            priorClose !== null && priorClose > 0
+              ? ((bars[index].close - priorClose) / priorClose) * 100
+              : null,
+          );
+        }
+      }
       const BATCH_SIZE = 500;
       for (let start = 0; start < bars.length; start += BATCH_SIZE) {
         const batch = bars.slice(start, start + BATCH_SIZE);
@@ -995,11 +1115,14 @@ async function runTier2(
     //
     // The VIX-family OHLCV source is `effectiveDailyTarget` (the
     // spotStore-seeded TEMP when io.spotStore is present) or
-    // `market.spot_daily` when io.spotStore is absent — `market.enriched` no
-    // longer carries OHLCV columns. The SPX JOIN keeps `dailyTarget` because
-    // Return_20D is a Tier 1 enriched column written to the working table
-    // earlier in the runEnrichment pipeline; spot/ never holds enriched fields.
+    // `market.spot_daily` when io.spotStore is absent. The canonical store
+    // path computes SPX Return_20D directly from closure-owned spot history;
+    // only the legacy SQL path reads a precomputed enriched SPX field.
     const vixOhlcvSource = spotStore ? effectiveDailyTarget : "market.spot_daily";
+    const spxReturnProjection = spotStore ? "NULL::DOUBLE AS Return_20D" : "spx.Return_20D";
+    const spxJoin = spotStore
+      ? ""
+      : `LEFT JOIN ${dailyTarget} spx ON spx.date = vix.date AND spx.ticker = $1`;
     const contextQuery = `
     SELECT
       vix.date,
@@ -1010,16 +1133,18 @@ async function runTier2(
       vix9d.close AS VIX9D_Close,
       vix3m.open AS VIX3M_Open,
       vix3m.close AS VIX3M_Close,
-      spx.Return_20D
+      ${spxReturnProjection}
     FROM ${vixOhlcvSource} vix
     LEFT JOIN ${vixOhlcvSource} vix9d ON vix9d.date = vix.date AND vix9d.ticker = 'VIX9D'
     LEFT JOIN ${vixOhlcvSource} vix3m ON vix3m.date = vix.date AND vix3m.ticker = 'VIX3M'
-    LEFT JOIN ${dailyTarget} spx ON spx.date = vix.date AND spx.ticker = $1
+    ${spxJoin}
     WHERE vix.ticker = 'VIX' AND vix.close IS NOT NULL
     ORDER BY vix.date ASC
   `;
 
-    const rawResult = await conn.runAndReadAll(contextQuery, [DEFAULT_MARKET_TICKER]);
+    const rawResult = spotStore
+      ? await conn.runAndReadAll(contextQuery)
+      : await conn.runAndReadAll(contextQuery, [DEFAULT_MARKET_TICKER]);
     const rawRows = rawResult.getRows();
     if (rawRows.length === 0) return { status: "complete", fieldsWritten: 0 };
 
@@ -1077,10 +1202,12 @@ async function runTier2(
       }
     }
 
-    const return20dByDate = new Map<string, number | null>();
+    const return20dByDate = new Map<string, number | null>(spotReturn20dByDate);
     const contextRows: ContextRow[] = rawRows.map((r) => {
       const dateStr = r[0] as string;
-      return20dByDate.set(dateStr, r[8] as number | null);
+      if (!spotStore) {
+        return20dByDate.set(dateStr, r[8] as number | null);
+      }
       return {
         date: dateStr,
         VIX_Open: r[1] as number | null,
@@ -1095,7 +1222,15 @@ async function runTier2(
     });
 
     // Step 4: Compute derived fields (reuse existing pure functions unchanged)
-    const enrichedContext = computeVIXDerivedFields(contextRows);
+    const completeVixGapDates = new Set<string>();
+    for (let index = 1; index < contextRows.length; index += 1) {
+      if (isCompleteXnysWindow([contextRows[index - 1].date, contextRows[index].date], 2)) {
+        completeVixGapDates.add(contextRows[index].date);
+      }
+    }
+    const enrichedContext = computeVIXDerivedFields(contextRows).map((row) =>
+      completeVixGapDates.has(row.date) ? row : { ...row, VIX_Gap_Pct: null },
+    );
 
     // Step 5: Write derived fields to market.enriched_context (INSERT OR REPLACE)
     const derivedCols = [
@@ -1227,6 +1362,18 @@ export async function runEnrichment(
   io?: EnrichmentIO,
 ): Promise<EnrichmentResult> {
   const { forceFull = false } = opts;
+  if (!/^[A-Z][A-Z0-9._-]*$/.test(ticker)) {
+    throw new TypeError(`Enrichment ticker is not canonical: ${JSON.stringify(ticker)}`);
+  }
+  if (opts.from && !isRealMarketSessionDate(opts.from)) {
+    throw new TypeError(`Enrichment from date is invalid: ${JSON.stringify(opts.from)}`);
+  }
+  if (opts.to && !isRealMarketSessionDate(opts.to)) {
+    throw new TypeError(`Enrichment to date is invalid: ${JSON.stringify(opts.to)}`);
+  }
+  if (opts.from && opts.to && opts.from > opts.to) {
+    throw new RangeError("Enrichment publication window is inverted");
+  }
 
   // Parquet mode: create working temp tables for all writes
   const parquetMode = (opts.parquetMode ?? isParquetMode()) && !!opts.dataDir;
@@ -1260,8 +1407,17 @@ export async function runEnrichment(
       }
     }
 
-    // 2. Compute lookback start: watermark - 200 calendar days (as string comparison)
-    const lookbackStart = watermark ? subtractDays(watermark, 200) : null;
+    // 2. Compute enough history for both incremental progress and an explicit
+    // bounded repair/backfill window. A later watermark must not hide an older
+    // requested slice that needs to be reconstructed.
+    const watermarkLookback = watermark ? subtractDays(watermark, 200) : null;
+    const requestedLookback = opts.from ? subtractDays(opts.from, 200) : null;
+    const lookbackStart =
+      watermarkLookback && requestedLookback
+        ? watermarkLookback < requestedLookback
+          ? watermarkLookback
+          : requestedLookback
+        : (watermarkLookback ?? requestedLookback);
 
     // 3. Fetch OHLCV rows.
     //
@@ -1276,7 +1432,11 @@ export async function runEnrichment(
     let rawRows: Array<Array<unknown>>;
     if (io?.spotStore) {
       const startDate = lookbackStart ?? "1970-01-01";
-      const endDate = "9999-12-31"; // readDailyBars caps internally via partition discovery
+      // The interactive enrichment tool intentionally passes an empty string
+      // to request the operational, watermark-driven window. Treat that the
+      // same as an omitted upper bound; an empty string is not a logical date
+      // and would otherwise make SpotStore return no rows.
+      const endDate = opts.to || "9999-12-31";
       const dailyBars = await io.spotStore.readDailyBars(ticker, startDate, endDate);
       rawRows = dailyBars.map((b) => [b.ticker, b.date, b.open, b.high, b.low, b.close]);
     } else {
@@ -1290,6 +1450,10 @@ export async function runEnrichment(
       if (lookbackStart) {
         fetchSql += ` AND date >= $2`;
         fetchParams.push(lookbackStart);
+      }
+      if (opts.to) {
+        fetchSql += ` AND date <= $${fetchParams.length + 1}`;
+        fetchParams.push(opts.to);
       }
       fetchSql += ` ORDER BY date ASC`;
       const rawReader = await conn.runAndReadAll(
@@ -1352,10 +1516,12 @@ export async function runEnrichment(
     const consecutiveDays = computeConsecutiveDays(closes);
 
     // 6. Determine which rows to write back (only rows after watermark)
-    const writeRows =
-      watermark && !forceFull
-        ? rawRows.map((_, i) => i).filter((i) => dates[i] > watermark)
-        : rawRows.map((_, i) => i);
+    const writeRows = rawRows
+      .map((_, i) => i)
+      .filter((i) => {
+        if (forceFull || !watermark || dates[i] > watermark) return true;
+        return Boolean(opts.from && opts.to && dates[i] >= opts.from && dates[i] <= opts.to);
+      });
 
     if (writeRows.length === 0) {
       const tier2Targets = workingTables
@@ -1368,7 +1534,18 @@ export async function runEnrichment(
 
       // Flush even if no Tier 1 rows — Tier 2 may have written to working tables
       if (parquetMode && workingTables && opts.dataDir) {
-        await flushEnrichedToParquet(conn, opts.dataDir, ticker, workingTables);
+        await flushEnrichedToParquet(
+          conn,
+          opts.dataDir,
+          ticker,
+          workingTables,
+          opts.from,
+          opts.to,
+          {
+            ticker: opts.publishTicker ?? true,
+            context: opts.publishContext ?? true,
+          },
+        );
       }
 
       return {
@@ -1517,7 +1694,16 @@ export async function runEnrichment(
     // 10. Tier 3 — intraday timing fields (routes through io.spotStore when provided)
     const tier3Result = await runTier3(conn, ticker, dates, dailyTarget, io?.spotStore);
 
-    // 11. Persist the new watermark.
+    // 11. Publish bounded Parquet slices before advancing the watermark. A
+    // failed ticker or context write must remain retryable under the old mark.
+    if (parquetMode && workingTables && opts.dataDir) {
+      await flushEnrichedToParquet(conn, opts.dataDir, ticker, workingTables, opts.from, opts.to, {
+        ticker: opts.publishTicker ?? true,
+        context: opts.publishContext ?? true,
+      });
+    }
+
+    // 12. Persist the new watermark only after every requested slice is durable.
     // Every watermark write goes through the JSON adapter. The legacy SQL
     // UPSERT against the metadata sync table has been removed — when callers
     // don't supply `io.watermarkStore` we fall back to
@@ -1525,17 +1711,14 @@ export async function runEnrichment(
     // nor dataDir is supplied the watermark simply isn't persisted (math
     // still runs); callers that need watermark continuity must supply one of
     // the two.
-    const newWatermark = dates[dates.length - 1];
-    if (io?.watermarkStore) {
-      await io.watermarkStore.upsert(ticker, newWatermark);
-    } else if (opts.dataDir) {
-      await upsertEnrichedThrough(ticker, newWatermark, opts.dataDir);
-    }
-
-    // 12. Parquet mode: write enrichment to the enriched/ partition layout
-    //     (legacy daily.parquet output retired)
-    if (parquetMode && workingTables && opts.dataDir) {
-      await flushEnrichedToParquet(conn, opts.dataDir, ticker, workingTables);
+    const latestComputed = dates[dates.length - 1];
+    const newWatermark = watermark && watermark > latestComputed ? watermark : latestComputed;
+    if (opts.persistWatermark ?? true) {
+      if (io?.watermarkStore) {
+        await io.watermarkStore.upsert(ticker, newWatermark);
+      } else if (opts.dataDir) {
+        await upsertEnrichedThrough(ticker, newWatermark, opts.dataDir);
+      }
     }
 
     return {

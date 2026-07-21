@@ -39,14 +39,17 @@ import type {
   RefreshResult,
 } from "../ingestor/types.ts";
 import { bulkQuoteRootsForUnderlying } from "../../utils/providers/thetadata/bulk-roots.ts";
+import { getEnrichedThrough, upsertEnrichedThrough } from "../../db/json-adapters.ts";
 
 export const CANONICAL_REFRESH_COMPLETION_KIND =
   "tradeblocks.market-data.canonical-refresh-completion" as const;
-export const CANONICAL_REFRESH_COMPLETION_VERSION = 1 as const;
+export const CANONICAL_REFRESH_COMPLETION_VERSION = 2 as const;
 
-export interface CanonicalRefreshPlanV1 {
+export interface CanonicalRefreshPlanV2 {
   asOf: string;
   spotTickers: readonly string[];
+  enrichedTickers: readonly string[];
+  includeEnrichedContext: boolean;
   chainUnderlyings: readonly string[];
   quoteUnderlyings: readonly string[];
   openInterestUnderlyings: readonly string[];
@@ -73,12 +76,12 @@ export interface CanonicalRefreshQuoteGroupV1 {
   totalContracts: number;
 }
 
-export interface CanonicalRefreshCompletionV1 {
+export interface CanonicalRefreshCompletionV2 {
   kind: typeof CANONICAL_REFRESH_COMPLETION_KIND;
   version: typeof CANONICAL_REFRESH_COMPLETION_VERSION;
   attemptId: string;
   closure: CanonicalJsonAddress;
-  plan: CanonicalRefreshPlanV1;
+  plan: CanonicalRefreshPlanV2;
   operations: readonly CanonicalRefreshOperationV1[];
   quoteGroups: readonly CanonicalRefreshQuoteGroupV1[];
   receipts: readonly CanonicalRefreshReceiptV1[];
@@ -144,7 +147,7 @@ function normalizedSymbols(values: readonly string[] | undefined, label: string)
   return [...new Set(normalized)].sort(compareCodePoints);
 }
 
-function normalizePlan(input: RefreshOptions, deps: MarketIngestorDeps): CanonicalRefreshPlanV1 {
+function normalizePlan(input: RefreshOptions, deps: MarketIngestorDeps): CanonicalRefreshPlanV2 {
   if (!isXnysSessionDate(input.asOf)) {
     throw new Error(`Canonical refresh cutoff is not a supported XNYS session: ${input.asOf}`);
   }
@@ -172,36 +175,40 @@ function normalizePlan(input: RefreshOptions, deps: MarketIngestorDeps): Canonic
   ) {
     throw new Error("Canonical option refresh requires the explicit ThetaData terminal protocol");
   }
-  const plan: CanonicalRefreshPlanV1 = {
+  const plan: CanonicalRefreshPlanV2 = {
     asOf: input.asOf,
     spotTickers: normalizedSymbols(input.spotTickers, "spotTickers"),
+    enrichedTickers: [],
+    includeEnrichedContext: false,
     chainUnderlyings: normalizedSymbols(input.chainUnderlyings, "chainUnderlyings"),
     quoteUnderlyings,
     openInterestUnderlyings,
     ...(input.provider ? { provider: input.provider } : {}),
   };
-  const inventorySize =
-    plan.spotTickers.length +
-    plan.chainUnderlyings.length +
-    plan.quoteUnderlyings.length +
-    plan.openInterestUnderlyings.length;
-  if (inventorySize === 0) throw new Error("Canonical refresh inventory must not be empty");
   return Object.freeze({
     ...plan,
     spotTickers: Object.freeze(plan.spotTickers),
+    enrichedTickers: Object.freeze(plan.enrichedTickers),
     chainUnderlyings: Object.freeze(plan.chainUnderlyings),
     quoteUnderlyings: Object.freeze(plan.quoteUnderlyings),
     openInterestUnderlyings: Object.freeze(plan.openInterestUnderlyings),
   });
 }
 
-function expectedInventory(plan: CanonicalRefreshPlanV1): DatasetPartitionIdentity[] {
+function expectedInventory(plan: CanonicalRefreshPlanV2): DatasetPartitionIdentity[] {
   const session = plan.asOf;
   return [
     ...plan.spotTickers.map((ticker) => ({
       dataset: "spot",
       partition: { ticker, date: session },
     })),
+    ...plan.enrichedTickers.map((ticker) => ({
+      dataset: "enriched",
+      partition: { ticker, date: session },
+    })),
+    ...(plan.includeEnrichedContext
+      ? [{ dataset: "enriched_context", partition: { date: session } }]
+      : []),
     ...plan.chainUnderlyings.map((underlying) => ({
       dataset: "option_chain",
       partition: { underlying, date: session },
@@ -215,6 +222,20 @@ function expectedInventory(plan: CanonicalRefreshPlanV1): DatasetPartitionIdenti
       partition: { underlying, date: session },
     })),
   ];
+}
+
+function validateDerivedPlanInputs(plan: CanonicalRefreshPlanV2): void {
+  if (plan.enrichedTickers.some((ticker) => !plan.spotTickers.includes(ticker))) {
+    throw new Error("Canonical enriched cutoff requires same-session spot refresh for its ticker");
+  }
+  if (plan.includeEnrichedContext) {
+    const requiredContextSpot = ["SPX", "VIX", "VIX9D", "VIX3M"];
+    if (requiredContextSpot.some((ticker) => !plan.spotTickers.includes(ticker))) {
+      throw new Error(
+        "Canonical enriched context requires same-session SPX/VIX/VIX9D/VIX3M spot refresh",
+      );
+    }
+  }
 }
 
 async function closureTailInventory(
@@ -266,6 +287,38 @@ async function closureTailInventory(
   return identities;
 }
 
+async function bindPlanToClosure(
+  partitions: FilePartitionCommitStore,
+  closure: CanonicalJsonAddress,
+  base: CanonicalRefreshPlanV2,
+): Promise<CanonicalRefreshPlanV2> {
+  const inventory = await closureTailInventory(partitions, closure, base.asOf);
+  const enrichedTickers = inventory
+    .filter((identity) => identity.dataset === "enriched")
+    .map((identity) => identity.partition.ticker)
+    .sort(compareCodePoints);
+  const includeEnrichedContext = inventory.some(
+    (identity) => identity.dataset === "enriched_context",
+  );
+  const rawInventory = inventory.filter(
+    (identity) => identity.dataset !== "enriched" && identity.dataset !== "enriched_context",
+  );
+  if (
+    canonicalJson(rawInventory.map(identityKey)) !==
+    canonicalJson(expectedInventory(base).map(identityKey).sort(compareCodePoints))
+  ) {
+    throw new Error("Canonical refresh request does not equal the closure raw cutoff inventory");
+  }
+  if (inventory.length === 0) throw new Error("Canonical refresh inventory must not be empty");
+  const plan = Object.freeze({
+    ...base,
+    enrichedTickers: Object.freeze(enrichedTickers),
+    includeEnrichedContext,
+  });
+  validateDerivedPlanInputs(plan);
+  return plan;
+}
+
 function identityKey(identity: DatasetPartitionIdentity): string {
   return canonicalJson({ dataset: identity.dataset, partition: identity.partition });
 }
@@ -286,7 +339,7 @@ function requireTerminalResult(result: IngestResult, label: string): IngestResul
 
 async function runBoundedRefresh(
   ingestor: MarketIngestor,
-  plan: CanonicalRefreshPlanV1,
+  plan: CanonicalRefreshPlanV2,
   onProgress: BulkProgressReporter | undefined,
 ): Promise<BoundedRefreshResult> {
   const spot: IngestResult[] = [];
@@ -410,7 +463,7 @@ function operationKey(operation: Pick<CanonicalRefreshOperationV1, "kind" | "tar
 }
 
 function terminalOperations(
-  plan: CanonicalRefreshPlanV1,
+  plan: CanonicalRefreshPlanV2,
   value: BoundedRefreshResult["perOperation"],
 ): CanonicalRefreshOperationV1[] {
   if (
@@ -452,7 +505,7 @@ function terminalOperations(
   return operations;
 }
 
-function expectedOperationKeys(plan: CanonicalRefreshPlanV1): string[] {
+function expectedOperationKeys(plan: CanonicalRefreshPlanV2): string[] {
   return [
     ...plan.spotTickers.map((target) => operationKey({ kind: "spot", target })),
     ...plan.chainUnderlyings.map((target) => operationKey({ kind: "chain", target })),
@@ -489,7 +542,7 @@ function operationIdentity(
 }
 
 function validateAttemptInventory(
-  plan: CanonicalRefreshPlanV1,
+  plan: CanonicalRefreshPlanV2,
   attempt: PartitionCommitAttemptResult<BoundedRefreshResult>,
 ): void {
   const expected = new Map(
@@ -510,7 +563,7 @@ function validateAttemptInventory(
 
 async function validateCurrentReceipt(
   partitions: FilePartitionCommitStore,
-  plan: CanonicalRefreshPlanV1,
+  plan: CanonicalRefreshPlanV2,
   commit: StoredPartitionCommit,
 ): Promise<void> {
   const receipt = commit.receipt;
@@ -546,7 +599,7 @@ function receiptValue(commit: StoredPartitionCommit): CanonicalRefreshReceiptV1 
   };
 }
 
-function normalizeCompletion(value: unknown): CanonicalRefreshCompletionV1 {
+function normalizeCompletion(value: unknown): CanonicalRefreshCompletionV2 {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Canonical refresh completion must be an object");
   }
@@ -589,6 +642,8 @@ function normalizeCompletion(value: unknown): CanonicalRefreshCompletionV1 {
   const expectedPlanKeys = [
     "asOf",
     "chainUnderlyings",
+    "enrichedTickers",
+    "includeEnrichedContext",
     "openInterestUnderlyings",
     "quoteUnderlyings",
     "spotTickers",
@@ -597,9 +652,19 @@ function normalizeCompletion(value: unknown): CanonicalRefreshCompletionV1 {
   if (canonicalJson(planKeys) !== canonicalJson(expectedPlanKeys)) {
     throw new Error("Canonical refresh completion plan has unknown or missing fields");
   }
-  const plan: CanonicalRefreshPlanV1 = {
+  const plan: CanonicalRefreshPlanV2 = {
     asOf: String(planRecord.asOf),
     spotTickers: normalizedSymbols(planRecord.spotTickers as string[], "plan.spotTickers"),
+    enrichedTickers: normalizedSymbols(
+      planRecord.enrichedTickers as string[],
+      "plan.enrichedTickers",
+    ),
+    includeEnrichedContext:
+      typeof planRecord.includeEnrichedContext === "boolean"
+        ? planRecord.includeEnrichedContext
+        : (() => {
+            throw new Error("Canonical refresh completion enriched context intent is invalid");
+          })(),
     chainUnderlyings: normalizedSymbols(
       planRecord.chainUnderlyings as string[],
       "plan.chainUnderlyings",
@@ -620,6 +685,7 @@ function normalizeCompletion(value: unknown): CanonicalRefreshCompletionV1 {
             throw new Error("Canonical refresh completion provider is invalid");
           })()),
   };
+  validateDerivedPlanInputs(plan);
   if (!isXnysSessionDate(plan.asOf) || expectedInventory(plan).length === 0) {
     throw new Error("Canonical refresh completion plan is empty or outside the calendar");
   }
@@ -769,7 +835,7 @@ function normalizeCompletion(value: unknown): CanonicalRefreshCompletionV1 {
 export async function verifyCanonicalRefreshCompletion(
   partitions: FilePartitionCommitStore,
   completionAddress: CanonicalJsonAddress,
-): Promise<PutContentObjectResult<CanonicalRefreshCompletionV1>> {
+): Promise<PutContentObjectResult<CanonicalRefreshCompletionV2>> {
   parseCanonicalJsonAddress(completionAddress);
   await verifyRefreshCompletionAuthority(partitions, completionAddress);
   const stored = await partitions.objects.get<unknown>(completionAddress);
@@ -820,14 +886,14 @@ export async function verifyCanonicalRefreshCompletion(
 async function publishCompletion(
   partitions: FilePartitionCommitStore,
   closure: CanonicalJsonAddress,
-  plan: CanonicalRefreshPlanV1,
+  plan: CanonicalRefreshPlanV2,
   attempt: PartitionCommitAttemptResult<BoundedRefreshResult>,
-): Promise<PutContentObjectResult<CanonicalRefreshCompletionV1>> {
+): Promise<PutContentObjectResult<CanonicalRefreshCompletionV2>> {
   validateAttemptInventory(plan, attempt);
   for (const commit of attempt.receipts) {
     await validateCurrentReceipt(partitions, plan, commit);
   }
-  const completion = await partitions.objects.put<CanonicalRefreshCompletionV1>({
+  const completion = await partitions.objects.put<CanonicalRefreshCompletionV2>({
     kind: CANONICAL_REFRESH_COMPLETION_KIND,
     version: CANONICAL_REFRESH_COMPLETION_VERSION,
     attemptId: attempt.attemptId,
@@ -851,32 +917,46 @@ export async function runCanonicalProvenanceRefresh(
   // Snapshot semantic caller fields before the first await. The progress
   // callback is operational only and is deliberately excluded from identity.
   const authority = normalizeAuthority(input.provenance);
-  const plan = normalizePlan(input, deps);
+  const basePlan = normalizePlan(input, deps);
   const onProgress = input.onProgress;
   const computeVixContext = input.computeVixContext ?? true;
   const marketRoot = path.join(path.resolve(deps.dataRoot), "market");
   const partitions = new FilePartitionCommitStore(marketRoot);
+  const plan = await bindPlanToClosure(partitions, authority.closure, basePlan);
+  if (plan.includeEnrichedContext && !computeVixContext) {
+    throw new Error("Canonical closure requires enriched context but refresh disabled it");
+  }
+  let vixContext: IngestResult | null = null;
   const attempt = await runPartitionCommitAttempt(
     { attemptId: authority.attemptId, recorder: partitions },
-    () => runBoundedRefresh(ingestor, plan, onProgress),
+    async () => {
+      const value = await runBoundedRefresh(ingestor, plan, onProgress);
+      for (const ticker of plan.enrichedTickers) {
+        await deps.stores.enriched.compute(ticker, plan.asOf, plan.asOf, {
+          persistWatermark: false,
+        });
+      }
+      if (plan.includeEnrichedContext) {
+        await deps.stores.enriched.computeContext(plan.asOf, plan.asOf, {
+          persistWatermark: false,
+        });
+        vixContext = {
+          status: "ok",
+          rowsWritten: 0,
+          dateRange: { from: plan.asOf, to: plan.asOf },
+        };
+      }
+      return value;
+    },
   );
   const completion = await publishCompletion(partitions, authority.closure, plan, attempt);
-
-  // Legacy derived datasets stay outside the bounded attempt. Any closure
-  // that reads them still fails canonical registry validation until bounded
-  // enriched slices exist.
-  for (const ticker of plan.spotTickers) {
-    await deps.stores.enriched.compute(ticker, plan.asOf, plan.asOf);
-  }
-  const vixFamily = new Set(["VIX", "VIX9D", "VIX3M", "VXN"]);
-  const shouldComputeContext =
-    computeVixContext && plan.spotTickers.some((ticker) => vixFamily.has(ticker));
-  const vixContext = shouldComputeContext
-    ? await ingestor.computeVixContext({ from: plan.asOf, to: plan.asOf })
-    : null;
-  if (vixContext && vixContext.status !== "ok") {
-    throw new Error(
-      `Canonical post-refresh VIX context failed: ${vixContext.error ?? vixContext.status}`,
+  const watermarkTickers = new Set(plan.enrichedTickers);
+  for (const ticker of [...watermarkTickers].sort(compareCodePoints)) {
+    const current = await getEnrichedThrough(ticker, deps.dataRoot);
+    await upsertEnrichedThrough(
+      ticker,
+      current && current > plan.asOf ? current : plan.asOf,
+      deps.dataRoot,
     );
   }
 

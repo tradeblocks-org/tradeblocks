@@ -22,14 +22,28 @@ export interface EnrichedReadOpts {
   includeOhlcv?: boolean; // join spot daily for OHLCV (avoids double-storing OHLCV)
 }
 
+export interface EnrichedComputeOptions {
+  /** Defer the operational watermark until a composite provenance completion exists. */
+  persistWatermark?: boolean;
+}
+
 export abstract class EnrichedStore {
   protected readonly ctx: StoreContext;
   constructor(ctx: StoreContext) {
     this.ctx = ctx;
   }
 
-  abstract compute(ticker: string, from: string, to: string): Promise<void>;
-  abstract computeContext(from: string, to: string): Promise<void>;
+  abstract compute(
+    ticker: string,
+    from: string,
+    to: string,
+    options?: EnrichedComputeOptions,
+  ): Promise<void>;
+  abstract computeContext(
+    from: string,
+    to: string,
+    options?: EnrichedComputeOptions,
+  ): Promise<void>;
   abstract read(opts: EnrichedReadOpts): Promise<Record<string, unknown>[]>;
   abstract getCoverage(ticker: string): Promise<CoverageReport>;
 }

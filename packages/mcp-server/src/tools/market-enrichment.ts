@@ -76,10 +76,8 @@ export function registerMarketEnrichmentTools(
       await upgradeToReadWrite(baseDir);
       try {
         const upperTicker = ticker.toUpperCase();
-        // from/to are informational only — ParquetEnrichedStore.compute
-        // ignores them and uses the persisted watermark + 200-day lookback
-        // window. Pass empty strings to satisfy the typed signature;
-        // downstream math is unchanged.
+        // Empty bounds select the operational, watermark-driven window. The
+        // canonical refresh path supplies concrete session bounds instead.
         await stores.enriched.compute(upperTicker, "", "");
         let contextComputed = false;
         if (VIX_FAMILY.has(upperTicker)) {

@@ -9,6 +9,7 @@ import {
   addressBytes,
   canonicalJson,
   capturePartitionCommitReceipt,
+  getEnrichedThrough,
   publishCanonicalMarketResolverRegistry,
   publishInputClosure,
   verifyCanonicalMarketDataCutoff,
@@ -61,21 +62,29 @@ describe("producer-owned canonical refresh completion", () => {
     droppedRows = 0;
     quoteProgress: "complete" | "none" | "late-error" = "complete";
 
-    private async commit(
-      dataset: "spot" | "option_chain" | "option_quote_minutes" | "option_oi_daily",
+    async commit(
+      dataset:
+        | "spot"
+        | "enriched"
+        | "enriched_context"
+        | "option_chain"
+        | "option_quote_minutes"
+        | "option_oi_daily",
       partition: Record<string, string>,
     ) {
       const attempt = activePartitionCommitAttempt();
       if (!attempt) throw new Error("test stub expected an active receipt attempt");
       const parts =
-        dataset === "spot"
-          ? ["spot", `ticker=${partition.ticker}`, `date=${partition.date}`, "data.parquet"]
-          : [
-              dataset,
-              `underlying=${partition.underlying}`,
-              `date=${partition.date}`,
-              "data.parquet",
-            ];
+        dataset === "spot" || dataset === "enriched"
+          ? [dataset, `ticker=${partition.ticker}`, `date=${partition.date}`, "data.parquet"]
+          : dataset === "enriched_context"
+            ? ["enriched", "context", `date=${partition.date}`, "data.parquet"]
+            : [
+                dataset,
+                `underlying=${partition.underlying}`,
+                `date=${partition.date}`,
+                "data.parquet",
+              ];
       const relativePath = parts.join("/");
       const targetPath = join(marketRoot, ...parts);
       const preparedPath = `${targetPath}.prepared-${Math.random().toString(36).slice(2)}`;
@@ -197,6 +206,53 @@ describe("producer-owned canonical refresh completion", () => {
     return { partitions, closure };
   }
 
+  async function enrichedClosure() {
+    const partitions = new FilePartitionCommitStore(marketRoot);
+    const registry = await publishCanonicalMarketResolverRegistry(partitions.objects);
+    const closure = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [
+        {
+          kind: "exact",
+          dataClass: "spot",
+          selector: { ticker: "IWM", date: "2026-07-06" },
+          session: "2026-07-06",
+        },
+        {
+          kind: "exact",
+          dataClass: "enriched",
+          selector: { ticker: "IWM", date: "2026-07-06" },
+          session: "2026-07-06",
+        },
+      ],
+    });
+    return { partitions, closure };
+  }
+
+  async function enrichedContextClosure() {
+    const partitions = new FilePartitionCommitStore(marketRoot);
+    const registry = await publishCanonicalMarketResolverRegistry(partitions.objects);
+    const session = "2026-07-06";
+    const closure = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [
+        ...["SPX", "VIX", "VIX3M", "VIX9D"].map((ticker) => ({
+          kind: "exact" as const,
+          dataClass: "spot",
+          selector: { ticker, date: session },
+          session,
+        })),
+        {
+          kind: "exact",
+          dataClass: "enriched_context",
+          selector: { date: session },
+          session,
+        },
+      ],
+    });
+    return { partitions, closure };
+  }
+
   it("mints a refresh completion and binds it into the cutoff authority", async () => {
     const { partitions, closure } = await spotClosure();
     const ingestor = new StubIngestor(deps);
@@ -217,6 +273,88 @@ describe("producer-owned canonical refresh completion", () => {
     const cutoff = await verifyCanonicalMarketDataCutoff(partitions, result.provenance!.cutoff);
     expect(cutoff.manifest.refreshCompletion).toBe(result.provenance!.completion);
     expect(cutoff.manifest.aggregateRoot).toBe(result.provenance!.aggregateRoot);
+  });
+
+  it("requires the closure-owned enriched partition before minting completion", async () => {
+    const { partitions, closure } = await enrichedClosure();
+    const missing = new StubIngestor(deps);
+    await expect(
+      missing.refresh({
+        asOf: "2026-07-06",
+        spotTickers: ["IWM"],
+        computeVixContext: false,
+        provenance: { closure: closure.address, attemptId: "enriched-missing" },
+      }),
+    ).rejects.toThrow(/do not equal the producer inventory/);
+    await expect(getEnrichedThrough("IWM", dataRoot)).resolves.toBeNull();
+
+    const ingestor = new StubIngestor(deps);
+    deps.stores.enriched = {
+      compute: async (ticker: string, from: string) => {
+        await ingestor.commit("enriched", { ticker, date: from });
+      },
+      computeContext: async () => undefined,
+    } as unknown as MarketIngestorDeps["stores"]["enriched"];
+    const result = await ingestor.refresh({
+      asOf: "2026-07-06",
+      spotTickers: ["IWM"],
+      computeVixContext: false,
+      provenance: { closure: closure.address, attemptId: "enriched-success" },
+    });
+    const completion = await verifyCanonicalRefreshCompletion(
+      partitions,
+      result.provenance!.completion,
+    );
+    expect(completion.value.plan.enrichedTickers).toEqual(["IWM"]);
+    expect(completion.value.receipts.map((receipt) => receipt.dataset)).toEqual([
+      "enriched",
+      "spot",
+    ]);
+    await expect(getEnrichedThrough("IWM", dataRoot)).resolves.toBe("2026-07-06");
+    await expect(
+      verifyCanonicalMarketDataCutoff(partitions, result.provenance!.cutoff),
+    ).resolves.toBeDefined();
+  });
+
+  it("requires the closure-owned context receipt without advancing ticker watermarks", async () => {
+    const { partitions, closure } = await enrichedContextClosure();
+    const input = {
+      asOf: "2026-07-06",
+      spotTickers: ["SPX", "VIX", "VIX3M", "VIX9D"],
+      provenance: { closure: closure.address, attemptId: "context-missing" },
+    } as const;
+    const missing = new StubIngestor(deps);
+    await expect(missing.refresh(input)).rejects.toThrow(/do not equal the producer inventory/);
+    for (const ticker of input.spotTickers) {
+      await expect(getEnrichedThrough(ticker, dataRoot)).resolves.toBeNull();
+    }
+
+    const ingestor = new StubIngestor(deps);
+    deps.stores.enriched = {
+      compute: async () => undefined,
+      computeContext: async (from: string) => {
+        await ingestor.commit("enriched_context", { date: from });
+      },
+    } as unknown as MarketIngestorDeps["stores"]["enriched"];
+    const result = await ingestor.refresh({
+      ...input,
+      provenance: { ...input.provenance, attemptId: "context-success" },
+    });
+    const completion = await verifyCanonicalRefreshCompletion(
+      partitions,
+      result.provenance!.completion,
+    );
+    expect(completion.value.plan.includeEnrichedContext).toBe(true);
+    expect(completion.value.receipts.map((receipt) => receipt.dataset)).toEqual([
+      "enriched_context",
+      "spot",
+      "spot",
+      "spot",
+      "spot",
+    ]);
+    for (const ticker of input.spotTickers) {
+      await expect(getEnrichedThrough(ticker, dataRoot)).resolves.toBeNull();
+    }
   });
 
   it("refuses ok-with-zero, unexpected receipts, and dropped rows", async () => {

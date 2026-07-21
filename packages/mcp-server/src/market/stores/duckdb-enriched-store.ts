@@ -10,7 +10,11 @@
  *
  * D-02 reminder: no method body inspects `ctx.parquetMode`.
  */
-import { EnrichedStore, type EnrichedReadOpts } from "./enriched-store.ts";
+import {
+  EnrichedStore,
+  type EnrichedComputeOptions,
+  type EnrichedReadOpts,
+} from "./enriched-store.ts";
 import { SpotStore } from "./spot-store.ts";
 import type { StoreContext, CoverageReport } from "./types.ts";
 import { buildReadEnrichedSQL } from "./enriched-sql.ts";
@@ -24,11 +28,20 @@ export class DuckdbEnrichedStore extends EnrichedStore {
     this.spotStore = spotStore;
   }
 
-  async compute(ticker: string, _from: string, _to: string): Promise<void> {
+  async compute(
+    ticker: string,
+    _from: string,
+    _to: string,
+    options: EnrichedComputeOptions = {},
+  ): Promise<void> {
     await runEnrichment(
       this.ctx.conn,
       ticker,
-      { dataDir: this.ctx.dataDir, parquetMode: false },
+      {
+        dataDir: this.ctx.dataDir,
+        parquetMode: false,
+        persistWatermark: options.persistWatermark,
+      },
       {
         spotStore: this.spotStore,
         watermarkStore: {
@@ -39,12 +52,20 @@ export class DuckdbEnrichedStore extends EnrichedStore {
     );
   }
 
-  async computeContext(_from: string, _to: string): Promise<void> {
+  async computeContext(
+    _from: string,
+    _to: string,
+    options: EnrichedComputeOptions = {},
+  ): Promise<void> {
     for (const ticker of ["VIX", "VIX9D", "VIX3M"]) {
       await runEnrichment(
         this.ctx.conn,
         ticker,
-        { dataDir: this.ctx.dataDir, parquetMode: false },
+        {
+          dataDir: this.ctx.dataDir,
+          parquetMode: false,
+          persistWatermark: options.persistWatermark,
+        },
         {
           spotStore: this.spotStore,
           watermarkStore: {

@@ -49,17 +49,17 @@ export const MARKET_DATASETS = deepFreezeDatasetRegistry({
   },
   enriched: {
     subdir: "enriched",
-    partitionKeys: ["ticker"],
+    partitionKeys: ["ticker", "date"],
     filename: "data.parquet",
     schemaRevision: 1,
-    provenance: { kind: "unbounded-unsupported" },
+    provenance: { kind: "bounded-session", sessionKey: "date" },
   },
   enriched_context: {
     subdir: "enriched/context",
-    partitionKeys: [],
+    partitionKeys: ["date"],
     filename: "data.parquet",
     schemaRevision: 1,
-    provenance: { kind: "unbounded-unsupported" },
+    provenance: { kind: "bounded-session", sessionKey: "date" },
   },
   option_chain: {
     subdir: "option_chain",

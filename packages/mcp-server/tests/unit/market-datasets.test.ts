@@ -8,9 +8,8 @@
  *     writeSpotPartition           → market/spot/ticker=X/date=Y/data.parquet
  *     writeChainPartition          → market/option_chain/underlying=X/date=Y/data.parquet
  *     writeQuoteMinutesPartition   → market/option_quote_minutes/underlying=X/date=Y/data.parquet
- *     writeEnrichedTickerFile      → market/enriched/ticker=X/data.parquet
- *     writeEnrichedContext         → market/enriched/context/data.parquet  (special case)
- * - Pattern 7 regression shield: writeEnrichedContext does NOT land at market/enriched/data.parquet
+ *     writeEnrichedTickerFile      → market/enriched/ticker=X/date=Y/data.parquet
+ *     writeEnrichedContext         → market/enriched/context/date=Y/data.parquet
  * - T-1-01 propagation: unsafe partition value rejected through helper layer
  *
  * Pattern: standalone DuckDB :memory: instance per test, tmpdir for output.
@@ -31,7 +30,6 @@ import {
   writeEnrichedContext,
   FilePartitionCommitStore,
   runPartitionCommitAttempt,
-  UnmanifestedParquetWriteError,
 } from "../../src/test-exports.ts";
 
 let tmpDir: string; // serves as dataDir
@@ -85,23 +83,23 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
     });
   });
 
-  it("enriched: {ticker} single-level partitioning", () => {
+  it("enriched: {ticker,date} bounded partitioning", () => {
     expect(DATASETS_V3.enriched).toEqual({
       subdir: "enriched",
-      partitionKeys: ["ticker"],
+      partitionKeys: ["ticker", "date"],
       filename: "data.parquet",
       schemaRevision: 1,
-      provenance: { kind: "unbounded-unsupported" },
+      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
-  it("enriched_context: zero partitions", () => {
+  it("enriched_context: bounded date partitioning", () => {
     expect(DATASETS_V3.enriched_context).toEqual({
       subdir: "enriched/context",
-      partitionKeys: [],
+      partitionKeys: ["date"],
       filename: "data.parquet",
       schemaRevision: 1,
-      provenance: { kind: "unbounded-unsupported" },
+      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
@@ -268,43 +266,108 @@ describe("writeOiDailyPartition — path resolution", () => {
   });
 });
 
-describe("writeEnrichedTickerFile — single-level partitioning", () => {
-  it("writes to {dataDir}/market/enriched/ticker=SPX/data.parquet", async () => {
+describe("writeEnrichedTickerFile — bounded partitioning", () => {
+  it("writes to {dataDir}/market/enriched/ticker=SPX/date=Y/data.parquet", async () => {
     const { rowCount } = await writeEnrichedTickerFile(conn, {
       dataDir: tmpDir,
       ticker: "SPX",
-      selectQuery: "SELECT * FROM src",
+      date: "2025-01-06",
+      selectQuery: "SELECT 'SPX' ticker, '2025-01-06' date, id, label FROM src",
     });
     expect(rowCount).toBe(3);
-    expect(existsSync(join(tmpDir, "market", "enriched", "ticker=SPX", "data.parquet"))).toBe(true);
+    expect(
+      existsSync(
+        join(tmpDir, "market", "enriched", "ticker=SPX", "date=2025-01-06", "data.parquet"),
+      ),
+    ).toBe(true);
   });
 
-  it("refuses its unbounded whole-history file inside an active provenance attempt", async () => {
+  it("captures its exact bounded receipt inside an active provenance attempt", async () => {
     const store = new FilePartitionCommitStore(join(tmpDir, "market"));
-    await expect(
-      runPartitionCommitAttempt({ attemptId: "bounded-only", recorder: store }, () =>
+    const attempt = await runPartitionCommitAttempt(
+      { attemptId: "bounded-enriched", recorder: store },
+      () =>
         writeEnrichedTickerFile(conn, {
           dataDir: tmpDir,
           ticker: "SPX",
-          selectQuery: "SELECT * FROM src",
+          date: "2025-01-06",
+          selectQuery: "SELECT 'SPX' ticker, '2025-01-06' date, id, label FROM src",
+          quality: { kind: "writer-input-complete" },
         }),
-      ),
-    ).rejects.toBeInstanceOf(UnmanifestedParquetWriteError);
-    expect(existsSync(join(tmpDir, "market", "enriched", "ticker=SPX", "data.parquet"))).toBe(
-      false,
     );
+    expect(attempt.receipts).toHaveLength(1);
+    expect(attempt.receipts[0].receipt).toMatchObject({
+      dataset: "enriched",
+      partition: { ticker: "SPX", date: "2025-01-06" },
+      coverage: { kind: "date-range", from: "2025-01-06", through: "2025-01-06" },
+      quality: { inputRows: 3, writtenRows: 3, droppedRows: 0 },
+    });
   });
 });
 
-describe("writeEnrichedContext — zero-partition special case", () => {
-  it("writes to {dataDir}/market/enriched/context/data.parquet (NOT enriched/data.parquet)", async () => {
+describe("writeEnrichedContext — bounded date partition", () => {
+  const completeContextQuery =
+    "SELECT '2025-01-06' date, 4::INTEGER Vol_Regime, " +
+    "1::INTEGER Term_Structure_State, 'flat'::VARCHAR Trend_Direction, " +
+    "2.5::DOUBLE VIX_Spike_Pct, 1.25::DOUBLE VIX_Gap_Pct";
+
+  it("writes to {dataDir}/market/enriched/context/date=Y/data.parquet", async () => {
     const { rowCount } = await writeEnrichedContext(conn, {
       dataDir: tmpDir,
-      selectQuery: "SELECT * FROM src",
+      date: "2025-01-06",
+      selectQuery: completeContextQuery,
     });
-    expect(rowCount).toBe(3);
-    expect(existsSync(join(tmpDir, "market", "enriched", "context", "data.parquet"))).toBe(true);
-    // Regression shield for the Pattern 7 note: must NOT land at enriched/data.parquet
-    expect(existsSync(join(tmpDir, "market", "enriched", "data.parquet"))).toBe(false);
+    expect(rowCount).toBe(1);
+    expect(
+      existsSync(join(tmpDir, "market", "enriched", "context", "date=2025-01-06", "data.parquet")),
+    ).toBe(true);
+    expect(existsSync(join(tmpDir, "market", "enriched", "context", "data.parquet"))).toBe(false);
+  });
+
+  it("captures its exact bounded receipt inside an active provenance attempt", async () => {
+    const store = new FilePartitionCommitStore(join(tmpDir, "market"));
+    const attempt = await runPartitionCommitAttempt(
+      { attemptId: "bounded-enriched-context", recorder: store },
+      () =>
+        writeEnrichedContext(conn, {
+          dataDir: tmpDir,
+          date: "2025-01-06",
+          selectQuery: completeContextQuery,
+          quality: { kind: "writer-input-complete" },
+        }),
+    );
+    expect(attempt.receipts).toHaveLength(1);
+    expect(attempt.receipts[0].receipt).toMatchObject({
+      dataset: "enriched_context",
+      partition: { date: "2025-01-06" },
+      coverage: { kind: "date-range", from: "2025-01-06", through: "2025-01-06" },
+      quality: { inputRows: 1, writtenRows: 1, droppedRows: 0 },
+    });
+  });
+
+  it("refuses a bounded context row without same-session VIX completeness fields", async () => {
+    await expect(
+      writeEnrichedContext(conn, {
+        dataDir: tmpDir,
+        date: "2025-01-06",
+        selectQuery:
+          "SELECT '2025-01-06' date, 4::INTEGER Vol_Regime, " +
+          "NULL::INTEGER Term_Structure_State, NULL::VARCHAR Trend_Direction, " +
+          "NULL::DOUBLE VIX_Spike_Pct, NULL::DOUBLE VIX_Gap_Pct",
+      }),
+    ).rejects.toThrow(/missing required VIX completeness fields/);
+  });
+
+  it("refuses context without its prior-session VIX gap input", async () => {
+    await expect(
+      writeEnrichedContext(conn, {
+        dataDir: tmpDir,
+        date: "2025-01-06",
+        selectQuery:
+          "SELECT '2025-01-06' date, 4::INTEGER Vol_Regime, " +
+          "1::INTEGER Term_Structure_State, 'flat'::VARCHAR Trend_Direction, " +
+          "2.5::DOUBLE VIX_Spike_Pct, NULL::DOUBLE VIX_Gap_Pct",
+      }),
+    ).rejects.toThrow(/missing required VIX completeness fields/);
   });
 });
