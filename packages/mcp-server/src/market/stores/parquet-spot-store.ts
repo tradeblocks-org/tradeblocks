@@ -21,6 +21,7 @@ import { resolveMarketDir, writeSpotPartition } from "../../db/market-datasets.t
 export class ParquetSpotStore extends SpotStore {
   async writeBars(ticker: string, date: string, bars: BarRow[]): Promise<void> {
     if (bars.length === 0) return;
+    const inputRowCount = bars.length;
 
     // Defense-in-depth write-side filter (per-bar).
     //
@@ -107,6 +108,7 @@ export class ParquetSpotStore extends SpotStore {
         ticker,
         date,
         selectQuery: `SELECT * FROM "${staging}"`,
+        quality: { inputRows: inputRowCount, droppedRows: dropped },
       });
     } finally {
       try {
@@ -126,6 +128,7 @@ export class ParquetSpotStore extends SpotStore {
       ticker: partition.ticker,
       date: partition.date,
       selectQuery: selectSql,
+      quality: { kind: "writer-input-complete" },
     });
   }
 

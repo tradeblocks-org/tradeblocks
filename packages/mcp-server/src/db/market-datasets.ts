@@ -1,7 +1,11 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as path from "path";
 import { getDataRoot } from "./data-root.ts";
-import { writeParquetAtomic, writeParquetPartition } from "./parquet-writer.ts";
+import {
+  writeParquetAtomic,
+  writeParquetPartition,
+  type ParquetWriteResult,
+} from "./parquet-writer.ts";
 
 export type CanonicalSingleFileDataset = "daily" | "date_context";
 export type CanonicalPartitionedDataset = "intraday" | "option_chain" | "option_quote_minutes";
@@ -75,26 +79,62 @@ export interface DatasetDef {
   subdir: string;
   partitionKeys: string[];
   filename: string;
+  schemaRevision: number;
+}
+
+export type DatasetWriteQuality =
+  | { inputRows: number; droppedRows: number }
+  | { kind: "writer-input-complete" };
+
+function provenanceOptions(
+  dataset: string,
+  partition: Record<string, string>,
+  schemaRevision: number,
+  relativePath: string,
+  coverage:
+    | { kind: "date-range"; from: string; through: string }
+    | { kind: "staging-date-range"; column: string },
+  quality?: DatasetWriteQuality,
+) {
+  return { dataset, partition, schemaRevision, relativePath, coverage, quality };
 }
 
 export const DATASETS_V3: Record<string, DatasetDef> = {
-  spot: { subdir: "spot", partitionKeys: ["ticker", "date"], filename: "data.parquet" },
-  enriched: { subdir: "enriched", partitionKeys: ["ticker"], filename: "data.parquet" },
-  enriched_context: { subdir: "enriched/context", partitionKeys: [], filename: "data.parquet" },
+  spot: {
+    subdir: "spot",
+    partitionKeys: ["ticker", "date"],
+    filename: "data.parquet",
+    schemaRevision: 1,
+  },
+  enriched: {
+    subdir: "enriched",
+    partitionKeys: ["ticker"],
+    filename: "data.parquet",
+    schemaRevision: 1,
+  },
+  enriched_context: {
+    subdir: "enriched/context",
+    partitionKeys: [],
+    filename: "data.parquet",
+    schemaRevision: 1,
+  },
   option_chain: {
     subdir: "option_chain",
     partitionKeys: ["underlying", "date"],
     filename: "data.parquet",
+    schemaRevision: 1,
   },
   option_quote_minutes: {
     subdir: "option_quote_minutes",
     partitionKeys: ["underlying", "date"],
     filename: "data.parquet",
+    schemaRevision: 1,
   },
   option_oi_daily: {
     subdir: "option_oi_daily",
     partitionKeys: ["underlying", "date"],
     filename: "data.parquet",
+    schemaRevision: 1,
   },
 };
 
@@ -117,8 +157,9 @@ export async function writeSpotPartition(
     date: string;
     selectQuery: string;
     compression?: string;
+    quality?: DatasetWriteQuality;
   },
-): Promise<{ rowCount: number }> {
+): Promise<ParquetWriteResult> {
   const def = DATASETS_V3.spot;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
@@ -126,6 +167,14 @@ export async function writeSpotPartition(
     selectQuery: args.selectQuery,
     compression: args.compression,
     filename: def.filename,
+    provenance: provenanceOptions(
+      "spot",
+      { ticker: args.ticker, date: args.date },
+      def.schemaRevision,
+      path.posix.join(def.subdir, `ticker=${args.ticker}`, `date=${args.date}`, def.filename),
+      { kind: "staging-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
@@ -137,8 +186,9 @@ export async function writeChainPartition(
     date: string;
     selectQuery: string;
     compression?: string;
+    quality?: DatasetWriteQuality;
   },
-): Promise<{ rowCount: number }> {
+): Promise<ParquetWriteResult> {
   const def = DATASETS_V3.option_chain;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
@@ -146,6 +196,19 @@ export async function writeChainPartition(
     selectQuery: args.selectQuery,
     compression: args.compression,
     filename: def.filename,
+    provenance: provenanceOptions(
+      "option_chain",
+      { underlying: args.underlying, date: args.date },
+      def.schemaRevision,
+      path.posix.join(
+        def.subdir,
+        `underlying=${args.underlying}`,
+        `date=${args.date}`,
+        def.filename,
+      ),
+      { kind: "staging-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
@@ -157,8 +220,9 @@ export async function writeQuoteMinutesPartition(
     date: string;
     selectQuery: string;
     compression?: string;
+    quality?: DatasetWriteQuality;
   },
-): Promise<{ rowCount: number }> {
+): Promise<ParquetWriteResult> {
   const def = DATASETS_V3.option_quote_minutes;
   // Sort rows by (ticker, time) before writing so DuckDB row groups in the
   // resulting parquet have tight min/max statistics on `ticker`. The
@@ -184,6 +248,19 @@ export async function writeQuoteMinutesPartition(
     selectQuery: sortedSelect,
     compression: args.compression,
     filename: def.filename,
+    provenance: provenanceOptions(
+      "option_quote_minutes",
+      { underlying: args.underlying, date: args.date },
+      def.schemaRevision,
+      path.posix.join(
+        def.subdir,
+        `underlying=${args.underlying}`,
+        `date=${args.date}`,
+        def.filename,
+      ),
+      { kind: "staging-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
@@ -195,8 +272,9 @@ export async function writeOiDailyPartition(
     date: string;
     selectQuery: string;
     compression?: string;
+    quality?: DatasetWriteQuality;
   },
-): Promise<{ rowCount: number }> {
+): Promise<ParquetWriteResult> {
   const def = DATASETS_V3.option_oi_daily;
   // Sort rows by ticker before writing so DuckDB row groups carry tight
   // min/max statistics on `ticker` — the dominant read pattern is a
@@ -210,6 +288,19 @@ export async function writeOiDailyPartition(
     selectQuery: sortedSelect,
     compression: args.compression,
     filename: def.filename,
+    provenance: provenanceOptions(
+      "option_oi_daily",
+      { underlying: args.underlying, date: args.date },
+      def.schemaRevision,
+      path.posix.join(
+        def.subdir,
+        `underlying=${args.underlying}`,
+        `date=${args.date}`,
+        def.filename,
+      ),
+      { kind: "staging-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
@@ -219,8 +310,14 @@ export async function writeOiDailyPartition(
  */
 export async function writeEnrichedTickerFile(
   conn: DuckDBConnection,
-  args: { dataDir: string; ticker: string; selectQuery: string; compression?: string },
-): Promise<{ rowCount: number }> {
+  args: {
+    dataDir: string;
+    ticker: string;
+    selectQuery: string;
+    compression?: string;
+    quality?: DatasetWriteQuality;
+  },
+): Promise<ParquetWriteResult> {
   const def = DATASETS_V3.enriched;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
@@ -228,6 +325,14 @@ export async function writeEnrichedTickerFile(
     selectQuery: args.selectQuery,
     compression: args.compression,
     filename: def.filename,
+    provenance: provenanceOptions(
+      "enriched",
+      { ticker: args.ticker },
+      def.schemaRevision,
+      path.posix.join(def.subdir, `ticker=${args.ticker}`, def.filename),
+      { kind: "staging-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
@@ -240,13 +345,26 @@ export async function writeEnrichedTickerFile(
  */
 export async function writeEnrichedContext(
   conn: DuckDBConnection,
-  args: { dataDir: string; selectQuery: string; compression?: string },
-): Promise<{ rowCount: number }> {
+  args: {
+    dataDir: string;
+    selectQuery: string;
+    compression?: string;
+    quality?: DatasetWriteQuality;
+  },
+): Promise<ParquetWriteResult> {
   const def = DATASETS_V3.enriched_context;
   const targetPath = path.join(resolveMarketDir(args.dataDir), def.subdir, def.filename);
   return writeParquetAtomic(conn, {
     targetPath,
     selectQuery: args.selectQuery,
     compression: args.compression,
+    provenance: provenanceOptions(
+      "enriched_context",
+      {},
+      def.schemaRevision,
+      path.posix.join(def.subdir, def.filename),
+      { kind: "staging-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }

@@ -1,6 +1,6 @@
 {
   "name": "tradeblocks-mcp",
-  "version": "3.3.1",
+  "version": "3.4.0",
   "description": "MCP server for options trade analysis",
   "author": "David Romeo <davidmromeo@gmail.com>",
   "type": "module",
@@ -115,6 +115,10 @@
     "./market/tickers/schemas": {
       "types": "./src/market/tickers/schemas.ts",
       "import": "./src/market/tickers/schemas.ts"
+    },
+    "./market/provenance": {
+      "types": "./src/market/provenance/index.ts",
+      "import": "./src/market/provenance/index.ts"
     },
     "./test-exports": {
       "types": "./src/test-exports.ts",

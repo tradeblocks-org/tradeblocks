@@ -17,8 +17,20 @@
  */
 
 import type { DuckDBConnection } from "@duckdb/node-api";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import * as fs from "fs/promises";
 import * as path from "path";
+import type {
+  ExactFileFingerprint,
+  LogicalCoverage,
+  PartitionQualityCounts,
+  StoredPartitionCommit,
+} from "../market/provenance/partition-commit-store.ts";
+import {
+  activePartitionCommitAttempt,
+  capturePartitionCommitReceipt,
+} from "../market/provenance/partition-commit-attempt.ts";
 export { resolveMarketDir } from "./market-datasets.ts";
 
 // ---------------------------------------------------------------------------
@@ -48,6 +60,100 @@ export interface WriteParquetAtomicOpts {
   stagingName?: string;
   /** Parquet compression codec (default: 'ZSTD') */
   compression?: string;
+  /** Optional exact-byte partition provenance. Omit for legacy behavior. */
+  provenance?: WriteParquetProvenanceOpts;
+}
+
+export interface WriteParquetProvenanceOpts {
+  dataset: string;
+  partition: Record<string, string>;
+  schemaRevision: number;
+  /** Stable path relative to the canonical market directory. */
+  relativePath: string;
+  coverage: LogicalCoverage | { kind: "staging-date-range"; column: string };
+  /** Required inside a provenance attempt; omitted legacy writes remain supported. */
+  quality?: { inputRows: number; droppedRows: number } | { kind: "writer-input-complete" };
+}
+
+export interface ParquetWriteResult {
+  rowCount: number;
+  provenance?: StoredPartitionCommit;
+}
+
+/**
+ * The Parquet rename succeeded but the immutable receipt/head update failed.
+ * The target is intentionally left in place and must be reconciled before a
+ * manifest can treat it as committed.
+ */
+export class ParquetProvenanceOrphanError extends Error {
+  readonly targetPath: string;
+  readonly file: ExactFileFingerprint;
+
+  constructor(targetPath: string, file: ExactFileFingerprint, cause: unknown) {
+    super(`Parquet data committed without provenance receipt: ${targetPath}`, { cause });
+    this.name = "ParquetProvenanceOrphanError";
+    this.targetPath = targetPath;
+    this.file = file;
+  }
+}
+
+async function exactFileFingerprint(filePath: string, rows: number): Promise<ExactFileFingerprint> {
+  const hash = createHash("sha256");
+  let bytes = 0;
+  for await (const chunk of createReadStream(filePath)) {
+    const buffer = chunk as Buffer;
+    bytes += buffer.byteLength;
+    hash.update(buffer);
+  }
+  return { address: `sha256:${hash.digest("hex")}`, bytes, rows };
+}
+
+async function resolveLogicalCoverage(
+  conn: DuckDBConnection,
+  stagingName: string,
+  coverage: WriteParquetProvenanceOpts["coverage"],
+): Promise<LogicalCoverage> {
+  if (coverage.kind !== "staging-date-range") return coverage;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(coverage.column)) {
+    throw new TypeError(`Unsafe provenance coverage column: ${JSON.stringify(coverage.column)}`);
+  }
+  const reader = await conn.runAndReadAll(
+    `SELECT MIN(CAST("${coverage.column}" AS VARCHAR)), MAX(CAST("${coverage.column}" AS VARCHAR)) FROM "${stagingName}"`,
+  );
+  const row = reader.getRows()[0];
+  if (row[0] == null && row[1] == null) return { kind: "empty" };
+  if (row[0] == null || row[1] == null) {
+    throw new Error(`Incomplete logical coverage from staging column ${coverage.column}`);
+  }
+  return { kind: "date-range", from: String(row[0]), through: String(row[1]) };
+}
+
+function resolveQuality(
+  rowCount: number,
+  quality: WriteParquetProvenanceOpts["quality"],
+): PartitionQualityCounts {
+  if (!quality) {
+    throw new Error("Partition provenance requires explicit inputRows and droppedRows");
+  }
+  if ("kind" in quality) {
+    return { inputRows: rowCount, writtenRows: rowCount, droppedRows: 0 };
+  }
+  if (
+    !Number.isSafeInteger(quality.inputRows) ||
+    !Number.isSafeInteger(quality.droppedRows) ||
+    quality.inputRows < 0 ||
+    quality.droppedRows < 0 ||
+    quality.inputRows !== rowCount + quality.droppedRows
+  ) {
+    throw new Error(
+      `Partition provenance quality must satisfy inputRows (${quality.inputRows}) = writtenRows (${rowCount}) + droppedRows (${quality.droppedRows})`,
+    );
+  }
+  return {
+    inputRows: quality.inputRows,
+    writtenRows: rowCount,
+    droppedRows: quality.droppedRows,
+  };
 }
 
 /**
@@ -70,13 +176,15 @@ export interface WriteParquetAtomicOpts {
 export async function writeParquetAtomic(
   conn: DuckDBConnection,
   opts: WriteParquetAtomicOpts,
-): Promise<{ rowCount: number }> {
+): Promise<ParquetWriteResult> {
   const {
     targetPath,
     selectQuery,
     stagingName = `_staging_${Date.now()}`,
     compression = "ZSTD",
+    provenance,
   } = opts;
+  const provenanceAttempt = provenance ? activePartitionCommitAttempt() : undefined;
 
   // Write to a temp sibling path, then atomic-rename into place. DuckDB's
   // COPY ... TO 'data.parquet' writes directly to the target — concurrent
@@ -99,14 +207,41 @@ export async function writeParquetAtomic(
       `COPY "${stagingName}" TO '${tempPath}' (FORMAT PARQUET, COMPRESSION ${compression})`,
     );
 
-    // Atomic replace
-    await fs.rename(tempPath, targetPath);
-
-    // Get row count from staging table
+    // Count from the exact staging snapshot that COPY consumed. Provenance
+    // hashes the completed temp file before publish; a hash failure therefore
+    // leaves the prior target untouched.
     const reader = await conn.runAndReadAll(
       `SELECT COUNT(*)::INTEGER AS cnt FROM "${stagingName}"`,
     );
     const rowCount = Number(reader.getRows()[0][0]);
+    const logicalCoverage = provenanceAttempt
+      ? await resolveLogicalCoverage(conn, stagingName, provenance!.coverage)
+      : undefined;
+    const quality = provenanceAttempt ? resolveQuality(rowCount, provenance!.quality) : undefined;
+    const fingerprint = provenanceAttempt
+      ? await exactFileFingerprint(tempPath, rowCount)
+      : undefined;
+
+    // Atomic replace
+    await fs.rename(tempPath, targetPath);
+
+    if (provenance && provenanceAttempt && fingerprint && logicalCoverage && quality) {
+      try {
+        const stored = await provenanceAttempt.recorder.recordCommit({
+          dataset: provenance.dataset,
+          partition: provenance.partition,
+          schemaRevision: provenance.schemaRevision,
+          relativePath: provenance.relativePath,
+          coverage: logicalCoverage,
+          quality,
+          file: fingerprint,
+        });
+        capturePartitionCommitReceipt(stored);
+        return { rowCount, provenance: stored };
+      } catch (error) {
+        throw new ParquetProvenanceOrphanError(targetPath, fingerprint, error);
+      }
+    }
 
     return { rowCount };
   } catch (writeErr) {
@@ -140,6 +275,7 @@ export interface WriteParquetPartitionOpts {
   selectQuery: string;
   /** Parquet compression codec (default: 'ZSTD') */
   compression?: string;
+  provenance?: WriteParquetProvenanceOpts;
 }
 
 /**
@@ -166,6 +302,7 @@ export interface WriteParquetPartitionOptsV3 {
   compression?: string;
   /** Defaults to 'data.parquet'. */
   filename?: string;
+  provenance?: WriteParquetProvenanceOpts;
 }
 
 // Partition-value whitelist — deepest defense-in-depth boundary against path
@@ -201,17 +338,17 @@ const PARTITION_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export function writeParquetPartition(
   conn: DuckDBConnection,
   opts: WriteParquetPartitionOptsV3,
-): Promise<{ rowCount: number }>;
+): Promise<ParquetWriteResult>;
 // Overload: legacy single-{date} signature
 export function writeParquetPartition(
   conn: DuckDBConnection,
   opts: WriteParquetPartitionOpts,
-): Promise<{ rowCount: number }>;
+): Promise<ParquetWriteResult>;
 // Implementation
 export async function writeParquetPartition(
   conn: DuckDBConnection,
   opts: WriteParquetPartitionOpts | WriteParquetPartitionOptsV3,
-): Promise<{ rowCount: number }> {
+): Promise<ParquetWriteResult> {
   // Runtime dispatch — this boolean is load-bearing.
   // The legacy shape has `date` but no `partitions`; the generic shape has `partitions`.
   const isLegacy = "date" in opts && !("partitions" in opts);
@@ -245,5 +382,6 @@ export async function writeParquetPartition(
     targetPath,
     selectQuery: opts.selectQuery,
     compression: opts.compression,
+    provenance: opts.provenance,
   });
 }

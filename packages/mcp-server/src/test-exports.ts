@@ -329,8 +329,47 @@ export {
   isParquetMode,
   writeParquetAtomic,
   writeParquetPartition,
+  ParquetProvenanceOrphanError,
   resolveMarketDir,
 } from "./db/parquet-writer.ts";
+export type { ParquetWriteResult, WriteParquetProvenanceOpts } from "./db/parquet-writer.ts";
+
+// Export market-data provenance foundation for focused unit and integration tests.
+export {
+  CANONICAL_JSON_VERSION,
+  canonicalJson,
+  canonicalJsonBytes,
+  addressCanonicalJson,
+  addressBytes,
+  parseCanonicalJsonAddress,
+  parseSha256Address,
+  ContentObjectStore,
+  ContentObjectCollisionError,
+  PARTITION_COMMIT_RECEIPT_KIND,
+  PARTITION_COMMIT_RECEIPT_VERSION,
+  FilePartitionCommitStore,
+  runPartitionCommitAttempt,
+  activePartitionCommitAttempt,
+  capturePartitionCommitReceipt,
+} from "./market/provenance/index.ts";
+export type {
+  CanonicalJsonAddress,
+  Sha256Address,
+  PutContentObjectResult,
+  ExactFileFingerprint,
+  LogicalCoverage,
+  PartitionQualityCounts,
+  PartitionIdentity,
+  PartitionCommitClassification,
+  PartitionCommitReceiptV1,
+  StoredPartitionCommit,
+  RecordPartitionCommitInput,
+  PartitionCommitRecorder,
+  PartitionInspection,
+  FilePartitionCommitStoreOptions,
+  PartitionCommitAttemptOptions,
+  PartitionCommitAttemptResult,
+} from "./market/provenance/index.ts";
 
 // Export json-store utility for unit testing
 export {
@@ -567,7 +606,7 @@ export {
   writeEnrichedTickerFile,
   writeEnrichedContext,
 } from "./db/market-datasets.ts";
-export type { DatasetDef } from "./db/market-datasets.ts";
+export type { DatasetDef, DatasetWriteQuality } from "./db/market-datasets.ts";
 
 // Ticker MCP tool handlers — schemas re-exported from tickers/schemas.ts above
 export {

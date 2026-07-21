@@ -126,6 +126,7 @@ export class ParquetQuoteStore extends QuoteStore {
         underlying,
         date,
         selectQuery: `SELECT * FROM "${staging}"`,
+        quality: { inputRows: quotes.length, droppedRows: 0 },
       });
     } finally {
       try {
@@ -150,6 +151,7 @@ export class ParquetQuoteStore extends QuoteStore {
       underlying: partition.underlying,
       date: partition.date,
       selectQuery: `SELECT ${projection} FROM (${selectSql}) AS q`,
+      quality: { kind: "writer-input-complete" },
     });
   }
 

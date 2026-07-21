@@ -79,6 +79,7 @@ export class ParquetOiDailyStore {
         underlying,
         date,
         selectQuery: `SELECT ${OI_DAILY_COLUMNS} FROM "${staging}"`,
+        quality: { inputRows: rows.length, droppedRows: 0 },
       });
     } finally {
       try {

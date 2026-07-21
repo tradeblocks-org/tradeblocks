@@ -5,7 +5,8 @@
  * Uses standalone DuckDB instances (no connection.ts dependency).
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import { mkdirSync, rmSync, existsSync } from "fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
@@ -14,6 +15,9 @@ import {
   resolveMarketDir,
   writeParquetAtomic,
   writeParquetPartition,
+  FilePartitionCommitStore,
+  ParquetProvenanceOrphanError,
+  runPartitionCommitAttempt,
 } from "../../src/test-exports.ts";
 
 describe("parquet-writer", () => {
@@ -179,6 +183,122 @@ describe("parquet-writer", () => {
 
       expect(result.rowCount).toBe(1);
       expect(existsSync(targetPath)).toBe(true);
+    });
+
+    it("records the exact committed hash, bytes, and rows through an attempt scope", async () => {
+      await conn.run(`CREATE TEMP TABLE exact_data AS SELECT * FROM range(0, 7) t(id)`);
+      const targetPath = join(
+        tmpDir,
+        "market",
+        "spot",
+        "ticker=IWM",
+        "date=2026-07-20",
+        "data.parquet",
+      );
+      const store = new FilePartitionCommitStore(join(tmpDir, "provenance"));
+
+      const attempt = await runPartitionCommitAttempt(
+        { attemptId: "refresh-2026-07-20", recorder: store },
+        () =>
+          writeParquetAtomic(conn, {
+            targetPath,
+            selectQuery: "SELECT * FROM exact_data",
+            provenance: {
+              dataset: "spot",
+              partition: { ticker: "IWM", date: "2026-07-20" },
+              schemaRevision: 1,
+              relativePath: "spot/ticker=IWM/date=2026-07-20/data.parquet",
+              coverage: { kind: "date-range", from: "2026-07-20", through: "2026-07-20" },
+              quality: { inputRows: 7, droppedRows: 0 },
+            },
+          }),
+      );
+
+      const bytes = readFileSync(targetPath);
+      const expectedAddress = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+      expect(attempt.value.rowCount).toBe(7);
+      expect(attempt.receipts).toHaveLength(1);
+      expect(attempt.receipts[0].receipt.file).toEqual({
+        address: expectedAddress,
+        bytes: bytes.byteLength,
+        rows: 7,
+      });
+      expect(attempt.receipts[0].receipt.classification).toBe("append");
+      expect(attempt.value.provenance?.address).toBe(attempt.receipts[0].address);
+      await expect(
+        store.inspectPartition({
+          dataset: "spot",
+          partition: { ticker: "IWM", date: "2026-07-20" },
+          targetPath,
+        }),
+      ).resolves.toMatchObject({ status: "match" });
+    });
+
+    it("leaves a detectable orphan when receipt recording fails after publish", async () => {
+      await conn.run(`CREATE TEMP TABLE orphan_data AS SELECT 1 AS id`);
+      const targetPath = join(
+        tmpDir,
+        "market",
+        "spot",
+        "ticker=IWM",
+        "date=2026-07-21",
+        "data.parquet",
+      );
+      const inspectionStore = new FilePartitionCommitStore(join(tmpDir, "provenance"));
+      const failingRecorder = {
+        recordCommit: async () => {
+          throw new Error("simulated receipt failure");
+        },
+      };
+
+      await expect(
+        runPartitionCommitAttempt({ attemptId: "failed-refresh", recorder: failingRecorder }, () =>
+          writeParquetAtomic(conn, {
+            targetPath,
+            selectQuery: "SELECT * FROM orphan_data",
+            provenance: {
+              dataset: "spot",
+              partition: { ticker: "IWM", date: "2026-07-21" },
+              schemaRevision: 1,
+              relativePath: "spot/ticker=IWM/date=2026-07-21/data.parquet",
+              coverage: { kind: "date-range", from: "2026-07-21", through: "2026-07-21" },
+              quality: { inputRows: 1, droppedRows: 0 },
+            },
+          }),
+        ),
+      ).rejects.toBeInstanceOf(ParquetProvenanceOrphanError);
+
+      expect(existsSync(targetPath)).toBe(true);
+      await expect(
+        inspectionStore.inspectPartition({
+          dataset: "spot",
+          partition: { ticker: "IWM", date: "2026-07-21" },
+          targetPath,
+        }),
+      ).resolves.toMatchObject({ status: "orphan" });
+    });
+
+    it("refuses to publish provenance without explicit quality counts", async () => {
+      await conn.run(`CREATE TEMP TABLE no_quality AS SELECT 1 AS id`);
+      const targetPath = join(tmpDir, "no-quality.parquet");
+      const store = new FilePartitionCommitStore(join(tmpDir, "provenance"));
+
+      await expect(
+        runPartitionCommitAttempt({ attemptId: "missing-quality", recorder: store }, () =>
+          writeParquetAtomic(conn, {
+            targetPath,
+            selectQuery: "SELECT * FROM no_quality",
+            provenance: {
+              dataset: "spot",
+              partition: { ticker: "IWM", date: "2026-07-22" },
+              schemaRevision: 1,
+              relativePath: "spot/ticker=IWM/date=2026-07-22/data.parquet",
+              coverage: { kind: "date-range", from: "2026-07-22", through: "2026-07-22" },
+            },
+          }),
+        ),
+      ).rejects.toThrow(/requires explicit inputRows and droppedRows/);
+      expect(existsSync(targetPath)).toBe(false);
     });
   });
 

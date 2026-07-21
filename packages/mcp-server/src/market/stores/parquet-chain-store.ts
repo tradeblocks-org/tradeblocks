@@ -61,6 +61,7 @@ export class ParquetChainStore extends ChainStore {
         underlying,
         date,
         selectQuery: `SELECT * FROM "${staging}"`,
+        quality: { inputRows: rows.length, droppedRows: 0 },
       });
     } finally {
       try {
@@ -80,6 +81,7 @@ export class ParquetChainStore extends ChainStore {
       underlying: partition.underlying,
       date: partition.date,
       selectQuery: selectSql,
+      quality: { kind: "writer-input-complete" },
     });
   }
 

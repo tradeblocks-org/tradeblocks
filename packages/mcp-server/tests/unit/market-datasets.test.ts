@@ -29,6 +29,8 @@ import {
   writeOiDailyPartition,
   writeEnrichedTickerFile,
   writeEnrichedContext,
+  FilePartitionCommitStore,
+  runPartitionCommitAttempt,
 } from "../../src/test-exports.ts";
 
 let tmpDir: string; // serves as dataDir
@@ -77,6 +79,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "spot",
       partitionKeys: ["ticker", "date"],
       filename: "data.parquet",
+      schemaRevision: 1,
     });
   });
 
@@ -85,6 +88,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "enriched",
       partitionKeys: ["ticker"],
       filename: "data.parquet",
+      schemaRevision: 1,
     });
   });
 
@@ -93,6 +97,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "enriched/context",
       partitionKeys: [],
       filename: "data.parquet",
+      schemaRevision: 1,
     });
   });
 
@@ -101,6 +106,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "option_chain",
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
+      schemaRevision: 1,
     });
   });
 
@@ -109,6 +115,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "option_quote_minutes",
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
+      schemaRevision: 1,
     });
   });
 
@@ -117,6 +124,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "option_oi_daily",
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
+      schemaRevision: 1,
     });
   });
 });
@@ -144,6 +152,33 @@ describe("writeSpotPartition — path resolution", () => {
         selectQuery: "SELECT * FROM src",
       }),
     ).rejects.toThrow(/unsafe partition value/);
+  });
+
+  it("supplies canonical dataset identity to attempt-scoped provenance", async () => {
+    const store = new FilePartitionCommitStore(join(tmpDir, "market", ".provenance"));
+    const attempt = await runPartitionCommitAttempt(
+      { attemptId: "dataset-helper-test", recorder: store },
+      () =>
+        writeSpotPartition(conn, {
+          dataDir: tmpDir,
+          ticker: "SPX",
+          date: "2025-01-06",
+          selectQuery: "SELECT *, '2025-01-06' AS date FROM src",
+          quality: { inputRows: 3, droppedRows: 0 },
+        }),
+    );
+
+    expect(attempt.receipts).toHaveLength(1);
+    expect(attempt.receipts[0].receipt).toMatchObject({
+      dataset: "spot",
+      partition: { ticker: "SPX", date: "2025-01-06" },
+      schemaRevision: 1,
+      relativePath: "spot/ticker=SPX/date=2025-01-06/data.parquet",
+      classification: "append",
+      coverage: { kind: "date-range", from: "2025-01-06", through: "2025-01-06" },
+      quality: { inputRows: 3, writtenRows: 3, droppedRows: 0 },
+      file: { rows: 3 },
+    });
   });
 });
 
