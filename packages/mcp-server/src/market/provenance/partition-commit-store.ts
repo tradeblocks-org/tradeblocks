@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { DuckDBConnection } from "@duckdb/node-api";
 import { constants, readFileSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { hostname } from "node:os";
@@ -270,6 +271,127 @@ function validateInput(input: RecordPartitionCommitInput): void {
       `Partition logical coverage must equal its registered date: ${JSON.stringify({ date, coverage: input.coverage })}`,
     );
   }
+}
+
+const CANONICAL_PARQUET_SCHEMAS: Readonly<
+  Record<string, readonly (readonly [name: string, type: string])[]>
+> = Object.freeze({
+  spot: [
+    ["ticker", "VARCHAR"],
+    ["date", "VARCHAR"],
+    ["time", "VARCHAR"],
+    ["open", "DOUBLE"],
+    ["high", "DOUBLE"],
+    ["low", "DOUBLE"],
+    ["close", "DOUBLE"],
+    ["bid", "DOUBLE"],
+    ["ask", "DOUBLE"],
+  ],
+  option_chain: [
+    ["underlying", "VARCHAR"],
+    ["date", "VARCHAR"],
+    ["ticker", "VARCHAR"],
+    ["contract_type", "VARCHAR"],
+    ["strike", "DOUBLE"],
+    ["expiration", "VARCHAR"],
+    ["dte", "INTEGER"],
+    ["exercise_style", "VARCHAR"],
+  ],
+  option_quote_minutes: [
+    ["underlying", "VARCHAR"],
+    ["date", "VARCHAR"],
+    ["ticker", "VARCHAR"],
+    ["time", "VARCHAR"],
+    ["bid", "DOUBLE"],
+    ["ask", "DOUBLE"],
+    ["mid", "DOUBLE"],
+    ["last_updated_ns", "BIGINT"],
+    ["source", "VARCHAR"],
+    ["delta", "FLOAT"],
+    ["gamma", "FLOAT"],
+    ["theta", "FLOAT"],
+    ["vega", "FLOAT"],
+    ["iv", "FLOAT"],
+    ["greeks_source", "VARCHAR"],
+    ["greeks_revision", "INTEGER"],
+    ["rate_type", "VARCHAR"],
+    ["rate_value", "DOUBLE"],
+    ["gamma_source", "VARCHAR"],
+  ],
+  option_oi_daily: [
+    ["underlying", "VARCHAR"],
+    ["date", "VARCHAR"],
+    ["ticker", "VARCHAR"],
+    ["expiration", "VARCHAR"],
+    ["strike", "DOUBLE"],
+    ["right", "VARCHAR"],
+    ["open_interest", "BIGINT"],
+    ["source", "VARCHAR"],
+  ],
+});
+
+function escapeSqlLiteral(value: string): string {
+  return value.replaceAll("'", "''");
+}
+
+function canonicalDuckDbType(value: unknown): string {
+  const normalized = String(value).toUpperCase();
+  return normalized === "REAL" ? "FLOAT" : normalized;
+}
+
+async function inspectCanonicalParquet(
+  conn: DuckDBConnection,
+  filePath: string,
+  identity: PartitionIdentity,
+): Promise<{ rows: number; coverage: LogicalCoverage }> {
+  const expectedSchema = CANONICAL_PARQUET_SCHEMAS[identity.dataset];
+  if (!expectedSchema) throw new TypeError(`No canonical Parquet schema for ${identity.dataset}`);
+  const source = `read_parquet('${escapeSqlLiteral(filePath)}', hive_partitioning=false)`;
+  const described = await conn.runAndReadAll(`DESCRIBE SELECT * FROM ${source}`);
+  const schema = described
+    .getRows()
+    .map((row) => [String(row[0]), canonicalDuckDbType(row[1])] as const);
+  if (canonicalJsonBytes(schema).compare(canonicalJsonBytes(expectedSchema)) !== 0) {
+    throw new Error(
+      `Existing partition Parquet schema does not match revision 1: ${JSON.stringify({ observed: schema, expected: expectedSchema })}`,
+    );
+  }
+  const definition = canonicalPartitionDataset(identity.dataset) as NonNullable<
+    ReturnType<typeof canonicalPartitionDataset>
+  >;
+  const sessionColumn = definition.provenance.sessionKey;
+  const predicates = Object.entries(identity.partition)
+    .map(
+      ([key, value]) =>
+        `COUNT(*) FILTER (WHERE "${key}" IS NULL OR CAST("${key}" AS VARCHAR) <> '${escapeSqlLiteral(value)}')::BIGINT`,
+    )
+    .join(", ");
+  const inspected = await conn.runAndReadAll(
+    `SELECT COUNT(*)::BIGINT,
+            COUNT("${sessionColumn}")::BIGINT,
+            MIN(CAST("${sessionColumn}" AS VARCHAR)),
+            MAX(CAST("${sessionColumn}" AS VARCHAR)),
+            ${predicates}
+       FROM ${source}`,
+  );
+  const row = inspected.getRows()[0];
+  const rows = Number(row[0]);
+  const coveredRows = Number(row[1]);
+  if (!Number.isSafeInteger(rows) || rows <= 0 || coveredRows !== rows) {
+    throw new Error("Existing canonical Parquet must contain non-null rows for its session");
+  }
+  for (const mismatches of row.slice(4)) {
+    if (Number(mismatches) !== 0) {
+      throw new Error("Existing canonical Parquet rows disagree with the registered partition");
+    }
+  }
+  const from = String(row[2]);
+  const through = String(row[3]);
+  const expectedSession = identity.partition[sessionColumn];
+  if (from !== expectedSession || through !== expectedSession) {
+    throw new Error("Existing canonical Parquet coverage disagrees with its partition session");
+  }
+  return { rows, coverage: { kind: "date-range", from, through } };
 }
 
 function validateReceipt(receipt: PartitionCommitReceiptV1, identity: PartitionIdentity): void {
@@ -1071,12 +1193,49 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
   }
 
   /**
+   * Adopt an existing canonical Parquet partition after producer-owned schema,
+   * identity, coverage, row-count, and exact-byte inspection.
+   */
+  async adoptCanonicalParquetPartition(
+    conn: DuckDBConnection,
+    identity: PartitionIdentity,
+  ): Promise<StoredPartitionCommit> {
+    const captured = JSON.parse(canonicalJsonBytes(identity).toString("utf8")) as PartitionIdentity;
+    validateIdentity(captured);
+    const definition = canonicalPartitionDataset(captured.dataset) as NonNullable<
+      ReturnType<typeof canonicalPartitionDataset>
+    >;
+    const relativePath = canonicalRelativePath(captured);
+    const targetPath = path.resolve(this.targetPath(relativePath));
+    const before = await exactFileAddress(targetPath);
+    const inspected = await inspectCanonicalParquet(conn, targetPath, captured);
+    const after = await exactFileAddress(targetPath);
+    if (before.address !== after.address || before.bytes !== after.bytes) {
+      throw new PartitionFileIntegrityError(
+        targetPath,
+        "existing Parquet changed during semantic inspection",
+      );
+    }
+    return this.adoptExistingFileCommit({
+      dataset: captured.dataset,
+      partition: captured.partition,
+      schemaRevision: definition.schemaRevision,
+      relativePath,
+      coverage: inspected.coverage,
+      quality: { inputRows: inspected.rows, writtenRows: inspected.rows, droppedRows: 0 },
+      file: { ...after, rows: inspected.rows },
+    });
+  }
+
+  /**
    * Establish immutable authority for a canonical file that predates receipt
    * publication. This never replaces the data file: it pins and hashes the
    * existing regular inode under the partition lock, then appends authority
    * only when the caller-supplied rows/coverage/fingerprint agree exactly.
    */
-  async adoptExistingFileCommit(input: RecordPartitionCommitInput): Promise<StoredPartitionCommit> {
+  private async adoptExistingFileCommit(
+    input: RecordPartitionCommitInput,
+  ): Promise<StoredPartitionCommit> {
     const captured = captureInput(input);
     const targetPath = path.resolve(this.targetPath(captured.relativePath));
     const realMarketRoot = await this.validateMarketRoot();
@@ -1437,6 +1596,62 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       }
       return { status: "match", receipt: tip.commit };
     });
+  }
+}
+
+/** @internal Producer-only capability marker; intentionally omitted from the public barrel. */
+export async function publishRefreshCompletionAuthority(
+  store: FilePartitionCommitStore,
+  completion: CanonicalJsonAddress,
+): Promise<void> {
+  const digest = parseCanonicalJsonAddress(completion);
+  const source = store.objects.objectPath(completion);
+  const directory = path.join(store.provenanceRootDir, "refresh-completions", digest.slice(0, 2));
+  const marker = path.join(directory, `${digest}.json`);
+  await fs.mkdir(directory, { recursive: true });
+  try {
+    await fs.link(source, marker);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  const bytes = await fs.readFile(marker);
+  if (addressBytes(bytes) !== completion) {
+    throw new ContentObjectCollisionError(completion, marker);
+  }
+  const handle = await fs.open(marker, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  const directoryHandle = await fs.open(directory, "r");
+  try {
+    await directoryHandle.sync();
+  } finally {
+    await directoryHandle.close();
+  }
+}
+
+/** @internal Verifies publication through the producer-only completion rail. */
+export async function verifyRefreshCompletionAuthority(
+  store: FilePartitionCommitStore,
+  completion: CanonicalJsonAddress,
+): Promise<void> {
+  const digest = parseCanonicalJsonAddress(completion);
+  const marker = path.join(
+    store.provenanceRootDir,
+    "refresh-completions",
+    digest.slice(0, 2),
+    `${digest}.json`,
+  );
+  const stat = await fs.lstat(marker);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error("Canonical refresh completion has no producer authority marker");
+  }
+  const bytes = await fs.readFile(marker);
+  const object = await fs.readFile(store.objects.objectPath(completion));
+  if (addressBytes(bytes) !== completion || !bytes.equals(object)) {
+    throw new Error("Canonical refresh completion authority marker is corrupt");
   }
 }
 

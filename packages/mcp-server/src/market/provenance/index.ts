@@ -55,12 +55,21 @@ export {
   canonicalControlIdentity,
   publishCanonicalMarketResolverRegistry,
   CanonicalMarketInputResolver,
-  finalizeCanonicalMarketDataCutoff,
   verifyCanonicalMarketDataCutoff,
   proveCanonicalMarketDataPrefix,
   type CanonicalControlIdentity,
   type PublishCanonicalMarketRegistryInput,
 } from "./canonical-market-resolver.ts";
+export {
+  CANONICAL_REFRESH_COMPLETION_KIND,
+  CANONICAL_REFRESH_COMPLETION_VERSION,
+  verifyCanonicalRefreshCompletion,
+  type CanonicalRefreshPlanV1,
+  type CanonicalRefreshReceiptV1,
+  type CanonicalRefreshOperationV1,
+  type CanonicalRefreshQuoteGroupV1,
+  type CanonicalRefreshCompletionV1,
+} from "./refresh-completion.ts";
 export {
   INPUT_RESOLVER_REGISTRY_KIND,
   INPUT_RESOLVER_REGISTRY_VERSION,

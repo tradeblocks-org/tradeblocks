@@ -1,3 +1,5 @@
+import type { CanonicalJsonAddress, Sha256Address } from "../provenance/canonical-json.ts";
+
 export type IngestStatus = "ok" | "partial" | "skipped" | "unsupported" | "error";
 
 /**
@@ -231,6 +233,15 @@ export interface RefreshOptions {
    * connector's 60s idle timeout doesn't fire.
    */
   onProgress?: BulkProgressReporter;
+  /**
+   * Opt into the producer-owned bounded refresh + cutoff publication rail.
+   * Per-ticker quote refreshes are intentionally unsupported in this mode.
+   */
+  provenance?: {
+    closure: CanonicalJsonAddress;
+    attemptId: string;
+    predecessor?: { manifest: CanonicalJsonAddress; aggregateRoot: Sha256Address };
+  };
 }
 
 export interface RefreshResult {
@@ -252,4 +263,11 @@ export interface RefreshResult {
    * should read `result.skipped?.length ?? 0`.
    */
   skipped?: IngestSkippedBatch[];
+  provenance?: {
+    attemptId: string;
+    completion: CanonicalJsonAddress;
+    receipts: readonly CanonicalJsonAddress[];
+    cutoff: CanonicalJsonAddress;
+    aggregateRoot: Sha256Address;
+  };
 }

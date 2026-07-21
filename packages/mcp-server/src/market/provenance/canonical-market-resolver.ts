@@ -31,6 +31,7 @@ import {
   enumerateXnysSessions,
   isXnysSessionDate,
 } from "./xnys-session-calendar.ts";
+import { verifyCanonicalRefreshCompletion } from "./refresh-completion.ts";
 
 export const CANONICAL_MARKET_RESOLVER_REVISION = "tradeblocks-market-resolver-v1" as const;
 export const BLACKOUT_SLICE_KIND = "tradeblocks.market-data.blackout-slice" as const;
@@ -350,6 +351,20 @@ export class CanonicalMarketInputResolver implements ManifestInputResolver {
     }
     const receipt = inspected.receipt.receipt;
     const session = partition[resolverClass.sessionKey];
+    if (
+      !resolverClass.supportedSchemaRevisions.includes(receipt.schemaRevision) ||
+      receipt.file.rows <= 0 ||
+      receipt.coverage.kind !== "date-range" ||
+      receipt.coverage.from !== session ||
+      receipt.coverage.through !== session ||
+      receipt.quality.writtenRows !== receipt.file.rows ||
+      receipt.quality.inputRows !== receipt.file.rows ||
+      receipt.quality.droppedRows !== 0
+    ) {
+      throw new Error(
+        `Canonical partition is not a complete zero-drop cutoff partition: ${resolverClass.dataset} ${JSON.stringify(partition)}`,
+      );
+    }
     const leaf = await publishSemanticInputLeaf(this.partitions.objects, {
       registry: registryAddress,
       observation,
@@ -557,25 +572,54 @@ export async function finalizeCanonicalMarketDataCutoff(
   input: {
     closure: CanonicalJsonAddress;
     completeThrough: string;
+    refreshCompletion: CanonicalJsonAddress;
     predecessor?: { manifest: CanonicalJsonAddress; aggregateRoot: Sha256Address };
   },
 ): Promise<PutContentObjectResult<CutoffManifestV1>> {
   if (!isXnysSessionDate(input.completeThrough)) {
     throw new Error(`Canonical cutoff is not a supported XNYS session: ${input.completeThrough}`);
   }
-  return publishCutoffManifest(partitions, {
+  const completion = await verifyCanonicalRefreshCompletion(partitions, input.refreshCompletion);
+  if (
+    completion.value.plan.asOf !== input.completeThrough ||
+    completion.value.closure !== input.closure
+  ) {
+    throw new Error("Canonical refresh completion does not authorize this closure and cutoff");
+  }
+  const manifest = await publishCutoffManifest(partitions, {
     closure: input.closure,
     completeThrough: input.completeThrough,
     resolver: new CanonicalMarketInputResolver(partitions),
+    refreshCompletion: completion.address,
     ...(input.predecessor ? { predecessor: input.predecessor } : {}),
   });
+  await verifyCanonicalRefreshCompletion(partitions, completion.address);
+  return manifest;
 }
 
 export async function verifyCanonicalMarketDataCutoff(
   partitions: FilePartitionCommitStore,
   manifest: CanonicalJsonAddress,
 ) {
-  return verifyCutoffManifest(partitions, manifest, new CanonicalMarketInputResolver(partitions));
+  const verified = await verifyCutoffManifest(
+    partitions,
+    manifest,
+    new CanonicalMarketInputResolver(partitions),
+  );
+  if (!verified.manifest.refreshCompletion) {
+    throw new Error("Canonical cutoff manifest has no refresh completion authority");
+  }
+  const completion = await verifyCanonicalRefreshCompletion(
+    partitions,
+    verified.manifest.refreshCompletion,
+  );
+  if (
+    completion.value.plan.asOf !== verified.manifest.completeThrough ||
+    completion.value.closure !== verified.manifest.closure
+  ) {
+    throw new Error("Canonical cutoff manifest refresh authority is inconsistent");
+  }
+  return verified;
 }
 
 export async function proveCanonicalMarketDataPrefix(
@@ -583,10 +627,15 @@ export async function proveCanonicalMarketDataPrefix(
   ancestor: CanonicalJsonAddress,
   descendant: CanonicalJsonAddress,
 ) {
-  return proveCutoffManifestPrefix(
+  await verifyCanonicalMarketDataCutoff(partitions, ancestor);
+  await verifyCanonicalMarketDataCutoff(partitions, descendant);
+  const proof = await proveCutoffManifestPrefix(
     partitions,
     ancestor,
     descendant,
     new CanonicalMarketInputResolver(partitions),
   );
+  await verifyCanonicalMarketDataCutoff(partitions, ancestor);
+  await verifyCanonicalMarketDataCutoff(partitions, descendant);
+  return proof;
 }

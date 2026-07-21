@@ -365,9 +365,11 @@ export {
   canonicalControlIdentity,
   publishCanonicalMarketResolverRegistry,
   CanonicalMarketInputResolver,
-  finalizeCanonicalMarketDataCutoff,
   verifyCanonicalMarketDataCutoff,
   proveCanonicalMarketDataPrefix,
+  CANONICAL_REFRESH_COMPLETION_KIND,
+  CANONICAL_REFRESH_COMPLETION_VERSION,
+  verifyCanonicalRefreshCompletion,
   INPUT_RESOLVER_REGISTRY_KIND,
   INPUT_RESOLVER_REGISTRY_VERSION,
   INPUT_CLOSURE_DESCRIPTOR_KIND,
@@ -397,6 +399,10 @@ export {
   proveCutoffManifestPrefix,
 } from "./market/provenance/index.ts";
 export { setPartitionCommitTestFault } from "./market/provenance/partition-commit-store.ts";
+export {
+  activePartitionCommitAttempt,
+  capturePartitionCommitReceipt,
+} from "./market/provenance/partition-commit-attempt.ts";
 export type {
   CanonicalJsonAddress,
   Sha256Address,
@@ -418,6 +424,11 @@ export type {
   PartitionCommitAttemptResult,
   CanonicalControlIdentity,
   PublishCanonicalMarketRegistryInput,
+  CanonicalRefreshPlanV1,
+  CanonicalRefreshReceiptV1,
+  CanonicalRefreshOperationV1,
+  CanonicalRefreshQuoteGroupV1,
+  CanonicalRefreshCompletionV1,
   PartitionedResolverClassV1,
   StaticResolverClassV1,
   InputResolverClassV1,
@@ -439,6 +450,8 @@ export type {
   ManifestResolution,
   ManifestInputResolver,
 } from "./market/provenance/index.ts";
+export { finalizeCanonicalMarketDataCutoff } from "./market/provenance/canonical-market-resolver.ts";
+export { publishRefreshCompletionAuthority } from "./market/provenance/partition-commit-store.ts";
 
 // Export json-store utility for unit testing
 export {
@@ -774,6 +787,7 @@ export type {
   IngestBarsOptions,
   IngestQuotesOptions,
   IngestChainOptions,
+  IngestOpenInterestOptions,
   IngestFlatFileOptions,
   ComputeVixContextOptions,
   RefreshOptions,

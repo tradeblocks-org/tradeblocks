@@ -24,6 +24,7 @@ import {
   applyQuoteGreeksParallel,
   type QuoteGreeksStats,
 } from "../../utils/option-quote-greeks.ts";
+import { runCanonicalProvenanceRefresh } from "../provenance/refresh-completion.ts";
 
 export interface MarketIngestorDeps {
   stores: MarketStores;
@@ -1229,6 +1230,12 @@ export class MarketIngestor {
   }
 
   async refresh(opts: RefreshOptions): Promise<RefreshResult> {
+    if (opts.provenance) {
+      return runCanonicalProvenanceRefresh(this, this.deps, {
+        ...opts,
+        provenance: opts.provenance,
+      });
+    }
     // Short-circuit non-trading days. Provider behavior on weekends is
     // inconsistent — Saturday returns nothing (good), Sunday returns the
     // prior trading day's chain plus zero-priced quote rows (junk that

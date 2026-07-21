@@ -187,6 +187,7 @@ export interface CutoffManifestV1 {
   completeThrough: string;
   classes: readonly ManifestClassV1[];
   aggregateRoot: Sha256Address;
+  refreshCompletion?: CanonicalJsonAddress;
   predecessor?: { manifest: CanonicalJsonAddress; aggregateRoot: Sha256Address };
 }
 
@@ -1391,6 +1392,7 @@ function createCutoffManifestValue(
   closure: CanonicalJsonAddress,
   completeThrough: string,
   classes: readonly ManifestClassV1[],
+  refreshCompletion?: CanonicalJsonAddress,
   predecessor?: { manifest: CanonicalJsonAddress; aggregateRoot: Sha256Address },
 ): CutoffManifestV1 {
   const sortedClasses = [...classes].sort((left, right) =>
@@ -1402,6 +1404,7 @@ function createCutoffManifestValue(
     version: 1,
     closure,
     completeThrough,
+    ...(refreshCompletion ? { refreshCompletion } : {}),
     classes: sortedClasses.map(({ dataClass, leafCount, root }) => ({
       dataClass,
       leafCount,
@@ -1415,6 +1418,7 @@ function createCutoffManifestValue(
     completeThrough,
     classes: sortedClasses,
     aggregateRoot,
+    ...(refreshCompletion ? { refreshCompletion } : {}),
     ...(predecessor ? { predecessor } : {}),
   };
 }
@@ -1444,6 +1448,7 @@ function normalizeCutoffManifest(value: unknown): CutoffManifestV1 {
     "completeThrough",
     "classes",
     "aggregateRoot",
+    ...(Object.hasOwn(record, "refreshCompletion") ? ["refreshCompletion"] : []),
     ...(Object.hasOwn(record, "predecessor") ? ["predecessor"] : []),
   ];
   exactKeys(record, expected, "cutoff manifest");
@@ -1468,6 +1473,11 @@ function normalizeCutoffManifest(value: unknown): CutoffManifestV1 {
     completeThrough: sessionDate(record.completeThrough, "cutoff manifest completeThrough"),
     classes,
     aggregateRoot: sha256Address(record.aggregateRoot, "cutoff manifest aggregateRoot"),
+    ...(record.refreshCompletion === undefined
+      ? {}
+      : {
+          refreshCompletion: address(record.refreshCompletion, "cutoff manifest refreshCompletion"),
+        }),
     ...(record.predecessor === undefined
       ? {}
       : { predecessor: normalizePredecessor(record.predecessor, "cutoff manifest predecessor") }),
@@ -1650,6 +1660,7 @@ export async function publishCutoffManifest(
     closure: CanonicalJsonAddress;
     completeThrough: string;
     resolver: ManifestInputResolver;
+    refreshCompletion?: CanonicalJsonAddress;
     predecessor?: { manifest: CanonicalJsonAddress; aggregateRoot: Sha256Address };
   },
 ): Promise<PutContentObjectResult<CutoffManifestV1>> {
@@ -1658,6 +1669,9 @@ export async function publishCutoffManifest(
   const closureAddress = address(input.closure, "cutoff manifest closure");
   const completeThrough = sessionDate(input.completeThrough, "cutoff manifest completeThrough");
   const resolver = input.resolver;
+  const refreshCompletion = input.refreshCompletion
+    ? address(input.refreshCompletion, "cutoff manifest refreshCompletion")
+    : undefined;
   const predecessor = input.predecessor
     ? normalizePredecessor(input.predecessor, "cutoff manifest predecessor")
     : undefined;
@@ -1668,7 +1682,14 @@ export async function publishCutoffManifest(
     completeThrough,
     resolver,
   );
-  const value = createCutoffManifestValue(closureAddress, completeThrough, classes, predecessor);
+  if (refreshCompletion) await partitions.objects.get<unknown>(refreshCompletion);
+  const value = createCutoffManifestValue(
+    closureAddress,
+    completeThrough,
+    classes,
+    refreshCompletion,
+    predecessor,
+  );
   const published = await partitions.objects.put(value);
   // Evidence checks span multiple independently locked resources. Re-resolve
   // after immutable publication so a repair or control change during the first
@@ -1683,6 +1704,7 @@ export async function publishCutoffManifest(
     closureAddress,
     completeThrough,
     finalClasses,
+    refreshCompletion,
     predecessor,
   );
   if (!canonicalJsonBytes(finalValue).equals(canonicalJsonBytes(value))) {
@@ -1702,6 +1724,9 @@ export async function verifyCutoffManifest(
   if (!canonicalJsonBytes(manifest).equals(canonicalJsonBytes(stored))) {
     fail("cutoff manifest is not normalized and deterministically ordered");
   }
+  if (manifest.refreshCompletion) {
+    await partitions.objects.get<unknown>(manifest.refreshCompletion);
+  }
   const closure = await verifyInputClosure(partitions.objects, manifest.closure);
   const classes = await resolveManifestClasses(
     partitions,
@@ -1713,6 +1738,7 @@ export async function verifyCutoffManifest(
     manifest.closure,
     manifest.completeThrough,
     classes,
+    manifest.refreshCompletion,
     manifest.predecessor,
   );
   if (!canonicalJsonBytes(expected).equals(canonicalJsonBytes(manifest))) {

@@ -57,9 +57,9 @@ try {
       canonicalJson,
       createInputClosureDescriptor,
       dependencyKeyAddress,
-      finalizeCanonicalMarketDataCutoff,
       isXnysSessionDate,
       publishCanonicalMarketResolverRegistry,
+      verifyCanonicalRefreshCompletion,
     } from "tradeblocks-mcp/market/provenance";
     const resolved = import.meta.resolve("tradeblocks-mcp/market/provenance");
     if (!resolved.includes("/dist/market/provenance/index.js")) throw new Error("not built dist: " + resolved);
@@ -82,8 +82,8 @@ try {
       if (!isXnysSessionDate("2026-07-02") || isXnysSessionDate("2026-07-03")) {
         throw new Error("canonical XNYS calendar API failed");
       }
-      if (typeof finalizeCanonicalMarketDataCutoff !== "function") {
-        throw new Error("canonical finalizer API is missing");
+      if (typeof verifyCanonicalRefreshCompletion !== "function") {
+        throw new Error("canonical refresh completion verifier API is missing");
       }
 
       const marketRoot = join(root, "market");
@@ -185,12 +185,14 @@ try {
 
   writeFileSync(
     join(consumerDir, "consumer.ts"),
-    `import { ContentObjectStore, PartitionFileIntegrityError, finalizeCanonicalMarketDataCutoff, type CanonicalJsonAddress, type CutoffManifestV1 } from "tradeblocks-mcp/market/provenance";\n` +
+    `import { ContentObjectStore, PartitionFileIntegrityError, verifyCanonicalRefreshCompletion, type CanonicalJsonAddress, type CanonicalRefreshCompletionV1, type CutoffManifestV1 } from "tradeblocks-mcp/market/provenance";\n` +
       `const store = new ContentObjectStore("/tmp/provenance-types");\n` +
       `const address: CanonicalJsonAddress = "sha256:${"0".repeat(64)}";\n` +
       `const manifest: CutoffManifestV1 | undefined = undefined;\n` +
+      `const completion: CanonicalRefreshCompletionV1 | undefined = undefined;\n` +
       `void PartitionFileIntegrityError;\n` +
-      `void finalizeCanonicalMarketDataCutoff;\n` +
+      `void verifyCanonicalRefreshCompletion;\n` +
+      `void completion;\n` +
       `void manifest;\n` +
       `void store.get(address);\n`,
   );
