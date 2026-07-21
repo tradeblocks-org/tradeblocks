@@ -12,7 +12,6 @@ import {
   type ManifestResolution,
   type MaterializedResolverClassV1,
   type PartitionedResolverClassV1,
-  dependencyKeyAddress,
   proveCutoffManifestPrefix,
   publishCutoffManifest,
   publishInputResolverRegistry,
