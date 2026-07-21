@@ -330,6 +330,7 @@ export {
   writeParquetAtomic,
   writeParquetPartition,
   ParquetProvenanceOrphanError,
+  UnmanifestedParquetWriteError,
   resolveMarketDir,
 } from "./db/parquet-writer.ts";
 export type { ParquetWriteResult, WriteParquetProvenanceOpts } from "./db/parquet-writer.ts";
@@ -347,11 +348,13 @@ export {
   ContentObjectCollisionError,
   PARTITION_COMMIT_RECEIPT_KIND,
   PARTITION_COMMIT_RECEIPT_VERSION,
+  PARTITION_COMMIT_EVENT_KIND,
+  PARTITION_COMMIT_EVENT_VERSION,
   FilePartitionCommitStore,
+  PartitionFilePublicationError,
   runPartitionCommitAttempt,
-  activePartitionCommitAttempt,
-  capturePartitionCommitReceipt,
 } from "./market/provenance/index.ts";
+export { setPartitionCommitTestFault } from "./market/provenance/partition-commit-store.ts";
 export type {
   CanonicalJsonAddress,
   Sha256Address,
@@ -362,8 +365,10 @@ export type {
   PartitionIdentity,
   PartitionCommitClassification,
   PartitionCommitReceiptV1,
+  PartitionCommitEventV1,
   StoredPartitionCommit,
   RecordPartitionCommitInput,
+  PublishPartitionFileInput,
   PartitionCommitRecorder,
   PartitionInspection,
   FilePartitionCommitStoreOptions,

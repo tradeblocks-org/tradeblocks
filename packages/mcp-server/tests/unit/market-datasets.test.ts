@@ -31,6 +31,7 @@ import {
   writeEnrichedContext,
   FilePartitionCommitStore,
   runPartitionCommitAttempt,
+  UnmanifestedParquetWriteError,
 } from "../../src/test-exports.ts";
 
 let tmpDir: string; // serves as dataDir
@@ -155,7 +156,7 @@ describe("writeSpotPartition — path resolution", () => {
   });
 
   it("supplies canonical dataset identity to attempt-scoped provenance", async () => {
-    const store = new FilePartitionCommitStore(join(tmpDir, "market", ".provenance"));
+    const store = new FilePartitionCommitStore(join(tmpDir, "market"));
     const attempt = await runPartitionCommitAttempt(
       { attemptId: "dataset-helper-test", recorder: store },
       () =>
@@ -270,6 +271,22 @@ describe("writeEnrichedTickerFile — single-level partitioning", () => {
     });
     expect(rowCount).toBe(3);
     expect(existsSync(join(tmpDir, "market", "enriched", "ticker=SPX", "data.parquet"))).toBe(true);
+  });
+
+  it("refuses its unbounded whole-history file inside an active provenance attempt", async () => {
+    const store = new FilePartitionCommitStore(join(tmpDir, "market"));
+    await expect(
+      runPartitionCommitAttempt({ attemptId: "bounded-only", recorder: store }, () =>
+        writeEnrichedTickerFile(conn, {
+          dataDir: tmpDir,
+          ticker: "SPX",
+          selectQuery: "SELECT * FROM src",
+        }),
+      ),
+    ).rejects.toBeInstanceOf(UnmanifestedParquetWriteError);
+    expect(existsSync(join(tmpDir, "market", "enriched", "ticker=SPX", "data.parquet"))).toBe(
+      false,
+    );
   });
 });
 

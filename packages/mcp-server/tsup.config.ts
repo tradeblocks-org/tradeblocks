@@ -32,6 +32,17 @@ export default defineConfig([
     // Bundle workspace package content
     noExternal: [/^@tradeblocks\//],
   },
+  // Public provenance is a genuine package runtime subpath. It must resolve to
+  // Node 18-compatible JavaScript rather than relying on Node's evolving
+  // source-TypeScript loader.
+  {
+    entry: { "market/provenance/index": "src/market/provenance/index.ts" },
+    outDir: "dist",
+    format: ["esm"],
+    target: "node18",
+    dts: true,
+    sourcemap: true,
+  },
   // iv-solver-worker is NOT a tsup entry — tsup's multi-entry code-splitting
   // breaks the worker's self-containment and drops its side-effect message
   // handler. It is built as a standalone esbuild bundle (see the

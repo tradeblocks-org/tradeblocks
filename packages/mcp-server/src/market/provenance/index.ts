@@ -17,23 +17,26 @@ export {
 export {
   PARTITION_COMMIT_RECEIPT_KIND,
   PARTITION_COMMIT_RECEIPT_VERSION,
+  PARTITION_COMMIT_EVENT_KIND,
+  PARTITION_COMMIT_EVENT_VERSION,
   FilePartitionCommitStore,
+  PartitionFilePublicationError,
   type ExactFileFingerprint,
   type LogicalCoverage,
   type PartitionQualityCounts,
   type PartitionIdentity,
   type PartitionCommitClassification,
   type PartitionCommitReceiptV1,
+  type PartitionCommitEventV1,
   type StoredPartitionCommit,
   type RecordPartitionCommitInput,
+  type PublishPartitionFileInput,
   type PartitionCommitRecorder,
   type PartitionInspection,
   type FilePartitionCommitStoreOptions,
 } from "./partition-commit-store.ts";
 export {
   runPartitionCommitAttempt,
-  activePartitionCommitAttempt,
-  capturePartitionCommitReceipt,
   type PartitionCommitAttemptOptions,
   type PartitionCommitAttemptResult,
 } from "./partition-commit-attempt.ts";

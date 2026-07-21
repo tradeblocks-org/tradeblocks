@@ -146,13 +146,14 @@ export class ParquetQuoteStore extends QuoteStore {
     // footprint half-size vs DOUBLE without depending on upstream producers
     // to cast correctly.
     const projection = quoteParquetCanonicalWriteProjection(columns, "q");
-    return writeQuoteMinutesPartition(this.ctx.conn, {
+    const { rowCount } = await writeQuoteMinutesPartition(this.ctx.conn, {
       dataDir: this.ctx.dataDir,
       underlying: partition.underlying,
       date: partition.date,
       selectQuery: `SELECT ${projection} FROM (${selectSql}) AS q`,
       quality: { kind: "writer-input-complete" },
     });
+    return { rowCount };
   }
 
   async readQuotes(

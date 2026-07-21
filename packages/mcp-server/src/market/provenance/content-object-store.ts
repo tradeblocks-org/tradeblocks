@@ -3,7 +3,6 @@ import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   addressBytes,
-  addressCanonicalJson,
   canonicalJsonBytes,
   parseCanonicalJsonAddress,
   type CanonicalJsonAddress,
@@ -29,12 +28,21 @@ export class ContentObjectCollisionError extends Error {
   }
 }
 
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 /**
  * Immutable canonical-JSON object store.
  *
- * Objects are created with `wx`; an existing path is never replaced. Repeating
- * an identical put is idempotent, while different bytes at the same address are
- * treated as collision/corruption and fail closed.
+ * Temp objects are created with `wx` and installed by a no-replace hard link;
+ * an existing address is never replaced. Repeating an identical put is
+ * idempotent, while different bytes at the same address are treated as
+ * collision/corruption and fail closed.
  */
 export class ContentObjectStore {
   constructor(readonly rootDir: string) {}
@@ -53,12 +61,58 @@ export class ContentObjectStore {
     }
   }
 
+  private async ensureDurableDirectory(directory: string): Promise<void> {
+    const parent = path.dirname(directory);
+    if (parent !== directory) await this.ensureDurableDirectory(parent);
+    try {
+      const handle = await fs.open(directory, "r");
+      try {
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      if (parent !== directory) await this.syncDirectory(parent);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+
+    if (parent === directory)
+      throw new Error(`Cannot create content-object directory ${directory}`);
+    let created = false;
+    try {
+      await fs.mkdir(directory);
+      created = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    if (created) {
+      // A directory entry is durable only after its parent is synced. Sync the
+      // new directory too before publishing any children into it.
+      await this.syncDirectory(directory);
+      await this.syncDirectory(parent);
+    }
+  }
+
+  private async syncExistingObject(objectPath: string): Promise<void> {
+    const handle = await fs.open(objectPath, "r");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await this.syncDirectory(path.dirname(objectPath));
+  }
+
   async put<T>(value: T): Promise<PutContentObjectResult<T>> {
+    // Encode once. Accessors and mutable input objects must not be able to make
+    // an address computed by a second traversal disagree with published bytes.
     const bytes = canonicalJsonBytes(value);
-    const address = addressCanonicalJson(value);
+    const address = addressBytes(bytes);
+    const materialized = deepFreeze(JSON.parse(bytes.toString("utf8")) as T);
     const objectPath = this.objectPath(address);
     const objectDir = path.dirname(objectPath);
-    await fs.mkdir(objectDir, { recursive: true });
+    await this.ensureDurableDirectory(objectDir);
     const tempPath = path.join(objectDir, `.${path.basename(objectPath)}.tmp-${randomUUID()}`);
 
     let handle: fs.FileHandle | undefined;
@@ -75,7 +129,13 @@ export class ContentObjectStore {
       await this.syncDirectory(objectDir);
       await fs.unlink(tempPath);
       await this.syncDirectory(objectDir);
-      return { address, value, path: objectPath, bytes: bytes.byteLength, created: true };
+      return {
+        address,
+        value: materialized,
+        path: objectPath,
+        bytes: bytes.byteLength,
+        created: true,
+      };
     } catch (error) {
       await handle?.close();
       handle = undefined;
@@ -83,7 +143,17 @@ export class ContentObjectStore {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const existing = await fs.readFile(objectPath);
       if (!existing.equals(bytes)) throw new ContentObjectCollisionError(address, objectPath);
-      return { address, value, path: objectPath, bytes: bytes.byteLength, created: false };
+      // The EEXIST winner may have linked the inode but not yet completed its
+      // durability barrier. An idempotent caller supplies that barrier before
+      // reporting success.
+      await this.syncExistingObject(objectPath);
+      return {
+        address,
+        value: materialized,
+        path: objectPath,
+        bytes: bytes.byteLength,
+        created: false,
+      };
     } finally {
       await handle?.close();
     }
@@ -100,6 +170,6 @@ export class ContentObjectStore {
     if (!canonicalJsonBytes(value).equals(bytes)) {
       throw new ContentObjectCollisionError(address, objectPath);
     }
-    return value;
+    return deepFreeze(value);
   }
 }

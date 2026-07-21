@@ -117,8 +117,8 @@
       "import": "./src/market/tickers/schemas.ts"
     },
     "./market/provenance": {
-      "types": "./src/market/provenance/index.ts",
-      "import": "./src/market/provenance/index.ts"
+      "types": "./dist/market/provenance/index.d.ts",
+      "import": "./dist/market/provenance/index.js"
     },
     "./test-exports": {
       "types": "./src/test-exports.ts",
@@ -133,6 +133,8 @@
     "dev": "tsup --watch",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "verify:exports": "node scripts/verify-exports-surface.mjs",
+    "verify:packed-provenance": "npm run build && node scripts/verify-packed-provenance-runtime.mjs",
+    "verify:provenance-process-lock": "npm run build && node scripts/verify-provenance-process-lock.mjs",
     "pack:beta": "npm run build && npm pack --pack-destination .",
     "prepublishOnly": "npm run build"
   },

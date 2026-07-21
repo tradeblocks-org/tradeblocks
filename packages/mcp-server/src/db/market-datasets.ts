@@ -91,9 +91,7 @@ function provenanceOptions(
   partition: Record<string, string>,
   schemaRevision: number,
   relativePath: string,
-  coverage:
-    | { kind: "date-range"; from: string; through: string }
-    | { kind: "staging-date-range"; column: string },
+  coverage: { kind: "prepared-date-range"; column: string },
   quality?: DatasetWriteQuality,
 ) {
   return { dataset, partition, schemaRevision, relativePath, coverage, quality };
@@ -172,7 +170,7 @@ export async function writeSpotPartition(
       { ticker: args.ticker, date: args.date },
       def.schemaRevision,
       path.posix.join(def.subdir, `ticker=${args.ticker}`, `date=${args.date}`, def.filename),
-      { kind: "staging-date-range", column: "date" },
+      { kind: "prepared-date-range", column: "date" },
       args.quality,
     ),
   });
@@ -206,7 +204,7 @@ export async function writeChainPartition(
         `date=${args.date}`,
         def.filename,
       ),
-      { kind: "staging-date-range", column: "date" },
+      { kind: "prepared-date-range", column: "date" },
       args.quality,
     ),
   });
@@ -258,7 +256,7 @@ export async function writeQuoteMinutesPartition(
         `date=${args.date}`,
         def.filename,
       ),
-      { kind: "staging-date-range", column: "date" },
+      { kind: "prepared-date-range", column: "date" },
       args.quality,
     ),
   });
@@ -298,7 +296,7 @@ export async function writeOiDailyPartition(
         `date=${args.date}`,
         def.filename,
       ),
-      { kind: "staging-date-range", column: "date" },
+      { kind: "prepared-date-range", column: "date" },
       args.quality,
     ),
   });
@@ -325,14 +323,9 @@ export async function writeEnrichedTickerFile(
     selectQuery: args.selectQuery,
     compression: args.compression,
     filename: def.filename,
-    provenance: provenanceOptions(
-      "enriched",
-      { ticker: args.ticker },
-      def.schemaRevision,
-      path.posix.join(def.subdir, `ticker=${args.ticker}`, def.filename),
-      { kind: "staging-date-range", column: "date" },
-      args.quality,
-    ),
+    // This legacy whole-history file is not a bounded logical-date partition.
+    // An active provenance attempt therefore refuses it in writeParquetAtomic;
+    // outside an attempt it retains legacy write behavior without a receipt.
   });
 }
 
@@ -358,13 +351,6 @@ export async function writeEnrichedContext(
     targetPath,
     selectQuery: args.selectQuery,
     compression: args.compression,
-    provenance: provenanceOptions(
-      "enriched_context",
-      {},
-      def.schemaRevision,
-      path.posix.join(def.subdir, def.filename),
-      { kind: "staging-date-range", column: "date" },
-      args.quality,
-    ),
+    // See writeEnrichedTickerFile: context is also an unbounded legacy file.
   });
 }

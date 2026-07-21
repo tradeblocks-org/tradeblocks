@@ -123,13 +123,14 @@ export class ParquetSpotStore extends SpotStore {
     partition: { ticker: string; date: string },
     selectSql: string,
   ): Promise<{ rowCount: number }> {
-    return writeSpotPartition(this.ctx.conn, {
+    const { rowCount } = await writeSpotPartition(this.ctx.conn, {
       dataDir: this.ctx.dataDir,
       ticker: partition.ticker,
       date: partition.date,
       selectQuery: selectSql,
       quality: { kind: "writer-input-complete" },
     });
+    return { rowCount };
   }
 
   async readBars(ticker: string, from: string, to: string): Promise<BarRow[]> {
