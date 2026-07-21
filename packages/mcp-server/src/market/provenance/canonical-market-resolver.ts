@@ -10,6 +10,7 @@ import {
   type ManifestInputResolver,
   type ManifestLeafReferenceV1,
   type ManifestResolution,
+  type MaterializedResolverClassV1,
   type PartitionedResolverClassV1,
   dependencyKeyAddress,
   proveCutoffManifestPrefix,
@@ -32,6 +33,7 @@ import {
   isXnysSessionDate,
 } from "./xnys-session-calendar.ts";
 import { verifyCanonicalRefreshCompletion } from "./refresh-completion.ts";
+import { publishCanonicalRateSlice, type CanonicalRateDataClass } from "./rate-slices.ts";
 
 export const CANONICAL_MARKET_RESOLVER_REVISION = "tradeblocks-market-resolver-v1" as const;
 export const BLACKOUT_SLICE_KIND = "tradeblocks.market-data.blackout-slice" as const;
@@ -91,9 +93,22 @@ function canonicalPartitionedClasses(): PartitionedResolverClassV1[] {
   });
 }
 
+function canonicalMaterializedClasses(): MaterializedResolverClassV1[] {
+  return (["sofr_rates", "treasury_rates"] as const).map((dataClass) => ({
+    kind: "materialized",
+    dataClass,
+    selectorKeys: ["date"],
+    sessionKey: "date",
+    supportedSchemaRevisions: [1],
+    resolverRevision: CANONICAL_MARKET_RESOLVER_REVISION,
+    calendarRevision: XNYS_SESSION_CALENDAR_REVISION,
+  }));
+}
+
 function canonicalRegistryClasses(controls: readonly CanonicalControlIdentity[]) {
   return [
     ...canonicalPartitionedClasses(),
+    ...canonicalMaterializedClasses(),
     ...controls.map((control) => ({
       kind: "static" as const,
       ...control,
@@ -148,7 +163,7 @@ function requireCanonicalClass(
     throw new Error(`Unsupported resolver revision for ${observation.dataClass}`);
   }
   if (
-    resolverClass.kind === "partitioned" &&
+    resolverClass.kind !== "static" &&
     resolverClass.calendarRevision !== XNYS_SESSION_CALENDAR_REVISION
   ) {
     throw new Error(`Unsupported calendar revision for ${observation.dataClass}`);
@@ -383,6 +398,35 @@ export class CanonicalMarketInputResolver implements ManifestInputResolver {
     return partitionLeafReference(leaf.address, inspected.receipt.address);
   }
 
+  private async resolveMaterializedRate(
+    registryAddress: CanonicalJsonAddress,
+    observation: Extract<InputClosureObservationV1, { kind: "exact" | "range" }>,
+    resolverClass: MaterializedResolverClassV1,
+    selector: Record<string, string>,
+  ): Promise<ManifestLeafReferenceV1> {
+    const session = selector[resolverClass.sessionKey];
+    const object = await publishCanonicalRateSlice(
+      this.partitions.objects,
+      resolverClass.dataClass as CanonicalRateDataClass,
+      session,
+    );
+    const leaf = await publishSemanticInputLeaf(this.partitions.objects, {
+      registry: registryAddress,
+      observation,
+      source: {
+        kind: "materialized-slice",
+        selector,
+        session,
+        schemaRevision: 1,
+        object: { address: object.address, bytes: object.bytes },
+      },
+    });
+    return {
+      leaf: leaf.address,
+      evidence: { kind: "content-object", object: object.address },
+    };
+  }
+
   async resolve(input: {
     registry: InputResolverRegistryV1;
     closure: import("./content-manifest.ts").InputClosureDescriptorV1;
@@ -436,10 +480,13 @@ export class CanonicalMarketInputResolver implements ManifestInputResolver {
           ],
         };
       }
-      if (resolverClass.kind !== "partitioned") {
-        return { kind: "unmanifestable", reasonCode: "partition-class-not-bounded" };
+      if (resolverClass.kind === "static") {
+        return { kind: "unmanifestable", reasonCode: "session-observation-class-is-static" };
       }
       if (observation.kind === "missing-probe") {
+        if (resolverClass.kind !== "partitioned") {
+          return { kind: "unmanifestable", reasonCode: "probe-class-not-partitioned" };
+        }
         if (!isXnysSessionDate(observation.session)) {
           return { kind: "unmanifestable", reasonCode: "probe-not-xnys-session" };
         }
@@ -488,12 +535,19 @@ export class CanonicalMarketInputResolver implements ManifestInputResolver {
             ? observation.selector
             : { ...observation.selectorPrefix, [resolverClass.sessionKey]: session };
         entries.push(
-          await this.resolvePartition(
-            input.closure.registry,
-            observation,
-            resolverClass,
-            partition,
-          ),
+          resolverClass.kind === "partitioned"
+            ? await this.resolvePartition(
+                input.closure.registry,
+                observation,
+                resolverClass,
+                partition,
+              )
+            : await this.resolveMaterializedRate(
+                input.closure.registry,
+                observation,
+                resolverClass,
+                partition,
+              ),
         );
       }
       return { kind: "resolved", completeThrough, entries };

@@ -12,8 +12,10 @@ import {
   finalizeCanonicalMarketDataCutoff,
   proveCanonicalMarketDataPrefix,
   publishCanonicalMarketResolverRegistry,
+  publishCanonicalRateSlice,
   publishRefreshCompletionAuthority,
   publishInputClosure,
+  verifySemanticInputLeaf,
   verifyCanonicalMarketDataCutoff,
   type CanonicalJsonAddress,
   type StoredPartitionCommit,
@@ -133,6 +135,172 @@ describe("producer-owned canonical market resolver", () => {
 
     expect(verified.manifest.classes).toHaveLength(1);
     expect(verified.manifest.classes[0]).toMatchObject({ dataClass: "spot", leafCount: 2 });
+  });
+
+  it("materializes distinct bounded SOFR and Treasury rate leaves", async () => {
+    await expect(
+      publishCanonicalRateSlice(partitions.objects, "unknown_rates" as never, "2026-04-30"),
+    ).rejects.toThrow(/Unsupported canonical rate data class/);
+    await expect(
+      publishCanonicalRateSlice(partitions.objects, "sofr_rates", "2026-05-02"),
+    ).rejects.toThrow(/not an XNYS session/);
+
+    const registry = await publishCanonicalMarketResolverRegistry(partitions.objects);
+    const session = "2026-04-30";
+    const closure = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [
+        {
+          kind: "exact",
+          dataClass: "spot",
+          selector: { ticker: "IWM", date: session },
+          session,
+        },
+        {
+          kind: "exact",
+          dataClass: "sofr_rates",
+          selector: { date: session },
+          session,
+        },
+        {
+          kind: "exact",
+          dataClass: "treasury_rates",
+          selector: { date: session },
+          session,
+        },
+      ],
+    });
+    const receipt = await adoptSpot(session, { closeCents: 22_650 });
+    const completion = await publishCompletion(closure.address, session, [receipt]);
+    const manifest = await finalizeCanonicalMarketDataCutoff(partitions, {
+      closure: closure.address,
+      completeThrough: session,
+      refreshCompletion: completion.address,
+    });
+    const verified = await verifyCanonicalMarketDataCutoff(partitions, manifest.address);
+
+    expect(verified.manifest.classes.map((entry) => entry.dataClass)).toEqual([
+      "sofr_rates",
+      "spot",
+      "treasury_rates",
+    ]);
+    const rateValues = await Promise.all(
+      verified.manifest.classes
+        .filter((entry) => entry.dataClass.endsWith("_rates"))
+        .map(async (entry) => {
+          const leaf = await verifySemanticInputLeaf(partitions.objects, entry.entries[0].leaf);
+          expect(leaf.value.source).toMatchObject({
+            kind: "materialized-slice",
+            selector: { date: session },
+            session,
+            schemaRevision: 1,
+          });
+          const source = leaf.value.source;
+          if (source.kind !== "materialized-slice") throw new Error("expected rate slice");
+          return partitions.objects.get(source.object.address);
+        }),
+    );
+    expect(rateValues).toEqual([
+      expect.objectContaining({
+        series: "sofr",
+        requestedDate: session,
+        annualRateBasisPoints: 366,
+      }),
+      expect.objectContaining({
+        series: "treasury_3m",
+        requestedDate: session,
+        annualRateBasisPoints: 359,
+      }),
+    ]);
+  });
+
+  it("proves materialized rate history is a stable cutoff prefix", async () => {
+    const registry = await publishCanonicalMarketResolverRegistry(partitions.objects);
+    const rateRange = (throughSession: string) => ({
+      kind: "range" as const,
+      dataClass: "sofr_rates",
+      selectorPrefix: {},
+      fromSession: "2026-04-29",
+      throughSession,
+    });
+    const spotRange = (throughSession: string) => ({
+      kind: "range" as const,
+      dataClass: "spot",
+      selectorPrefix: { ticker: "IWM" },
+      fromSession: "2026-04-29",
+      throughSession,
+    });
+    const ancestorClosure = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [rateRange("2026-04-29"), spotRange("2026-04-29")],
+    });
+    const firstReceipt = await adoptSpot("2026-04-29", { closeCents: 22_600 });
+    const firstCompletion = await publishCompletion(ancestorClosure.address, "2026-04-29", [
+      firstReceipt,
+    ]);
+    const ancestor = await finalizeCanonicalMarketDataCutoff(partitions, {
+      closure: ancestorClosure.address,
+      completeThrough: "2026-04-29",
+      refreshCompletion: firstCompletion.address,
+    });
+
+    const descendantClosure = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [rateRange("2026-04-30"), spotRange("2026-04-30")],
+    });
+    const secondReceipt = await adoptSpot("2026-04-30", { closeCents: 22_650 });
+    const secondCompletion = await publishCompletion(descendantClosure.address, "2026-04-30", [
+      secondReceipt,
+    ]);
+    const descendant = await finalizeCanonicalMarketDataCutoff(partitions, {
+      closure: descendantClosure.address,
+      completeThrough: "2026-04-30",
+      refreshCompletion: secondCompletion.address,
+      predecessor: {
+        manifest: ancestor.address,
+        aggregateRoot: ancestor.value.aggregateRoot,
+      },
+    });
+
+    await expect(
+      proveCanonicalMarketDataPrefix(partitions, ancestor.address, descendant.address),
+    ).resolves.toEqual({ valid: true });
+    const verified = await verifyCanonicalMarketDataCutoff(partitions, descendant.address);
+    expect(
+      verified.manifest.classes.find((entry) => entry.dataClass === "sofr_rates"),
+    ).toMatchObject({ leafCount: 2 });
+  });
+
+  it("refuses to certify a session beyond the bundled rate horizon", async () => {
+    const registry = await publishCanonicalMarketResolverRegistry(partitions.objects);
+    const session = "2026-07-06";
+    const closure = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [
+        {
+          kind: "exact",
+          dataClass: "spot",
+          selector: { ticker: "IWM", date: session },
+          session,
+        },
+        {
+          kind: "exact",
+          dataClass: "sofr_rates",
+          selector: { date: session },
+          session,
+        },
+      ],
+    });
+    const receipt = await adoptSpot(session, { closeCents: 22_650 });
+    const completion = await publishCompletion(closure.address, session, [receipt]);
+
+    await expect(
+      finalizeCanonicalMarketDataCutoff(partitions, {
+        closure: closure.address,
+        completeThrough: session,
+        refreshCompletion: completion.address,
+      }),
+    ).rejects.toThrow(/sofr_rates input is stale after 2026-05-07/);
   });
 
   it("slices blackout semantics by cutoff and detects a historical content change", async () => {

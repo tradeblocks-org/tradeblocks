@@ -71,6 +71,14 @@ export {
   type CanonicalRefreshCompletionV1,
 } from "./refresh-completion.ts";
 export {
+  CANONICAL_RATE_SLICE_KIND,
+  CANONICAL_RATE_SLICE_VERSION,
+  publishCanonicalRateSlice,
+  type CanonicalRateDataClass,
+  type CanonicalRateSeries,
+  type CanonicalRateSliceV1,
+} from "./rate-slices.ts";
+export {
   INPUT_RESOLVER_REGISTRY_KIND,
   INPUT_RESOLVER_REGISTRY_VERSION,
   INPUT_CLOSURE_DESCRIPTOR_KIND,
@@ -100,6 +108,7 @@ export {
   proveCutoffManifestPrefix,
   type PartitionedResolverClassV1,
   type StaticResolverClassV1,
+  type MaterializedResolverClassV1,
   type InputResolverClassV1,
   type InputResolverRegistryV1,
   type InputResolverRegistryInputV1,

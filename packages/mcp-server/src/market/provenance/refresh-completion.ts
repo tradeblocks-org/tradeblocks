@@ -239,6 +239,7 @@ async function closureTailInventory(
     const resolverClass = registry.value.classes.find(
       (entry) => entry.dataClass === observation.dataClass,
     );
+    if (resolverClass?.kind === "materialized") continue;
     if (!resolverClass || resolverClass.kind !== "partitioned") {
       throw new Error("Cutoff closure tail is not a canonical partitioned input class");
     }

@@ -201,6 +201,119 @@ describe("market-data content manifests", () => {
     );
   });
 
+  it("binds materialized slices to their registry selector, schema, and content object", async () => {
+    const registry = await publishInputResolverRegistry(partitions.objects, {
+      revision: "materialized-registry-2026-07-21",
+      classes: [
+        {
+          kind: "materialized",
+          dataClass: "sofr_rates",
+          selectorKeys: ["date"],
+          sessionKey: "date",
+          supportedSchemaRevisions: [1],
+          resolverRevision: "sofr-resolver-v1",
+          calendarRevision: "xnys-2026a",
+        },
+      ],
+    });
+    const session = "2026-04-30";
+    const observation: InputClosureObservationV1 = {
+      kind: "exact",
+      dataClass: "sofr_rates",
+      selector: { date: session },
+      session,
+    };
+    const object = await partitions.objects.put({
+      kind: "tradeblocks.market-data.rate-slice",
+      version: 1,
+      series: "sofr",
+      requestedDate: session,
+      effectiveDate: session,
+      annualRateBasisPoints: 366,
+      resolution: "exact",
+    });
+    const source = {
+      kind: "materialized-slice" as const,
+      selector: { date: session },
+      session,
+      schemaRevision: 1,
+      object: { address: object.address, bytes: object.bytes },
+    };
+    const leaf = await publishSemanticInputLeaf(partitions.objects, {
+      registry: registry.address,
+      observation,
+      source,
+    });
+    const closure = await publishInputClosure(partitions.objects, {
+      registry: registry.address,
+      observations: [observation],
+    });
+    const resolver = resolverFrom(
+      new Map([
+        [
+          dependencyKeyAddress(registry.address, observation),
+          {
+            completeThrough: session,
+            entries: [
+              {
+                leaf: leaf.address,
+                evidence: { kind: "content-object" as const, object: object.address },
+              },
+            ],
+          },
+        ],
+      ]),
+    );
+    const manifest = await publishCutoffManifest(partitions, {
+      closure: closure.address,
+      completeThrough: session,
+      resolver,
+    });
+    await expect(
+      verifyCutoffManifest(partitions, manifest.address, resolver),
+    ).resolves.toBeDefined();
+
+    await expect(
+      publishSemanticInputLeaf(partitions.objects, {
+        registry: registry.address,
+        observation,
+        source: { ...source, selector: { date: "2026-04-29" }, session: "2026-04-29" },
+      }),
+    ).rejects.toThrow(/exact source partition is incorrect/);
+    await expect(
+      publishSemanticInputLeaf(partitions.objects, {
+        registry: registry.address,
+        observation,
+        source: { ...source, schemaRevision: 2 },
+      }),
+    ).rejects.toThrow(/schemaRevision is unsupported/);
+
+    const otherObject = await partitions.objects.put({ unrelated: true });
+    const wrongEvidenceResolver = resolverFrom(
+      new Map([
+        [
+          dependencyKeyAddress(registry.address, observation),
+          {
+            completeThrough: session,
+            entries: [
+              {
+                leaf: leaf.address,
+                evidence: { kind: "content-object" as const, object: otherObject.address },
+              },
+            ],
+          },
+        ],
+      ]),
+    );
+    await expect(
+      publishCutoffManifest(partitions, {
+        closure: closure.address,
+        completeThrough: session,
+        resolver: wrongEvidenceResolver,
+      }),
+    ).rejects.toThrow(/address disagrees with the semantic leaf/);
+  });
+
   it("publishes, raw-verifies, and recomputes deterministic class and aggregate roots", async () => {
     const registry = await publishInputResolverRegistry(partitions.objects, registryInput);
     const closure = await publishInputClosure(partitions.objects, {

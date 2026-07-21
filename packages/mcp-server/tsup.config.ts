@@ -42,6 +42,10 @@ export default defineConfig([
     target: "node18",
     dts: true,
     sourcemap: true,
+    // Rate slices resolve through the same bundled deterministic tables as
+    // @tradeblocks/lib consumers; the packed provenance runtime must not rely
+    // on a sibling workspace package being installed.
+    noExternal: [/^@tradeblocks\//],
   },
   // iv-solver-worker is NOT a tsup entry — tsup's multi-entry code-splitting
   // breaks the worker's self-containment and drops its side-effect message

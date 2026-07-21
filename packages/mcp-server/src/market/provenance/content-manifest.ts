@@ -64,7 +64,20 @@ export interface StaticResolverClassV1 {
   resolverRevision: string;
 }
 
-export type InputResolverClassV1 = PartitionedResolverClassV1 | StaticResolverClassV1;
+export interface MaterializedResolverClassV1 {
+  kind: "materialized";
+  dataClass: string;
+  selectorKeys: readonly string[];
+  sessionKey: string;
+  supportedSchemaRevisions: readonly number[];
+  resolverRevision: string;
+  calendarRevision: string;
+}
+
+export type InputResolverClassV1 =
+  | PartitionedResolverClassV1
+  | StaticResolverClassV1
+  | MaterializedResolverClassV1;
 
 export interface InputResolverRegistryV1 {
   kind: typeof INPUT_RESOLVER_REGISTRY_KIND;
@@ -462,6 +475,38 @@ function normalizeRegistryClass(value: unknown, label: string): InputResolverCla
       resolverRevision: revision(record.resolverRevision, `${label}.resolverRevision`),
     };
   }
+  if (kind === "materialized") {
+    exactKeys(
+      record,
+      [
+        "kind",
+        "dataClass",
+        "selectorKeys",
+        "sessionKey",
+        "supportedSchemaRevisions",
+        "resolverRevision",
+        "calendarRevision",
+      ],
+      label,
+    );
+    const selectorKeys = normalizeSelectorKeys(record.selectorKeys, `${label}.selectorKeys`);
+    const sessionKey = identifier(record.sessionKey, `${label}.sessionKey`);
+    if (!selectorKeys.includes(sessionKey)) {
+      fail(`${label}.sessionKey is not one of its selector keys`);
+    }
+    return {
+      kind,
+      dataClass: identifier(record.dataClass, `${label}.dataClass`),
+      selectorKeys,
+      sessionKey,
+      supportedSchemaRevisions: normalizeSchemaRevisions(
+        record.supportedSchemaRevisions,
+        `${label}.supportedSchemaRevisions`,
+      ),
+      resolverRevision: revision(record.resolverRevision, `${label}.resolverRevision`),
+      calendarRevision: revision(record.calendarRevision, `${label}.calendarRevision`),
+    };
+  }
   fail(`${label}.kind is unsupported`);
 }
 
@@ -684,8 +729,8 @@ function validateObservationAgainstRegistry(
     }
     return;
   }
-  if (resolverClass.kind !== "partitioned") {
-    fail(`${observation.kind} observation requires a partitioned registry class`);
+  if (resolverClass.kind === "static") {
+    fail(`${observation.kind} observation requires a session-scoped registry class`);
   }
   if (observation.kind === "range") {
     const expectedPrefixKeys = resolverClass.selectorKeys.filter(
@@ -961,6 +1006,33 @@ function normalizePartitionProjection(
   };
 }
 
+function normalizeMaterializedSlice(
+  record: JsonRecord,
+  label: string,
+  resolverClass: MaterializedResolverClassV1,
+): MaterializedSliceV1 {
+  exactKeys(record, ["kind", "selector", "session", "schemaRevision", "object"], label);
+  const selector = stringMap(record.selector, `${label}.selector`);
+  const session = sessionDate(record.session, `${label}.session`);
+  const schemaRevision = positiveSafeInteger(record.schemaRevision, `${label}.schemaRevision`);
+  if (!sameStringSet(Object.keys(selector), resolverClass.selectorKeys)) {
+    fail(`${label}.selector disagrees with the registry selector keys`);
+  }
+  if (selector[resolverClass.sessionKey] !== session) {
+    fail(`${label}.selector session disagrees with its explicit session`);
+  }
+  if (!resolverClass.supportedSchemaRevisions.includes(schemaRevision)) {
+    fail(`${label}.schemaRevision is unsupported`);
+  }
+  return {
+    kind: "materialized-slice",
+    selector,
+    session,
+    schemaRevision,
+    object: normalizeObjectReference(record.object, `${label}.object`),
+  };
+}
+
 function normalizeSemanticSource(
   value: unknown,
   label: string,
@@ -1004,7 +1076,10 @@ function normalizeSemanticSource(
       };
     }
     case "materialized-slice":
-      fail("materialized-slice sources require a bounded slice registry class in a later version");
+      if (resolverClass.kind !== "materialized") {
+        fail(`${label} requires a materialized registry class`);
+      }
+      return normalizeMaterializedSlice(record, label, resolverClass);
     default:
       fail(`${label}.kind is unsupported`);
   }
@@ -1015,7 +1090,7 @@ function expectedScope(
   source: SemanticInputSourceV1,
 ): SemanticInputLeafV1["scope"] {
   if (observation.kind === "control-file") return { kind: "static" };
-  if (source.kind === "control-file" || source.kind === "materialized-slice") {
+  if (source.kind === "control-file") {
     fail(`${observation.kind} observation cannot use ${source.kind} source evidence`);
   }
   return { kind: "session", session: source.session };
@@ -1041,20 +1116,24 @@ function validateSourceAgainstObservation(
     if (source.session !== observation.session) fail("missing-probe source session is incorrect");
     return "included";
   }
-  if (source.kind !== "partition-projection" || resolverClass.kind !== "partitioned") {
-    fail(`${observation.kind} observation requires partition projection evidence`);
+  if (
+    (source.kind !== "partition-projection" || resolverClass.kind !== "partitioned") &&
+    (source.kind !== "materialized-slice" || resolverClass.kind !== "materialized")
+  ) {
+    fail(`${observation.kind} observation requires compatible session evidence`);
   }
+  const selector = source.kind === "partition-projection" ? source.partition : source.selector;
   if (observation.kind === "exact") {
     if (
       source.session !== observation.session ||
-      canonicalJson(source.partition) !== canonicalJson(observation.selector)
+      canonicalJson(selector) !== canonicalJson(observation.selector)
     ) {
       fail("exact source partition is incorrect");
     }
     return "included";
   }
   for (const [key, value] of Object.entries(observation.selectorPrefix)) {
-    if (source.partition[key] !== value) fail("range source partition prefix is incorrect");
+    if (selector[key] !== value) fail("range source partition prefix is incorrect");
   }
   if (source.session < observation.fromSession) fail("range source precedes the requested range");
   if (source.session > observation.throughSession) {
@@ -1526,8 +1605,8 @@ async function verifyLeafEvidence(
       return;
     }
     case "content-object": {
-      if (leaf.source.kind !== "control-file") {
-        fail("content-object evidence requires a control-file leaf");
+      if (leaf.source.kind !== "control-file" && leaf.source.kind !== "materialized-slice") {
+        fail("content-object evidence requires an object-backed semantic leaf");
       }
       if (leaf.source.object.address !== reference.evidence.object) {
         fail("content-object evidence address disagrees with the semantic leaf");

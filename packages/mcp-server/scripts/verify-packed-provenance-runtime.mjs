@@ -59,6 +59,7 @@ try {
       dependencyKeyAddress,
       isXnysSessionDate,
       publishCanonicalMarketResolverRegistry,
+      publishCanonicalRateSlice,
       verifyCanonicalRefreshCompletion,
     } from "tradeblocks-mcp/market/provenance";
     const resolved = import.meta.resolve("tradeblocks-mcp/market/provenance");
@@ -84,6 +85,16 @@ try {
       }
       if (typeof verifyCanonicalRefreshCompletion !== "function") {
         throw new Error("canonical refresh completion verifier API is missing");
+      }
+      const rate = await publishCanonicalRateSlice(store, "sofr_rates", "2026-04-30");
+      if (rate.value.annualRateBasisPoints !== 366 || rate.value.series !== "sofr") {
+        throw new Error("canonical materialized rate API failed");
+      }
+      try {
+        await publishCanonicalRateSlice(store, "sofr_rates", "2026-07-21");
+        throw new Error("stale canonical rate tail was accepted");
+      } catch (error) {
+        if (!String(error).includes("stale after 2026-05-07")) throw error;
       }
 
       const marketRoot = join(root, "market");
@@ -185,14 +196,19 @@ try {
 
   writeFileSync(
     join(consumerDir, "consumer.ts"),
-    `import { ContentObjectStore, PartitionFileIntegrityError, verifyCanonicalRefreshCompletion, type CanonicalJsonAddress, type CanonicalRefreshCompletionV1, type CutoffManifestV1 } from "tradeblocks-mcp/market/provenance";\n` +
+    `import { ContentObjectStore, PartitionFileIntegrityError, publishCanonicalRateSlice, verifyCanonicalRefreshCompletion, type CanonicalJsonAddress, type CanonicalRateSliceV1, type CanonicalRefreshCompletionV1, type CutoffManifestV1, type MaterializedResolverClassV1 } from "tradeblocks-mcp/market/provenance";\n` +
       `const store = new ContentObjectStore("/tmp/provenance-types");\n` +
       `const address: CanonicalJsonAddress = "sha256:${"0".repeat(64)}";\n` +
       `const manifest: CutoffManifestV1 | undefined = undefined;\n` +
       `const completion: CanonicalRefreshCompletionV1 | undefined = undefined;\n` +
+      `const rate: CanonicalRateSliceV1 | undefined = undefined;\n` +
+      `const materialized: MaterializedResolverClassV1 | undefined = undefined;\n` +
       `void PartitionFileIntegrityError;\n` +
       `void verifyCanonicalRefreshCompletion;\n` +
       `void completion;\n` +
+      `void publishCanonicalRateSlice;\n` +
+      `void rate;\n` +
+      `void materialized;\n` +
       `void manifest;\n` +
       `void store.get(address);\n`,
   );
