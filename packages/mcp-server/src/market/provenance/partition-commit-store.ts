@@ -13,6 +13,12 @@ import {
   type Sha256Address,
 } from "./canonical-json.ts";
 import { ContentObjectCollisionError, ContentObjectStore } from "./content-object-store.ts";
+import {
+  canonicalPartitionDataset,
+  canonicalPartitionRelativePath,
+  isRealMarketSessionDate,
+  validatePartitionIdentity,
+} from "./dataset-registry.ts";
 
 export const PARTITION_COMMIT_RECEIPT_KIND = "tradeblocks.market-data.partition-commit" as const;
 export const PARTITION_COMMIT_RECEIPT_VERSION = 1 as const;
@@ -167,7 +173,6 @@ export class PartitionFileIntegrityError extends Error {
 }
 
 const TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CURRENT_HOSTNAME = hostname();
 const CURRENT_BOOT_ID = (() => {
   try {
@@ -178,61 +183,12 @@ const CURRENT_BOOT_ID = (() => {
   }
 })();
 
-const DATASET_PARTITIONS: Readonly<
-  Record<string, { first: string; date: string; subdir: string }>
-> = Object.freeze({
-  spot: { first: "ticker", date: "date", subdir: "spot" },
-  option_chain: { first: "underlying", date: "date", subdir: "option_chain" },
-  option_quote_minutes: {
-    first: "underlying",
-    date: "date",
-    subdir: "option_quote_minutes",
-  },
-  option_oi_daily: { first: "underlying", date: "date", subdir: "option_oi_daily" },
-});
-
-function isRealDate(value: string): boolean {
-  if (!ISO_DATE_RE.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
 function validateIdentity(identity: PartitionIdentity): void {
-  const definition = DATASET_PARTITIONS[identity.dataset];
-  if (!definition) {
-    throw new TypeError(`Unregistered provenance dataset: ${JSON.stringify(identity.dataset)}`);
-  }
-  const expectedKeys = [definition.first, definition.date].sort();
-  const observedKeys = Object.keys(identity.partition).sort();
-  if (
-    observedKeys.length !== expectedKeys.length ||
-    observedKeys.some((key, index) => key !== expectedKeys[index])
-  ) {
-    throw new TypeError(
-      `Invalid provenance partition keys: ${JSON.stringify({ dataset: identity.dataset, observedKeys, expectedKeys })}`,
-    );
-  }
-  for (const [key, value] of Object.entries(identity.partition)) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || !/^[A-Za-z0-9._-]+$/.test(value)) {
-      throw new TypeError(`Invalid provenance partition: ${JSON.stringify({ key, value })}`);
-    }
-  }
-  if (!isRealDate(identity.partition[definition.date])) {
-    throw new TypeError(
-      `Invalid provenance partition date: ${JSON.stringify(identity.partition[definition.date])}`,
-    );
-  }
+  validatePartitionIdentity(identity);
 }
 
 function canonicalRelativePath(identity: PartitionIdentity): string {
-  validateIdentity(identity);
-  const definition = DATASET_PARTITIONS[identity.dataset];
-  return path.posix.join(
-    definition.subdir,
-    `${definition.first}=${identity.partition[definition.first]}`,
-    `${definition.date}=${identity.partition[definition.date]}`,
-    "data.parquet",
-  );
+  return canonicalPartitionRelativePath(identity);
 }
 
 function validateRelativePath(relativePath: string): void {
@@ -271,7 +227,7 @@ function validateCoverage(coverage: LogicalCoverage, rows: number): void {
     if (rows !== 0) throw new TypeError("Non-empty partition cannot have empty logical coverage");
     return;
   }
-  if (!isRealDate(coverage.from) || !isRealDate(coverage.through)) {
+  if (!isRealMarketSessionDate(coverage.from) || !isRealMarketSessionDate(coverage.through)) {
     throw new TypeError(`Invalid logical date coverage: ${JSON.stringify(coverage)}`);
   }
   if (coverage.from > coverage.through) {
@@ -305,7 +261,7 @@ function validateInput(input: RecordPartitionCommitInput): void {
   validateFingerprint(input.file);
   validateCoverage(input.coverage, input.file.rows);
   validateQuality(input.quality, input.file);
-  const date = input.partition[DATASET_PARTITIONS[input.dataset].date];
+  const date = input.partition[canonicalPartitionDataset(input.dataset)!.provenance.sessionKey];
   if (
     input.coverage.kind === "date-range" &&
     (input.coverage.from !== date || input.coverage.through !== date)

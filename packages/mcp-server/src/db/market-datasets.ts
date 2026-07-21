@@ -6,6 +6,10 @@ import {
   writeParquetPartition,
   type ParquetWriteResult,
 } from "./parquet-writer.ts";
+import {
+  MARKET_DATASETS,
+  type MarketDatasetDefinition,
+} from "../market/provenance/dataset-registry.ts";
 
 export type CanonicalSingleFileDataset = "daily" | "date_context";
 export type CanonicalPartitionedDataset = "intraday" | "option_chain" | "option_quote_minutes";
@@ -69,18 +73,12 @@ export function canonicalMarketTableName(dataset: CanonicalMarketDataset): strin
 //   option_chain:         option_chain/underlying=X/date=Y/data.parquet
 //   option_quote_minutes: option_quote_minutes/underlying=X/date=Y/data.parquet
 //
-// This registry is SEPARATE from the legacy CanonicalPartitionedDataset enum
-// and PARTITIONED_DATASETS map above. Both coexist while consumer migration
-// is ongoing: legacy resolvers serve existing callers (date-only paths) and
-// DATASETS_V3 describes the canonical target state.
+// Legacy resolvers above remain during consumer migration. DATASETS_V3 is an
+// alias of the one shared writer/provenance registry; there is no second
+// canonical dataset definition map.
 // ============================================================================
 
-export interface DatasetDef {
-  subdir: string;
-  partitionKeys: string[];
-  filename: string;
-  schemaRevision: number;
-}
+export type DatasetDef = MarketDatasetDefinition;
 
 export type DatasetWriteQuality =
   | { inputRows: number; droppedRows: number }
@@ -97,44 +95,7 @@ function provenanceOptions(
   return { dataset, partition, schemaRevision, relativePath, coverage, quality };
 }
 
-export const DATASETS_V3: Record<string, DatasetDef> = {
-  spot: {
-    subdir: "spot",
-    partitionKeys: ["ticker", "date"],
-    filename: "data.parquet",
-    schemaRevision: 1,
-  },
-  enriched: {
-    subdir: "enriched",
-    partitionKeys: ["ticker"],
-    filename: "data.parquet",
-    schemaRevision: 1,
-  },
-  enriched_context: {
-    subdir: "enriched/context",
-    partitionKeys: [],
-    filename: "data.parquet",
-    schemaRevision: 1,
-  },
-  option_chain: {
-    subdir: "option_chain",
-    partitionKeys: ["underlying", "date"],
-    filename: "data.parquet",
-    schemaRevision: 1,
-  },
-  option_quote_minutes: {
-    subdir: "option_quote_minutes",
-    partitionKeys: ["underlying", "date"],
-    filename: "data.parquet",
-    schemaRevision: 1,
-  },
-  option_oi_daily: {
-    subdir: "option_oi_daily",
-    partitionKeys: ["underlying", "date"],
-    filename: "data.parquet",
-    schemaRevision: 1,
-  },
-};
+export const DATASETS_V3 = MARKET_DATASETS;
 
 // ------ Per-dataset write helpers ------
 //

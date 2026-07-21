@@ -81,6 +81,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       partitionKeys: ["ticker", "date"],
       filename: "data.parquet",
       schemaRevision: 1,
+      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
@@ -90,6 +91,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       partitionKeys: ["ticker"],
       filename: "data.parquet",
       schemaRevision: 1,
+      provenance: { kind: "unbounded-unsupported" },
     });
   });
 
@@ -99,6 +101,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       partitionKeys: [],
       filename: "data.parquet",
       schemaRevision: 1,
+      provenance: { kind: "unbounded-unsupported" },
     });
   });
 
@@ -108,6 +111,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
       schemaRevision: 1,
+      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
@@ -117,6 +121,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
       schemaRevision: 1,
+      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
@@ -126,6 +131,7 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
       schemaRevision: 1,
+      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 });
