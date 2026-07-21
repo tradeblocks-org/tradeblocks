@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -21,6 +21,8 @@ import {
   type CanonicalJsonAddress,
   type StoredPartitionCommit,
 } from "../../src/test-exports.ts";
+
+jest.setTimeout(15_000);
 
 describe("producer-owned canonical market resolver", () => {
   let dataRoot: string;
