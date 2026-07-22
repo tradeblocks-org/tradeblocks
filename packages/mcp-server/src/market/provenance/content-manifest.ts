@@ -1834,6 +1834,12 @@ export async function proveCutoffManifestPrefix(
 ): Promise<{ valid: boolean; reason?: string }> {
   const ancestor = await verifyCutoffManifest(partitions, ancestorAddress, resolver);
   const descendant = await verifyCutoffManifest(partitions, descendantAddress, resolver);
+  // Prefix is reflexive for one immutable, content-addressed manifest. This is
+  // the producer proof used by already-current resume operations: both reads
+  // above still re-verify the exact object before equality is accepted.
+  if (ancestorAddress === descendantAddress) {
+    return { valid: true };
+  }
   if (ancestor.manifest.completeThrough >= descendant.manifest.completeThrough) {
     return { valid: false, reason: "cutoff-not-increasing" };
   }
