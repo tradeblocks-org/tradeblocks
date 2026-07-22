@@ -19,7 +19,7 @@ import {
   createMarketStores,
   type MarketStores,
 } from "../../src/test-exports.ts";
-import { writeEnrichedTickerFile } from "../../src/db/market-datasets.ts";
+import { writeEnrichedTickerPartition } from "../../src/db/market-datasets.ts";
 import { checkDataAvailability } from "../../src/utils/data-availability.ts";
 import { queryCoverage } from "../../src/utils/data-quality.ts";
 
@@ -32,7 +32,7 @@ async function seedEnriched(fixture: FixtureHandle, ticker: string, date: string
   );
   // Materialize to Parquet so getCoverage's filesystem-backed check sees it
   const safe = ticker.replace(/'/g, "''");
-  await writeEnrichedTickerFile(fixture.ctx.conn, {
+  await writeEnrichedTickerPartition(fixture.ctx.conn, {
     dataDir: fixture.ctx.dataDir,
     ticker,
     date,

@@ -138,6 +138,19 @@ describe("ParquetOiDailyStore", () => {
     fixture.cleanup();
   });
 
+  it("preserves a valid pre-2022 partition in ordinary range reads", async () => {
+    const { store, fixture } = await setUp();
+    const row = buildRows()[0];
+    await store.writeOiDaily("SPX", "2021-12-31", [
+      { ...row, date: "2021-12-31", expiration: "2022-01-07" },
+    ]);
+
+    const rows = await store.readOiDaily("SPX", "1970-01-01", "9999-12-31");
+    expect(rows.map((value) => value.date)).toEqual(["2021-12-31"]);
+
+    fixture.cleanup();
+  });
+
   it("returns an empty array for an underlying with no partitions", async () => {
     const { store, fixture } = await setUp();
     const rows = await store.readOiDaily("QQQ", DATE, DATE);

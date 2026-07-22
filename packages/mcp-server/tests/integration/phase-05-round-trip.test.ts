@@ -6,11 +6,11 @@
  * tmp Parquet fixture with a mocked provider. Asserts that:
  *   - spot/ticker=X/date=Y/data.parquet exists after SpotStore.writeBars
  *   - enriched/ticker=X/date=Y/data.parquet exists, no OHLCV columns (via
- *     writeEnrichedTickerFile — the canonical write primitive that the
+ *     writeEnrichedTickerPartition — the canonical write primitive that the
  *     stores-based `EnrichedStore.compute` is wired through; some legacy
  *     daily.parquet plumbing remains and is exercised separately)
  *   - enriched/context/date=Y/data.parquet exists with cross-ticker fields (via
- *     writeEnrichedContext)
+ *     writeEnrichedContextPartition)
  *   - compareRow.anyFailure=true when Gap_Pct drift exceeds 1e-9
  *   - In-process round-trip: MockProvider.fetchBars → SpotStore.writeBars
  *     surfaces as coverage and via the canonical view
@@ -26,8 +26,8 @@ import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import {
   createMarketStores,
-  writeEnrichedTickerFile,
-  writeEnrichedContext,
+  writeEnrichedTickerPartition,
+  writeEnrichedContextPartition,
   compareRow,
   DOUBLE_EPSILON,
   ENRICHED_FIELD_TYPES,
@@ -152,7 +152,7 @@ describe("market data round-trip — spot backfill → enriched layout → verif
                1::INTEGER AS Gap_Filled, 1::INTEGER AS Day_of_Week,
                8::INTEGER AS Month, 0::INTEGER AS Is_Opex`,
     );
-    await writeEnrichedTickerFile(handle.ctx.conn, {
+    await writeEnrichedTickerPartition(handle.ctx.conn, {
       dataDir: handle.ctx.dataDir,
       ticker: "SPX",
       date: "2024-08-05",
@@ -190,7 +190,7 @@ describe("market data round-trip — spot backfill → enriched layout → verif
                65.0::DOUBLE AS VIX_Spike_Pct,
                20.0::DOUBLE AS VIX_Gap_Pct`,
     );
-    await writeEnrichedContext(handle.ctx.conn, {
+    await writeEnrichedContextPartition(handle.ctx.conn, {
       dataDir: handle.ctx.dataDir,
       date: "2024-08-05",
       selectQuery: `SELECT * FROM _context_stage`,

@@ -256,13 +256,17 @@ describe("ParquetSpotStore XNYS partition boundary", () => {
     }
   });
 
-  it("excludes an unsupported pre-2022 partition without turning it into an authority error", async () => {
+  it("preserves a valid pre-2022 partition in ordinary range reads", async () => {
     const { store, fixture } = await makeParquetSpot();
     try {
       await store.writeBars("SPX", "2021-12-31", makeBars("SPX", "2021-12-31"));
 
-      await expect(store.readBars("SPX", "1970-01-01", "9999-12-31")).resolves.toEqual([]);
-      await expect(store.readDailyBars("SPX", "1970-01-01", "9999-12-31")).resolves.toEqual([]);
+      const minute = await store.readBars("SPX", "1970-01-01", "9999-12-31");
+      expect(minute).toHaveLength(3);
+      expect(new Set(minute.map((row) => row.date))).toEqual(new Set(["2021-12-31"]));
+
+      const daily = await store.readDailyBars("SPX", "1970-01-01", "9999-12-31");
+      expect(daily.map((row) => row.date)).toEqual(["2021-12-31"]);
     } finally {
       fixture.cleanup();
     }

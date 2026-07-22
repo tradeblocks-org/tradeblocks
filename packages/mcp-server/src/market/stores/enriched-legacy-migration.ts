@@ -3,8 +3,8 @@ import { existsSync, readdirSync } from "node:fs";
 import * as path from "node:path";
 import {
   resolveMarketDir,
-  writeEnrichedContext,
-  writeEnrichedTickerFile,
+  writeEnrichedContextPartition,
+  writeEnrichedTickerPartition,
 } from "../../db/market-datasets.ts";
 import {
   activePartitionCommitAttempt,
@@ -50,7 +50,13 @@ async function legacyDates(conn: DuckDBConnection, filePath: string): Promise<st
     try {
       if (isXnysSessionDate(date)) dates.push(date);
     } catch (error) {
-      if (error instanceof RangeError) continue;
+      // Whole-file reads predate the bounded provenance calendar. Preserve
+      // valid historical/future rows for ordinary reads, but keep known
+      // in-horizon closures excluded.
+      if (error instanceof RangeError) {
+        dates.push(date);
+        continue;
+      }
       throw new LegacyEnrichedMigrationError(
         `Legacy enriched file has an invalid session date: ${JSON.stringify({ filePath, date })}`,
         { cause: error },
@@ -58,6 +64,15 @@ async function legacyDates(conn: DuckDBConnection, filePath: string): Promise<st
     }
   }
   return dates;
+}
+
+function migrationEligibleSessionDate(date: string): boolean {
+  try {
+    return isXnysSessionDate(date);
+  } catch (error) {
+    if (error instanceof RangeError) return false;
+    throw error;
+  }
 }
 
 export interface LegacyEnrichedSource {
@@ -142,13 +157,15 @@ export async function migrateLegacyEnrichedTicker(
     const legacy = await inspectLegacyEnrichedTicker(conn, dataDir, ticker);
     if (!legacy) return;
     const escapedLegacy = escapeSqlLiteral(legacy.filePath);
-    for (const date of legacy.dates.filter((candidate) => insideBounds(candidate, bounds))) {
+    for (const date of legacy.dates.filter(
+      (candidate) => insideBounds(candidate, bounds) && migrationEligibleSessionDate(candidate),
+    )) {
       const targetPath = path.join(tickerDir, `date=${date}`, "data.parquet");
       if (existsSync(targetPath)) {
         await establishExistingAuthority(conn, "enriched", { ticker, date });
         continue;
       }
-      await writeEnrichedTickerFile(conn, {
+      await writeEnrichedTickerPartition(conn, {
         dataDir,
         ticker,
         date,
@@ -224,13 +241,15 @@ export async function migrateLegacyEnrichedContext(
     const legacy = await inspectLegacyEnrichedContext(conn, dataDir);
     if (!legacy) return;
     const escapedLegacy = escapeSqlLiteral(legacy.filePath);
-    for (const date of legacy.dates.filter((candidate) => insideBounds(candidate, bounds))) {
+    for (const date of legacy.dates.filter(
+      (candidate) => insideBounds(candidate, bounds) && migrationEligibleSessionDate(candidate),
+    )) {
       const targetPath = path.join(contextDir, `date=${date}`, "data.parquet");
       if (existsSync(targetPath)) {
         await establishExistingAuthority(conn, "enriched_context", { date });
         continue;
       }
-      await writeEnrichedContext(conn, {
+      await writeEnrichedContextPartition(conn, {
         dataDir,
         date,
         selectQuery:

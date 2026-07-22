@@ -47,39 +47,45 @@ export function listPartitionValues(dir: string, partitionKey: string): string[]
 /**
  * Enumerate canonical daily market partitions inside an inclusive date range.
  *
- * A weekday-shaped `date=...` directory is not sufficient authority: XNYS
- * full-day closures (for example 2026-07-03) must never become an implicit
- * input merely because a stale or manually-created Parquet file exists.
- * Invalid and calendar-unsupported dates deliberately retain the calendar's
- * named refusal instead of being guessed from weekday arithmetic.
+ * Inside the bounded XNYS calendar revision, a weekday-shaped `date=...`
+ * directory is not sufficient authority: known full-day closures (for
+ * example 2026-07-03) are excluded. Ordinary store reads predate that bounded
+ * provenance calendar, however, so real ISO dates outside its horizon remain
+ * readable instead of being misreported as absent.
  */
 export function listXnysSessionPartitionValues(dir: string, from: string, to: string): string[] {
-  // Read callers intentionally use broad operational sentinels such as
-  // 1970-01-01..9999-12-31. Only disk-owned values are classified here;
-  // malformed, unsupported, holiday, and weekend names are excluded without
-  // making the read throw. Provenance identity validation continues to call
-  // the strict calendar directly and is intentionally unchanged.
+  // Provenance identity validation calls the strict calendar directly and
+  // intentionally retains its RangeError outside the supported horizon.
   return listPartitionValues(dir, "date")
     .filter((date) => date >= from && date <= to)
     .filter((date) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+      const parsed = new Date(`${date}T00:00:00.000Z`);
+      if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+        return false;
+      }
       try {
         return isXnysSessionDate(date);
-      } catch {
+      } catch (error) {
+        if (error instanceof RangeError) return true;
         return false;
       }
     });
 }
 
-/** Disk partitions in the requested lexical window that are not read authority. */
+/**
+ * Disk partitions that are not read authority. Known dates are scoped to the
+ * requested lexical window. Malformed names cannot be scoped safely, so they
+ * remain unqualified authority errors and deliberately poison every range.
+ */
 export function listExcludedXnysPartitionValues(dir: string, from: string, to: string): string[] {
   return listPartitionValues(dir, "date").filter((date) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return true;
     try {
       return date >= from && date <= to && !isXnysSessionDate(date);
     } catch (error) {
-      // Out-of-calendar history/future is simply outside this reader's
-      // authority horizon. Malformed in-horizon names remain explicit
-      // excluded-disk evidence for the named authority error path.
+      // Out-of-calendar history/future remains ordinary readable data. Bad
+      // ISO names remain explicit excluded-disk evidence.
       return error instanceof TypeError;
     }
   });

@@ -8,8 +8,10 @@
  *     writeSpotPartition           → market/spot/ticker=X/date=Y/data.parquet
  *     writeChainPartition          → market/option_chain/underlying=X/date=Y/data.parquet
  *     writeQuoteMinutesPartition   → market/option_quote_minutes/underlying=X/date=Y/data.parquet
- *     writeEnrichedTickerFile      → market/enriched/ticker=X/date=Y/data.parquet
- *     writeEnrichedContext         → market/enriched/context/date=Y/data.parquet
+ *     writeEnrichedTickerFile      → market/enriched/ticker=X/data.parquet (legacy)
+ *     writeEnrichedContext         → market/enriched/context/data.parquet (legacy)
+ *     writeEnrichedTickerPartition → market/enriched/ticker=X/date=Y/data.parquet
+ *     writeEnrichedContextPartition → market/enriched/context/date=Y/data.parquet
  * - T-1-01 propagation: unsafe partition value rejected through helper layer
  *
  * Pattern: standalone DuckDB :memory: instance per test, tmpdir for output.
@@ -28,6 +30,8 @@ import {
   writeOiDailyPartition,
   writeEnrichedTickerFile,
   writeEnrichedContext,
+  writeEnrichedTickerPartition,
+  writeEnrichedContextPartition,
   FilePartitionCommitStore,
   runPartitionCommitAttempt,
 } from "../../src/test-exports.ts";
@@ -266,9 +270,74 @@ describe("writeOiDailyPartition — path resolution", () => {
   });
 });
 
-describe("writeEnrichedTickerFile — bounded partitioning", () => {
-  it("writes to {dataDir}/market/enriched/ticker=SPX/date=Y/data.parquet", async () => {
+describe("bounded writer date validation", () => {
+  it("rejects JS callers that omit dates before composing any partition path", async () => {
+    await expect(
+      writeSpotPartition(conn, {
+        dataDir: tmpDir,
+        ticker: "SPX",
+        selectQuery: "SELECT * FROM src",
+      } as unknown as Parameters<typeof writeSpotPartition>[1]),
+    ).rejects.toThrow(/writeSpotPartition: date must be an ISO calendar date/);
+    await expect(
+      writeChainPartition(conn, {
+        dataDir: tmpDir,
+        underlying: "SPX",
+        selectQuery: "SELECT * FROM src",
+      } as unknown as Parameters<typeof writeChainPartition>[1]),
+    ).rejects.toThrow(/writeChainPartition: date must be an ISO calendar date/);
+    await expect(
+      writeQuoteMinutesPartition(conn, {
+        dataDir: tmpDir,
+        underlying: "SPX",
+        selectQuery: "SELECT * FROM src",
+      } as unknown as Parameters<typeof writeQuoteMinutesPartition>[1]),
+    ).rejects.toThrow(/writeQuoteMinutesPartition: date must be an ISO calendar date/);
+    await expect(
+      writeOiDailyPartition(conn, {
+        dataDir: tmpDir,
+        underlying: "SPX",
+        selectQuery: "SELECT * FROM src",
+      } as unknown as Parameters<typeof writeOiDailyPartition>[1]),
+    ).rejects.toThrow(/writeOiDailyPartition: date must be an ISO calendar date/);
+
+    expect(existsSync(join(tmpDir, "market", "spot", "ticker=SPX", "date=undefined"))).toBe(false);
+    for (const dataset of ["option_chain", "option_quote_minutes", "option_oi_daily"]) {
+      expect(existsSync(join(tmpDir, "market", dataset, "underlying=SPX", "date=undefined"))).toBe(
+        false,
+      );
+    }
+  });
+});
+
+describe("legacy enriched whole-file writer compatibility", () => {
+  it("keeps writeEnrichedTickerFile at the legacy ticker destination", async () => {
     const { rowCount } = await writeEnrichedTickerFile(conn, {
+      dataDir: tmpDir,
+      ticker: "SPX",
+      selectQuery: "SELECT 'SPX' ticker, '2025-01-06' date, id, label FROM src",
+    });
+    expect(rowCount).toBe(3);
+    expect(existsSync(join(tmpDir, "market", "enriched", "ticker=SPX", "data.parquet"))).toBe(true);
+    expect(existsSync(join(tmpDir, "market", "enriched", "ticker=SPX", "date=undefined"))).toBe(
+      false,
+    );
+  });
+
+  it("keeps writeEnrichedContext at the legacy context destination", async () => {
+    const { rowCount } = await writeEnrichedContext(conn, {
+      dataDir: tmpDir,
+      selectQuery: "SELECT * FROM src",
+    });
+    expect(rowCount).toBe(3);
+    expect(existsSync(join(tmpDir, "market", "enriched", "context", "data.parquet"))).toBe(true);
+    expect(existsSync(join(tmpDir, "market", "enriched", "context", "date=undefined"))).toBe(false);
+  });
+});
+
+describe("writeEnrichedTickerPartition — bounded partitioning", () => {
+  it("writes to {dataDir}/market/enriched/ticker=SPX/date=Y/data.parquet", async () => {
+    const { rowCount } = await writeEnrichedTickerPartition(conn, {
       dataDir: tmpDir,
       ticker: "SPX",
       date: "2025-01-06",
@@ -287,7 +356,7 @@ describe("writeEnrichedTickerFile — bounded partitioning", () => {
     const attempt = await runPartitionCommitAttempt(
       { attemptId: "bounded-enriched", recorder: store },
       () =>
-        writeEnrichedTickerFile(conn, {
+        writeEnrichedTickerPartition(conn, {
           dataDir: tmpDir,
           ticker: "SPX",
           date: "2025-01-06",
@@ -303,16 +372,33 @@ describe("writeEnrichedTickerFile — bounded partitioning", () => {
       quality: { inputRows: 3, writtenRows: 3, droppedRows: 0 },
     });
   });
+
+  it.each([undefined, "", "2025-02-30", "2025/01/06"])(
+    "rejects a JS caller date of %p before composing a partition path",
+    async (date) => {
+      await expect(
+        writeEnrichedTickerPartition(conn, {
+          dataDir: tmpDir,
+          ticker: "SPX",
+          date,
+          selectQuery: "SELECT * FROM src",
+        } as Parameters<typeof writeEnrichedTickerPartition>[1]),
+      ).rejects.toThrow(/date (must be an ISO calendar date|is not a real calendar date)/);
+      expect(
+        existsSync(join(tmpDir, "market", "enriched", "ticker=SPX", `date=${String(date)}`)),
+      ).toBe(false);
+    },
+  );
 });
 
-describe("writeEnrichedContext — bounded date partition", () => {
+describe("writeEnrichedContextPartition — bounded date partition", () => {
   const completeContextQuery =
     "SELECT '2025-01-06' date, 4::INTEGER Vol_Regime, " +
     "1::INTEGER Term_Structure_State, 'flat'::VARCHAR Trend_Direction, " +
     "2.5::DOUBLE VIX_Spike_Pct, 1.25::DOUBLE VIX_Gap_Pct";
 
   it("writes to {dataDir}/market/enriched/context/date=Y/data.parquet", async () => {
-    const { rowCount } = await writeEnrichedContext(conn, {
+    const { rowCount } = await writeEnrichedContextPartition(conn, {
       dataDir: tmpDir,
       date: "2025-01-06",
       selectQuery: completeContextQuery,
@@ -329,7 +415,7 @@ describe("writeEnrichedContext — bounded date partition", () => {
     const attempt = await runPartitionCommitAttempt(
       { attemptId: "bounded-enriched-context", recorder: store },
       () =>
-        writeEnrichedContext(conn, {
+        writeEnrichedContextPartition(conn, {
           dataDir: tmpDir,
           date: "2025-01-06",
           selectQuery: completeContextQuery,
@@ -347,7 +433,7 @@ describe("writeEnrichedContext — bounded date partition", () => {
 
   it("refuses a bounded context row without same-session VIX completeness fields", async () => {
     await expect(
-      writeEnrichedContext(conn, {
+      writeEnrichedContextPartition(conn, {
         dataDir: tmpDir,
         date: "2025-01-06",
         selectQuery:
@@ -360,7 +446,7 @@ describe("writeEnrichedContext — bounded date partition", () => {
 
   it("refuses context without its prior-session VIX gap input", async () => {
     await expect(
-      writeEnrichedContext(conn, {
+      writeEnrichedContextPartition(conn, {
         dataDir: tmpDir,
         date: "2025-01-06",
         selectQuery:
@@ -370,4 +456,20 @@ describe("writeEnrichedContext — bounded date partition", () => {
       }),
     ).rejects.toThrow(/missing required VIX completeness fields/);
   });
+
+  it.each([undefined, "", "2025-02-30", "2025/01/06"])(
+    "rejects a JS caller date of %p before querying or composing a partition path",
+    async (date) => {
+      await expect(
+        writeEnrichedContextPartition(conn, {
+          dataDir: tmpDir,
+          date,
+          selectQuery: completeContextQuery,
+        } as Parameters<typeof writeEnrichedContextPartition>[1]),
+      ).rejects.toThrow(/date (must be an ISO calendar date|is not a real calendar date)/);
+      expect(
+        existsSync(join(tmpDir, "market", "enriched", "context", `date=${String(date)}`)),
+      ).toBe(false);
+    },
+  );
 });

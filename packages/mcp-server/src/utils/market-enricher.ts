@@ -22,8 +22,8 @@ import { isParquetMode } from "../db/parquet-writer.ts";
 import {
   resolveCanonicalMarketFile,
   resolveMarketDir,
-  writeEnrichedContext,
-  writeEnrichedTickerFile,
+  writeEnrichedContextPartition,
+  writeEnrichedTickerPartition,
 } from "../db/market-datasets.ts";
 import { getEnrichedThrough, upsertEnrichedThrough } from "../db/json-adapters.ts";
 import { DEFAULT_MARKET_TICKER } from "./ticker.ts";
@@ -909,7 +909,7 @@ async function flushEnrichedToParquet(
       if (!isRealMarketSessionDate(date)) {
         throw new Error(`Enriched slice has invalid logical date: ${JSON.stringify(date)}`);
       }
-      await writeEnrichedTickerFile(conn, {
+      await writeEnrichedTickerPartition(conn, {
         dataDir,
         ticker,
         date,
@@ -936,7 +936,7 @@ async function flushEnrichedToParquet(
       if (!isRealMarketSessionDate(date)) {
         throw new Error(`Enriched context slice has invalid logical date: ${JSON.stringify(date)}`);
       }
-      await writeEnrichedContext(conn, {
+      await writeEnrichedContextPartition(conn, {
         dataDir,
         date,
         selectQuery:

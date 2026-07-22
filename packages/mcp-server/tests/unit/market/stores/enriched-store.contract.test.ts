@@ -13,7 +13,7 @@
  *   - DuckDB mode: both tables are physical — INSERT OR REPLACE direct.
  *   - Parquet mode: INSERT into the physical table first (so tests can use
  *     the same seeding code), then write the corresponding Parquet file via
- *     `writeEnrichedTickerFile` / `writeEnrichedContext`, and refresh the
+ *     `writeEnrichedTickerPartition` / `writeEnrichedContextPartition`, and refresh the
  *     Parquet views via `createMarketParquetViews`. After the view flip,
  *     `market.enriched` resolves to the Parquet view (not the physical
  *     table), so reads exercise the real Parquet read path.
@@ -42,8 +42,8 @@ import {
 import { makeBars } from "../../../fixtures/market-stores/bars-fixture.ts";
 import { createMarketParquetViews } from "../../../../src/db/market-views.ts";
 import {
-  writeEnrichedTickerFile,
-  writeEnrichedContext,
+  writeEnrichedTickerPartition,
+  writeEnrichedContextPartition,
 } from "../../../../src/db/market-datasets.ts";
 
 /** Seed two rows of enriched data. Used by every contract test. */
@@ -65,7 +65,7 @@ async function seedEnriched(
     );
     if (parquetMode) {
       const safe = ticker.replace(/'/g, "''");
-      await writeEnrichedTickerFile(conn, {
+      await writeEnrichedTickerPartition(conn, {
         dataDir,
         ticker,
         date,
@@ -93,7 +93,7 @@ async function seedContext(
       [date, volRegime, tss, trendDir, 0.1, 0.2],
     );
     if (parquetMode) {
-      await writeEnrichedContext(conn, {
+      await writeEnrichedContextPartition(conn, {
         dataDir,
         date,
         selectQuery: `SELECT * FROM market.enriched_context WHERE date = '${date}'`,
@@ -384,9 +384,66 @@ describe("ParquetEnrichedStore XNYS partition boundary", () => {
       fixture.cleanup();
     }
   });
+
+  it("preserves valid pre-2022 enriched and context partitions in ordinary reads", async () => {
+    const { store, fixture } = await makeParquetEnriched();
+    try {
+      await seedEnriched(fixture.ctx.conn, "SPX", fixture.ctx.dataDir, true, [
+        ["2021-12-31", 100.0, 0.5, 55.0],
+      ]);
+      await seedContext(fixture.ctx.conn, fixture.ctx.dataDir, true, [["2021-12-31", 1, 0, "up"]]);
+
+      const rows = await store.read({
+        ticker: "SPX",
+        from: "1970-01-01",
+        to: "9999-12-31",
+        includeContext: true,
+      });
+      expect(rows).toHaveLength(1);
+      expect(String(rows[0].date)).toBe("2021-12-31");
+      expect(rows[0]).toMatchObject({ Prior_Close: 100, Vol_Regime: 1 });
+    } finally {
+      fixture.cleanup();
+    }
+  });
 });
 
 describe("ParquetEnrichedStore legacy whole-file migration", () => {
+  it("reads valid pre-2022 ticker and context rows without minting unsupported partitions", async () => {
+    const { store, fixture } = await makeParquetEnriched();
+    try {
+      await seedLegacyEnriched(fixture.ctx.conn, "SPX", fixture.ctx.dataDir, [
+        ["2021-12-31", 100, 0.5, 55],
+      ]);
+      await seedLegacyContext(fixture.ctx.conn, fixture.ctx.dataDir, [["2021-12-31", 1, 0, "up"]]);
+
+      const rows = await store.read({
+        ticker: "SPX",
+        from: "1970-01-01",
+        to: "9999-12-31",
+        includeContext: true,
+      });
+      expect(rows).toHaveLength(1);
+      expect(String(rows[0].date)).toBe("2021-12-31");
+      expect(rows[0]).toMatchObject({ Prior_Close: 100, Vol_Regime: 1 });
+
+      await migrateLegacyEnrichedTicker(fixture.ctx.conn, fixture.ctx.dataDir, "SPX");
+      await migrateLegacyEnrichedContext(fixture.ctx.conn, fixture.ctx.dataDir);
+      expect(
+        existsSync(
+          path.join(fixture.ctx.dataDir, "market/enriched/ticker=SPX/date=2021-12-31/data.parquet"),
+        ),
+      ).toBe(false);
+      expect(
+        existsSync(
+          path.join(fixture.ctx.dataDir, "market/enriched/context/date=2021-12-31/data.parquet"),
+        ),
+      ).toBe(false);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
   it("preserves legacy values past an advanced watermark and prefers existing slices", async () => {
     const { store, fixture } = await makeParquetEnriched();
     try {

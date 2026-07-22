@@ -703,6 +703,8 @@ export {
   writeOiDailyPartition,
   writeEnrichedTickerFile,
   writeEnrichedContext,
+  writeEnrichedTickerPartition,
+  writeEnrichedContextPartition,
 } from "./db/market-datasets.ts";
 export type { DatasetDef, DatasetWriteQuality } from "./db/market-datasets.ts";
 

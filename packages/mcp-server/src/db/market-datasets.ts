@@ -1,7 +1,11 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as path from "path";
 import { getDataRoot } from "./data-root.ts";
-import { writeParquetPartition, type ParquetWriteResult } from "./parquet-writer.ts";
+import {
+  writeParquetAtomic,
+  writeParquetPartition,
+  type ParquetWriteResult,
+} from "./parquet-writer.ts";
 import {
   MARKET_DATASETS,
   type MarketDatasetDefinition,
@@ -93,6 +97,18 @@ function provenanceOptions(
 
 export const DATASETS_V3 = MARKET_DATASETS;
 
+function assertCanonicalPartitionDate(value: unknown, helper: string): asserts value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new TypeError(
+      `${helper}: date must be an ISO calendar date (YYYY-MM-DD): ${JSON.stringify(value)}`,
+    );
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new TypeError(`${helper}: date is not a real calendar date: ${JSON.stringify(value)}`);
+  }
+}
+
 // ------ Per-dataset write helpers ------
 //
 // Each helper reads its DatasetDef, composes the partitions map in the order
@@ -101,8 +117,8 @@ export const DATASETS_V3 = MARKET_DATASETS;
 //
 // Security note: writeParquetPartition applies a whitelist to every partition
 // key and value — /^[A-Za-z0-9._-]+$/ on values, /^[A-Za-z_][A-Za-z0-9_]*$/ on keys.
-// That is the deepest defense-in-depth layer against path traversal. Helpers
-// do not re-validate.
+// That is the deepest defense-in-depth layer against path traversal. Bounded
+// helpers additionally validate dates before composing paths or provenance.
 
 export async function writeSpotPartition(
   conn: DuckDBConnection,
@@ -115,6 +131,7 @@ export async function writeSpotPartition(
     quality?: DatasetWriteQuality;
   },
 ): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeSpotPartition");
   const def = DATASETS_V3.spot;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
@@ -144,6 +161,7 @@ export async function writeChainPartition(
     quality?: DatasetWriteQuality;
   },
 ): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeChainPartition");
   const def = DATASETS_V3.option_chain;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
@@ -178,6 +196,7 @@ export async function writeQuoteMinutesPartition(
     quality?: DatasetWriteQuality;
   },
 ): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeQuoteMinutesPartition");
   const def = DATASETS_V3.option_quote_minutes;
   // Sort rows by (ticker, time) before writing so DuckDB row groups in the
   // resulting parquet have tight min/max statistics on `ticker`. The
@@ -230,6 +249,7 @@ export async function writeOiDailyPartition(
     quality?: DatasetWriteQuality;
   },
 ): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeOiDailyPartition");
   const def = DATASETS_V3.option_oi_daily;
   // Sort rows by ticker before writing so DuckDB row groups carry tight
   // min/max statistics on `ticker` — the dominant read pattern is a
@@ -260,10 +280,28 @@ export async function writeOiDailyPartition(
 }
 
 /**
+ * Backward-compatible whole-file writer for the legacy 3.3.x layout:
+ * enriched/ticker=X/data.parquet.
+ */
+export async function writeEnrichedTickerFile(
+  conn: DuckDBConnection,
+  args: { dataDir: string; ticker: string; selectQuery: string; compression?: string },
+): Promise<{ rowCount: number }> {
+  const def = DATASETS_V3.enriched;
+  return writeParquetPartition(conn, {
+    baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
+    partitions: { ticker: args.ticker },
+    selectQuery: args.selectQuery,
+    compression: args.compression,
+    filename: def.filename,
+  });
+}
+
+/**
  * Writes one bounded ticker/session slice:
  * enriched/ticker=X/date=Y/data.parquet.
  */
-export async function writeEnrichedTickerFile(
+export async function writeEnrichedTickerPartition(
   conn: DuckDBConnection,
   args: {
     dataDir: string;
@@ -274,6 +312,7 @@ export async function writeEnrichedTickerFile(
     quality?: DatasetWriteQuality;
   },
 ): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeEnrichedTickerPartition");
   const def = DATASETS_V3.enriched;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
@@ -293,10 +332,26 @@ export async function writeEnrichedTickerFile(
 }
 
 /**
+ * Backward-compatible whole-file writer for the legacy 3.3.x layout:
+ * enriched/context/data.parquet.
+ */
+export async function writeEnrichedContext(
+  conn: DuckDBConnection,
+  args: { dataDir: string; selectQuery: string; compression?: string },
+): Promise<{ rowCount: number }> {
+  const def = DATASETS_V3.enriched_context;
+  return writeParquetAtomic(conn, {
+    targetPath: path.join(resolveMarketDir(args.dataDir), def.subdir, def.filename),
+    selectQuery: args.selectQuery,
+    compression: args.compression,
+  });
+}
+
+/**
  * Writes one bounded cross-ticker context session:
  * enriched/context/date=Y/data.parquet.
  */
-export async function writeEnrichedContext(
+export async function writeEnrichedContextPartition(
   conn: DuckDBConnection,
   args: {
     dataDir: string;
@@ -306,6 +361,7 @@ export async function writeEnrichedContext(
     quality?: DatasetWriteQuality;
   },
 ): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeEnrichedContextPartition");
   const completeness = await conn.runAndReadAll(
     `SELECT date, Vol_Regime, Term_Structure_State, Trend_Direction,
             VIX_Spike_Pct, VIX_Gap_Pct
