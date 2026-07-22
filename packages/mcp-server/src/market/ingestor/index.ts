@@ -5,6 +5,7 @@ export type {
   IngestBarsOptions,
   IngestQuotesOptions,
   IngestChainOptions,
+  IngestOpenInterestOptions,
   IngestFlatFileOptions,
   ComputeVixContextOptions,
   RefreshOptions,

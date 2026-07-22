@@ -184,3 +184,38 @@ describe("QuoteStore backend parity", () => {
     }
   });
 });
+
+describe("ParquetQuoteStore XNYS partition boundary", () => {
+  it("excludes a 2026-07-03 holiday partition from range reads", async () => {
+    const { store, fixture } = await makeParquetQuote();
+    try {
+      await store.writeQuotes("SPX", "2026-07-02", makeQuotes(SPX_CALL, "2026-07-02"));
+      await store.writeQuotes("SPX", "2026-07-03", makeQuotes(SPX_CALL, "2026-07-03"));
+
+      const result = await store.readQuotes([SPX_CALL], "2026-07-02", "2026-07-06");
+      expect(result.get(SPX_CALL)?.map((quote) => quote.timestamp.slice(0, 10))).toEqual([
+        "2026-07-02",
+        "2026-07-02",
+        "2026-07-02",
+      ]);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("preserves a valid pre-2022 partition in ordinary range reads", async () => {
+    const { store, fixture } = await makeParquetQuote();
+    try {
+      await store.writeQuotes("SPX", "2021-12-31", makeQuotes(SPX_CALL, "2021-12-31"));
+
+      const result = await store.readQuotes([SPX_CALL], "1970-01-01", "9999-12-31");
+      expect(result.get(SPX_CALL)?.map((quote) => quote.timestamp.slice(0, 10))).toEqual([
+        "2021-12-31",
+        "2021-12-31",
+        "2021-12-31",
+      ]);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+});

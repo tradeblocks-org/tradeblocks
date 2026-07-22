@@ -11,7 +11,7 @@
  *  5. Static boundary: src/market/ must not import anything from src/backtest/
  *     (shared-code-no-private-import rule; T-1-04 mitigation)
  */
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, jest } from "@jest/globals";
 import { execSync } from "child_process";
 import { existsSync } from "fs";
 import * as path from "path";
@@ -21,6 +21,7 @@ import {
   ChainStore,
   QuoteStore,
   createMarketStores,
+  getMarketStoresAuthority,
   ParquetSpotStore,
   DuckdbSpotStore,
   ParquetEnrichedStore,
@@ -90,6 +91,115 @@ describe("EnrichedStore / ChainStore / QuoteStore abstract shape", () => {
 });
 
 describe("createMarketStores factory (Pitfall 6 resolution — real DuckDB fixture)", () => {
+  it("brands only factory-created bundles with their resolved root and backend", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      const stores = createMarketStores(fixture.ctx);
+      const originalDataDir = stores.spot.dataDir;
+      expect(getMarketStoresAuthority(stores)).toEqual({
+        dataRoot: originalDataDir,
+        parquetMode: true,
+      });
+      expect(Object.isFrozen(stores)).toBe(true);
+      for (const store of Object.values(stores)) expect(Object.isFrozen(store)).toBe(true);
+      expect(Object.getOwnPropertyDescriptor(stores.spot, "readBars")).toMatchObject({
+        writable: false,
+        configurable: false,
+      });
+      expect(Object.getOwnPropertyDescriptor(stores.spot, "dataDir")).toMatchObject({
+        value: path.resolve(fixture.ctx.dataDir),
+        writable: false,
+        configurable: false,
+      });
+      fixture.ctx.dataDir = path.resolve(fixture.ctx.dataDir, "redirected");
+      fixture.ctx.tickers.register({ underlying: "MUT", roots: ["MUTX"] });
+      expect(stores.spot.dataDir).toBe(originalDataDir);
+      expect(stores.quote.tickers.resolve("MUTX")).toBe("MUT");
+      expect(() => stores.quote.tickers.register({ underlying: "BAD", roots: ["BAD"] })).toThrow(
+        /read-only facades/,
+      );
+      fixture.ctx.tickers.unregister("MUT");
+      expect(stores.quote.tickers.resolve("MUTX")).toBe("MUTX");
+      expect(() =>
+        Object.defineProperty(stores.spot, "readBars", {
+          value: async () => [{ close: 9_999 }],
+        }),
+      ).toThrow();
+      expect(getMarketStoresAuthority(stores)).toEqual({
+        dataRoot: originalDataDir,
+        parquetMode: true,
+      });
+      expect(getMarketStoresAuthority({ ...stores })).toBeNull();
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("resolves every connection method against the current getter value", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      const first = {
+        run: jest.fn(async () => "first-run"),
+        runAndReadAll: jest.fn(async () => "first-read"),
+        createAppender: jest.fn(async () => "first-appender"),
+      };
+      const second = {
+        run: jest.fn(async () => "second-run"),
+        runAndReadAll: jest.fn(async () => "second-read"),
+        createAppender: jest.fn(async () => "second-appender"),
+      };
+      let current = first;
+      Object.defineProperty(fixture.ctx, "conn", {
+        configurable: true,
+        get: () => current as unknown as StoreContext["conn"],
+      });
+      const stores = createMarketStores(fixture.ctx);
+      const authorityContext = (stores.spot as unknown as { ctx: { conn: StoreContext["conn"] } })
+        .ctx;
+
+      await expect(authorityContext.conn.run("SELECT 1")).resolves.toBe("first-run");
+      await expect(authorityContext.conn.runAndReadAll("SELECT 1")).resolves.toBe("first-read");
+      await expect(authorityContext.conn.createAppender("first_table")).resolves.toBe(
+        "first-appender",
+      );
+
+      current = second;
+      await expect(authorityContext.conn.run("SELECT 2")).resolves.toBe("second-run");
+      await expect(authorityContext.conn.runAndReadAll("SELECT 2")).resolves.toBe("second-read");
+      await expect(authorityContext.conn.createAppender("second_table")).resolves.toBe(
+        "second-appender",
+      );
+      expect(first.run).toHaveBeenCalledTimes(1);
+      expect(second.run).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("brands the exact data-root snapshot used to construct authority stores", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      const originalDataDir = path.resolve(fixture.ctx.dataDir);
+      const redirectedDataDir = path.resolve(originalDataDir, "redirected");
+      let reads = 0;
+      Object.defineProperty(fixture.ctx, "dataDir", {
+        configurable: true,
+        get: () => (reads++ === 0 ? originalDataDir : redirectedDataDir),
+      });
+
+      const stores = createMarketStores(fixture.ctx);
+
+      expect(reads).toBe(1);
+      expect(stores.spot.dataDir).toBe(originalDataDir);
+      expect(getMarketStoresAuthority(stores)).toEqual({
+        dataRoot: originalDataDir,
+        parquetMode: true,
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
   it("returns real instances extending each abstract base (DuckDB backend)", async () => {
     const fixture = await buildStoreFixture({ parquetMode: false });
     try {

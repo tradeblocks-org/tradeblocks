@@ -61,6 +61,7 @@ export class ParquetChainStore extends ChainStore {
         underlying,
         date,
         selectQuery: `SELECT * FROM "${staging}"`,
+        quality: { inputRows: rows.length, droppedRows: 0 },
       });
     } finally {
       try {
@@ -75,12 +76,14 @@ export class ParquetChainStore extends ChainStore {
     partition: { underlying: string; date: string },
     selectSql: string,
   ): Promise<{ rowCount: number }> {
-    return writeChainPartition(this.ctx.conn, {
+    const { rowCount } = await writeChainPartition(this.ctx.conn, {
       dataDir: this.ctx.dataDir,
       underlying: partition.underlying,
       date: partition.date,
       selectQuery: selectSql,
+      quality: { kind: "writer-input-complete" },
     });
+    return { rowCount };
   }
 
   /**

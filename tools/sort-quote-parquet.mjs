@@ -247,6 +247,13 @@ async function worker(workerId, queue, dryRun, results, totals) {
 
 async function main() {
   const args = parseArgs(process.argv);
+  const provenanceRoot = resolve(ROOT, "..", ".provenance");
+  if (!args.dryRun && existsSync(provenanceRoot)) {
+    throw new Error(
+      `Refusing an in-place bypass rewrite of provenance-managed partitions under ${ROOT}. ` +
+        `Rewrite through the canonical partition writer instead.`,
+    );
+  }
   console.log(`Root: ${ROOT}`);
   console.log(`Filter: ${args.underlying ?? "(all underlyings)"}`);
   console.log(`Mode: ${args.dryRun ? "DRY-RUN" : "IN-PLACE REWRITE"}`);

@@ -1,7 +1,12 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import * as path from "path";
 import { getDataRoot } from "./data-root.ts";
-import { writeParquetAtomic, writeParquetPartition } from "./parquet-writer.ts";
+import {
+  writeParquetAtomic,
+  writeParquetPartition,
+  type ParquetWriteResult,
+} from "./parquet-writer.ts";
+import { MARKET_DATASETS } from "../market/provenance/dataset-registry.ts";
 
 export type CanonicalSingleFileDataset = "daily" | "date_context";
 export type CanonicalPartitionedDataset = "intraday" | "option_chain" | "option_quote_minutes";
@@ -65,16 +70,30 @@ export function canonicalMarketTableName(dataset: CanonicalMarketDataset): strin
 //   option_chain:         option_chain/underlying=X/date=Y/data.parquet
 //   option_quote_minutes: option_quote_minutes/underlying=X/date=Y/data.parquet
 //
-// This registry is SEPARATE from the legacy CanonicalPartitionedDataset enum
-// and PARTITIONED_DATASETS map above. Both coexist while consumer migration
-// is ongoing: legacy resolvers serve existing callers (date-only paths) and
-// DATASETS_V3 describes the canonical target state.
+// This mutable exported registry is a compatibility contract for the public
+// tradeblocks-mcp/db/market-datasets subpath. Bounded provenance writers use
+// the separate frozen internal registry below.
 // ============================================================================
 
 export interface DatasetDef {
   subdir: string;
   partitionKeys: string[];
   filename: string;
+}
+
+export type DatasetWriteQuality =
+  | { inputRows: number; droppedRows: number }
+  | { kind: "writer-input-complete" };
+
+function provenanceOptions(
+  dataset: string,
+  partition: Record<string, string>,
+  schemaRevision: number,
+  relativePath: string,
+  coverage: { kind: "prepared-date-range"; column: string },
+  quality?: DatasetWriteQuality,
+) {
+  return { dataset, partition, schemaRevision, relativePath, coverage, quality };
 }
 
 export const DATASETS_V3: Record<string, DatasetDef> = {
@@ -98,6 +117,21 @@ export const DATASETS_V3: Record<string, DatasetDef> = {
   },
 };
 
+type BoundedProvenanceDatasetRegistry = typeof MARKET_DATASETS;
+const BOUNDED_PROVENANCE_DATASETS: BoundedProvenanceDatasetRegistry = MARKET_DATASETS;
+
+function assertCanonicalPartitionDate(value: unknown, helper: string): asserts value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new TypeError(
+      `${helper}: date must be an ISO calendar date (YYYY-MM-DD): ${JSON.stringify(value)}`,
+    );
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new TypeError(`${helper}: date is not a real calendar date: ${JSON.stringify(value)}`);
+  }
+}
+
 // ------ Per-dataset write helpers ------
 //
 // Each helper reads its DatasetDef, composes the partitions map in the order
@@ -106,8 +140,8 @@ export const DATASETS_V3: Record<string, DatasetDef> = {
 //
 // Security note: writeParquetPartition applies a whitelist to every partition
 // key and value — /^[A-Za-z0-9._-]+$/ on values, /^[A-Za-z_][A-Za-z0-9_]*$/ on keys.
-// That is the deepest defense-in-depth layer against path traversal. Helpers
-// do not re-validate.
+// That is the deepest defense-in-depth layer against path traversal. Bounded
+// helpers additionally validate dates before composing paths or provenance.
 
 export async function writeSpotPartition(
   conn: DuckDBConnection,
@@ -117,15 +151,25 @@ export async function writeSpotPartition(
     date: string;
     selectQuery: string;
     compression?: string;
+    quality?: DatasetWriteQuality;
   },
-): Promise<{ rowCount: number }> {
-  const def = DATASETS_V3.spot;
+): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeSpotPartition");
+  const def = BOUNDED_PROVENANCE_DATASETS.spot;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
     partitions: { ticker: args.ticker, date: args.date }, // order matches def.partitionKeys
     selectQuery: args.selectQuery,
     compression: args.compression,
     filename: def.filename,
+    provenance: provenanceOptions(
+      "spot",
+      { ticker: args.ticker, date: args.date },
+      def.schemaRevision,
+      path.posix.join(def.subdir, `ticker=${args.ticker}`, `date=${args.date}`, def.filename),
+      { kind: "prepared-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
@@ -137,15 +181,30 @@ export async function writeChainPartition(
     date: string;
     selectQuery: string;
     compression?: string;
+    quality?: DatasetWriteQuality;
   },
-): Promise<{ rowCount: number }> {
-  const def = DATASETS_V3.option_chain;
+): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeChainPartition");
+  const def = BOUNDED_PROVENANCE_DATASETS.option_chain;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
     partitions: { underlying: args.underlying, date: args.date },
     selectQuery: args.selectQuery,
     compression: args.compression,
     filename: def.filename,
+    provenance: provenanceOptions(
+      "option_chain",
+      { underlying: args.underlying, date: args.date },
+      def.schemaRevision,
+      path.posix.join(
+        def.subdir,
+        `underlying=${args.underlying}`,
+        `date=${args.date}`,
+        def.filename,
+      ),
+      { kind: "prepared-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
@@ -157,9 +216,11 @@ export async function writeQuoteMinutesPartition(
     date: string;
     selectQuery: string;
     compression?: string;
+    quality?: DatasetWriteQuality;
   },
-): Promise<{ rowCount: number }> {
-  const def = DATASETS_V3.option_quote_minutes;
+): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeQuoteMinutesPartition");
+  const def = BOUNDED_PROVENANCE_DATASETS.option_quote_minutes;
   // Sort rows by (ticker, time) before writing so DuckDB row groups in the
   // resulting parquet have tight min/max statistics on `ticker`. The
   // dominant read pattern is ticker-windowed scans across a time range
@@ -184,6 +245,19 @@ export async function writeQuoteMinutesPartition(
     selectQuery: sortedSelect,
     compression: args.compression,
     filename: def.filename,
+    provenance: provenanceOptions(
+      "option_quote_minutes",
+      { underlying: args.underlying, date: args.date },
+      def.schemaRevision,
+      path.posix.join(
+        def.subdir,
+        `underlying=${args.underlying}`,
+        `date=${args.date}`,
+        def.filename,
+      ),
+      { kind: "prepared-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
@@ -195,9 +269,11 @@ export async function writeOiDailyPartition(
     date: string;
     selectQuery: string;
     compression?: string;
+    quality?: DatasetWriteQuality;
   },
-): Promise<{ rowCount: number }> {
-  const def = DATASETS_V3.option_oi_daily;
+): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeOiDailyPartition");
+  const def = BOUNDED_PROVENANCE_DATASETS.option_oi_daily;
   // Sort rows by ticker before writing so DuckDB row groups carry tight
   // min/max statistics on `ticker` — the dominant read pattern is a
   // ticker-windowed scan within a (underlying, date) partition, matching the
@@ -210,12 +286,25 @@ export async function writeOiDailyPartition(
     selectQuery: sortedSelect,
     compression: args.compression,
     filename: def.filename,
+    provenance: provenanceOptions(
+      "option_oi_daily",
+      { underlying: args.underlying, date: args.date },
+      def.schemaRevision,
+      path.posix.join(
+        def.subdir,
+        `underlying=${args.underlying}`,
+        `date=${args.date}`,
+        def.filename,
+      ),
+      { kind: "prepared-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }
 
 /**
- * Writes the single file for a ticker: enriched/ticker=X/data.parquet.
- * Single-level partitioning (only `ticker`).
+ * Backward-compatible whole-file writer for the legacy 3.3.x layout:
+ * enriched/ticker=X/data.parquet.
  */
 export async function writeEnrichedTickerFile(
   conn: DuckDBConnection,
@@ -232,21 +321,116 @@ export async function writeEnrichedTickerFile(
 }
 
 /**
- * Writes the zero-partition enriched context file: enriched/context/data.parquet.
- *
- * SPECIAL CASE: partitionKeys=[] would cause writeParquetPartition's partition
- * loop to no-op and compose {baseDir}/data.parquet (one directory too shallow).
- * Bypass the generic writer and call writeParquetAtomic directly with the full target path.
+ * Writes one bounded ticker/session slice:
+ * enriched/ticker=X/date=Y/data.parquet.
+ */
+export async function writeEnrichedTickerPartition(
+  conn: DuckDBConnection,
+  args: {
+    dataDir: string;
+    ticker: string;
+    date: string;
+    selectQuery: string;
+    compression?: string;
+    quality?: DatasetWriteQuality;
+  },
+): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeEnrichedTickerPartition");
+  const def = BOUNDED_PROVENANCE_DATASETS.enriched;
+  return writeParquetPartition(conn, {
+    baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
+    partitions: { ticker: args.ticker, date: args.date },
+    selectQuery: args.selectQuery,
+    compression: args.compression,
+    filename: def.filename,
+    provenance: provenanceOptions(
+      "enriched",
+      { ticker: args.ticker, date: args.date },
+      def.schemaRevision,
+      path.posix.join(def.subdir, `ticker=${args.ticker}`, `date=${args.date}`, def.filename),
+      { kind: "prepared-date-range", column: "date" },
+      args.quality,
+    ),
+  });
+}
+
+/**
+ * Backward-compatible whole-file writer for the legacy 3.3.x layout:
+ * enriched/context/data.parquet.
  */
 export async function writeEnrichedContext(
   conn: DuckDBConnection,
   args: { dataDir: string; selectQuery: string; compression?: string },
 ): Promise<{ rowCount: number }> {
   const def = DATASETS_V3.enriched_context;
-  const targetPath = path.join(resolveMarketDir(args.dataDir), def.subdir, def.filename);
   return writeParquetAtomic(conn, {
-    targetPath,
+    targetPath: path.join(resolveMarketDir(args.dataDir), def.subdir, def.filename),
     selectQuery: args.selectQuery,
     compression: args.compression,
+  });
+}
+
+/**
+ * Writes one bounded cross-ticker context session:
+ * enriched/context/date=Y/data.parquet.
+ */
+export async function writeEnrichedContextPartition(
+  conn: DuckDBConnection,
+  args: {
+    dataDir: string;
+    date: string;
+    selectQuery: string;
+    compression?: string;
+    quality?: DatasetWriteQuality;
+  },
+): Promise<ParquetWriteResult> {
+  assertCanonicalPartitionDate(args.date, "writeEnrichedContextPartition");
+  const completeness = await conn.runAndReadAll(
+    `SELECT date, Vol_Regime, Term_Structure_State, Trend_Direction,
+            VIX_Spike_Pct, VIX_Gap_Pct
+     FROM (${args.selectQuery}) AS bounded_enriched_context`,
+  );
+  const rows = completeness.getRows();
+  if (rows.length !== 1) {
+    throw new Error(
+      `Enriched context partition ${args.date} must contain exactly one logical session row`,
+    );
+  }
+  const [date, volRegime, termStructure, trendDirection, vixSpikePct, vixGapPct] = rows[0];
+  if (String(date) !== args.date) {
+    throw new Error(`Enriched context partition ${args.date} contains a different logical date`);
+  }
+  if (
+    !Number.isInteger(volRegime) ||
+    Number(volRegime) < 1 ||
+    Number(volRegime) > 6 ||
+    !Number.isInteger(termStructure) ||
+    ![-1, 0, 1].includes(Number(termStructure)) ||
+    typeof trendDirection !== "string" ||
+    !["up", "down", "flat"].includes(trendDirection) ||
+    typeof vixSpikePct !== "number" ||
+    !Number.isFinite(vixSpikePct) ||
+    typeof vixGapPct !== "number" ||
+    !Number.isFinite(vixGapPct)
+  ) {
+    throw new Error(
+      `Enriched context partition ${args.date} is missing required VIX completeness fields`,
+    );
+  }
+  const def = BOUNDED_PROVENANCE_DATASETS.enriched_context;
+  return writeParquetPartition(conn, {
+    baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
+    partitions: { date: args.date },
+    selectQuery: args.selectQuery,
+    compression: args.compression,
+    filename: def.filename,
+    provenance: provenanceOptions(
+      "enriched_context",
+      { date: args.date },
+      def.schemaRevision,
+      path.posix.join(def.subdir, `date=${args.date}`, def.filename),
+      { kind: "prepared-date-range", column: "date" },
+      args.quality,
+    ),
   });
 }

@@ -15,7 +15,7 @@ import { existsSync } from "fs";
 import * as path from "path";
 import type { StoreContext } from "./types.ts";
 import type { OiDailyRow } from "./types.ts";
-import { listPartitionValues } from "./coverage.ts";
+import { listXnysSessionPartitionValues } from "./coverage.ts";
 import { resolveMarketDir, writeOiDailyPartition } from "../../db/market-datasets.ts";
 import { readParquetFilesSql } from "../../utils/quote-parquet-projection.ts";
 
@@ -79,6 +79,7 @@ export class ParquetOiDailyStore {
         underlying,
         date,
         selectQuery: `SELECT ${OI_DAILY_COLUMNS} FROM "${staging}"`,
+        quality: { inputRows: rows.length, droppedRows: 0 },
       });
     } finally {
       try {
@@ -96,8 +97,7 @@ export class ParquetOiDailyStore {
       `underlying=${underlying}`,
     );
     if (!existsSync(underlyingDir)) return [];
-    const files = listPartitionValues(underlyingDir, "date")
-      .filter((date) => date >= from && date <= to)
+    const files = listXnysSessionPartitionValues(underlyingDir, from, to)
       .map((date) => path.join(underlyingDir, `date=${date}`, "data.parquet"))
       .filter((filePath) => existsSync(filePath));
     if (files.length === 0) return [];

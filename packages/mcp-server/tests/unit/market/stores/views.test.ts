@@ -3,8 +3,8 @@
  *
  * Covers the three primary Parquet views:
  *   - market.spot               (Hive: ticker=X/date=Y/data.parquet)
- *   - market.enriched           (per-ticker file: ticker=X/data.parquet)
- *   - market.enriched_context   (global single file: context/data.parquet)
+ *   - market.enriched           (bounded: ticker=X/date=Y/data.parquet)
+ *   - market.enriched_context   (bounded: context/date=Y/data.parquet)
  *
  * Ensures:
  *   - Empty market/ dir → all three land in tablesKept, not viewsCreated
@@ -61,7 +61,7 @@ async function writeSpotPartitionFixture(ticker: string, date: string): Promise<
 }
 
 async function writeEnrichedFixture(ticker: string): Promise<void> {
-  const dir = join(tmpDir, "market", "enriched", `ticker=${ticker}`);
+  const dir = join(tmpDir, "market", "enriched", `ticker=${ticker}`, "date=2025-01-06");
   mkdirSync(dir, { recursive: true });
   await conn.run(`
     COPY (
@@ -74,7 +74,7 @@ async function writeEnrichedFixture(ticker: string): Promise<void> {
 }
 
 async function writeEnrichedContextFixture(): Promise<void> {
-  const dir = join(tmpDir, "market", "enriched", "context");
+  const dir = join(tmpDir, "market", "enriched", "context", "date=2025-01-06");
   mkdirSync(dir, { recursive: true });
   await conn.run(`
     COPY (
@@ -159,7 +159,7 @@ describe("market-views registration", () => {
     expect(Number(read.getRows()[0][0])).toBe(1);
   });
 
-  it("creates market.enriched view when enriched/ticker=X/data.parquet exists", async () => {
+  it("creates market.enriched view when an enriched ticker/date partition exists", async () => {
     await writeEnrichedFixture("SPX");
     const result = await createMarketParquetViews(conn, tmpDir);
     expect(result.viewsCreated).toContain("enriched");
@@ -167,7 +167,7 @@ describe("market-views registration", () => {
     expect(Number(read.getRows()[0][0])).toBe(1);
   });
 
-  it("creates market.enriched_context view when enriched/context/data.parquet exists", async () => {
+  it("creates market.enriched_context view when a bounded context partition exists", async () => {
     await writeEnrichedContextFixture();
     const result = await createMarketParquetViews(conn, tmpDir);
     expect(result.viewsCreated).toContain("enriched_context");

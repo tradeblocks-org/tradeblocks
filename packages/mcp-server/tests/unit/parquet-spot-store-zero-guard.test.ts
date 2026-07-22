@@ -23,7 +23,12 @@
  * Parquet write path (writeSpotPartition) end-to-end.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import { ParquetSpotStore } from "../../src/test-exports.ts";
+import { join } from "node:path";
+import {
+  FilePartitionCommitStore,
+  ParquetSpotStore,
+  runPartitionCommitAttempt,
+} from "../../src/test-exports.ts";
 import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import type { BarRow } from "../../src/market/stores/types.ts";
@@ -93,6 +98,41 @@ describe("ParquetSpotStore writeBars zero/weekend guard", () => {
       expect(r.low).toBeGreaterThan(0);
       expect(r.close).toBeGreaterThan(0);
     }
+  });
+
+  it("records mixed-batch input, written, and dropped quality counts exactly", async () => {
+    const bars = [zeroBar("09:30"), validBar("10:30", 105), validBar("15:45", 99)];
+    const receiptStore = new FilePartitionCommitStore(join(fixture.ctx.dataDir, "market"));
+    const attempt = await runPartitionCommitAttempt(
+      { attemptId: "spot-quality-test", recorder: receiptStore },
+      () => store.writeBars("SPX", "2025-01-06", bars),
+    );
+
+    expect(attempt.value).toBeUndefined();
+    expect(attempt.receipts).toHaveLength(1);
+    expect(attempt.receipts[0].receipt.quality).toEqual({
+      inputRows: 3,
+      writtenRows: 2,
+      droppedRows: 1,
+    });
+  });
+
+  it("keeps store writeFromSelect results row-count-only while the attempt captures evidence", async () => {
+    const receiptStore = new FilePartitionCommitStore(join(fixture.ctx.dataDir, "market"));
+    const attempt = await runPartitionCommitAttempt(
+      { attemptId: "spot-select-result", recorder: receiptStore },
+      () =>
+        store.writeFromSelect(
+          { ticker: "SPX", date: "2025-01-07" },
+          `SELECT 'SPX' AS ticker, '2025-01-07' AS date, '09:30' AS time,
+                  100.0 AS open, 101.0 AS high, 99.0 AS low, 100.5 AS close,
+                  NULL::DOUBLE AS bid, NULL::DOUBLE AS ask`,
+        ),
+    );
+
+    expect(attempt.value).toEqual({ rowCount: 1 });
+    expect(Object.keys(attempt.value)).toEqual(["rowCount"]);
+    expect(attempt.receipts).toHaveLength(1);
   });
 
   it("skips weekend dates (Saturday) silently — no rows written", async () => {

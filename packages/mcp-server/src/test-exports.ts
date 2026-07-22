@@ -329,8 +329,136 @@ export {
   isParquetMode,
   writeParquetAtomic,
   writeParquetPartition,
+  ParquetProvenanceOrphanError,
+  UnmanifestedParquetWriteError,
   resolveMarketDir,
 } from "./db/parquet-writer.ts";
+export type { ParquetWriteResult, WriteParquetProvenanceOpts } from "./db/parquet-writer.ts";
+
+// Export market-data provenance foundation for focused unit and integration tests.
+export {
+  CANONICAL_JSON_VERSION,
+  canonicalJson,
+  canonicalJsonBytes,
+  addressCanonicalJson,
+  addressBytes,
+  parseCanonicalJsonAddress,
+  parseSha256Address,
+  ContentObjectStore,
+  ContentObjectCollisionError,
+  PARTITION_COMMIT_RECEIPT_KIND,
+  PARTITION_COMMIT_RECEIPT_VERSION,
+  PARTITION_COMMIT_EVENT_KIND,
+  PARTITION_COMMIT_EVENT_VERSION,
+  FilePartitionCommitStore,
+  PartitionFileIntegrityError,
+  PartitionFilePublicationError,
+  runPartitionCommitAttempt,
+  XNYS_SESSION_CALENDAR_REVISION,
+  XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
+  XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
+  isXnysSessionDate,
+  enumerateXnysSessions,
+  CANONICAL_MARKET_RESOLVER_REVISION,
+  BLACKOUT_SLICE_KIND,
+  BLACKOUT_SLICE_VERSION,
+  canonicalControlIdentity,
+  publishCanonicalMarketResolverRegistry,
+  CanonicalMarketInputResolver,
+  verifyCanonicalMarketDataCutoff,
+  proveCanonicalMarketDataPrefix,
+  CANONICAL_REFRESH_COMPLETION_KIND,
+  CANONICAL_REFRESH_COMPLETION_VERSION,
+  verifyCanonicalRefreshCompletion,
+  CANONICAL_RATE_SLICE_KIND,
+  CANONICAL_RATE_SLICE_VERSION,
+  publishCanonicalRateSlice,
+  INPUT_RESOLVER_REGISTRY_KIND,
+  INPUT_RESOLVER_REGISTRY_VERSION,
+  INPUT_CLOSURE_DESCRIPTOR_KIND,
+  INPUT_CLOSURE_DESCRIPTOR_VERSION,
+  INPUT_DEPENDENCY_KEY_KIND,
+  INPUT_DEPENDENCY_KEY_VERSION,
+  SEMANTIC_INPUT_LEAF_KIND,
+  SEMANTIC_INPUT_LEAF_VERSION,
+  MISSING_PROBE_EVIDENCE_KIND,
+  MISSING_PROBE_EVIDENCE_VERSION,
+  CUTOFF_MANIFEST_KIND,
+  CUTOFF_MANIFEST_VERSION,
+  ManifestVerificationError,
+  compareUnicodeCodePoints,
+  publishInputResolverRegistry,
+  verifyInputResolverRegistry,
+  createInputClosureDescriptor,
+  publishInputClosure,
+  verifyInputClosure,
+  dependencyKeyAddress,
+  restrictInputClosureDescriptor,
+  publishSemanticInputLeaf,
+  verifySemanticInputLeaf,
+  publishMissingProbeEvidence,
+  publishCutoffManifest,
+  verifyCutoffManifest,
+  proveCutoffManifestPrefix,
+} from "./market/provenance/index.ts";
+export { setPartitionCommitTestFault } from "./market/provenance/partition-commit-store.ts";
+export {
+  activePartitionCommitAttempt,
+  capturePartitionCommitReceipt,
+} from "./market/provenance/partition-commit-attempt.ts";
+export type {
+  CanonicalJsonAddress,
+  Sha256Address,
+  PutContentObjectResult,
+  ExactFileFingerprint,
+  LogicalCoverage,
+  PartitionQualityCounts,
+  PartitionIdentity,
+  PartitionCommitClassification,
+  PartitionCommitReceiptV1,
+  PartitionCommitEventV1,
+  StoredPartitionCommit,
+  RecordPartitionCommitInput,
+  PublishPartitionFileInput,
+  PartitionCommitRecorder,
+  PartitionInspection,
+  FilePartitionCommitStoreOptions,
+  PartitionCommitAttemptOptions,
+  PartitionCommitAttemptResult,
+  CanonicalControlIdentity,
+  PublishCanonicalMarketRegistryInput,
+  CanonicalRefreshPlanV2,
+  CanonicalRefreshReceiptV1,
+  CanonicalRefreshOperationV1,
+  CanonicalRefreshQuoteGroupV1,
+  CanonicalRefreshCompletionV2,
+  PartitionedResolverClassV1,
+  StaticResolverClassV1,
+  MaterializedResolverClassV1,
+  CanonicalRateDataClass,
+  CanonicalRateSeries,
+  CanonicalRateSliceV1,
+  InputResolverClassV1,
+  InputResolverRegistryV1,
+  InputResolverRegistryInputV1,
+  InputClosureObservationV1,
+  InputClosureDescriptorV1,
+  PartitionProjectionV1,
+  MaterializedSliceV1,
+  ControlFileProjectionV1,
+  MissingProbeProjectionV1,
+  SemanticInputSourceV1,
+  SemanticInputLeafV1,
+  MissingProbeEvidenceV1,
+  ManifestLeafEvidenceV1,
+  ManifestLeafReferenceV1,
+  ManifestClassV1,
+  CutoffManifestV1,
+  ManifestResolution,
+  ManifestInputResolver,
+} from "./market/provenance/index.ts";
+export { finalizeCanonicalMarketDataCutoff } from "./market/provenance/canonical-market-resolver.ts";
+export { publishRefreshCompletionAuthority } from "./market/provenance/partition-commit-store.ts";
 
 // Export json-store utility for unit testing
 export {
@@ -527,6 +655,7 @@ export {
   ChainStore,
   QuoteStore,
   createMarketStores,
+  getMarketStoresAuthority,
 } from "./market/stores/index.ts";
 export type {
   StoreContext,
@@ -540,6 +669,14 @@ export type { BarRow as MarketStoreBarRow, ContractRow } from "./market/stores/i
 // Ticker registry + resolver + loader + schemas
 export { extractRoot, rootToUnderlying } from "./market/tickers/resolver.ts";
 export { TickerRegistry } from "./market/tickers/registry.ts";
+export {
+  LegacyEnrichedMigrationError,
+  inspectLegacyEnrichedTicker,
+  inspectLegacyEnrichedContext,
+  migrateLegacyEnrichedTicker,
+  migrateLegacyEnrichedContext,
+  migrateAllLegacyEnrichedFiles,
+} from "./market/stores/enriched-legacy-migration.ts";
 export type { TickerEntry, EntrySource } from "./market/tickers/registry.ts";
 export { loadRegistry, saveUserOverride } from "./market/tickers/loader.ts";
 export {
@@ -566,8 +703,10 @@ export {
   writeOiDailyPartition,
   writeEnrichedTickerFile,
   writeEnrichedContext,
+  writeEnrichedTickerPartition,
+  writeEnrichedContextPartition,
 } from "./db/market-datasets.ts";
-export type { DatasetDef } from "./db/market-datasets.ts";
+export type { DatasetDef, DatasetWriteQuality } from "./db/market-datasets.ts";
 
 // Ticker MCP tool handlers — schemas re-exported from tickers/schemas.ts above
 export {
@@ -600,7 +739,12 @@ export { rthDailyAggregateSubquery } from "./market/stores/rth-aggregation.ts";
 export type { RthWindowOpts } from "./market/stores/rth-aggregation.ts";
 
 // Shared coverage helper
-export { listPartitionValues } from "./market/stores/coverage.ts";
+export {
+  listPartitionValues,
+  listXnysSessionPartitionValues,
+  listExcludedXnysPartitionValues,
+} from "./market/stores/coverage.ts";
+export { MarketDataAuthorityError } from "./market/stores/spot-store.ts";
 
 // Enrichment watermark adapter
 export {
@@ -666,6 +810,7 @@ export type {
   IngestBarsOptions,
   IngestQuotesOptions,
   IngestChainOptions,
+  IngestOpenInterestOptions,
   IngestFlatFileOptions,
   ComputeVixContextOptions,
   RefreshOptions,
