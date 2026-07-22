@@ -118,9 +118,12 @@ export class ParquetProvenanceOrphanError extends Error {
 
 /** An active commit attempt encountered a write with no registered receipt shape. */
 export class UnmanifestedParquetWriteError extends Error {
-  constructor(readonly targetPath: string) {
+  readonly targetPath: string;
+
+  constructor(targetPath: string) {
     super(`Active partition commit attempt refuses an unregistered Parquet write: ${targetPath}`);
     this.name = "UnmanifestedParquetWriteError";
+    this.targetPath = targetPath;
   }
 }
 

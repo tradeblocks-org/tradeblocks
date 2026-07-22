@@ -45,7 +45,11 @@ function deepFreeze<T>(value: T): T {
  * collision/corruption and fail closed.
  */
 export class ContentObjectStore {
-  constructor(readonly rootDir: string) {}
+  readonly rootDir: string;
+
+  constructor(rootDir: string) {
+    this.rootDir = rootDir;
+  }
 
   objectPath(address: CanonicalJsonAddress): string {
     const digest = parseCanonicalJsonAddress(address);

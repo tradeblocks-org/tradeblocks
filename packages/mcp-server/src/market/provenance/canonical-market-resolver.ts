@@ -336,8 +336,10 @@ function normalizeBlackoutSlice(
  */
 export class CanonicalMarketInputResolver implements ManifestInputResolver {
   readonly dataRootDir: string;
+  readonly partitions: FilePartitionCommitStore;
 
-  constructor(readonly partitions: FilePartitionCommitStore) {
+  constructor(partitions: FilePartitionCommitStore) {
+    this.partitions = partitions;
     const marketRoot = path.resolve(partitions.marketRootDir);
     if (path.basename(marketRoot) !== "market") {
       throw new Error("Canonical market resolver requires a data-root/market authority store");

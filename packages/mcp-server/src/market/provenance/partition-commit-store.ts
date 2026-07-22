@@ -161,15 +161,14 @@ export type PartitionInspection =
 
 /** A canonical partition path does not name the regular file inode being verified. */
 export class PartitionFileIntegrityError extends Error {
-  constructor(
-    readonly filePath: string,
-    reason: string,
-    cause?: unknown,
-  ) {
+  readonly filePath: string;
+
+  constructor(filePath: string, reason: string, cause?: unknown) {
     super(`Invalid partition file (${reason}): ${filePath}`, {
       ...(cause === undefined ? {} : { cause }),
     });
     this.name = "PartitionFileIntegrityError";
+    this.filePath = filePath;
   }
 }
 
@@ -611,15 +610,14 @@ function captureInput(input: RecordPartitionCommitInput): RecordPartitionCommitI
  * callers cannot redirect inspection or publication to arbitrary files.
  */
 export class FilePartitionCommitStore implements PartitionCommitRecorder {
+  readonly marketRootDir: string;
   readonly objects: ContentObjectStore;
   readonly provenanceRootDir: string;
   private readonly staleLockMs: number;
   private readonly lockWaitMs: number;
 
-  constructor(
-    readonly marketRootDir: string,
-    options: FilePartitionCommitStoreOptions = {},
-  ) {
+  constructor(marketRootDir: string, options: FilePartitionCommitStoreOptions = {}) {
+    this.marketRootDir = marketRootDir;
     this.provenanceRootDir = path.join(marketRootDir, ".provenance");
     this.objects = new ContentObjectStore(this.provenanceRootDir);
     this.staleLockMs = options.staleLockMs ?? 30_000;
@@ -1696,12 +1694,13 @@ export async function verifyRefreshCompletionAuthority(
 }
 
 export class PartitionFilePublicationError extends Error {
-  constructor(
-    readonly targetPath: string,
-    readonly file: ExactFileFingerprint,
-    cause: unknown,
-  ) {
+  readonly targetPath: string;
+  readonly file: ExactFileFingerprint;
+
+  constructor(targetPath: string, file: ExactFileFingerprint, cause: unknown) {
     super(`Partition file installed without a complete projected commit: ${targetPath}`, { cause });
     this.name = "PartitionFilePublicationError";
+    this.targetPath = targetPath;
+    this.file = file;
   }
 }
