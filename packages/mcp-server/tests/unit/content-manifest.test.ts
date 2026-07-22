@@ -655,6 +655,25 @@ describe("market-data content manifests", () => {
     });
 
     await expect(
+      proveCutoffManifestPrefix(partitions, ancestor.address, ancestor.address, resolver),
+    ).resolves.toEqual({ valid: true });
+
+    const sameCutoffDifferentManifest = await publishCutoffManifest(partitions, {
+      closure: ancestorClosure.address,
+      completeThrough: "2026-07-20",
+      resolver,
+      predecessor: { manifest: ancestor.address, aggregateRoot: ancestor.value.aggregateRoot },
+    });
+    await expect(
+      proveCutoffManifestPrefix(
+        partitions,
+        ancestor.address,
+        sameCutoffDifferentManifest.address,
+        resolver,
+      ),
+    ).resolves.toEqual({ valid: false, reason: "cutoff-not-increasing" });
+
+    await expect(
       proveCutoffManifestPrefix(partitions, ancestor.address, descendant.address, resolver),
     ).resolves.toMatchObject({ valid: true });
 

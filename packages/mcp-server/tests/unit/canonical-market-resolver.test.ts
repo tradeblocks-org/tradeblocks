@@ -340,6 +340,9 @@ describe("producer-owned canonical market resolver", () => {
     });
 
     await expect(
+      proveCanonicalMarketDataPrefix(partitions, ancestor.address, ancestor.address),
+    ).resolves.toEqual({ valid: true });
+    await expect(
       proveCanonicalMarketDataPrefix(partitions, ancestor.address, descendant.address),
     ).resolves.toEqual({ valid: true });
     const verified = await verifyCanonicalMarketDataCutoff(partitions, descendant.address);
