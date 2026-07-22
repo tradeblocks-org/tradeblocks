@@ -6,10 +6,7 @@ import {
   writeParquetPartition,
   type ParquetWriteResult,
 } from "./parquet-writer.ts";
-import {
-  MARKET_DATASETS,
-  type MarketDatasetDefinition,
-} from "../market/provenance/dataset-registry.ts";
+import { MARKET_DATASETS } from "../market/provenance/dataset-registry.ts";
 
 export type CanonicalSingleFileDataset = "daily" | "date_context";
 export type CanonicalPartitionedDataset = "intraday" | "option_chain" | "option_quote_minutes";
@@ -68,17 +65,21 @@ export function canonicalMarketTableName(dataset: CanonicalMarketDataset): strin
 // Declarative dataset registry — canonical Parquet layout
 //
 //   spot:                 spot/ticker=X/date=Y/data.parquet
-//   enriched:             enriched/ticker=X/date=Y/data.parquet
-//   enriched_context:     enriched/context/date=Y/data.parquet
+//   enriched:             enriched/ticker=X/data.parquet
+//   enriched_context:     enriched/context/data.parquet
 //   option_chain:         option_chain/underlying=X/date=Y/data.parquet
 //   option_quote_minutes: option_quote_minutes/underlying=X/date=Y/data.parquet
 //
-// Legacy resolvers above remain during consumer migration. DATASETS_V3 is an
-// alias of the one shared writer/provenance registry; there is no second
-// canonical dataset definition map.
+// This mutable exported registry is a compatibility contract for the public
+// tradeblocks-mcp/db/market-datasets subpath. Bounded provenance writers use
+// the separate frozen internal registry below.
 // ============================================================================
 
-export type DatasetDef = MarketDatasetDefinition;
+export interface DatasetDef {
+  subdir: string;
+  partitionKeys: string[];
+  filename: string;
+}
 
 export type DatasetWriteQuality =
   | { inputRows: number; droppedRows: number }
@@ -95,7 +96,29 @@ function provenanceOptions(
   return { dataset, partition, schemaRevision, relativePath, coverage, quality };
 }
 
-export const DATASETS_V3 = MARKET_DATASETS;
+export const DATASETS_V3: Record<string, DatasetDef> = {
+  spot: { subdir: "spot", partitionKeys: ["ticker", "date"], filename: "data.parquet" },
+  enriched: { subdir: "enriched", partitionKeys: ["ticker"], filename: "data.parquet" },
+  enriched_context: { subdir: "enriched/context", partitionKeys: [], filename: "data.parquet" },
+  option_chain: {
+    subdir: "option_chain",
+    partitionKeys: ["underlying", "date"],
+    filename: "data.parquet",
+  },
+  option_quote_minutes: {
+    subdir: "option_quote_minutes",
+    partitionKeys: ["underlying", "date"],
+    filename: "data.parquet",
+  },
+  option_oi_daily: {
+    subdir: "option_oi_daily",
+    partitionKeys: ["underlying", "date"],
+    filename: "data.parquet",
+  },
+};
+
+type BoundedProvenanceDatasetRegistry = typeof MARKET_DATASETS;
+const BOUNDED_PROVENANCE_DATASETS: BoundedProvenanceDatasetRegistry = MARKET_DATASETS;
 
 function assertCanonicalPartitionDate(value: unknown, helper: string): asserts value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -132,7 +155,7 @@ export async function writeSpotPartition(
   },
 ): Promise<ParquetWriteResult> {
   assertCanonicalPartitionDate(args.date, "writeSpotPartition");
-  const def = DATASETS_V3.spot;
+  const def = BOUNDED_PROVENANCE_DATASETS.spot;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
     partitions: { ticker: args.ticker, date: args.date }, // order matches def.partitionKeys
@@ -162,7 +185,7 @@ export async function writeChainPartition(
   },
 ): Promise<ParquetWriteResult> {
   assertCanonicalPartitionDate(args.date, "writeChainPartition");
-  const def = DATASETS_V3.option_chain;
+  const def = BOUNDED_PROVENANCE_DATASETS.option_chain;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
     partitions: { underlying: args.underlying, date: args.date },
@@ -197,7 +220,7 @@ export async function writeQuoteMinutesPartition(
   },
 ): Promise<ParquetWriteResult> {
   assertCanonicalPartitionDate(args.date, "writeQuoteMinutesPartition");
-  const def = DATASETS_V3.option_quote_minutes;
+  const def = BOUNDED_PROVENANCE_DATASETS.option_quote_minutes;
   // Sort rows by (ticker, time) before writing so DuckDB row groups in the
   // resulting parquet have tight min/max statistics on `ticker`. The
   // dominant read pattern is ticker-windowed scans across a time range
@@ -250,7 +273,7 @@ export async function writeOiDailyPartition(
   },
 ): Promise<ParquetWriteResult> {
   assertCanonicalPartitionDate(args.date, "writeOiDailyPartition");
-  const def = DATASETS_V3.option_oi_daily;
+  const def = BOUNDED_PROVENANCE_DATASETS.option_oi_daily;
   // Sort rows by ticker before writing so DuckDB row groups carry tight
   // min/max statistics on `ticker` — the dominant read pattern is a
   // ticker-windowed scan within a (underlying, date) partition, matching the
@@ -313,7 +336,7 @@ export async function writeEnrichedTickerPartition(
   },
 ): Promise<ParquetWriteResult> {
   assertCanonicalPartitionDate(args.date, "writeEnrichedTickerPartition");
-  const def = DATASETS_V3.enriched;
+  const def = BOUNDED_PROVENANCE_DATASETS.enriched;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
     partitions: { ticker: args.ticker, date: args.date },
@@ -394,7 +417,7 @@ export async function writeEnrichedContextPartition(
       `Enriched context partition ${args.date} is missing required VIX completeness fields`,
     );
   }
-  const def = DATASETS_V3.enriched_context;
+  const def = BOUNDED_PROVENANCE_DATASETS.enriched_context;
   return writeParquetPartition(conn, {
     baseDir: path.join(resolveMarketDir(args.dataDir), def.subdir),
     partitions: { date: args.date },

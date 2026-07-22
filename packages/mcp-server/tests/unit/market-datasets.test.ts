@@ -22,6 +22,12 @@ import { mkdirSync, rmSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
+import type { DatasetDef } from "../../src/db/market-datasets.ts";
+import {
+  MARKET_DATASETS,
+  canonicalPartitionRelativePath,
+  validatePartitionIdentity,
+} from "../../src/market/provenance/dataset-registry.ts";
 import {
   DATASETS_V3,
   writeSpotPartition,
@@ -82,28 +88,22 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "spot",
       partitionKeys: ["ticker", "date"],
       filename: "data.parquet",
-      schemaRevision: 1,
-      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
-  it("enriched: {ticker,date} bounded partitioning", () => {
+  it("enriched: {ticker} legacy whole-file partitioning", () => {
     expect(DATASETS_V3.enriched).toEqual({
       subdir: "enriched",
-      partitionKeys: ["ticker", "date"],
+      partitionKeys: ["ticker"],
       filename: "data.parquet",
-      schemaRevision: 1,
-      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
-  it("enriched_context: bounded date partitioning", () => {
+  it("enriched_context: legacy whole-file partitioning", () => {
     expect(DATASETS_V3.enriched_context).toEqual({
       subdir: "enriched/context",
-      partitionKeys: ["date"],
+      partitionKeys: [],
       filename: "data.parquet",
-      schemaRevision: 1,
-      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
@@ -112,8 +112,6 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "option_chain",
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
-      schemaRevision: 1,
-      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
@@ -122,8 +120,6 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "option_quote_minutes",
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
-      schemaRevision: 1,
-      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
   });
 
@@ -132,9 +128,92 @@ describe("DATASETS_V3 — shape matches D-14 spec", () => {
       subdir: "option_oi_daily",
       partitionKeys: ["underlying", "date"],
       filename: "data.parquet",
-      schemaRevision: 1,
-      provenance: { kind: "bounded-session", sessionKey: "date" },
     });
+  });
+
+  it("retains the mutable Record<string, DatasetDef> compatibility contract", () => {
+    const assigned: DatasetDef = {
+      subdir: "compat",
+      partitionKeys: ["ticker"],
+      filename: "compat.parquet",
+    };
+    assigned.partitionKeys.push("date");
+
+    const registry: Record<string, DatasetDef> = DATASETS_V3;
+    const compatibilityKey = "__compatibility_assignment__";
+    const hadCompatibilityKey = Object.hasOwn(registry, compatibilityKey);
+    const previousCompatibilityValue = registry[compatibilityKey];
+    const enriched = registry.enriched;
+    const originalKeys = [...enriched.partitionKeys];
+    const originalFilename = enriched.filename;
+    try {
+      registry[compatibilityKey] = assigned;
+      enriched.partitionKeys.push("compatibility_probe");
+      enriched.filename = "compatibility-probe.parquet";
+
+      expect(registry[compatibilityKey]).toBe(assigned);
+      expect(enriched.partitionKeys).toEqual(["ticker", "compatibility_probe"]);
+      expect(enriched.filename).toBe("compatibility-probe.parquet");
+      expect(Object.isFrozen(registry)).toBe(false);
+      expect(Object.isFrozen(enriched)).toBe(false);
+      expect(Object.isFrozen(enriched.partitionKeys)).toBe(false);
+    } finally {
+      enriched.partitionKeys.splice(0, enriched.partitionKeys.length, ...originalKeys);
+      enriched.filename = originalFilename;
+      if (hadCompatibilityKey && previousCompatibilityValue) {
+        registry[compatibilityKey] = previousCompatibilityValue;
+      } else {
+        delete registry[compatibilityKey];
+      }
+    }
+  });
+});
+
+describe("bounded provenance dataset registry", () => {
+  it("remains deeply frozen and strict for bounded enriched identities", () => {
+    expect(Object.isFrozen(MARKET_DATASETS)).toBe(true);
+    for (const definition of Object.values(MARKET_DATASETS)) {
+      expect(Object.isFrozen(definition)).toBe(true);
+      expect(Object.isFrozen(definition.partitionKeys)).toBe(true);
+      expect(Object.isFrozen(definition.provenance)).toBe(true);
+    }
+    expect(MARKET_DATASETS.enriched.partitionKeys).toEqual(["ticker", "date"]);
+    expect(MARKET_DATASETS.enriched_context.partitionKeys).toEqual(["date"]);
+    expect(() =>
+      validatePartitionIdentity({ dataset: "enriched", partition: { ticker: "SPX" } }),
+    ).toThrow(/Invalid provenance partition keys/);
+    expect(
+      canonicalPartitionRelativePath({
+        dataset: "enriched",
+        partition: { ticker: "SPX", date: "2025-01-06" },
+      }),
+    ).toBe("enriched/ticker=SPX/date=2025-01-06/data.parquet");
+  });
+
+  it("keeps bounded writers isolated from mutable public registry overrides", async () => {
+    const publicDefinition = DATASETS_V3.enriched;
+    const originalSubdir = publicDefinition.subdir;
+    const originalFilename = publicDefinition.filename;
+    try {
+      publicDefinition.subdir = "compatibility-override";
+      publicDefinition.filename = "compatibility-override.parquet";
+      await writeEnrichedTickerPartition(conn, {
+        dataDir: tmpDir,
+        ticker: "SPX",
+        date: "2025-01-06",
+        selectQuery: "SELECT 'SPX' ticker, '2025-01-06' date, id, label FROM src",
+      });
+
+      expect(
+        existsSync(
+          join(tmpDir, "market", "enriched", "ticker=SPX", "date=2025-01-06", "data.parquet"),
+        ),
+      ).toBe(true);
+      expect(existsSync(join(tmpDir, "market", "compatibility-override"))).toBe(false);
+    } finally {
+      publicDefinition.subdir = originalSubdir;
+      publicDefinition.filename = originalFilename;
+    }
   });
 });
 
