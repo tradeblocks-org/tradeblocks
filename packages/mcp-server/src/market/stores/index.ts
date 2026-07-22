@@ -94,6 +94,8 @@ function lockAuthorityStore<T extends object>(store: T): T {
 
 function snapshotAuthorityContext(ctx: StoreContext): StoreContext {
   const connection = ctx.conn as unknown as Record<string, unknown> | null;
+  const sourceTickers = ctx.tickers;
+  const dataDir = resolve(ctx.dataDir);
   const bindConnectionMethod = (name: string): CallableFunction => {
     const method = connection?.[name];
     if (typeof method !== "function") {
@@ -101,7 +103,7 @@ function snapshotAuthorityContext(ctx: StoreContext): StoreContext {
         throw new TypeError(`Canonical market connection has no ${name} method`);
       };
     }
-    return method.bind(ctx.conn);
+    return method.bind(connection);
   };
   const conn = Object.freeze({
     run: bindConnectionMethod("run"),
@@ -109,7 +111,7 @@ function snapshotAuthorityContext(ctx: StoreContext): StoreContext {
     createAppender: bindConnectionMethod("createAppender"),
   }) as unknown as StoreContext["conn"];
   const tickers = new TickerRegistry(
-    ctx.tickers.list().map(({ underlying, roots }) => ({ underlying, roots })),
+    sourceTickers.list().map(({ underlying, roots }) => ({ underlying, roots })),
   );
   for (const name of ["resolve", "list", "toJSON"] as const) {
     Object.defineProperty(tickers, name, {
@@ -130,7 +132,7 @@ function snapshotAuthorityContext(ctx: StoreContext): StoreContext {
   Object.freeze(tickers);
   return Object.freeze({
     conn,
-    dataDir: resolve(ctx.dataDir),
+    dataDir,
     parquetMode: true,
     tickers,
   });
@@ -158,9 +160,12 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
   // native (one row per contract per day), so the same store serves both
   // modes — it always writes/reads Hive-partitioned Parquet under the data
   // archive, like the option-quote and option-chain partitions.
+  const parquetMode = ctx.parquetMode;
   let stores: MarketStores;
-  if (ctx.parquetMode) {
+  let dataRoot: string;
+  if (parquetMode) {
     const authorityContext = snapshotAuthorityContext(ctx);
+    dataRoot = authorityContext.dataDir;
     const oiDaily = new ParquetOiDailyStore(authorityContext);
     const spot = new ParquetSpotStore(authorityContext);
     const enriched = new ParquetEnrichedStore(authorityContext, spot);
@@ -176,6 +181,7 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
       oiDaily: lockAuthorityStore(oiDaily),
     };
   } else {
+    dataRoot = resolve(ctx.dataDir);
     const oiDaily = new ParquetOiDailyStore(ctx);
     const spot = new DuckdbSpotStore(ctx);
     const enriched = new DuckdbEnrichedStore(ctx, spot);
@@ -184,10 +190,7 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
     stores = { spot, enriched, chain, quote, oiDaily };
   }
   const brandedStores = Object.freeze(stores);
-  marketStoresAuthorities.set(
-    brandedStores,
-    Object.freeze({ dataRoot: resolve(ctx.dataDir), parquetMode: ctx.parquetMode }),
-  );
+  marketStoresAuthorities.set(brandedStores, Object.freeze({ dataRoot, parquetMode }));
   return brandedStores;
 }
 

@@ -133,6 +133,30 @@ describe("createMarketStores factory (Pitfall 6 resolution — real DuckDB fixtu
     }
   });
 
+  it("brands the exact data-root snapshot used to construct authority stores", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      const originalDataDir = path.resolve(fixture.ctx.dataDir);
+      const redirectedDataDir = path.resolve(originalDataDir, "redirected");
+      let reads = 0;
+      Object.defineProperty(fixture.ctx, "dataDir", {
+        configurable: true,
+        get: () => (reads++ === 0 ? originalDataDir : redirectedDataDir),
+      });
+
+      const stores = createMarketStores(fixture.ctx);
+
+      expect(reads).toBe(1);
+      expect(stores.spot.dataDir).toBe(originalDataDir);
+      expect(getMarketStoresAuthority(stores)).toEqual({
+        dataRoot: originalDataDir,
+        parquetMode: true,
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
   it("returns real instances extending each abstract base (DuckDB backend)", async () => {
     const fixture = await buildStoreFixture({ parquetMode: false });
     try {
