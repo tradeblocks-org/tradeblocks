@@ -363,6 +363,7 @@ export {
   BLACKOUT_SLICE_KIND,
   BLACKOUT_SLICE_VERSION,
   canonicalControlIdentity,
+  adoptCanonicalHistoricalInputClosure,
   publishCanonicalMarketResolverRegistry,
   CanonicalMarketInputResolver,
   verifyCanonicalMarketDataCutoff,

@@ -58,6 +58,7 @@ try {
       createInputClosureDescriptor,
       dependencyKeyAddress,
       isXnysSessionDate,
+      migrateAllLegacyEnrichedFiles,
       publishCanonicalMarketResolverRegistry,
       publishCanonicalRateSlice,
       verifyCanonicalRefreshCompletion,
@@ -85,6 +86,9 @@ try {
       }
       if (typeof verifyCanonicalRefreshCompletion !== "function") {
         throw new Error("canonical refresh completion verifier API is missing");
+      }
+      if (typeof migrateAllLegacyEnrichedFiles !== "function") {
+        throw new Error("legacy enriched migration API is missing");
       }
       const rate = await publishCanonicalRateSlice(store, "sofr_rates", "2026-04-30");
       if (rate.value.annualRateBasisPoints !== 366 || rate.value.series !== "sofr") {
@@ -196,19 +200,22 @@ try {
 
   writeFileSync(
     join(consumerDir, "consumer.ts"),
-    `import { ContentObjectStore, PartitionFileIntegrityError, publishCanonicalRateSlice, verifyCanonicalRefreshCompletion, type CanonicalJsonAddress, type CanonicalRateSliceV1, type CanonicalRefreshCompletionV2, type CutoffManifestV1, type MaterializedResolverClassV1 } from "tradeblocks-mcp/market/provenance";\n` +
+    `import { ContentObjectStore, PartitionFileIntegrityError, migrateAllLegacyEnrichedFiles, publishCanonicalRateSlice, verifyCanonicalRefreshCompletion, type CanonicalJsonAddress, type CanonicalRateSliceV1, type CanonicalRefreshCompletionV2, type CutoffManifestV1, type LegacyMigrationBounds, type MaterializedResolverClassV1 } from "tradeblocks-mcp/market/provenance";\n` +
       `const store = new ContentObjectStore("/tmp/provenance-types");\n` +
       `const address: CanonicalJsonAddress = "sha256:${"0".repeat(64)}";\n` +
       `const manifest: CutoffManifestV1 | undefined = undefined;\n` +
       `const completion: CanonicalRefreshCompletionV2 | undefined = undefined;\n` +
       `const rate: CanonicalRateSliceV1 | undefined = undefined;\n` +
       `const materialized: MaterializedResolverClassV1 | undefined = undefined;\n` +
+      `const migrationBounds: LegacyMigrationBounds = { to: "2026-07-20" };\n` +
       `void PartitionFileIntegrityError;\n` +
       `void verifyCanonicalRefreshCompletion;\n` +
       `void completion;\n` +
       `void publishCanonicalRateSlice;\n` +
       `void rate;\n` +
       `void materialized;\n` +
+      `void migrateAllLegacyEnrichedFiles;\n` +
+      `void migrationBounds;\n` +
       `void manifest;\n` +
       `void store.get(address);\n`,
   );

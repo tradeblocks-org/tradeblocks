@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import { DuckDBInstance } from "@duckdb/node-api";
+import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -24,10 +24,13 @@ import {
   FilePartitionCommitStore,
   PartitionFileIntegrityError,
   PartitionFilePublicationError,
+  adoptCanonicalHistoricalInputClosure,
   addressBytes,
   addressCanonicalJson,
   canonicalJson,
   parseCanonicalJsonAddress,
+  publishCanonicalMarketResolverRegistry,
+  publishInputClosure,
   setPartitionCommitTestFault,
 } from "../../src/test-exports.ts";
 import { INTERNAL_HISTORICAL_PARTITION_ADOPTION } from "../../src/market/provenance/partition-commit-store.ts";
@@ -160,6 +163,29 @@ describe("market-data provenance foundation", () => {
     const targetFor = (partition: Record<string, string>) =>
       join(rootDir, "spot", `ticker=${partition.ticker}`, `date=${partition.date}`, "data.parquet");
 
+    const writeCanonicalSpot = async (
+      conn: DuckDBConnection,
+      partition: Record<string, string>,
+      close = 225.5,
+    ) => {
+      const targetPath = targetFor(partition);
+      mkdirSync(dirname(targetPath), { recursive: true });
+      await conn.run(`
+        COPY (
+          SELECT '${partition.ticker}'::VARCHAR AS ticker,
+                 '${partition.date}'::VARCHAR AS date,
+                 '09:30'::VARCHAR AS time,
+                 225.0::DOUBLE AS open,
+                 226.0::DOUBLE AS high,
+                 224.0::DOUBLE AS low,
+                 ${close}::DOUBLE AS close,
+                 NULL::DOUBLE AS bid,
+                 NULL::DOUBLE AS ask
+        ) TO '${targetPath.replaceAll("'", "''")}' (FORMAT PARQUET)
+      `);
+      return targetPath;
+    };
+
     const publicationInput = (preparedPath: string, targetPath: string, bytes: Buffer) => ({
       ...identity,
       relativePath,
@@ -275,6 +301,190 @@ describe("market-data provenance foundation", () => {
           store[INTERNAL_HISTORICAL_PARTITION_ADOPTION](conn, wrongIdentity),
         ).rejects.toThrow(/rows disagree with the registered partition/);
       } finally {
+        conn.closeSync();
+        instance.closeSync();
+      }
+    });
+
+    it("adopts only the authenticated historical closure and keeps the cutoff tail separate", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const targetPath = targetFor(identity.partition);
+      mkdirSync(dirname(targetPath), { recursive: true });
+      const instance = await DuckDBInstance.create(":memory:");
+      const conn = await instance.connect();
+      try {
+        await conn.run(`
+          COPY (
+            SELECT 'IWM'::VARCHAR AS ticker,
+                   '2026-07-20'::VARCHAR AS date,
+                   '09:30'::VARCHAR AS time,
+                   225.0::DOUBLE AS open,
+                   226.0::DOUBLE AS high,
+                   224.0::DOUBLE AS low,
+                   225.5::DOUBLE AS close,
+                   NULL::DOUBLE AS bid,
+                   NULL::DOUBLE AS ask
+          ) TO '${targetPath.replaceAll("'", "''")}' (FORMAT PARQUET)
+        `);
+        const registry = await publishCanonicalMarketResolverRegistry(store.objects);
+        const closure = await publishInputClosure(store.objects, {
+          registry: registry.address,
+          observations: [
+            {
+              kind: "exact",
+              dataClass: "spot",
+              selector: identity.partition,
+              session: "2026-07-20",
+            },
+          ],
+        });
+
+        const adopted = await adoptCanonicalHistoricalInputClosure(
+          store,
+          conn,
+          closure.address,
+          "2026-07-20",
+        );
+
+        expect(adopted.closure).toBe(closure.address);
+        expect(adopted.receipts).toHaveLength(1);
+        await expect(store.inspectPartition(identity)).resolves.toMatchObject({ status: "match" });
+        expect(existsSync(join(rootDir, ".provenance", "refresh-completions"))).toBe(false);
+      } finally {
+        conn.closeSync();
+        instance.closeSync();
+      }
+    });
+
+    it("restricts range adoption to the requested XNYS prefix", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const source = { ticker: "IWM", date: "2026-07-17" };
+      const tail = { ticker: "IWM", date: "2026-07-20" };
+      const instance = await DuckDBInstance.create(":memory:");
+      const conn = await instance.connect();
+      try {
+        await writeCanonicalSpot(conn, source);
+        await writeCanonicalSpot(conn, tail);
+        const registry = await publishCanonicalMarketResolverRegistry(store.objects);
+        const closure = await publishInputClosure(store.objects, {
+          registry: registry.address,
+          observations: [
+            {
+              kind: "range",
+              dataClass: "spot",
+              selectorPrefix: { ticker: "IWM" },
+              fromSession: source.date,
+              throughSession: tail.date,
+            },
+          ],
+        });
+
+        const adopted = await adoptCanonicalHistoricalInputClosure(
+          store,
+          conn,
+          closure.address,
+          source.date,
+        );
+
+        expect(adopted.receipts).toHaveLength(1);
+        await expect(
+          store.inspectPartition({ dataset: "spot", partition: source }),
+        ).resolves.toMatchObject({ status: "match" });
+        await expect(
+          store.inspectPartition({ dataset: "spot", partition: tail }),
+        ).resolves.toMatchObject({ status: "orphan" });
+      } finally {
+        conn.closeSync();
+        instance.closeSync();
+      }
+    });
+
+    it("requires missing probes to remain absent", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const exact = { ticker: "IWM", date: "2026-07-17" };
+      const probe = { ticker: "IWM", date: "2026-07-20" };
+      const instance = await DuckDBInstance.create(":memory:");
+      const conn = await instance.connect();
+      try {
+        await writeCanonicalSpot(conn, exact);
+        const registry = await publishCanonicalMarketResolverRegistry(store.objects);
+        const closure = await publishInputClosure(store.objects, {
+          registry: registry.address,
+          observations: [
+            { kind: "exact", dataClass: "spot", selector: exact, session: exact.date },
+            { kind: "missing-probe", dataClass: "spot", selector: probe, session: probe.date },
+          ],
+        });
+
+        await expect(
+          adoptCanonicalHistoricalInputClosure(store, conn, closure.address, probe.date),
+        ).resolves.toMatchObject({ receipts: [expect.any(Object)] });
+
+        await writeCanonicalSpot(conn, probe);
+        await expect(
+          adoptCanonicalHistoricalInputClosure(store, conn, closure.address, probe.date),
+        ).rejects.toThrow(/missing-probe is no longer absent.*orphan/);
+
+        unlinkSync(targetFor(probe));
+        await publish(store, { bytes: Buffer.from("committed-probe"), rows: 1 });
+        await expect(
+          adoptCanonicalHistoricalInputClosure(store, conn, closure.address, probe.date),
+        ).rejects.toThrow(/missing-probe is no longer absent.*match/);
+
+        unlinkSync(targetFor(probe));
+        await expect(
+          adoptCanonicalHistoricalInputClosure(store, conn, closure.address, probe.date),
+        ).rejects.toThrow(/missing-probe is no longer absent.*missing/);
+      } finally {
+        conn.closeSync();
+        instance.closeSync();
+      }
+    });
+
+    it.each(["exact", "missing-probe"] as const)(
+      "rejects a non-XNYS %s observation",
+      async (kind) => {
+        const store = new FilePartitionCommitStore(rootDir);
+        const weekend = { ticker: "IWM", date: "2026-07-18" };
+        const instance = await DuckDBInstance.create(":memory:");
+        const conn = await instance.connect();
+        try {
+          const registry = await publishCanonicalMarketResolverRegistry(store.objects);
+          const closure = await publishInputClosure(store.objects, {
+            registry: registry.address,
+            observations: [{ kind, dataClass: "spot", selector: weekend, session: weekend.date }],
+          });
+
+          await expect(
+            adoptCanonicalHistoricalInputClosure(store, conn, closure.address, "2026-07-20"),
+          ).rejects.toThrow(/is not an XNYS session/);
+        } finally {
+          conn.closeSync();
+          instance.closeSync();
+        }
+      },
+    );
+
+    it("refuses a canonical-name inode swap after capturing the inspection snapshot", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const targetPath = targetFor(identity.partition);
+      const displacedPath = join(externalDir, "historical-displaced.parquet");
+      const instance = await DuckDBInstance.create(":memory:");
+      const conn = await instance.connect();
+      try {
+        await writeCanonicalSpot(conn, identity.partition);
+        setPartitionCommitTestFault(store, (point) => {
+          if (point !== "historical-after-snapshot") return;
+          renameSync(targetPath, displacedPath);
+          writeFileSync(targetPath, "attacker replacement");
+        });
+
+        await expect(
+          store[INTERNAL_HISTORICAL_PARTITION_ADOPTION](conn, identity),
+        ).rejects.toBeInstanceOf(PartitionFileIntegrityError);
+        await expect(store.inspectPartition(identity)).resolves.toMatchObject({ status: "orphan" });
+      } finally {
+        setPartitionCommitTestFault(store);
         conn.closeSync();
         instance.closeSync();
       }

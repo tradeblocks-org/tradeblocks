@@ -49,15 +49,22 @@ export {
   enumerateXnysSessions,
 } from "./xnys-session-calendar.ts";
 export {
+  LegacyEnrichedMigrationError,
+  migrateAllLegacyEnrichedFiles,
+  type LegacyMigrationBounds,
+} from "../stores/enriched-legacy-migration.ts";
+export {
   CANONICAL_MARKET_RESOLVER_REVISION,
   BLACKOUT_SLICE_KIND,
   BLACKOUT_SLICE_VERSION,
   canonicalControlIdentity,
+  adoptCanonicalHistoricalInputClosure,
   publishCanonicalMarketResolverRegistry,
   CanonicalMarketInputResolver,
   verifyCanonicalMarketDataCutoff,
   proveCanonicalMarketDataPrefix,
   type CanonicalControlIdentity,
+  type AdoptCanonicalHistoricalClosureResult,
   type PublishCanonicalMarketRegistryInput,
 } from "./canonical-market-resolver.ts";
 export {

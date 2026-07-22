@@ -148,6 +148,7 @@ interface AuthorityTip {
 type PartitionCommitTestFaultPoint =
   | "after-claim-open"
   | "after-event-before-head"
+  | "historical-after-snapshot"
   | "before-release-claim";
 const partitionCommitTestFaults = new WeakMap<
   FilePartitionCommitStore,
@@ -593,6 +594,39 @@ async function exactFileAddress(filePath: string): Promise<Omit<ExactFileFingerp
   } finally {
     await opened.handle.close();
   }
+}
+
+async function snapshotOpenFile(
+  source: fs.FileHandle,
+  snapshotPath: string,
+): Promise<Omit<ExactFileFingerprint, "rows">> {
+  const snapshot = await fs.open(snapshotPath, "wx", 0o400);
+  const hash = createHash("sha256");
+  let bytes = 0;
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  try {
+    while (true) {
+      const read = await source.read(buffer, 0, buffer.byteLength, bytes);
+      if (read.bytesRead === 0) break;
+      hash.update(buffer.subarray(0, read.bytesRead));
+      let written = 0;
+      while (written < read.bytesRead) {
+        const result = await snapshot.write(
+          buffer,
+          written,
+          read.bytesRead - written,
+          bytes + written,
+        );
+        if (result.bytesWritten === 0) throw new Error("Unable to write inspection snapshot");
+        written += result.bytesWritten;
+      }
+      bytes += read.bytesRead;
+    }
+    await snapshot.sync();
+  } finally {
+    await snapshot.close();
+  }
+  return { address: `sha256:${hash.digest("hex")}`, bytes };
 }
 
 function sameCommitContent(
@@ -1292,30 +1326,81 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
     conn: DuckDBConnection,
     identity: PartitionIdentity,
   ): Promise<StoredPartitionCommit> {
-    const captured = JSON.parse(canonicalJsonBytes(identity).toString("utf8")) as PartitionIdentity;
-    validateIdentity(captured);
+    const captured = captureIdentity(identity);
     const definition = canonicalPartitionDataset(captured.dataset) as NonNullable<
       ReturnType<typeof canonicalPartitionDataset>
     >;
     const relativePath = canonicalRelativePath(captured);
     const targetPath = path.resolve(this.targetPath(relativePath));
-    const before = await exactFileAddress(targetPath);
-    const inspected = await inspectCanonicalParquet(conn, targetPath, captured);
-    const after = await exactFileAddress(targetPath);
-    if (before.address !== after.address || before.bytes !== after.bytes) {
-      throw new PartitionFileIntegrityError(
-        targetPath,
-        "existing Parquet changed during semantic inspection",
-      );
-    }
-    return this.adoptExistingFileCommit({
-      dataset: captured.dataset,
-      partition: captured.partition,
-      schemaRevision: definition.schemaRevision,
-      relativePath,
-      coverage: inspected.coverage,
-      quality: { inputRows: inspected.rows, writtenRows: inspected.rows, droppedRows: 0 },
-      file: { ...after, rows: inspected.rows },
+    return this.withPartitionLock(captured, async () => {
+      const realMarketRoot = await this.validateMarketRoot();
+      const validatedTargetPath = await this.validatedTargetPath(relativePath, realMarketRoot);
+      if (validatedTargetPath !== targetPath) {
+        throw new PartitionFileIntegrityError(
+          validatedTargetPath,
+          "validated target differs from the registered path",
+        );
+      }
+      const opened = await openRegularFileNoFollow(targetPath);
+      const snapshotRoot = path.join(this.provenanceRootDir, "inspection-snapshots");
+      await this.ensureDurableDirectory(snapshotRoot);
+      const snapshotDir = await fs.mkdtemp(path.join(snapshotRoot, "adopt-"));
+      const snapshotPath = path.join(snapshotDir, "partition.parquet");
+      try {
+        const snapshotFingerprint = await snapshotOpenFile(opened.handle, snapshotPath);
+        const snapshotObserved = await exactFileAddress(snapshotPath);
+        if (
+          snapshotObserved.address !== snapshotFingerprint.address ||
+          snapshotObserved.bytes !== snapshotFingerprint.bytes
+        ) {
+          throw new PartitionFileIntegrityError(
+            snapshotPath,
+            "inspection snapshot bytes disagree with the pinned canonical inode",
+          );
+        }
+        await partitionCommitTestFaults.get(this)?.("historical-after-snapshot");
+        const inspected = await inspectCanonicalParquet(conn, snapshotPath, captured);
+        const snapshotAfter = await exactFileAddress(snapshotPath);
+        if (
+          snapshotAfter.address !== snapshotFingerprint.address ||
+          snapshotAfter.bytes !== snapshotFingerprint.bytes
+        ) {
+          throw new PartitionFileIntegrityError(
+            snapshotPath,
+            "inspection snapshot changed during semantic inspection",
+          );
+        }
+        const canonicalAfter = await exactOpenFileAddress(opened.handle);
+        const afterStat = await opened.handle.stat();
+        if (
+          !afterStat.isFile() ||
+          afterStat.nlink !== 1 ||
+          !sameInode(opened.stat, afterStat) ||
+          canonicalAfter.address !== snapshotFingerprint.address ||
+          canonicalAfter.bytes !== snapshotFingerprint.bytes
+        ) {
+          throw new PartitionFileIntegrityError(
+            targetPath,
+            "canonical inode changed during historical semantic inspection",
+          );
+        }
+        await requireNamedRegularInode(targetPath, opened.stat);
+        return this.adoptExistingFileCommit(
+          {
+            dataset: captured.dataset,
+            partition: captured.partition,
+            schemaRevision: definition.schemaRevision,
+            relativePath,
+            coverage: inspected.coverage,
+            quality: { inputRows: inspected.rows, writtenRows: inspected.rows, droppedRows: 0 },
+            file: { ...snapshotFingerprint, rows: inspected.rows },
+          },
+          true,
+        );
+      } finally {
+        await opened.handle.close();
+        await fs.rm(snapshotDir, { recursive: true });
+      }
     });
   }
 
@@ -1327,11 +1412,12 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
    */
   private async adoptExistingFileCommit(
     input: RecordPartitionCommitInput,
+    lockHeld = false,
   ): Promise<StoredPartitionCommit> {
     const captured = captureInput(input);
     const targetPath = path.resolve(this.targetPath(captured.relativePath));
     const realMarketRoot = await this.validateMarketRoot();
-    return this.withPartitionLock(captured, async () => {
+    const adopt = async () => {
       const validatedTargetPath = await this.validatedTargetPath(
         captured.relativePath,
         realMarketRoot,
@@ -1443,7 +1529,8 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       } finally {
         await handle.close();
       }
-    });
+    };
+    return lockHeld ? adopt() : this.withPartitionLock(captured, adopt);
   }
 
   async publishFileCommit(input: PublishPartitionFileInput): Promise<StoredPartitionCommit> {

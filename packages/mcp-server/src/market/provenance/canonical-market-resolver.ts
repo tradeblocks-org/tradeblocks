@@ -1,3 +1,4 @@
+import type { DuckDBConnection } from "@duckdb/node-api";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -17,7 +18,10 @@ import {
   publishInputResolverRegistry,
   publishMissingProbeEvidence,
   publishSemanticInputLeaf,
+  restrictInputClosureDescriptor,
   verifyCutoffManifest,
+  verifyInputClosure,
+  verifyInputResolverRegistry,
   verifySemanticInputLeaf,
 } from "./content-manifest.ts";
 import {
@@ -25,7 +29,11 @@ import {
   isRealMarketSessionDate,
   type BoundedMarketDatasetDefinition,
 } from "./dataset-registry.ts";
-import { FilePartitionCommitStore } from "./partition-commit-store.ts";
+import {
+  FilePartitionCommitStore,
+  INTERNAL_HISTORICAL_PARTITION_ADOPTION,
+  type StoredPartitionCommit,
+} from "./partition-commit-store.ts";
 import {
   XNYS_SESSION_CALENDAR_REVISION,
   enumerateXnysSessions,
@@ -47,6 +55,12 @@ export interface CanonicalControlIdentity {
 export interface PublishCanonicalMarketRegistryInput {
   /** Engine-observed data-root-relative control paths. */
   controlFiles?: readonly string[];
+}
+
+export interface AdoptCanonicalHistoricalClosureResult {
+  readonly closure: CanonicalJsonAddress;
+  readonly completeThrough: string;
+  readonly receipts: readonly StoredPartitionCommit[];
 }
 
 function compareCodePoints(left: string, right: string): number {
@@ -149,6 +163,97 @@ export async function publishCanonicalMarketResolverRegistry(
   return publishInputResolverRegistry(objects, {
     revision: `${CANONICAL_MARKET_RESOLVER_REVISION}.${XNYS_SESSION_CALENDAR_REVISION}`,
     classes: canonicalRegistryClasses(controls),
+  });
+}
+
+/**
+ * Bring existing canonical-layout Parquet bytes under producer authority for
+ * one authenticated input closure. The caller cannot nominate arbitrary files:
+ * identities are derived only from the verified canonical registry + closure,
+ * and the store independently validates schema, partition values, coverage,
+ * row count, inode stability, and exact bytes before publishing each receipt.
+ *
+ * This is the bounded migration seam for data that predates receipt stamping.
+ * It deliberately does not mint refresh-completion authority or a cutoff; a
+ * normal canonical refresh must still finalize the requested tail session.
+ */
+export async function adoptCanonicalHistoricalInputClosure(
+  partitions: FilePartitionCommitStore,
+  conn: DuckDBConnection,
+  closureAddress: CanonicalJsonAddress,
+  completeThrough: string,
+): Promise<AdoptCanonicalHistoricalClosureResult> {
+  if (!isXnysSessionDate(completeThrough)) {
+    throw new Error(
+      `Historical adoption cutoff is not a supported XNYS session: ${completeThrough}`,
+    );
+  }
+  const verifiedClosure = await verifyInputClosure(partitions.objects, closureAddress);
+  const registryObject = await verifyInputResolverRegistry(
+    partitions.objects,
+    verifiedClosure.value.registry,
+  );
+  validateCanonicalRegistry(registryObject.value);
+  const closure = restrictInputClosureDescriptor(verifiedClosure.value, completeThrough);
+  const identities = new Map<string, { dataset: string; partition: Record<string, string> }>();
+
+  for (const observation of closure.observations) {
+    if (observation.kind === "unmanifestable") {
+      throw new Error(`Historical adoption closure is unmanifestable: ${observation.reasonCode}`);
+    }
+    if (observation.kind === "control-file") continue;
+    if (
+      (observation.kind === "exact" || observation.kind === "missing-probe") &&
+      !isXnysSessionDate(observation.session)
+    ) {
+      throw new Error(
+        `Historical adoption ${observation.kind} is not an XNYS session: ${observation.session}`,
+      );
+    }
+    if (observation.kind === "missing-probe") {
+      const resolverClass = registryObject.value.classes.find(
+        (entry) => entry.dataClass === observation.dataClass,
+      );
+      if (!resolverClass || resolverClass.kind !== "partitioned") {
+        throw new Error("Historical adoption missing-probe is not partition-backed");
+      }
+      const inspected = await partitions.inspectPartition({
+        dataset: resolverClass.dataset,
+        partition: observation.selector,
+      });
+      if (inspected.status !== "absent") {
+        throw new Error(
+          `Historical adoption missing-probe is no longer absent: ${resolverClass.dataset} ${canonicalJson(observation.selector)} (${inspected.status})`,
+        );
+      }
+      continue;
+    }
+    const resolverClass = requireCanonicalClass(registryObject.value, observation);
+    if (resolverClass.kind !== "partitioned") continue;
+    const sessions =
+      observation.kind === "exact"
+        ? [sessionFromObservation(observation) as string]
+        : enumerateXnysSessions(observation.fromSession, observation.throughSession);
+    for (const session of sessions) {
+      const partition =
+        observation.kind === "exact"
+          ? { ...observation.selector }
+          : { ...observation.selectorPrefix, [resolverClass.sessionKey]: session };
+      const identity = { dataset: resolverClass.dataset, partition };
+      identities.set(canonicalJson(identity), identity);
+    }
+  }
+
+  const receipts: StoredPartitionCommit[] = [];
+  for (const identity of [...identities.values()].sort((left, right) =>
+    compareCodePoints(canonicalJson(left), canonicalJson(right)),
+  )) {
+    receipts.push(await partitions[INTERNAL_HISTORICAL_PARTITION_ADOPTION](conn, identity));
+  }
+  return Object.freeze({
+    closure: verifiedClosure.address,
+    completeThrough,
+    receipts: Object.freeze(receipts),
   });
 }
 
