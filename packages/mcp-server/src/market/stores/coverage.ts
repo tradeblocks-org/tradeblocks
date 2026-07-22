@@ -54,7 +54,33 @@ export function listPartitionValues(dir: string, partitionKey: string): string[]
  * named refusal instead of being guessed from weekday arithmetic.
  */
 export function listXnysSessionPartitionValues(dir: string, from: string, to: string): string[] {
+  // Read callers intentionally use broad operational sentinels such as
+  // 1970-01-01..9999-12-31. Only disk-owned values are classified here;
+  // malformed, unsupported, holiday, and weekend names are excluded without
+  // making the read throw. Provenance identity validation continues to call
+  // the strict calendar directly and is intentionally unchanged.
   return listPartitionValues(dir, "date")
     .filter((date) => date >= from && date <= to)
-    .filter((date) => isXnysSessionDate(date));
+    .filter((date) => {
+      try {
+        return isXnysSessionDate(date);
+      } catch {
+        return false;
+      }
+    });
+}
+
+/** Disk partitions in the requested lexical window that are not read authority. */
+export function listExcludedXnysPartitionValues(dir: string, from: string, to: string): string[] {
+  return listPartitionValues(dir, "date").filter((date) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return true;
+    try {
+      return date >= from && date <= to && !isXnysSessionDate(date);
+    } catch (error) {
+      // Out-of-calendar history/future is simply outside this reader's
+      // authority horizon. Malformed in-horizon names remain explicit
+      // excluded-disk evidence for the named authority error path.
+      return error instanceof TypeError;
+    }
+  });
 }

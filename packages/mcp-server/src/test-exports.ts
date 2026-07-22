@@ -669,6 +669,14 @@ export type { BarRow as MarketStoreBarRow, ContractRow } from "./market/stores/i
 // Ticker registry + resolver + loader + schemas
 export { extractRoot, rootToUnderlying } from "./market/tickers/resolver.ts";
 export { TickerRegistry } from "./market/tickers/registry.ts";
+export {
+  LegacyEnrichedMigrationError,
+  inspectLegacyEnrichedTicker,
+  inspectLegacyEnrichedContext,
+  migrateLegacyEnrichedTicker,
+  migrateLegacyEnrichedContext,
+  migrateAllLegacyEnrichedFiles,
+} from "./market/stores/enriched-legacy-migration.ts";
 export type { TickerEntry, EntrySource } from "./market/tickers/registry.ts";
 export { loadRegistry, saveUserOverride } from "./market/tickers/loader.ts";
 export {
@@ -729,7 +737,12 @@ export { rthDailyAggregateSubquery } from "./market/stores/rth-aggregation.ts";
 export type { RthWindowOpts } from "./market/stores/rth-aggregation.ts";
 
 // Shared coverage helper
-export { listPartitionValues } from "./market/stores/coverage.ts";
+export {
+  listPartitionValues,
+  listXnysSessionPartitionValues,
+  listExcludedXnysPartitionValues,
+} from "./market/stores/coverage.ts";
+export { MarketDataAuthorityError } from "./market/stores/spot-store.ts";
 
 // Enrichment watermark adapter
 export {

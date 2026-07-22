@@ -32,7 +32,7 @@ import { DuckdbChainStore } from "./duckdb-chain-store.ts";
 import { ParquetQuoteStore } from "./parquet-quote-store.ts";
 import { DuckdbQuoteStore } from "./duckdb-quote-store.ts";
 import { ParquetOiDailyStore } from "./parquet-oi-daily-store.ts";
-import { TickerRegistry } from "../tickers/registry.ts";
+import type { TickerRegistry } from "../tickers/registry.ts";
 
 import type { StoreContext } from "./types.ts";
 
@@ -93,43 +93,40 @@ function lockAuthorityStore<T extends object>(store: T): T {
 }
 
 function snapshotAuthorityContext(ctx: StoreContext): StoreContext {
-  const connection = ctx.conn as unknown as Record<string, unknown> | null;
-  const sourceTickers = ctx.tickers;
   const dataDir = resolve(ctx.dataDir);
-  const bindConnectionMethod = (name: string): CallableFunction => {
-    const method = connection?.[name];
-    if (typeof method !== "function") {
-      return () => {
+  const liveConnectionMethod = (name: string): CallableFunction => {
+    return (...args: unknown[]) => {
+      // `ctx.conn` is deliberately a getter in the MCP process. Write tools
+      // close the read-only connection, reopen it read-write, then downgrade
+      // again. Resolve both the object and method at invocation time so an
+      // authority-bearing store never calls the disconnected startup handle.
+      const connection = ctx.conn as unknown as Record<string, unknown> | null;
+      const method = connection?.[name];
+      if (typeof method !== "function") {
         throw new TypeError(`Canonical market connection has no ${name} method`);
-      };
-    }
-    return method.bind(connection);
+      }
+      return Reflect.apply(method, connection, args);
+    };
   };
   const conn = Object.freeze({
-    run: bindConnectionMethod("run"),
-    runAndReadAll: bindConnectionMethod("runAndReadAll"),
-    createAppender: bindConnectionMethod("createAppender"),
+    run: liveConnectionMethod("run"),
+    runAndReadAll: liveConnectionMethod("runAndReadAll"),
+    createAppender: liveConnectionMethod("createAppender"),
   }) as unknown as StoreContext["conn"];
-  const tickers = new TickerRegistry(
-    sourceTickers.list().map(({ underlying, roots }) => ({ underlying, roots })),
-  );
-  for (const name of ["resolve", "list", "toJSON"] as const) {
-    Object.defineProperty(tickers, name, {
-      value: tickers[name].bind(tickers),
-      writable: false,
-      configurable: false,
-    });
-  }
-  for (const name of ["register", "unregister"] as const) {
-    Object.defineProperty(tickers, name, {
-      value: () => {
-        throw new TypeError("Authority-bearing ticker registries are immutable snapshots");
-      },
-      writable: false,
-      configurable: false,
-    });
-  }
-  Object.freeze(tickers);
+  // Stores need live symbol resolution (register_underlying takes effect in
+  // the same process), but must not expose mutation through their public
+  // `tickers` accessor. This frozen facade delegates every read to the live
+  // registry getter and refuses both mutators.
+  const immutableRegistry = () => {
+    throw new TypeError("Authority-bearing ticker registries are read-only facades");
+  };
+  const tickers = Object.freeze({
+    resolve: (root: string) => ctx.tickers.resolve(root),
+    list: () => ctx.tickers.list(),
+    toJSON: () => ctx.tickers.toJSON(),
+    register: immutableRegistry,
+    unregister: immutableRegistry,
+  }) as unknown as TickerRegistry;
   return Object.freeze({
     conn,
     dataDir,

@@ -94,7 +94,7 @@ try {
         await publishCanonicalRateSlice(store, "sofr_rates", "2026-07-21");
         throw new Error("stale canonical rate tail was accepted");
       } catch (error) {
-        if (!String(error).includes("stale after 2026-05-07")) throw error;
+        if (!String(error).includes("stale after 2026-07-20")) throw error;
       }
 
       const marketRoot = join(root, "market");

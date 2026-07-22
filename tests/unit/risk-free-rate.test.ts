@@ -202,6 +202,18 @@ describe("Risk-Free Rate Lookup Utility", () => {
       }
     });
 
+    it("keeps both bundled rate tails refreshed through the declared release horizon", () => {
+      const expectedTail = "2026-07-20";
+      expect(Object.keys(SOFR_RATES).at(-1)).toBe(expectedTail);
+      expect(Object.keys(TREASURY_RATES).at(-1)).toBe(expectedTail);
+      // FRED publishes blank observations on these federal/market holidays;
+      // blank rows are absence, never numeric zero-rate observations.
+      for (const holiday of ["2026-05-25", "2026-06-19", "2026-07-03"]) {
+        expect(SOFR_RATES[holiday]).toBeUndefined();
+        expect(TREASURY_RATES[holiday]).toBeUndefined();
+      }
+    });
+
     it("returns exact integer-basis-point identities for both distinct series", () => {
       expect(resolveSofrRateByKey("2026-05-07")).toEqual({
         requestedDate: "2026-05-07",
@@ -229,11 +241,19 @@ describe("Risk-Free Rate Lookup Utility", () => {
         resolution: "clamped-earliest",
       });
       expect(resolveSofrRateByKey("2026-05-08")).toMatchObject({
-        effectiveDate: "2026-05-07",
-        resolution: "stale-after-latest",
+        effectiveDate: "2026-05-08",
+        resolution: "exact",
       });
       expect(resolveTreasuryRateByKey("2026-05-08")).toMatchObject({
-        effectiveDate: "2026-05-07",
+        effectiveDate: "2026-05-08",
+        resolution: "exact",
+      });
+      expect(resolveSofrRateByKey("2026-07-21")).toMatchObject({
+        effectiveDate: "2026-07-20",
+        resolution: "stale-after-latest",
+      });
+      expect(resolveTreasuryRateByKey("2026-07-21")).toMatchObject({
+        effectiveDate: "2026-07-20",
         resolution: "stale-after-latest",
       });
     });

@@ -16,7 +16,13 @@
  *   - getCoverage on missing ticker returns empty report
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import { ParquetSpotStore, DuckdbSpotStore } from "../../../../src/test-exports.ts";
+import { mkdirSync, renameSync, rmSync } from "node:fs";
+import * as path from "node:path";
+import {
+  MarketDataAuthorityError,
+  ParquetSpotStore,
+  DuckdbSpotStore,
+} from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
@@ -187,6 +193,76 @@ describe("ParquetSpotStore XNYS partition boundary", () => {
 
       const daily = await store.readDailyBars("SPX", "2026-07-02", "2026-07-06");
       expect(daily.map((row) => row.date)).toEqual(["2026-07-02"]);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("raises a named authority error when excluded partitions are the only data", async () => {
+    const { store, fixture } = await makeParquetSpot();
+    try {
+      await store.writeBars("SPX", "2026-07-03", makeBars("SPX", "2026-07-03"));
+      await expect(store.readBars("SPX", "2026-07-03", "2026-07-03")).rejects.toBeInstanceOf(
+        MarketDataAuthorityError,
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("raises a named authority error instead of hiding global-layout spot data", async () => {
+    const { store, fixture } = await makeParquetSpot();
+    try {
+      await store.writeBars("SPX", "2025-01-06", makeBars("SPX", "2025-01-06"));
+      const spotDir = path.join(fixture.ctx.dataDir, "market", "spot");
+      const tickerDir = path.join(spotDir, "ticker=SPX");
+      const globalDir = path.join(spotDir, "date=2025-01-06");
+      mkdirSync(globalDir, { recursive: true });
+      renameSync(
+        path.join(tickerDir, "date=2025-01-06", "data.parquet"),
+        path.join(globalDir, "data.parquet"),
+      );
+      rmSync(tickerDir, { recursive: true, force: true });
+
+      await expect(store.readDailyBars("SPX", "2025-01-06", "2025-01-06")).rejects.toBeInstanceOf(
+        MarketDataAuthorityError,
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("does not report empty when another canonical date keeps the ticker directory alive", async () => {
+    const { store, fixture } = await makeParquetSpot();
+    try {
+      await store.writeBars("SPX", "2025-01-06", makeBars("SPX", "2025-01-06"));
+      await store.writeBars("SPX", "2025-01-07", makeBars("SPX", "2025-01-07"));
+      const spotDir = path.join(fixture.ctx.dataDir, "market", "spot");
+      const globalDir = path.join(spotDir, "date=2025-01-07");
+      mkdirSync(globalDir, { recursive: true });
+      renameSync(
+        path.join(spotDir, "ticker=SPX", "date=2025-01-07", "data.parquet"),
+        path.join(globalDir, "data.parquet"),
+      );
+
+      await expect(store.readBars("SPX", "2025-01-07", "2025-01-07")).rejects.toBeInstanceOf(
+        MarketDataAuthorityError,
+      );
+      // A disjoint canonical date remains readable; global evidence outside
+      // its requested window does not poison the read.
+      await expect(store.readBars("SPX", "2025-01-06", "2025-01-06")).resolves.toHaveLength(3);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("excludes an unsupported pre-2022 partition without turning it into an authority error", async () => {
+    const { store, fixture } = await makeParquetSpot();
+    try {
+      await store.writeBars("SPX", "2021-12-31", makeBars("SPX", "2021-12-31"));
+
+      await expect(store.readBars("SPX", "1970-01-01", "9999-12-31")).resolves.toEqual([]);
+      await expect(store.readDailyBars("SPX", "1970-01-01", "9999-12-31")).resolves.toEqual([]);
     } finally {
       fixture.cleanup();
     }

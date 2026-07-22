@@ -10,7 +10,7 @@
  * D-02 reminder: no method body inspects `ctx.parquetMode` — the factory
  * chooses the backend once at construction, every method is monomorphic.
  */
-import { existsSync, readdirSync } from "fs";
+import { existsSync } from "fs";
 import * as path from "path";
 import {
   EnrichedStore,
@@ -25,6 +25,13 @@ import { resolveMarketDir } from "../../db/market-datasets.ts";
 import { runEnrichment } from "../../utils/market-enricher.ts";
 import { getEnrichedThrough, upsertEnrichedThrough } from "../../db/json-adapters.ts";
 import { readParquetFilesSql } from "../../utils/quote-parquet-projection.ts";
+import {
+  inspectLegacyEnrichedContext,
+  inspectLegacyEnrichedTicker,
+  migrateLegacyEnrichedContext,
+  migrateLegacyEnrichedTicker,
+  type LegacyEnrichedSource,
+} from "./enriched-legacy-migration.ts";
 
 const EMPTY_SPOT_SOURCE = `(SELECT
   NULL::VARCHAR AS ticker,
@@ -51,6 +58,45 @@ function sessionPartitionFiles(dir: string, from: string, to: string): string[] 
     .filter((filePath) => existsSync(filePath));
 }
 
+function escapeSqlLiteral(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+/**
+ * Compose an immutable read source from bounded slices plus missing dates in
+ * a legacy whole-file source. Bounded slices win date-by-date when both exist.
+ */
+function enrichedReadSource(
+  partitionDir: string,
+  from: string,
+  to: string,
+  legacy: LegacyEnrichedSource | null,
+): string | null {
+  const canonicalDates = listXnysSessionPartitionValues(partitionDir, from, to).filter((date) =>
+    existsSync(path.join(partitionDir, `date=${date}`, "data.parquet")),
+  );
+  const canonicalFiles = canonicalDates.map((date) =>
+    path.join(partitionDir, `date=${date}`, "data.parquet"),
+  );
+  const canonicalSet = new Set(canonicalDates);
+  const legacyDates = (legacy?.dates ?? []).filter(
+    (date) => date >= from && date <= to && !canonicalSet.has(date),
+  );
+  const sources: string[] = [];
+  if (canonicalFiles.length > 0) {
+    sources.push(`SELECT * FROM ${readParquetFilesSql(canonicalFiles)}`);
+  }
+  if (legacy && legacyDates.length > 0) {
+    const dates = legacyDates.map((date) => `'${date}'`).join(", ");
+    sources.push(
+      `SELECT * FROM read_parquet('${escapeSqlLiteral(legacy.filePath)}', hive_partitioning=false) ` +
+        `WHERE CAST(date AS VARCHAR) IN (${dates})`,
+    );
+  }
+  if (sources.length === 0) return null;
+  return `(${sources.join(" UNION ALL BY NAME ")})`;
+}
+
 export class ParquetEnrichedStore extends EnrichedStore {
   private readonly spotStore: SpotStore;
   constructor(ctx: StoreContext, spotStore: SpotStore) {
@@ -64,6 +110,10 @@ export class ParquetEnrichedStore extends EnrichedStore {
     to: string,
     options: EnrichedComputeOptions = {},
   ): Promise<void> {
+    // Bootstrap 3.3.x whole-file data independently of the enrichment
+    // watermark. Otherwise an advanced watermark can suppress recomputation
+    // while the old history remains invisible to bounded reads.
+    await migrateLegacyEnrichedTicker(this.ctx.conn, this.ctx.dataDir, ticker, { from, to });
     // Indicator math still uses its watermark plus a 200-day lookback, while
     // publication is bounded to this requested logical session window.
     await runEnrichment(
@@ -93,6 +143,7 @@ export class ParquetEnrichedStore extends EnrichedStore {
     to: string,
     _options: EnrichedComputeOptions = {},
   ): Promise<void> {
+    await migrateLegacyEnrichedContext(this.ctx.conn, this.ctx.dataDir, { from, to });
     // D-16: wraps the existing Tier 2 context computation. Running
     // runEnrichment for each VIX-family ticker triggers Tier 2 internally
     // (it runs after every Tier 1 pass and is idempotent at date granularity).
@@ -133,9 +184,13 @@ export class ParquetEnrichedStore extends EnrichedStore {
     const marketDir = resolveMarketDir(this.ctx.dataDir);
     const tickerDir = path.join(marketDir, "enriched", `ticker=${opts.ticker}`);
     if (!existsSync(tickerDir)) return [];
-    const files = sessionPartitionFiles(tickerDir, opts.from, opts.to);
-    if (files.length === 0) return [];
-    const enrichedSource = readParquetFilesSql(files);
+    const legacyEnriched = await inspectLegacyEnrichedTicker(
+      this.ctx.conn,
+      this.ctx.dataDir,
+      opts.ticker,
+    );
+    const enrichedSource = enrichedReadSource(tickerDir, opts.from, opts.to, legacyEnriched);
+    if (!enrichedSource) return [];
 
     if (!wantsJoins) {
       const fromLit = opts.from.replace(/'/g, "''");
@@ -153,9 +208,11 @@ export class ParquetEnrichedStore extends EnrichedStore {
     const spotSource = spotFiles.length > 0 ? readParquetFilesSql(spotFiles) : EMPTY_SPOT_SOURCE;
 
     const contextDir = path.join(marketDir, "enriched", "context");
-    const contextFiles = sessionPartitionFiles(contextDir, opts.from, opts.to);
+    const legacyContext = opts.includeContext
+      ? await inspectLegacyEnrichedContext(this.ctx.conn, this.ctx.dataDir)
+      : null;
     const contextSource =
-      contextFiles.length > 0 ? readParquetFilesSql(contextFiles) : EMPTY_CONTEXT_SOURCE;
+      enrichedReadSource(contextDir, opts.from, opts.to, legacyContext) ?? EMPTY_CONTEXT_SOURCE;
 
     // Builder inlines values; unbound runAndReadAll(sql) bypasses extract_statements.
     const { sql } = buildReadEnrichedSQL({
@@ -183,13 +240,13 @@ export class ParquetEnrichedStore extends EnrichedStore {
       // is a union), so we return empty early to match Parquet reality.
       return { earliest: null, latest: null, missingDates: [], totalDates: 0 };
     }
-    const dates = readdirSync(tickerDir)
-      .filter(
-        (entry) =>
-          entry.startsWith("date=") && existsSync(path.join(tickerDir, entry, "data.parquet")),
-      )
-      .map((entry) => entry.slice("date=".length))
-      .sort();
+    const legacy = await inspectLegacyEnrichedTicker(this.ctx.conn, this.ctx.dataDir, ticker);
+    const dates = [
+      ...new Set([
+        ...listXnysSessionPartitionValues(tickerDir, "1970-01-01", "9999-12-31"),
+        ...(legacy?.dates ?? []),
+      ]),
+    ].sort();
     return {
       earliest: dates[0] ?? null,
       latest: dates[dates.length - 1] ?? null,

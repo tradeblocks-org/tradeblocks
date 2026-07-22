@@ -6,14 +6,64 @@
  * The `abstract` keyword enforces at compile time that every subclass provides
  * an implementation of all four methods (STORE-05 contract).
  */
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import * as path from "path";
 import type { StoreContext, BarRow, CoverageReport } from "./types.ts";
 import { resolveMarketDir } from "../../db/market-datasets.ts";
-import { listXnysSessionPartitionValues } from "./coverage.ts";
+import { listExcludedXnysPartitionValues, listXnysSessionPartitionValues } from "./coverage.ts";
 
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+export class MarketDataAuthorityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MarketDataAuthorityError";
+  }
+}
+
+function partitionEntryInWindow(entry: string, from: string, to: string): boolean {
+  if (!entry.startsWith("date=")) return false;
+  const date = entry.slice("date=".length);
+  return date >= from && date <= to;
+}
+
+function hasGlobalSpotData(dataDir: string, from: string, to: string): boolean {
+  const marketDir = resolveMarketDir(dataDir);
+  const spotDir = path.join(marketDir, "spot");
+  try {
+    if (existsSync(path.join(spotDir, "data.parquet"))) return true;
+    if (
+      existsSync(spotDir) &&
+      readdirSync(spotDir).some(
+        (entry) =>
+          partitionEntryInWindow(entry, from, to) &&
+          existsSync(path.join(spotDir, entry, "data.parquet")),
+      )
+    ) {
+      return true;
+    }
+  } catch {
+    return true;
+  }
+  const legacyIntraday = path.join(marketDir, "intraday");
+  if (!existsSync(legacyIntraday)) return false;
+  try {
+    return readdirSync(legacyIntraday).some((entry) => {
+      const candidate = path.join(legacyIntraday, entry);
+      // Whole files cannot be identified by ticker/date without executing
+      // their bytes, so conservatively surface their presence. Date-named
+      // global partitions are scoped to the requested window.
+      return (
+        entry.endsWith(".parquet") ||
+        (partitionEntryInWindow(entry, from, to) &&
+          existsSync(path.join(candidate, "data.parquet")))
+      );
+    });
+  } catch {
+    return true;
+  }
 }
 
 export abstract class SpotStore {
@@ -34,9 +84,29 @@ export abstract class SpotStore {
     opts?: { rthOnly?: boolean; dailyAgg?: boolean },
   ): { sql: string } | null {
     const tickerDir = path.join(resolveMarketDir(this.ctx.dataDir), "spot", `ticker=${ticker}`);
-    if (!existsSync(tickerDir)) return null;
+    if (!existsSync(tickerDir)) {
+      if (hasGlobalSpotData(this.ctx.dataDir, from, to)) {
+        throw new MarketDataAuthorityError(
+          `Canonical spot read for ${ticker} found only legacy/global spot data; migrate it to ticker/session partitions`,
+        );
+      }
+      return null;
+    }
     const dates = listXnysSessionPartitionValues(tickerDir, from, to);
-    if (dates.length === 0) return null;
+    if (dates.length === 0) {
+      const excluded = listExcludedXnysPartitionValues(tickerDir, from, to);
+      if (excluded.length > 0) {
+        throw new MarketDataAuthorityError(
+          `Canonical spot read found excluded disk partitions: ${JSON.stringify(excluded)}`,
+        );
+      }
+      if (hasGlobalSpotData(this.ctx.dataDir, from, to)) {
+        throw new MarketDataAuthorityError(
+          `Canonical spot read for ${ticker} found only legacy/global spot data in the requested window; migrate it to ticker/session partitions`,
+        );
+      }
+      return null;
+    }
     const paths: string[] = [];
     for (const d of dates) {
       const p = path.join(tickerDir, `date=${d}`, "data.parquet");

@@ -36,6 +36,12 @@ export async function publishCanonicalRateSlice(
     dataClass === "sofr_rates"
       ? resolveSofrRateByKey(requestedDate)
       : resolveTreasuryRateByKey(requestedDate);
+  if (resolved.resolution === "clamped-earliest") {
+    throw new Error(
+      `Canonical ${dataClass} input starts at ${resolved.effectiveDate}; ` +
+        `refusing lookahead-shaped request for earlier session ${requestedDate}`,
+    );
+  }
   if (resolved.resolution === "stale-after-latest") {
     throw new Error(
       `Canonical ${dataClass} input is stale after ${resolved.effectiveDate}; ` +

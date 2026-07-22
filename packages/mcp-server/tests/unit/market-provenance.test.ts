@@ -30,6 +30,7 @@ import {
   parseCanonicalJsonAddress,
   setPartitionCommitTestFault,
 } from "../../src/test-exports.ts";
+import { INTERNAL_HISTORICAL_PARTITION_ADOPTION } from "../../src/market/provenance/partition-commit-store.ts";
 
 describe("market-data provenance foundation", () => {
   let rootDir: string;
@@ -233,8 +234,8 @@ describe("market-data provenance foundation", () => {
         `);
         const before = lstatSync(targetPath);
 
-        const adopted = await store.adoptCanonicalParquetPartition(conn, identity);
-        const retry = await store.adoptCanonicalParquetPartition(conn, identity);
+        const adopted = await store[INTERNAL_HISTORICAL_PARTITION_ADOPTION](conn, identity);
+        const retry = await store[INTERNAL_HISTORICAL_PARTITION_ADOPTION](conn, identity);
         const after = lstatSync(targetPath);
 
         expect(adopted.receipt).toMatchObject({
@@ -270,9 +271,9 @@ describe("market-data provenance foundation", () => {
                    NULL::DOUBLE AS ask
           ) TO '${wrongPath.replaceAll("'", "''")}' (FORMAT PARQUET)
         `);
-        await expect(store.adoptCanonicalParquetPartition(conn, wrongIdentity)).rejects.toThrow(
-          /rows disagree with the registered partition/,
-        );
+        await expect(
+          store[INTERNAL_HISTORICAL_PARTITION_ADOPTION](conn, wrongIdentity),
+        ).rejects.toThrow(/rows disagree with the registered partition/);
       } finally {
         conn.closeSync();
         instance.closeSync();
@@ -664,6 +665,33 @@ describe("market-data provenance foundation", () => {
       expect(readFileSync(targetPath)).toEqual(bytes);
       expect(readFileSync(join(movedParent, "data.parquet"))).toEqual(bytes);
       expect(existsSync(join(rootDir, ".provenance", "rejected-prepared"))).toBe(false);
+    });
+
+    it("preserves the operation error when releasing its claim also fails", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const bytes = Buffer.from("double-failure");
+      const targetPath = targetFor(identity.partition);
+      const preparedPath = `${targetPath}.prepared-double-failure`;
+      mkdirSync(dirname(targetPath), { recursive: true });
+      writeFileSync(preparedPath, bytes);
+      const operationError = new Error("injected primary operation failure");
+      const cleanupError = new Error("injected release failure");
+      setPartitionCommitTestFault(store, (point) => {
+        if (point === "after-claim-open") throw operationError;
+        if (point === "before-release-claim") throw cleanupError;
+      });
+
+      let observed: unknown;
+      try {
+        await store.publishFileCommit(publicationInput(preparedPath, targetPath, bytes));
+      } catch (error) {
+        observed = error;
+      } finally {
+        setPartitionCommitTestFault(store);
+      }
+
+      expect(observed).toBe(operationError);
+      expect((observed as Error & { cleanupError?: unknown }).cleanupError).toBe(cleanupError);
     });
 
     it("inspection refuses byte-identical symlink and hard-link replacements", async () => {

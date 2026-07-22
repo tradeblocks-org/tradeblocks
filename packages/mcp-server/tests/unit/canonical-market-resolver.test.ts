@@ -350,7 +350,7 @@ describe("producer-owned canonical market resolver", () => {
 
   it("refuses to certify a session beyond the bundled rate horizon", async () => {
     const registry = await publishCanonicalMarketResolverRegistry(partitions.objects);
-    const session = "2026-07-06";
+    const session = "2026-07-21";
     const closure = await publishInputClosure(partitions.objects, {
       registry: registry.address,
       observations: [
@@ -377,7 +377,7 @@ describe("producer-owned canonical market resolver", () => {
         completeThrough: session,
         refreshCompletion: completion.address,
       }),
-    ).rejects.toThrow(/sofr_rates input is stale after 2026-05-07/);
+    ).rejects.toThrow(/sofr_rates input is stale after 2026-07-20/);
   });
 
   it("slices blackout semantics by cutoff and detects a historical content change", async () => {

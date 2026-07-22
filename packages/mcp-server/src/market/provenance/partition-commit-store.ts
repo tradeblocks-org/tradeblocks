@@ -92,6 +92,18 @@ export interface PublishPartitionFileInput extends RecordPartitionCommitInput {
   expectedTargetPath: string;
 }
 
+/**
+ * Package-internal capability used only to bring validated historical
+ * canonical-layout bytes under authority. It is deliberately a symbol so the
+ * exported store does not expose a general string-named "bless this file"
+ * operation. The migration caller must first validate its legacy source and
+ * XNYS session; the store independently revalidates canonical schema,
+ * partition identity, coverage, inode, and exact bytes.
+ */
+export const INTERNAL_HISTORICAL_PARTITION_ADOPTION = Symbol(
+  "tradeblocks.internal.historical-partition-adoption",
+);
+
 export interface PartitionCommitRecorder {
   publishFileCommit(input: PublishPartitionFileInput): Promise<StoredPartitionCommit>;
   readCommit(address: CanonicalJsonAddress): Promise<StoredPartitionCommit>;
@@ -133,7 +145,10 @@ interface AuthorityTip {
   commit: StoredPartitionCommit;
 }
 
-type PartitionCommitTestFaultPoint = "after-claim-open" | "after-event-before-head";
+type PartitionCommitTestFaultPoint =
+  | "after-claim-open"
+  | "after-event-before-head"
+  | "before-release-claim";
 const partitionCommitTestFaults = new WeakMap<
   FilePartitionCommitStore,
   (point: PartitionCommitTestFaultPoint) => void | Promise<void>
@@ -146,6 +161,27 @@ export function setPartitionCommitTestFault(
 ): void {
   if (fault) partitionCommitTestFaults.set(store, fault);
   else partitionCommitTestFaults.delete(store);
+}
+
+function attachPartitionLockCleanupError(primary: unknown, cleanup: unknown): unknown {
+  if (primary instanceof Error) {
+    try {
+      Object.defineProperty(primary, "cleanupError", {
+        value: cleanup,
+        enumerable: false,
+        configurable: true,
+      });
+      return primary;
+    } catch {
+      // A frozen/custom Error cannot carry the attachment; preserve both
+      // failures without discarding the operation error.
+    }
+  }
+  return new AggregateError(
+    [primary, cleanup],
+    "Partition operation failed and its lock claim could not be released",
+    { cause: primary },
+  );
 }
 
 export type PartitionInspection =
@@ -936,6 +972,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
   }
 
   private async releaseClaim(claimsDir: string, claimPath: string, token: string): Promise<void> {
+    await partitionCommitTestFaults.get(this)?.("before-release-claim");
     const owner = await this.readCanonicalFile<PartitionLockOwner>(
       path.join(claimPath, "owner.json"),
     );
@@ -968,12 +1005,18 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
     try {
       ownTicket = await this.assignTicket(claimsDir, claimPath, token);
     } catch (error) {
-      await this.releaseClaim(claimsDir, claimPath, token);
+      try {
+        await this.releaseClaim(claimsDir, claimPath, token);
+      } catch (cleanupError) {
+        throw attachPartitionLockCleanupError(error, cleanupError);
+      }
       throw error;
     }
     const deadline = Date.now() + this.lockWaitMs;
     let acquired = false;
 
+    let operationFailed = false;
+    let operationError: unknown;
     try {
       while (Date.now() <= deadline) {
         let blocked = false;
@@ -1020,8 +1063,19 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       }
       if (!acquired) throw new Error(`Timed out acquiring partition lock: ${lockRoot}`);
       return await operation();
+    } catch (error) {
+      operationFailed = true;
+      operationError = error;
+      throw error;
     } finally {
-      await this.releaseClaim(claimsDir, claimPath, token);
+      try {
+        await this.releaseClaim(claimsDir, claimPath, token);
+      } catch (cleanupError) {
+        if (operationFailed) {
+          throw attachPartitionLockCleanupError(operationError, cleanupError);
+        }
+        throw cleanupError;
+      }
     }
   }
 
@@ -1234,7 +1288,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
    * Adopt an existing canonical Parquet partition after producer-owned schema,
    * identity, coverage, row-count, and exact-byte inspection.
    */
-  async adoptCanonicalParquetPartition(
+  async [INTERNAL_HISTORICAL_PARTITION_ADOPTION](
     conn: DuckDBConnection,
     identity: PartitionIdentity,
   ): Promise<StoredPartitionCommit> {
