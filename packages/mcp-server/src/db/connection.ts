@@ -66,7 +66,10 @@ let storedThreads: string | null = null;
 let storedMemoryLimit: string | null = null;
 let storedMarketDbPath: string | null = null;
 const execFileAsync = promisify(execFile);
-const isWindows = process.platform === "win32";
+// Exported so other lock-recovery-adjacent callers (e.g. the stdio
+// parent-death watchdog in index.ts) can branch on platform without
+// re-deriving it.
+export const isWindows = process.platform === "win32";
 
 /**
  * Default DuckDB memory limit when `DUCKDB_MEMORY_LIMIT` is unset.
@@ -112,7 +115,10 @@ function parseLockHolderPid(message: string): number | null {
   return Number.isFinite(pid) ? pid : null;
 }
 
-function isProcessAlive(pid: number): boolean {
+// Exported so other lock-recovery-adjacent callers (e.g. the stdio
+// parent-death watchdog in index.ts) can reuse this instead of reimplementing
+// a `process.kill(pid, 0)` liveness probe.
+export function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
