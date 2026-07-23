@@ -1,6 +1,6 @@
 {
   "name": "tradeblocks",
-  "version": "3.6.1",
+  "version": "3.7.0",
   "author": "David Romeo <davidmromeo@gmail.com>",
   "private": true,
   "workspaces": [
