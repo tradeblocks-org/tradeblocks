@@ -1,5 +1,3 @@
-<!-- GSD:project-start source:PROJECT.md -->
-
 ## Project
 
 **TradeBlocks**
@@ -15,9 +13,6 @@ A Next.js 15 application for analyzing options trading performance. Processes CS
 - **MCP server**: New tools follow existing registration patterns (Zod schemas, sync middleware, createToolOutput)
 - **Storage**: All data in DuckDB for consistency across the analytics layer
 - **No new dependencies for core**: Massive API calls use native fetch — no SDK required
-<!-- GSD:project-end -->
-
-<!-- GSD:stack-start source:research/STACK.md -->
 
 ## Technology Stack
 
@@ -147,9 +142,6 @@ A Next.js 15 application for analyzing options trading performance. Processes CS
 - `packages/mcp-server/jest.config.js` — ESM + ts-jest preset confirmed (HIGH confidence)
 - Node.js 22 fetch stabilization: https://nodejs.org/en/blog/release/v22.0.0 (HIGH confidence — fetch stable, not experimental, since Node.js 21)
 - Jest 30 global spy pattern: jest.spyOn(globalThis, 'fetch') — standard pattern for mocking native fetch globals in Jest; confirmed consistent with Jest 30 release notes approach to ESM globals (MEDIUM confidence — verified via Jest docs cross-reference, not live Context7 query)
-<!-- GSD:stack-end -->
-
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
 
 ## Conventions
 
@@ -171,37 +163,6 @@ Frame effort as **complexity weighted to value/outcome**:
 
 When recommending between options, lead with the value delta and the blast radius — those are what David is actually weighing.
 
-<!-- GSD:conventions-end -->
-
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
-
 ## Architecture
 
 Architecture not yet mapped. Follow existing patterns found in the codebase.
-
-<!-- GSD:architecture-end -->
-
-<!-- GSD:workflow-start source:GSD defaults -->
-
-## GSD Workflow Enforcement
-
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
-
-Use these entry points:
-
-- `/gsd:quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd:debug` for investigation and bug fixing
-- `/gsd:execute-phase` for planned phase work
-
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-
-<!-- GSD:workflow-end -->
-
-<!-- GSD:profile-start -->
-
-## Developer Profile
-
-> Profile not yet configured. Run `/gsd:profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-
-<!-- GSD:profile-end -->
