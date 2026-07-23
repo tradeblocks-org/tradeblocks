@@ -159,7 +159,7 @@
     "jest": "^30.3.0",
     "ts-jest": "^29.4.9",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.0"
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=18"
