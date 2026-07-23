@@ -70,6 +70,14 @@ export interface FamilyCentroidInterval {
   effectiveN: number;
   overlapWindow: { start: string; end: string } | null;
   blockDays: number;
+  /** Honest refusal when a two-sided endpoint is unattainable at the requested level. */
+  refusalReason: "insufficient-resample-resolution" | null;
+  resampleQuantiles: {
+    lowerOneBasedRank: number;
+    upperOneBasedRank: number;
+    sampleSize: number;
+    rule: "floor(alpha / 2 * (resamples + 1)); ceil((1 - alpha / 2) * (resamples + 1))";
+  };
 }
 
 export interface ExpectedMaxOfSearch {
@@ -109,6 +117,9 @@ function assertExpectedMaxBindings(input: ParameterStudySelectionInput, familyK:
   }
   if (input.cumulativeRawK < familyK) {
     throw new RangeError("cumulativeRawK must be at least the stable family cardinality");
+  }
+  if (1 - 1 / (input.cumulativeRawK * Math.E) === 1) {
+    throw new RangeError("cumulativeRawK is too large for stable expected-max quantiles");
   }
   if (
     typeof input.cumulativeRawKSourceRef !== "string" ||
@@ -228,8 +239,9 @@ function standardizedExpectedMaximum(rawK: number): number {
  *
  * - the centroid interval estimates the complete stable family's additive path;
  * - the representative lower bound pays for selecting within that local family;
- * - expected max prices the caller-asserted cumulative raw search count under
- *   explicit centered independent-Gaussian null assumptions and binds its source.
+ * - expected max gives an expected null reference level for the caller-asserted
+ *   cumulative raw search count under explicit centered independent-Gaussian
+ *   assumptions and binds its source; it is not an alpha-calibrated decision.
  *
  * The representative is supplied by the caller and may be below the observed
  * argmax. This function never selects a winner and never derives or reduces K.
@@ -271,6 +283,13 @@ export function parameterStudySelectionStatistic(
     seed: input.seed,
     effectiveNFloorBlocks: input.effectiveNFloorBlocks,
   });
+  const twoSidedTail = (1 - input.confidenceLevel) / 2;
+  const lowerOneBasedRank = Math.floor(twoSidedTail * (input.resamples + 1));
+  const upperOneBasedRank = Math.ceil((1 - twoSidedTail) * (input.resamples + 1));
+  const centroidResolutionAttainable =
+    lowerOneBasedRank >= 1 && upperOneBasedRank <= input.resamples;
+  const centroidResolutionRefused =
+    centroidBootstrap.status === "resolved" && !centroidResolutionAttainable;
   if (
     centroidBootstrap.overlapWindow &&
     (model.window.start !== centroidBootstrap.overlapWindow.start ||
@@ -290,13 +309,20 @@ export function parameterStudySelectionStatistic(
     familyCentroidInterval: {
       point: centroidBootstrap.point,
       level: input.confidenceLevel,
-      low: centroidBootstrap.ci.low,
-      high: centroidBootstrap.ci.high,
+      low: centroidResolutionRefused ? null : centroidBootstrap.ci.low,
+      high: centroidResolutionRefused ? null : centroidBootstrap.ci.high,
       method: "paired-day-block-family-centroid",
-      status: centroidBootstrap.status,
+      status: centroidResolutionRefused ? "underpowered" : centroidBootstrap.status,
       effectiveN: centroidBootstrap.effectiveN,
       overlapWindow: centroidBootstrap.overlapWindow,
       blockDays: centroidBootstrap.blockDays,
+      refusalReason: centroidResolutionRefused ? "insufficient-resample-resolution" : null,
+      resampleQuantiles: {
+        lowerOneBasedRank,
+        upperOneBasedRank,
+        sampleSize: input.resamples,
+        rule: "floor(alpha / 2 * (resamples + 1)); ceil((1 - alpha / 2) * (resamples + 1))",
+      },
     },
     representativeLowerBound,
     expectedMaxOfSearch: {

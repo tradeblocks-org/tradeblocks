@@ -107,6 +107,13 @@ describe("parameterStudySelectionStatistic", () => {
       effectiveN: directCentroid.effectiveN,
       overlapWindow: directCentroid.overlapWindow,
       blockDays: directCentroid.blockDays,
+      refusalReason: null,
+      resampleQuantiles: {
+        lowerOneBasedRank: 5,
+        upperOneBasedRank: 195,
+        sampleSize: 199,
+        rule: "floor(alpha / 2 * (resamples + 1)); ceil((1 - alpha / 2) * (resamples + 1))",
+      },
     });
     expect(result.familyCentroidInterval.point).toBeCloseTo(
       centroidValues.reduce(
@@ -195,6 +202,28 @@ describe("parameterStudySelectionStatistic", () => {
     expect(result.familyCentroidInterval.high).toBeNull();
   });
 
+  it("refuses a two-sided centroid interval below finite-resample resolution", () => {
+    const tooFew = parameterStudySelectionStatistic(buildInput({ resamples: 38 }));
+    const attainable = parameterStudySelectionStatistic(buildInput({ resamples: 39 }));
+
+    expect(tooFew.representativeLowerBound.status).toBe("resolved");
+    expect(tooFew.familyCentroidInterval).toMatchObject({
+      status: "underpowered",
+      low: null,
+      high: null,
+      refusalReason: "insufficient-resample-resolution",
+      resampleQuantiles: {
+        lowerOneBasedRank: 0,
+        upperOneBasedRank: 39,
+        sampleSize: 38,
+      },
+    });
+    expect(attainable.familyCentroidInterval.status).toBe("resolved");
+    expect(attainable.familyCentroidInterval.low).not.toBeNull();
+    expect(attainable.familyCentroidInterval.high).not.toBeNull();
+    expect(attainable.familyCentroidInterval.refusalReason).toBeNull();
+  });
+
   it("prices one raw trial at zero and grows monotonically with raw K and null scale", () => {
     const base = buildInput();
     const oneMember = [base.stableFamilyMembers[0]];
@@ -252,6 +281,9 @@ describe("parameterStudySelectionStatistic", () => {
     expect(() => parameterStudySelectionStatistic({ ...input, cumulativeRawK: 1.5 })).toThrow(
       "cumulativeRawK must be a positive safe integer",
     );
+    expect(() =>
+      parameterStudySelectionStatistic({ ...input, cumulativeRawK: Number.MAX_SAFE_INTEGER }),
+    ).toThrow("cumulativeRawK is too large for stable expected-max quantiles");
     expect(() =>
       parameterStudySelectionStatistic({
         ...input,
