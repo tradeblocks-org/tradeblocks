@@ -126,34 +126,6 @@ The `.claude/CLAUDE.md` file provides project context to Claude Code, including:
 
 When working with Claude Code, this file is automatically loaded to provide codebase context.
 
-### GSD Workflow
-
-The project uses the "Get Shit Done" (GSD) workflow for structured development:
-
-```
-.planning/
-├── PROJECT.md      # Project goals and context
-├── ROADMAP.md      # Milestone and phase overview
-├── STATE.md        # Current position and accumulated decisions
-├── ISSUES.md       # Deferred issues and enhancements
-├── config.json     # Workflow mode (interactive/yolo)
-└── phases/         # Phase directories with PLAN.md and SUMMARY.md files
-```
-
-**Common GSD commands:**
-
-- `/gsd:progress` - Check current progress and next actions
-- `/gsd:plan-phase <N>` - Create detailed plan for a phase
-- `/gsd:execute-phase <N>` - Execute all plans in a phase
-- `/gsd:verify-work` - Manual acceptance testing
-
-The GSD workflow provides:
-
-- Structured planning with explicit success criteria
-- Atomic commits per task
-- Accumulated context across sessions (decisions, issues, blockers)
-- Subagent execution for parallel work
-
 ### MCP Server Integration
 
 Claude Code can interact with TradeBlocks data via the MCP server:

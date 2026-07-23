@@ -410,33 +410,6 @@ requirements. Do this automatically without being asked.**
 
 Tests go in the matching test directory (e.g., `packages/mcp-server/tests/unit/` for MCP utils, `tests/unit/` for lib). If the module needs to be imported from `dist/`, add its exports to `src/test-exports.ts`.
 
-GSD plans MUST include a test task for any new utility module. If a plan creates a utility file with exported pure functions but no test task, flag it during planning.
+Any implementation plan MUST include a test task for each new utility module. If a plan creates a utility file with exported pure functions but no test task, flag it during planning.
 
-## GSD Workflow Rules
-
-1. **Use GSD method for all features:**
-   - `/gsd:discuss-phase` - Understand requirements
-   - `/gsd:plan-phase` - Create PLAN.md with tasks
-   - `/gsd:execute-plan` - Execute with subagents
-   - NEVER code without a plan
-
-2. **Subagent execution:**
-   - Spawn multiple subagents IN PARALLEL (single message, multiple Task calls)
-   - Each subagent gets fresh 200k context
-   - Subagents commit their own work and create SUMMARY.md
-   - Main context only for orchestration (~5% usage)
-   - NEVER use TaskOutput to read full subagent output
-
-3. **Plans location:** `.planning/phases/XX-name/`
-
-4. **After subagent work:** Always run `npm run typecheck` before final commit
-
-5. **Version management:**
-   - MCP server version (`packages/mcp-server/package.json`), git tags, and GSD milestones all use the same version number
-   - Bump MCP server version to match the milestone version at milestone completion (e.g., milestone v2.1 → package version 2.1.0 → git tag v2.1)
-   - Mid-milestone patch bumps use the milestone version with patch increments (e.g., 2.1.1, 2.1.2)
-
-6. **Milestone completion checklist:**
-   - Archive milestone to `.planning/milestones/`
-   - Update `.planning/MILESTONES.md`, `ROADMAP.md`, `PROJECT.md`, `STATE.md`
-   - Create git tag `v{X.Y}` for the milestone
+After implementation work, always run `npm run typecheck` before the final commit.
