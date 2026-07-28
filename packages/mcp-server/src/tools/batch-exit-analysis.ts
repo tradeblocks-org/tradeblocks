@@ -404,8 +404,9 @@ export function registerBatchExitAnalysisTools(
       description:
         "Analyze how a candidate exit policy would perform across multiple trades in a block. " +
         "Replays each matching trade, evaluates exit triggers against the minute-level P&L path, " +
-        "and returns aggregate statistics (win rate, Sharpe, profit factor, drawdown) comparable " +
-        "to get_statistics. Includes per-trigger attribution showing which triggers drive outcomes. " +
+        "and returns aggregate statistics (win rate, profit factor, drawdown, and a legacy " +
+        "nonannualized trade-P&L signal-to-noise value in sharpeRatio). That legacy field is not " +
+        "comparable to the daily-return Sharpe from get_statistics. Includes per-trigger attribution. " +
         "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
         "trades with missing data are skipped. Use the data-pipeline tools to backfill cache, " +
         "and strategy profiles to iterate on exit rules.",

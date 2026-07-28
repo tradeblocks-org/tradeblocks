@@ -72,6 +72,12 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
             "Type of CSV: 'tradelog' (default) for trade records with P/L, " +
               "'dailylog' for daily portfolio values, 'reportinglog' for actual/reported trades",
           ),
+        plBasis: z
+          .enum(["net_includes_fees", "gross_before_fees"])
+          .default("net_includes_fees")
+          .describe(
+            "Basis of the tradelog P/L column. Use 'net_includes_fees' for Option Omega exports (default), or 'gross_before_fees' when commission/fee columns still need to be deducted.",
+          ),
         searchPaths: z
           .array(z.string())
           .optional()
@@ -81,7 +87,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           ),
       }),
     },
-    async ({ csvPath, blockName, csvType, searchPaths }) => {
+    async ({ csvPath, blockName, csvType, plBasis, searchPaths }) => {
       try {
         let resolvedPath = csvPath;
 
@@ -122,6 +128,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           csvPath: resolvedPath,
           blockName,
           csvType,
+          plBasis,
         });
 
         // Brief summary for user display (use result.csvType which reflects auto-detection)
@@ -132,6 +139,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           blockId: result.blockId,
           name: result.name,
           csvType: result.csvType,
+          plBasis: result.plBasis ?? null,
           sourcePath: resolvedPath,
           recordCount: result.recordCount,
           dateRange: result.dateRange,

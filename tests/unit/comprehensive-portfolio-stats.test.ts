@@ -138,11 +138,11 @@ describe("Comprehensive Portfolio Statistics", () => {
       expect(stats.totalTrades).toBe(4);
       expect(stats.totalPl).toBe(275); // 150 - 75 + 200 + 0
       expect(stats.winningTrades).toBe(2);
-      expect(stats.losingTrades).toBe(1);
-      expect(stats.breakEvenTrades).toBe(1);
+      expect(stats.losingTrades).toBe(2);
+      expect(stats.breakEvenTrades).toBe(0);
       expect(stats.winRate).toBeCloseTo(0.5, 2); // 2/4
-      expect(stats.avgWin).toBeCloseTo(175, 2); // (150 + 200) / 2
-      expect(stats.avgLoss).toBe(-75);
+      expect(stats.avgWin).toBeCloseTo(163, 2);
+      expect(stats.avgLoss).toBeCloseTo(-55.5, 2);
     });
 
     test("should handle empty portfolio", () => {
@@ -169,7 +169,7 @@ describe("Comprehensive Portfolio Statistics", () => {
       expect(stats.winningTrades).toBe(2);
       expect(stats.losingTrades).toBe(0);
       expect(stats.winRate).toBe(1.0);
-      expect(stats.avgWin).toBe(175);
+      expect(stats.avgWin).toBe(163);
     });
 
     test("should filter by Strategy B", () => {
@@ -181,7 +181,7 @@ describe("Comprehensive Portfolio Statistics", () => {
       expect(stats.winningTrades).toBe(0);
       expect(stats.losingTrades).toBe(1);
       expect(stats.winRate).toBe(0);
-      expect(stats.avgLoss).toBe(-75);
+      expect(stats.avgLoss).toBe(-95);
     });
 
     test("should handle break-even trades separately", () => {
@@ -190,9 +190,9 @@ describe("Comprehensive Portfolio Statistics", () => {
 
       expect(stats.totalTrades).toBe(1);
       expect(stats.totalPl).toBe(0);
-      expect(stats.breakEvenTrades).toBe(1);
+      expect(stats.breakEvenTrades).toBe(0);
       expect(stats.winningTrades).toBe(0);
-      expect(stats.losingTrades).toBe(0);
+      expect(stats.losingTrades).toBe(1);
     });
   });
 

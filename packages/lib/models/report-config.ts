@@ -301,15 +301,15 @@ export const REPORT_FIELDS: FieldInfo[] = [
     label: "Profit/Loss",
     category: "returns",
     unit: "$",
-    description: "Trade profit or loss in dollars (before fees)",
+    description: "Trade profit or loss in the source-declared P/L basis",
   },
   {
     field: "netPl",
     label: "Net P/L",
     category: "returns",
     unit: "$",
-    description: "Profit/loss after subtracting all fees",
-    formula: "P/L - Total Fees",
+    description: "Profit/loss after fees, deducting recorded fees only when the source is gross",
+    formula: "basis-aware net P/L",
   },
   {
     field: "plPct",

@@ -13,21 +13,38 @@ import {
   formatPercent,
   formatRatio,
 } from "../../utils/output-formatter.ts";
-import { PortfolioStatsCalculator, calculateDailyExposure } from "@tradeblocks/lib";
-import type { Trade, PeakExposure, EquityCurvePoint } from "@tradeblocks/lib";
+import {
+  PortfolioStatsCalculator,
+  calculateDailyExposure,
+  rebuildEquityCurve,
+  getNetPl,
+} from "@tradeblocks/lib";
+import type { Trade, DailyLogEntry, PeakExposure, EquityCurvePoint } from "@tradeblocks/lib";
 import { resolveTradeTicker } from "../../utils/ticker.ts";
 import {
   filterByStrategy,
-  filterByDateRange,
+  filterByRealizationDateRange,
   filterDailyLogsByDateRange,
 } from "../shared/filters.ts";
 import { withSyncedBlock, withFullSync } from "../middleware/sync-middleware.ts";
+
+export function rebuildSubsetEquity(
+  trades: Trade[],
+  allTrades: Trade[],
+  dailyLogs?: DailyLogEntry[],
+): Trade[] {
+  const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(allTrades, dailyLogs);
+  return rebuildEquityCurve(trades, {
+    initialCapital,
+    useNetPl: true,
+  });
+}
 
 /**
  * Calculate peak daily exposure using the shared sweep-line algorithm.
  * Wraps the centralized calculateDailyExposure function.
  */
-function calculatePeakExposure(
+export function calculatePeakExposure(
   trades: Trade[],
   initialCapital: number,
 ): {
@@ -44,7 +61,7 @@ function calculatePeakExposure(
   let runningEquity = initialCapital;
 
   for (const trade of sortedByClose) {
-    runningEquity += trade.pl;
+    runningEquity += getNetPl(trade);
     equityCurve.push({
       date: new Date(trade.dateClosed!).toISOString(),
       equity: runningEquity,
@@ -64,8 +81,6 @@ function calculatePeakExposure(
  * Register core block tools
  */
 export function registerCoreBlockTools(server: McpServer, baseDir: string): void {
-  const calculator = new PortfolioStatsCalculator();
-
   // Tool 1: list_blocks (formerly list_backtests)
   server.registerTool(
     "list_blocks",
@@ -382,7 +397,7 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
     "get_statistics",
     {
       description:
-        "Get comprehensive portfolio statistics: win rate, Sharpe ratio, max drawdown, P&L metrics, and more. Use blockId from list_blocks. Optionally filter by strategy, ticker, or date range.",
+        "Get comprehensive portfolio statistics with explicit P/L and Sharpe methodology. Option Omega P/L is already net of fees. Sharpe defaults to historical FRED DTB3 rates; optionally provide a fixed annual rate. Use blockId from list_blocks. Optionally filter by strategy, ticker, or date range.",
       inputSchema: z.object({
         blockId: z.string().describe("Block ID from list_blocks (e.g., 'main-port')"),
         strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
@@ -392,19 +407,31 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
           .describe("Filter trades by underlying ticker symbol (e.g., 'SPY', 'AAPL')"),
         startDate: z.string().optional().describe("Start date filter (YYYY-MM-DD)"),
         endDate: z.string().optional().describe("End date filter (YYYY-MM-DD)"),
+        riskFreeRateAnnualPct: z
+          .number()
+          .gt(-100)
+          .lte(100)
+          .optional()
+          .describe(
+            "Optional fixed annual risk-free rate in percentage points (for example, 2 means 2%). Omit to use historical FRED DTB3 rates.",
+          ),
       }),
     },
     withSyncedBlock(
       baseDir,
-      async ({ blockId, strategy, tickerFilter, startDate, endDate }, { syncResult }) => {
+      async (
+        { blockId, strategy, tickerFilter, startDate, endDate, riskFreeRateAnnualPct },
+        { syncResult },
+      ) => {
         try {
           const block = await loadBlock(baseDir, blockId);
-          let trades = block.trades;
+          const allTrades = block.trades;
+          let trades = allTrades;
           const dailyLogs = block.dailyLogs;
 
           // Apply filters
           trades = filterByStrategy(trades, strategy);
-          trades = filterByDateRange(trades, startDate, endDate);
+          trades = filterByRealizationDateRange(trades, startDate, endDate);
 
           // Apply ticker filter (supports both explicit ticker columns and legs-derived symbols)
           if (tickerFilter) {
@@ -425,18 +452,27 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
 
           // Filter daily logs by date range when date filters are provided
           // Only applies when not strategy-filtered (daily logs represent full portfolio)
-          const isStrategyFiltered = !!strategy;
+          const isSubsetFiltered = !!strategy || !!tickerFilter;
+          if (isSubsetFiltered) {
+            trades = rebuildSubsetEquity(trades, allTrades, dailyLogs);
+          }
           let filteredDailyLogs = dailyLogs;
-          if (!isStrategyFiltered && (startDate || endDate) && dailyLogs) {
+          if (!isSubsetFiltered && (startDate || endDate) && dailyLogs) {
             filteredDailyLogs = filterDailyLogsByDateRange(dailyLogs, startDate, endDate);
           }
 
-          // When strategy filter is applied, we MUST use trade-based calculations
-          // because daily logs represent the FULL portfolio, not per-strategy
-          const stats = calculator.calculatePortfolioStats(
+          // When a subset filter is applied, daily logs cannot be used because they
+          // represent the full portfolio rather than the selected strategy/ticker.
+          const effectiveDailyLogs = isSubsetFiltered ? undefined : filteredDailyLogs;
+          const requestCalculator = new PortfolioStatsCalculator({ riskFreeRateAnnualPct });
+          const stats = requestCalculator.calculatePortfolioStats(
             trades,
-            isStrategyFiltered ? undefined : filteredDailyLogs,
-            isStrategyFiltered,
+            effectiveDailyLogs,
+            isSubsetFiltered,
+          );
+          const calculationMethodology = requestCalculator.getCalculationMethodology(
+            trades,
+            effectiveDailyLogs,
           );
 
           // Calculate peak daily exposure
@@ -453,6 +489,7 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
               tickerFilter: tickerFilter ?? null,
               startDate: startDate ?? null,
               endDate: endDate ?? null,
+              riskFreeRateAnnualPct: riskFreeRateAnnualPct ?? null,
             },
             stats: {
               totalTrades: stats.totalTrades,
@@ -487,6 +524,7 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
               byDollars: peakExposure.peakByDollars,
               byPercent: peakExposure.peakByPercent,
             },
+            calculationMethodology,
             // Add sync info if sync occurred
             ...(syncResult.status === "synced"
               ? { syncInfo: { status: "synced", tradeCount: syncResult.tradeCount } }

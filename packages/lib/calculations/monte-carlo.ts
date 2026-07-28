@@ -418,6 +418,7 @@ export function createSyntheticMaxLossTrades(
         avgClosingCost: 0,
         reasonForClose,
         pl: -maxAbsoluteLoss,
+        plBasis: "net_includes_fees",
         numContracts: avgContracts,
         fundsAtClose: 0,
         marginReq: maxAbsoluteLoss,

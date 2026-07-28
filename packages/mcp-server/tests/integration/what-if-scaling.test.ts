@@ -5,9 +5,9 @@
  * Uses test fixture: marginal-test-block with 3 strategies (HighSharpe, Volatile, Neutral).
  *
  * Fixture data (30 trades total):
- * - HighSharpe (10 trades): Consistent wins (~$200 each), $2055 total P/L, $30 total commissions
- * - Volatile (10 trades): Big wins and losses, $1280 total P/L, $60 total commissions
- * - Neutral (10 trades): Alternating wins/losses, $200 total P/L, $30 total commissions
+ * - HighSharpe (10 trades): Consistent wins, $2055 Option Omega net P/L, $30 fees
+ * - Volatile (10 trades): Big wins/losses, $1280 Option Omega net P/L, $60 fees
+ * - Neutral (10 trades): Alternating wins/losses, $200 Option Omega net P/L, $30 fees
  *
  * CLI Test Mode Verification:
  * TRADEBLOCKS_DATA_DIR=~/backtests tradeblocks-mcp --call what_if_scaling '{"blockId":"main-port-2026","strategyWeights":{"5/7 17Δ":0.5}}'
@@ -21,7 +21,14 @@ import { fileURLToPath } from "url";
 
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { loadBlock, PortfolioStatsCalculator } from "../../src/test-exports.ts";
+import {
+  buildModifiedTrades,
+  filterByRealizationDateRange,
+  getNetPl,
+  loadBlock,
+  PortfolioStatsCalculator,
+  rebuildCounterfactualBaseline,
+} from "../../src/test-exports.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,32 +40,12 @@ interface Trade {
   pl: number;
   openingCommissionsFees: number;
   closingCommissionsFees: number;
+  plBasis?: "net_includes_fees" | "gross_before_fees";
   dateOpened: Date;
+  dateClosed?: Date;
+  timeClosed?: string;
+  fundsAtClose: number;
   [key: string]: unknown;
-}
-
-/**
- * Filter trades by date range (matching tool implementation)
- */
-function filterByDateRange(trades: Trade[], startDate?: string, endDate?: string): Trade[] {
-  let filtered = trades;
-
-  if (startDate) {
-    const start = new Date(startDate);
-    if (!isNaN(start.getTime())) {
-      filtered = filtered.filter((t) => new Date(t.dateOpened) >= start);
-    }
-  }
-
-  if (endDate) {
-    const end = new Date(endDate);
-    if (!isNaN(end.getTime())) {
-      end.setHours(23, 59, 59, 999);
-      filtered = filtered.filter((t) => new Date(t.dateOpened) <= end);
-    }
-  }
-
-  return filtered;
 }
 
 /**
@@ -80,7 +67,7 @@ async function simulateWhatIfScaling(
   let trades: Trade[] = block.trades;
 
   // Apply date range filter
-  trades = filterByDateRange(trades, startDate, endDate);
+  trades = filterByRealizationDateRange(trades, startDate, endDate);
 
   if (trades.length === 0) {
     return {
@@ -121,7 +108,11 @@ async function simulateWhatIfScaling(
   }
 
   // Calculate original (baseline) portfolio metrics
-  const baselineStats = calculator.calculatePortfolioStats(trades, undefined, true);
+  const baselineStats = calculator.calculatePortfolioStats(
+    rebuildCounterfactualBaseline(trades),
+    undefined,
+    true,
+  );
 
   // Build scaled trades
   type ScaledTrade = Trade & {
@@ -148,12 +139,7 @@ async function simulateWhatIfScaling(
   }
 
   // Create modified trades for scaled portfolio
-  const modifiedTrades: Trade[] = scaledTrades.map((st) => ({
-    ...st,
-    pl: st.scaledPl,
-    openingCommissionsFees: st.scaledOpeningComm,
-    closingCommissionsFees: st.scaledClosingComm,
-  }));
+  const modifiedTrades = buildModifiedTrades(scaledTrades, trades) as Trade[];
 
   // Calculate scaled portfolio metrics
   const scaledStats = calculator.calculatePortfolioStats(modifiedTrades, undefined, true);
@@ -189,7 +175,7 @@ async function simulateWhatIfScaling(
       originalByStrategy[trade.strategy] = { trades: 0, netPl: 0 };
     }
     originalByStrategy[trade.strategy].trades++;
-    const netPl = trade.pl - trade.openingCommissionsFees - trade.closingCommissionsFees;
+    const netPl = getNetPl(trade);
     originalByStrategy[trade.strategy].netPl += netPl;
     totalOriginalPl += netPl;
   }
@@ -200,7 +186,12 @@ async function simulateWhatIfScaling(
       scaledByStrategy[st.strategy] = { trades: 0, netPl: 0 };
     }
     scaledByStrategy[st.strategy].trades++;
-    const netPl = st.scaledPl - st.scaledOpeningComm - st.scaledClosingComm;
+    const netPl = getNetPl({
+      ...st,
+      pl: st.scaledPl,
+      openingCommissionsFees: st.scaledOpeningComm,
+      closingCommissionsFees: st.scaledClosingComm,
+    });
     scaledByStrategy[st.strategy].netPl += netPl;
     totalScaledPl += netPl;
   }
@@ -263,6 +254,23 @@ async function simulateWhatIfScaling(
 }
 
 describe("what_if_scaling", () => {
+  it("includes open-before/close-inside trades and excludes open-inside/close-after trades", () => {
+    const trades = [
+      {
+        strategy: "A",
+        dateOpened: new Date(2025, 11, 31),
+        dateClosed: new Date(2026, 0, 2),
+      },
+      {
+        strategy: "B",
+        dateOpened: new Date(2026, 0, 2),
+        dateClosed: new Date(2026, 0, 4),
+      },
+    ] as Trade[];
+
+    expect(filterByRealizationDateRange(trades, "2026-01-01", "2026-01-03")).toEqual([trades[0]]);
+  });
+
   describe("no weights (baseline = scaled)", () => {
     it("should return identical metrics when no weights specified", async () => {
       const result = await simulateWhatIfScaling(FIXTURES_DIR, "marginal-test-block");
@@ -300,7 +308,8 @@ describe("what_if_scaling", () => {
 
       const highSharpe = result.perStrategy?.find((s) => s.strategy === "HighSharpe");
       expect(highSharpe?.weight).toBe(0.5);
-      // Net P/L should be halved (approximately, accounting for scaled commissions)
+      expect(highSharpe?.original.netPl).toBe(2055);
+      expect(highSharpe?.scaled.netPl).toBe(1027.5);
       expect(highSharpe?.scaled.netPl).toBeCloseTo(highSharpe!.original.netPl * 0.5, 1);
       expect(highSharpe?.delta.netPlPct).toBeCloseTo(-50, 1);
     });
@@ -330,6 +339,32 @@ describe("what_if_scaling", () => {
         baseline.comparison?.netPl.original ?? 0,
       );
     });
+  });
+
+  it("rebuilds gross-basis scaled equity from net P/L", () => {
+    const original = {
+      strategy: "Gross",
+      pl: 110,
+      plBasis: "gross_before_fees" as const,
+      openingCommissionsFees: 5,
+      closingCommissionsFees: 5,
+      dateOpened: new Date("2026-01-02"),
+      dateClosed: new Date("2026-01-02"),
+      timeClosed: "15:55:00",
+      fundsAtClose: 1100,
+    } as Trade;
+    const scaled = {
+      ...original,
+      scaledPl: 55,
+      scaledOpeningComm: 2.5,
+      scaledClosingComm: 2.5,
+      weight: 0.5,
+    };
+
+    const [modified] = buildModifiedTrades([scaled], [original]);
+
+    expect(getNetPl(modified)).toBe(50);
+    expect(modified.fundsAtClose).toBe(1050);
   });
 
   describe("single strategy 2.0x", () => {

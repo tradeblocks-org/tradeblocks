@@ -6,7 +6,7 @@
  * Uses math.js for statistical calculations to ensure numpy compatibility.
  *
  * Key improvements for consistency:
- * - Sharpe Ratio: Uses sample std (N-1) via math.js 'uncorrected' parameter
+ * - Sharpe Ratio: Uses sample std (N-1) via math.js 'unbiased' parameter
  * - Sortino Ratio: Uses standard downside deviation = sqrt((1/N) * sum(min(excess_i, 0)^2))
  *   where N = total observations (RMS of negative excess returns from zero, not std of negatives)
  * - Mean calculations: Replaced manual reduce operations with math.js mean()
@@ -19,10 +19,21 @@
 import { std, mean, min, max } from "mathjs";
 import type { Trade } from "../models/trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
-import type { PortfolioStats, StrategyStats, AnalysisConfig } from "../models/portfolio-stats.ts";
+import type {
+  PortfolioStats,
+  StrategyStats,
+  AnalysisConfig,
+  PortfolioCalculationMethodology,
+} from "../models/portfolio-stats.ts";
 import type { NormalizedPortfolioStats } from "../models/portfolio-stats-normalized.ts";
 import { asDecimal01 } from "../types/percentage.ts";
-import { getRiskFreeRate } from "../utils/risk-free-rate.ts";
+import {
+  formatDateToKey,
+  getLatestRateDate,
+  getRiskFreeRate,
+  resolveTreasuryRateByKey,
+} from "../utils/risk-free-rate.ts";
+import { getNetPl } from "../utils/equity-curve.ts";
 
 /**
  * Daily return with associated date for date-based risk-free rate calculations.
@@ -31,6 +42,10 @@ import { getRiskFreeRate } from "../utils/risk-free-rate.ts";
 interface DailyReturnWithDate {
   date: Date;
   return: number;
+}
+
+function getMetricPl(trade: Trade): number {
+  return getNetPl(trade);
 }
 
 /**
@@ -51,6 +66,13 @@ export class PortfolioStatsCalculator {
 
   constructor(config: Partial<AnalysisConfig> = {}) {
     this.config = { ...DEFAULT_ANALYSIS_CONFIG, ...config };
+    const fixedRate = this.config.riskFreeRateAnnualPct;
+    if (
+      fixedRate !== undefined &&
+      (!Number.isFinite(fixedRate) || fixedRate <= -100 || fixedRate > 100)
+    ) {
+      throw new RangeError("riskFreeRateAnnualPct must be greater than -100 and at most 100");
+    }
   }
 
   /**
@@ -73,7 +95,7 @@ export class PortfolioStatsCalculator {
         if (!trade.dateOpened) return false;
 
         // Validate date
-        const date = new Date(trade.dateOpened);
+        const date = new Date(trade.dateClosed ?? trade.dateOpened);
         if (isNaN(date.getTime())) return false;
 
         // Check commissions
@@ -98,7 +120,13 @@ export class PortfolioStatsCalculator {
       ? undefined // Force trade-based calculations for strategy filtering
       : dailyLogEntries;
 
-    // Debug logging removed for tests
+    // Derived metrics always use net-after-fee P/L. The original reported P/L
+    // remains available separately as totalPl.
+    const metricTrades = validTrades.map((trade) => ({
+      ...trade,
+      pl: getMetricPl(trade),
+      plBasis: "net_includes_fees" as const,
+    }));
 
     // Basic statistics
     const totalTrades = validTrades.length;
@@ -107,12 +135,12 @@ export class PortfolioStatsCalculator {
       (sum, trade) => sum + trade.openingCommissionsFees + trade.closingCommissionsFees,
       0,
     );
-    const netPl = totalPl - totalCommissions;
+    const netPl = validTrades.reduce((sum, trade) => sum + getNetPl(trade), 0);
 
     // Win/Loss analysis
-    const winningTradesList = validTrades.filter((trade) => trade.pl > 0);
-    const losingTradesList = validTrades.filter((trade) => trade.pl < 0);
-    const breakEvenTradesList = validTrades.filter((trade) => trade.pl === 0);
+    const winningTradesList = metricTrades.filter((trade) => trade.pl > 0);
+    const losingTradesList = metricTrades.filter((trade) => trade.pl < 0);
+    const breakEvenTradesList = metricTrades.filter((trade) => trade.pl === 0);
 
     const winRate = winningTradesList.length / totalTrades;
     const avgWin =
@@ -123,7 +151,7 @@ export class PortfolioStatsCalculator {
       losingTradesList.length > 0 ? (mean(losingTradesList.map((trade) => trade.pl)) as number) : 0;
 
     // Max win/loss - handle empty arrays
-    const plValues = validTrades
+    const plValues = metricTrades
       .map((trade) => trade.pl)
       .filter((pl) => typeof pl === "number" && !isNaN(pl));
     const maxWin =
@@ -141,28 +169,28 @@ export class PortfolioStatsCalculator {
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
 
     // Drawdown calculation
-    const maxDrawdown = this.calculateMaxDrawdown(validTrades, adjustedDailyLogs);
+    const maxDrawdown = this.calculateMaxDrawdown(metricTrades, adjustedDailyLogs);
 
     // Daily P/L calculation
-    const avgDailyPl = this.calculateAvgDailyPl(validTrades, adjustedDailyLogs);
+    const avgDailyPl = this.calculateAvgDailyPl(metricTrades, adjustedDailyLogs);
 
     // Sharpe ratio (if we have daily data)
-    const sharpeRatio = this.calculateSharpeRatio(validTrades, adjustedDailyLogs);
+    const sharpeRatio = this.calculateSharpeRatio(metricTrades, adjustedDailyLogs);
 
     // Advanced metrics
-    const cagr = this.calculateCAGR(validTrades);
-    const sortinoRatio = this.calculateSortinoRatio(validTrades, adjustedDailyLogs);
-    const calmarRatio = this.calculateCalmarRatio(validTrades, adjustedDailyLogs);
-    const kellyPercentage = this.calculateKellyPercentage(validTrades);
+    const cagr = this.calculateCAGR(metricTrades);
+    const sortinoRatio = this.calculateSortinoRatio(metricTrades, adjustedDailyLogs);
+    const calmarRatio = this.calculateCalmarRatio(metricTrades, adjustedDailyLogs);
+    const kellyPercentage = this.calculateKellyPercentage(metricTrades);
 
     // Streak calculations
-    const streaks = this.calculateStreaks(validTrades);
+    const streaks = this.calculateStreaks(metricTrades);
 
     // Time in drawdown
-    const timeInDrawdown = this.calculateTimeInDrawdown(validTrades, adjustedDailyLogs);
+    const timeInDrawdown = this.calculateTimeInDrawdown(metricTrades, adjustedDailyLogs);
 
     // Periodic win rates
-    const periodicWinRates = this.calculatePeriodicWinRates(validTrades);
+    const periodicWinRates = this.calculatePeriodicWinRates(metricTrades);
 
     // Calculate initial capital (prefer daily logs when available)
     const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(
@@ -358,7 +386,7 @@ export class PortfolioStatsCalculator {
 
     trades.forEach((trade) => {
       try {
-        const date = new Date(trade.dateOpened);
+        const date = new Date(trade.dateClosed ?? trade.dateOpened);
         if (!isNaN(date.getTime())) {
           const dateKey = date.toISOString().split("T")[0];
           const currentPl = dailyPl.get(dateKey) || 0;
@@ -398,7 +426,7 @@ export class PortfolioStatsCalculator {
 
     for (const { date, return: dailyReturn } of dailyReturnsWithDates) {
       // Get the actual Treasury rate for this specific date
-      const annualRate = getRiskFreeRate(date); // Returns annual % (e.g., 4.32 for 4.32%)
+      const annualRate = this.getAnnualRiskFreeRatePct(date);
       const dailyRiskFreeRate = annualRate / 100 / this.config.annualizationFactor;
 
       excessReturns.push(dailyReturn - dailyRiskFreeRate);
@@ -408,7 +436,7 @@ export class PortfolioStatsCalculator {
     // With date-varying risk-free rates, we must use std of excess returns (not raw returns)
     // because std(rawReturns) != std(excessReturns) when rates change materially
     const avgExcessReturn = mean(excessReturns) as number;
-    const stdDev = std(excessReturns, "uncorrected") as number; // Use sample std (N-1) of excess returns
+    const stdDev = std(excessReturns, "unbiased") as number;
 
     if (stdDev === 0) return undefined;
 
@@ -498,7 +526,7 @@ export class PortfolioStatsCalculator {
 
     for (const { date, return: dailyReturn } of dailyReturnsWithDates) {
       // Get the actual Treasury rate for this specific date
-      const annualRate = getRiskFreeRate(date); // Returns annual % (e.g., 4.32 for 4.32%)
+      const annualRate = this.getAnnualRiskFreeRatePct(date);
       const dailyRiskFreeRate = annualRate / 100 / this.config.annualizationFactor;
 
       excessReturns.push(dailyReturn - dailyRiskFreeRate);
@@ -771,8 +799,16 @@ export class PortfolioStatsCalculator {
 
     // Calculate from trade data
     const sortedTrades = [...trades].sort((a, b) => {
-      const dateCompare = new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime();
+      const dateCompare =
+        new Date(a.dateClosed ?? a.dateOpened).getTime() -
+        new Date(b.dateClosed ?? b.dateOpened).getTime();
       if (dateCompare !== 0) return dateCompare;
+      const closeTimeCompare = (a.timeClosed ?? a.timeOpened).localeCompare(
+        b.timeClosed ?? b.timeOpened,
+      );
+      if (closeTimeCompare !== 0) return closeTimeCompare;
+      const openDateCompare = new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime();
+      if (openDateCompare !== 0) return openDateCompare;
       return a.timeOpened.localeCompare(b.timeOpened);
     });
 
@@ -781,7 +817,7 @@ export class PortfolioStatsCalculator {
 
     // Group trades by date
     for (const trade of sortedTrades) {
-      const tradeDate = new Date(trade.dateOpened);
+      const tradeDate = new Date(trade.dateClosed ?? trade.dateOpened);
       const dateKey = tradeDate.toISOString().split("T")[0];
       if (!tradesByDate.has(dateKey)) {
         tradesByDate.set(dateKey, { date: tradeDate, trades: [] });
@@ -789,26 +825,156 @@ export class PortfolioStatsCalculator {
       tradesByDate.get(dateKey)!.trades.push(trade);
     }
 
-    // Calculate daily returns with dates
+    // Calculate daily returns with dates. A Sharpe annualized by 252 must use
+    // a business-day series, not a sparse series containing only trade exits.
     const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(trades);
     let portfolioValue = initialCapital;
 
-    // Sort by date key to ensure chronological order
     const sortedDateKeys = Array.from(tradesByDate.keys()).sort();
+    if (sortedDateKeys.length === 0) return [];
+    const parseDateKey = (key: string): Date => {
+      const [year, month, day] = key.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    };
+    const cursor = parseDateKey(sortedDateKeys[0]);
+    const endDate = parseDateKey(sortedDateKeys[sortedDateKeys.length - 1]);
 
-    for (const dateKey of sortedDateKeys) {
-      const { date, trades: dayTrades } = tradesByDate.get(dateKey)!;
+    while (cursor <= endDate) {
+      const dateKey = formatDateToKey(cursor);
+      const dayTrades = tradesByDate.get(dateKey)?.trades ?? [];
+      const isWeekend = cursor.getDay() === 0 || cursor.getDay() === 6;
+      const includeDate = !this.config.useBusinessDaysOnly || !isWeekend || dayTrades.length > 0;
+      if (!includeDate) {
+        cursor.setDate(cursor.getDate() + 1);
+        continue;
+      }
       const dayPl = dayTrades.reduce((sum, trade) => sum + trade.pl, 0);
       if (portfolioValue > 0) {
         dailyReturns.push({
-          date,
+          date: new Date(cursor),
           return: dayPl / portfolioValue,
         });
         portfolioValue += dayPl;
       }
+      cursor.setDate(cursor.getDate() + 1);
     }
 
     return dailyReturns;
+  }
+
+  /**
+   * Return the exact methodology used by risk-adjusted-return and net P/L calculations.
+   * MCP consumers can use this instead of inferring semantics from metric names.
+   */
+  getCalculationMethodology(
+    trades: Trade[],
+    dailyLogEntries?: DailyLogEntry[],
+  ): PortfolioCalculationMethodology {
+    const returns = this.calculateDailyReturnsWithDates(trades, dailyLogEntries);
+    const basisCounts = {
+      netIncludesFees: trades.filter((trade) => trade.plBasis === "net_includes_fees").length,
+      grossBeforeFees: trades.filter((trade) => trade.plBasis === "gross_before_fees").length,
+      undeclaredAssumedGross: trades.filter((trade) => trade.plBasis === undefined).length,
+    };
+    const basisKinds = [
+      basisCounts.netIncludesFees > 0,
+      basisCounts.grossBeforeFees > 0,
+      basisCounts.undeclaredAssumedGross > 0,
+    ].filter(Boolean).length;
+    const sourceBasis: PortfolioCalculationMethodology["pnl"]["sourceBasis"] =
+      basisKinds > 1
+        ? "mixed"
+        : basisCounts.netIncludesFees > 0
+          ? "net_includes_fees"
+          : basisCounts.grossBeforeFees > 0
+            ? "gross_before_fees"
+            : "undeclared_assumed_gross";
+    const feeHandling: PortfolioCalculationMethodology["pnl"]["feeHandling"] =
+      basisKinds > 1
+        ? "mixed"
+        : basisCounts.netIncludesFees > 0
+          ? "already_included"
+          : "deducted_once";
+
+    const dateKeys = returns.map(({ date }) => formatDateToKey(date)).sort();
+    const fixedRate = this.config.riskFreeRateAnnualPct;
+    let riskFreeRate: PortfolioCalculationMethodology["sharpe"]["riskFreeRate"];
+    if (fixedRate !== undefined) {
+      riskFreeRate = { mode: "fixed", annualRatePct: fixedRate };
+    } else {
+      const resolutionCounts = {
+        exact: 0,
+        prior: 0,
+        clampedEarliest: 0,
+        staleAfterLatest: 0,
+      };
+      for (const dateKey of dateKeys) {
+        const resolution = resolveTreasuryRateByKey(dateKey).resolution;
+        if (resolution === "exact") resolutionCounts.exact++;
+        if (resolution === "prior") resolutionCounts.prior++;
+        if (resolution === "clamped-earliest") resolutionCounts.clampedEarliest++;
+        if (resolution === "stale-after-latest") resolutionCounts.staleAfterLatest++;
+      }
+      riskFreeRate = {
+        mode: "historical",
+        series: "FRED_DTB3",
+        dataThrough: formatDateToKey(getLatestRateDate()),
+        resolutionCounts,
+      };
+    }
+
+    const usesDailyLog = !!dailyLogEntries?.length;
+    const warnings: string[] = [];
+    if (!usesDailyLog) {
+      warnings.push(
+        `No daily log was available; realized trade P/L is grouped by close date and zero-P/L ${this.config.useBusinessDaysOnly ? "weekdays" : "calendar days"} are inserted. Exchange holidays are not modeled.`,
+      );
+    }
+    if (riskFreeRate.mode === "historical" && riskFreeRate.resolutionCounts.staleAfterLatest > 0) {
+      warnings.push(
+        `${riskFreeRate.resolutionCounts.staleAfterLatest} return observations use the latest available DTB3 rate after ${riskFreeRate.dataThrough}.`,
+      );
+    }
+
+    return {
+      pnl: {
+        netPlBasis: "net_after_fees",
+        sourceBasis,
+        feeHandling,
+        basisCounts,
+      },
+      returns: {
+        source: usesDailyLog ? "daily_log" : "realized_trade_pl",
+        attribution: usesDailyLog ? "daily_log_date" : "date_closed_fallback_date_opened",
+        observations: returns.length,
+        dateRange: {
+          start: dateKeys[0] ?? null,
+          end: dateKeys[dateKeys.length - 1] ?? null,
+        },
+        idleDays: usesDailyLog
+          ? "included_as_provided"
+          : this.config.useBusinessDaysOnly
+            ? "included_business_days"
+            : "included_calendar_days",
+      },
+      sharpe: {
+        annualizationFactor: this.config.annualizationFactor,
+        volatilityEstimator: "sample_standard_deviation_n_minus_1",
+        riskFreeRate,
+      },
+      sortino: {
+        annualizationFactor: this.config.annualizationFactor,
+        downsideTarget: "zero_excess_return",
+        observationSet: "all_return_observations_positive_values_contribute_zero",
+        denominator: "total_observations_n",
+        riskFreeRate: "same_daily_rate_as_sharpe",
+      },
+      warnings,
+    };
+  }
+
+  private getAnnualRiskFreeRatePct(date: Date): number {
+    return this.config.riskFreeRateAnnualPct ?? getRiskFreeRate(date);
   }
 
   /**
@@ -873,13 +1039,23 @@ export class PortfolioStatsCalculator {
     // Fall back to trade-based calculation
     // Sort trades chronologically
     const sortedTrades = [...trades].sort((a, b) => {
-      const dateCompare = new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime();
+      const dateCompare =
+        new Date(a.dateClosed ?? a.dateOpened).getTime() -
+        new Date(b.dateClosed ?? b.dateOpened).getTime();
       if (dateCompare !== 0) return dateCompare;
+      const closeTimeCompare = (a.timeClosed ?? a.timeOpened).localeCompare(
+        b.timeClosed ?? b.timeOpened,
+      );
+      if (closeTimeCompare !== 0) return closeTimeCompare;
+      const openDateCompare = new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime();
+      if (openDateCompare !== 0) return openDateCompare;
       return a.timeOpened.localeCompare(b.timeOpened);
     });
 
     const firstTrade = sortedTrades[0];
-    return firstTrade.fundsAtClose - firstTrade.pl;
+    const capitalBasisPl =
+      firstTrade.plBasis === undefined ? firstTrade.pl : getMetricPl(firstTrade);
+    return firstTrade.fundsAtClose - capitalBasisPl;
   }
 
   /**
@@ -895,11 +1071,11 @@ export class PortfolioStatsCalculator {
     }
 
     const relevantTrades = trades.filter((trade) => {
-      const tradeDate = new Date(trade.dateOpened);
+      const tradeDate = new Date(trade.dateClosed ?? trade.dateOpened);
       return tradeDate <= targetDate;
     });
 
-    const totalPl = relevantTrades.reduce((sum, trade) => sum + trade.pl, 0);
+    const totalPl = relevantTrades.reduce((sum, trade) => sum + getMetricPl(trade), 0);
     return initialCapital + totalPl;
   }
 }

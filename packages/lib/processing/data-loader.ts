@@ -163,7 +163,12 @@ export class IndexedDBAdapter implements StorageAdapter {
     return storedTrades.map((storedTrade) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { blockId, id, ...trade } = storedTrade;
-      return trade as Trade;
+      // This store is populated by the Option Omega CSV loader. Rows written
+      // before plBasis was introduced need the same provenance as fresh imports.
+      return {
+        ...trade,
+        plBasis: trade.plBasis ?? "net_includes_fees",
+      } as Trade;
     });
   }
 
@@ -512,6 +517,7 @@ export class DataLoader {
             : undefined,
           reasonForClose: row["Reason For Close"] || undefined,
           pl: parseFloat(row["P/L"] || "0"),
+          plBasis: "net_includes_fees",
           numContracts: parseInt(row["No. of Contracts"] || "1"),
           fundsAtClose: parseFloat(row["Funds at Close"] || "0"),
           marginReq: parseFloat(row["Margin Req."] || "0"),

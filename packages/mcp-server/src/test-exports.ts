@@ -25,8 +25,8 @@ export {
   type CsvType,
 } from "./utils/csv-discovery.ts";
 
-// Export PortfolioStatsCalculator for testing block_diff logic
-export { PortfolioStatsCalculator } from "@tradeblocks/lib";
+// Export canonical metric helpers for integration tests.
+export { PortfolioStatsCalculator, getNetPl } from "@tradeblocks/lib";
 
 // Export correlation and tail-risk utilities for testing strategy_similarity
 export { calculateCorrelationMatrix, performTailRiskAnalysis } from "@tradeblocks/lib";
@@ -83,8 +83,17 @@ export { ensureMutableMarketTables, ensureMarketDataTables } from "./db/market-s
 export {
   filterByStrategy,
   filterByDateRange,
+  filterByRealizationDateRange,
   filterDailyLogsByDateRange,
 } from "./tools/shared/filters.ts";
+export {
+  buildModifiedTrades,
+  getScaledNetPl,
+  rebuildCounterfactualBaseline,
+  type ScaledTrade,
+} from "./tools/blocks/similarity.ts";
+export { calculatePeakExposure, rebuildSubsetEquity } from "./tools/blocks/core.ts";
+export { buildEquityCurve, buildMonthlyReturns } from "./tools/performance.ts";
 
 // Export field timing utilities for testing
 export {

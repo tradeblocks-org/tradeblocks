@@ -16,6 +16,7 @@ import {
   type EquityCurvePoint,
   type ExposureAtOpen,
 } from "./daily-exposure.ts";
+import { getNetPl } from "../utils/equity-curve.ts";
 
 /**
  * Static dataset with its rows for matching
@@ -150,7 +151,7 @@ function enrichSingleTrade(
   exposureAtOpen?: ExposureAtOpen,
 ): EnrichedTrade {
   const totalFees = trade.openingCommissionsFees + (trade.closingCommissionsFees ?? 0);
-  const netPl = trade.pl - totalFees;
+  const netPl = getNetPl(trade);
 
   // VIX changes
   const hasVixData = trade.openingVix != null && trade.closingVix != null;

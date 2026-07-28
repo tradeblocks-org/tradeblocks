@@ -177,6 +177,32 @@ describe("IndexedDB Integration with Data Loader", () => {
   });
 
   describe("DataLoader with IndexedDBAdapter", () => {
+    test("should stamp pre-provenance Option Omega rows as net on read", async () => {
+      const blockId = "test-block-3";
+      await tradesStore.addTrades(blockId, [
+        {
+          dateOpened: new Date("2024-01-01"),
+          timeOpened: "10:00:00",
+          openingPrice: 100,
+          legs: "CALL",
+          premium: 500,
+          pl: 100,
+          numContracts: 1,
+          fundsAtClose: 10100,
+          marginReq: 1000,
+          strategy: "Legacy OO row",
+          openingCommissionsFees: 1,
+          closingCommissionsFees: 1,
+          openingShortLongRatio: 0.5,
+        },
+      ]);
+
+      const adapter = new IndexedDBAdapter();
+      const [restored] = await adapter.getTrades(blockId);
+
+      expect(restored.plBasis).toBe("net_includes_fees");
+    });
+
     test("should load and store data using IndexedDB adapter", async () => {
       const adapter = new IndexedDBAdapter();
       const loader = new DataLoader({

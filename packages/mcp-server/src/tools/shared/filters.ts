@@ -63,6 +63,20 @@ export function filterByDateRange(trades: Trade[], startDate?: string, endDate?:
   return filtered;
 }
 
+/** Filter by realized P/L date: dateClosed with dateOpened only as a fallback. */
+export function filterByRealizationDateRange(
+  trades: Trade[],
+  startDate?: string,
+  endDate?: string,
+): Trade[] {
+  const start = validateDateParam(startDate);
+  const end = validateDateParam(endDate);
+  return trades.filter((trade) => {
+    const realizedDate = toCalendarDateStr(trade.dateClosed ?? trade.dateOpened);
+    return (!start || realizedDate >= start) && (!end || realizedDate <= end);
+  });
+}
+
 /**
  * Filter daily log entries by date range using string comparison on calendar dates.
  * Mirrors filterByDateRange but uses entry.date (Date object) instead of t.dateOpened.

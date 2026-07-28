@@ -7,8 +7,12 @@
 
 import type { Trade } from "../models/trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
-import type { PerformanceMetrics, TimePeriod } from "../models/portfolio-stats.ts";
-import { getRiskFreeRateByKey } from "../utils/risk-free-rate.ts";
+import type {
+  PerformanceMetrics,
+  TimePeriod,
+  PortfolioCalculationMethodology,
+} from "../models/portfolio-stats.ts";
+import { PortfolioStatsCalculator } from "./portfolio-stats.ts";
 
 /**
  * Performance calculator for chart data and visualizations
@@ -215,47 +219,64 @@ export class PerformanceCalculator {
   }
 
   /**
-   * Calculate rolling Sharpe ratio using date-based Treasury rates
+   * Calculate rolling Sharpe over N distinct realized-trade dates.
+   *
+   * The canonical calculator inserts zero-P/L weekdays between the first and
+   * last realized date in each window, so the actual return-observation count
+   * is disclosed in calculationMethodology. This parameter is not a count of
+   * calendar or business-day observations.
    */
   static calculateRollingSharpe(
     trades: Trade[],
-    windowDays: number = 30,
-  ): Array<{ date: string; sharpe: number }> {
+    windowRealizedDates: number = 30,
+    riskFreeRateAnnualPct?: number,
+  ): Array<{
+    date: string;
+    sharpe: number | null;
+    windowDefinition: "distinct_realized_trade_dates";
+    requestedWindowSize: number;
+    calculationMethodology: PortfolioCalculationMethodology;
+  }> {
     if (trades.length === 0) return [];
 
-    const dailyPl = this.aggregatePLByPeriod(trades, "daily");
-    const sortedDates = Object.keys(dailyPl).sort();
+    const tradesByRealizedDate = new Map<string, Trade[]>();
+    for (const trade of trades) {
+      const date = new Date(trade.dateClosed ?? trade.dateOpened);
+      const dateKey = this.getDateKey(date, "daily");
+      const existing = tradesByRealizedDate.get(dateKey) ?? [];
+      existing.push(trade);
+      tradesByRealizedDate.set(dateKey, existing);
+    }
+    const sortedDates = [...tradesByRealizedDate.keys()].sort();
 
-    if (sortedDates.length < windowDays) return [];
+    if (sortedDates.length < windowRealizedDates) return [];
 
-    const result: Array<{ date: string; sharpe: number }> = [];
+    const calculator = new PortfolioStatsCalculator({
+      riskFreeRateAnnualPct,
+    });
+    const result: Array<{
+      date: string;
+      sharpe: number | null;
+      windowDefinition: "distinct_realized_trade_dates";
+      requestedWindowSize: number;
+      calculationMethodology: PortfolioCalculationMethodology;
+    }> = [];
 
-    for (let i = windowDays - 1; i < sortedDates.length; i++) {
-      const windowDates = sortedDates.slice(i - windowDays + 1, i + 1);
-      const windowReturns = windowDates.map((date) => dailyPl[date]);
-
-      // Calculate average excess returns using date-based Treasury rates
-      // Use getRiskFreeRateByKey to avoid UTC parsing issues with YYYY-MM-DD strings
-      const excessReturns = windowDates.map((date, idx) => {
-        const annualRate = getRiskFreeRateByKey(date); // Returns annual % (e.g., 4.32)
-        const dailyRiskFreeRate = annualRate / 100 / 252;
-        return windowReturns[idx] - dailyRiskFreeRate;
-      });
-
-      const avgExcessReturn =
-        excessReturns.reduce((sum, ret) => sum + ret, 0) / excessReturns.length;
-      // Use std of excess returns (not raw returns) for consistency with date-varying rates
-      const avgExcess = avgExcessReturn;
-      const excessVariance =
-        excessReturns.reduce((sum, ret) => sum + Math.pow(ret - avgExcess, 2), 0) /
-        (excessReturns.length - 1);
-      const stdDev = Math.sqrt(excessVariance);
-
-      const sharpe = stdDev > 0 ? (avgExcessReturn / stdDev) * Math.sqrt(252) : 0;
+    for (let i = windowRealizedDates - 1; i < sortedDates.length; i++) {
+      const windowDates = sortedDates.slice(i - windowRealizedDates + 1, i + 1);
+      const windowTrades = windowDates.flatMap((date) => tradesByRealizedDate.get(date) ?? []);
+      const stats = calculator.calculatePortfolioStats(windowTrades, undefined, true);
+      const calculationMethodology = calculator.getCalculationMethodology(windowTrades);
+      calculationMethodology.warnings.push(
+        `Rolling window is ${windowRealizedDates} distinct realized-trade dates, not ${windowRealizedDates} calendar or business days.`,
+      );
 
       result.push({
         date: sortedDates[i],
-        sharpe,
+        sharpe: stats.sharpeRatio ?? null,
+        windowDefinition: "distinct_realized_trade_dates",
+        requestedWindowSize: windowRealizedDates,
+        calculationMethodology,
       });
     }
 

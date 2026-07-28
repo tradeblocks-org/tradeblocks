@@ -109,6 +109,7 @@ const KNOWN_TRADE_COLUMNS = new Set([
   "Avg. Closing Cost",
   "Reason For Close",
   "P/L",
+  "P/L Basis",
   "No. of Contracts",
   "Funds at Close",
   "Margin Req.",
@@ -188,7 +189,11 @@ function parseCSVLine(line: string): string[] {
 /**
  * Convert raw CSV record to Trade object
  */
-function convertToTrade(raw: Record<string, string>, blockId?: string): Trade | null {
+function convertToTrade(
+  raw: Record<string, string>,
+  blockId?: string,
+  defaultPlBasis: Trade["plBasis"] = "net_includes_fees",
+): Trade | null {
   try {
     const dateOpened = parseDatePreservingCalendarDay(raw["Date Opened"]);
     if (isNaN(dateOpened.getTime())) return null;
@@ -217,6 +222,10 @@ function convertToTrade(raw: Record<string, string>, blockId?: string): Trade | 
       avgClosingCost: raw["Avg. Closing Cost"] ? parseNumber(raw["Avg. Closing Cost"]) : undefined,
       reasonForClose: raw["Reason For Close"] || undefined,
       pl: parseNumber(raw["P/L"]),
+      plBasis:
+        raw["P/L Basis"] === "gross_before_fees" || raw["P/L Basis"] === "net_includes_fees"
+          ? raw["P/L Basis"]
+          : defaultPlBasis,
       numContracts: Math.round(parseNumber(raw["No. of Contracts"], 1)),
       fundsAtClose: parseNumber(raw["Funds at Close"]),
       marginReq: parseNumber(raw["Margin Req."]),
@@ -438,8 +447,8 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
         COUNT(*) as trade_count,
         MIN(t.date_opened) as min_date,
         MAX(t.date_opened) as max_date,
-        SUM(t.pl) as total_pl,
-        SUM(t.pl) - SUM(COALESCE(t.opening_commissions, 0) + COALESCE(t.closing_commissions, 0)) as net_pl
+        SUM(COALESCE(t.reported_pl, t.pl)) as total_pl,
+        SUM(t.pl) as net_pl
       FROM trades.trade_data t
       WHERE t.source IS NULL OR t.source = 'csv'
       GROUP BY t.block_id
@@ -766,6 +775,8 @@ export interface ImportCsvResult {
   };
   strategies: string[];
   blockPath: string;
+  /** Declared P/L basis persisted for imported trade logs. */
+  plBasis?: Trade["plBasis"];
 }
 
 /**
@@ -778,6 +789,24 @@ export interface ImportCsvOptions {
   blockName: string;
   /** Type of CSV data */
   csvType?: "tradelog" | "dailylog" | "reportinglog";
+  /**
+   * Basis of the P/L column for trade logs. Option Omega exports are net.
+   * Generic gross-before-fee files must declare gross_before_fees.
+   */
+  plBasis?: Trade["plBasis"];
+}
+
+function serializeCsv(records: Record<string, string>[]): string {
+  if (records.length === 0) return "";
+  const headers = Object.keys(records[0]);
+  const escapeCell = (value: string): string => {
+    if (!/[",\r\n]/.test(value)) return value;
+    return `"${value.replace(/"/g, '""')}"`;
+  };
+  return [
+    headers.map(escapeCell).join(","),
+    ...records.map((record) => headers.map((header) => escapeCell(record[header] ?? "")).join(",")),
+  ].join("\n");
 }
 
 /**
@@ -872,6 +901,7 @@ export async function importCsv(
   options: ImportCsvOptions,
 ): Promise<ImportCsvResult> {
   const { csvPath, blockName } = options;
+  const plBasis = options.plBasis ?? "net_includes_fees";
   let { csvType = "tradelog" } = options;
   const blocksDir = resolveBlocksBaseDir(baseDir);
 
@@ -934,9 +964,18 @@ export async function importCsv(
         ? "dailylog.csv"
         : "reportinglog.csv";
 
-  // Copy CSV to block directory
+  // Persist the declared P/L basis in imported trade logs so later loads do
+  // not need to infer whether commission and fee columns are already included.
   const targetPath = path.join(blockPath, targetFilename);
-  await fs.copyFile(csvPath, targetPath);
+  if (csvType === "tradelog") {
+    const recordsWithBasis = records.map((record) => ({
+      ...record,
+      "P/L Basis": plBasis,
+    }));
+    await fs.writeFile(targetPath, `${serializeCsv(recordsWithBasis)}\n`, "utf-8");
+  } else {
+    await fs.copyFile(csvPath, targetPath);
+  }
 
   // Extract metadata for return value based on CSV type
   let dateRange: { start: string | null; end: string | null } = {
@@ -949,7 +988,7 @@ export async function importCsv(
     // Parse trades to extract metadata
     const trades: Trade[] = [];
     for (const record of records) {
-      const trade = convertToTrade(record, blockName);
+      const trade = convertToTrade(record, blockName, plBasis);
       if (trade) trades.push(trade);
     }
 
@@ -1002,5 +1041,6 @@ export async function importCsv(
     dateRange,
     strategies,
     blockPath,
+    ...(csvType === "tradelog" ? { plBasis } : {}),
   };
 }

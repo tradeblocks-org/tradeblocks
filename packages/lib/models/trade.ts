@@ -23,7 +23,15 @@ export interface Trade {
   reasonForClose?: string;
 
   // Financial metrics
-  pl: number; // Profit/Loss
+  pl: number; // Profit/Loss in the basis declared by plBasis
+  /**
+   * Declares whether `pl` already includes commissions and fees.
+   *
+   * Option Omega trade-log exports use `net_includes_fees`. Programmatic
+   * callers that omit this field retain the legacy TradeBlocks assumption
+   * that `pl` is gross and fees must be deducted once.
+   */
+  plBasis?: "net_includes_fees" | "gross_before_fees";
   numContracts: number;
   fundsAtClose: number;
   marginReq: number;

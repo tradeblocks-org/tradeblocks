@@ -418,6 +418,7 @@ export class TradeProcessor {
           : undefined,
         reasonForClose: rawData["Reason For Close"] || undefined,
         pl: parseNumber(rawData["P/L"], "P/L"),
+        plBasis: "net_includes_fees",
         numContracts: Math.round(parseNumber(rawData["No. of Contracts"], "No. of Contracts")),
         fundsAtClose: parseNumber(rawData["Funds at Close"], "Funds at Close"),
         marginReq: parseNumber(rawData["Margin Req."], "Margin Req."),

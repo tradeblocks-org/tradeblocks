@@ -209,17 +209,14 @@ describe("block_diff", () => {
     it("should calculate P/L delta between blocks", async () => {
       const result = await simulateBlockDiff(FIXTURES_DIR, "mock-block", "diff-block-b");
 
-      // mock-block: 200 + 250 - 150 + 430 + 250 = 980 (gross P/L)
-      // Commissions: (1.50*2)*4 + (3.00*2)*1 = 18 for mock-block
-      // Net P/L = 980 - 18 = 962
+      // Option Omega P/L is already net: 200 + 250 - 150 + 430 + 250 = 980.
+      // Commission columns are attribution and must not be deducted again.
 
-      // diff-block-b: 225 + 400 + 150 + 180 = 955 (gross P/L)
-      // Commissions: (1.50*2)*3 + (3.00*2)*1 = 15 for diff-block-b
-      // Net P/L = 955 - 15 = 940
+      // diff-block-b: 225 + 400 + 150 + 180 = 955 net P/L.
 
-      expect(result.portfolioTotals.blockA.netPl).toBeCloseTo(962, 1);
-      expect(result.portfolioTotals.blockB.netPl).toBeCloseTo(940, 1);
-      expect(result.portfolioTotals.delta.netPl).toBeCloseTo(-22, 1);
+      expect(result.portfolioTotals.blockA.netPl).toBeCloseTo(980, 1);
+      expect(result.portfolioTotals.blockB.netPl).toBeCloseTo(955, 1);
+      expect(result.portfolioTotals.delta.netPl).toBeCloseTo(-25, 1);
     });
   });
 

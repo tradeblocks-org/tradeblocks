@@ -15,11 +15,12 @@ import type {
   CalendarDayData,
 } from "../stores/trading-calendar-store.ts";
 import { PortfolioStatsCalculator } from "../calculations/portfolio-stats.ts";
+import { getNetPl } from "../utils/equity-curve.ts";
+import { getRiskFreeRate } from "../utils/risk-free-rate.ts";
 
 /**
  * Configuration for risk metric calculations
  */
-const RISK_FREE_RATE = 2.0; // 2% annual
 const ANNUALIZATION_FACTOR = 252; // Business days
 
 /**
@@ -91,10 +92,7 @@ export function getActualPlPerContract(trade: ReportingTrade): number {
  */
 export function getBacktestPlPerContract(trade: Trade): number {
   if (trade.numContracts === 0) return 0;
-  const totalCommissions =
-    (trade.openingCommissionsFees ?? 0) + (trade.closingCommissionsFees ?? 0);
-  const netPl = trade.pl - totalCommissions;
-  return netPl / trade.numContracts;
+  return getNetPl(trade) / trade.numContracts;
 }
 
 // =============================================================================
@@ -1080,16 +1078,16 @@ export function calculateAdvancedMetrics(
  * Calculate advanced metrics from daily log entries
  */
 function calculateMetricsFromDailyLogs(filteredLogs: DailyLogEntry[]): AdvancedPerformanceMetrics {
-  // Calculate daily returns from net liquidity
-  const dailyReturns: number[] = [];
-  for (let i = 1; i < filteredLogs.length; i++) {
-    const prevValue = filteredLogs[i - 1].netLiquidity;
-    const currentValue = filteredLogs[i].netLiquidity;
-    if (prevValue > 0) {
-      const dailyReturn = (currentValue - prevValue) / prevValue;
-      dailyReturns.push(dailyReturn);
-    }
-  }
+  // Match PortfolioStatsCalculator: use each row's stated daily P/L divided by
+  // the portfolio value before that P/L, including zero-P/L observation rows.
+  const returnsWithDates = filteredLogs.map((entry) => {
+    const previousValue = entry.netLiquidity - entry.dailyPl;
+    return {
+      date: entry.date,
+      value: previousValue > 0 ? entry.dailyPl / previousValue : 0,
+    };
+  });
+  const dailyReturns = returnsWithDates.map(({ value }) => value);
 
   if (dailyReturns.length < 2) {
     return {
@@ -1105,17 +1103,16 @@ function calculateMetricsFromDailyLogs(filteredLogs: DailyLogEntry[]): AdvancedP
   }
 
   // Calculate Sharpe Ratio
-  const avgDailyReturn = mean(dailyReturns) as number;
-  const stdDev = std(dailyReturns, "uncorrected") as number;
-  const dailyRiskFreeRate = RISK_FREE_RATE / 100 / ANNUALIZATION_FACTOR;
-  const excessReturn = avgDailyReturn - dailyRiskFreeRate;
-  const sharpe = stdDev > 0 ? (excessReturn / stdDev) * Math.sqrt(ANNUALIZATION_FACTOR) : null;
+  const excessReturns = returnsWithDates.map(
+    ({ date, value }) => value - getRiskFreeRate(date) / 100 / ANNUALIZATION_FACTOR,
+  );
+  const avgExcessReturn = mean(excessReturns) as number;
+  const stdDev = std(excessReturns, "unbiased") as number;
+  const sharpe = stdDev > 0 ? (avgExcessReturn / stdDev) * Math.sqrt(ANNUALIZATION_FACTOR) : null;
 
   // Calculate Sortino Ratio
   // Downside deviation = sqrt( (1/N) * sum( min(excessReturn_i, 0)^2 ) )
   // Uses ALL N observations; positive excess returns contribute 0 to the sum.
-  const excessReturns = dailyReturns.map((ret) => ret - dailyRiskFreeRate);
-  const avgExcessReturn = mean(excessReturns) as number;
   const N = excessReturns.length;
   const sumSquaredDownside = excessReturns.reduce((sum, ret) => {
     const downside = Math.min(ret, 0);

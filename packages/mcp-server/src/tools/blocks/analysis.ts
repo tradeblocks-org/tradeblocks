@@ -13,7 +13,7 @@ import {
   formatPercent,
   formatRatio,
 } from "../../utils/output-formatter.ts";
-import { PortfolioStatsCalculator } from "@tradeblocks/lib";
+import { PortfolioStatsCalculator, rebuildEquityCurve } from "@tradeblocks/lib";
 import type { Trade } from "@tradeblocks/lib";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
 import { STRESS_SCENARIOS } from "./stress-scenarios.ts";
@@ -538,6 +538,16 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
 
         // Get unique strategies
         const strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
+        const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(
+          trades,
+          block.dailyLogs,
+        );
+        const rebuildArm = (armTrades: Trade[]): Trade[] =>
+          rebuildEquityCurve(armTrades, {
+            initialCapital,
+            useNetPl: true,
+          });
+        const baselineTrades = rebuildArm(trades);
 
         // Validate targetStrategy if provided
         if (targetStrategy) {
@@ -559,10 +569,7 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
 
         // Edge case: single strategy portfolio
         if (strategies.length === 1) {
-          // Use daily logs for baseline when available (consistent with get_statistics)
-          const dailyLogs =
-            block.dailyLogs && block.dailyLogs.length > 0 ? block.dailyLogs : undefined;
-          const baselineStats = calculator.calculatePortfolioStats(trades, dailyLogs);
+          const baselineStats = calculator.calculatePortfolioStats(baselineTrades, undefined, true);
 
           const summary = `Marginal Contribution: ${blockId} | Single strategy portfolio - cannot calculate marginal contribution`;
 
@@ -587,6 +594,10 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
               mostBeneficial: null,
               leastBeneficial: null,
             },
+            calculationMethodology: {
+              comparisonBasis: "realized_trade_pl_for_all_counterfactual_arms",
+              baseline: calculator.getCalculationMethodology(baselineTrades),
+            },
             message:
               "Single strategy portfolio - marginal contribution cannot be calculated (no 'without' comparison possible)",
           };
@@ -594,11 +605,9 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           return createToolOutput(summary, structuredData);
         }
 
-        // Calculate baseline portfolio metrics using ALL trades
-        // Use daily logs for baseline when available (consistent with get_statistics)
-        const dailyLogs =
-          block.dailyLogs && block.dailyLogs.length > 0 ? block.dailyLogs : undefined;
-        const baselineStats = calculator.calculatePortfolioStats(trades, dailyLogs);
+        // A removed-strategy counterfactual cannot reuse the original
+        // full-portfolio daily log. Use the same trade-only basis for every arm.
+        const baselineStats = calculator.calculatePortfolioStats(baselineTrades, undefined, true);
 
         // Determine which strategies to analyze
         const strategiesToAnalyze = targetStrategy
@@ -606,9 +615,6 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           : strategies;
 
         // Calculate marginal contribution for each strategy
-        // NOTE: Baseline uses daily-log Sharpe (matching get_statistics), but "without" uses
-        // trade-based Sharpe because daily logs include the removed strategy's impact.
-        // This means marginal deltas are mixed-basis, but the baseline values match get_statistics.
         type Contribution = {
           strategy: string;
           trades: number;
@@ -640,7 +646,7 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           // Calculate "without" portfolio metrics
           // Trade-based: daily logs include the removed strategy's impact so can't be used here
           const withoutStats = calculator.calculatePortfolioStats(
-            tradesWithout,
+            rebuildArm(tradesWithout),
             undefined,
             true, // Force trade-based - daily logs include the removed strategy's impact
           );
@@ -728,6 +734,12 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           summary: {
             mostBeneficial,
             leastBeneficial,
+          },
+          calculationMethodology: {
+            comparisonBasis: "realized_trade_pl_for_all_counterfactual_arms",
+            baseline: calculator.getCalculationMethodology(baselineTrades),
+            removedStrategyArms:
+              "Each arm uses the same close-date realized-P/L, dense-business-day, historical-DTB3 convention as baseline.",
           },
         };
 

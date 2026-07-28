@@ -17,7 +17,7 @@ interface RollingMetricsChartProps {
   className?: string;
 }
 
-type MetricType = "win_rate" | "profit_factor" | "sharpe";
+type MetricType = "win_rate" | "profit_factor" | "pl_signal_to_noise";
 
 const METRIC_CONFIG = {
   win_rate: {
@@ -32,10 +32,10 @@ const METRIC_CONFIG = {
     yAxisLabel: "Profit Factor",
     format: (val: number) => val.toFixed(2),
   },
-  sharpe: {
-    key: "sharpeRatio" as const,
-    label: "Sharpe Ratio",
-    yAxisLabel: "Sharpe Ratio",
+  pl_signal_to_noise: {
+    key: "plSignalToNoise" as const,
+    label: "P/L Signal-to-Noise",
+    yAxisLabel: "Mean Trade P/L / P/L Volatility (Nonannualized)",
     format: (val: number) => val.toFixed(2),
   },
 };
@@ -88,7 +88,7 @@ export function RollingMetricsChart({ className }: RollingMetricsChartProps) {
     flavor:
       "Your building progress through a moving window - examining your last 30 blocks at each construction milestone.",
     detailed:
-      "Rolling calculations show how your performance metrics evolve using moving time windows, giving you a dynamic view of improvement or deterioration. This is more responsive than looking at all-time statistics and helps identify when your trading effectiveness is trending up or down.",
+      "Rolling calculations show how your performance metrics evolve using moving time windows. P/L Signal-to-Noise is the nonannualized mean trade P/L divided by population P/L volatility; it is not the portfolio Sharpe ratio.",
   };
 
   if (!data || !data.rollingMetrics || data.rollingMetrics.length === 0) {
@@ -126,7 +126,7 @@ export function RollingMetricsChart({ className }: RollingMetricsChartProps) {
           <SelectContent>
             <SelectItem value="win_rate">Win Rate</SelectItem>
             <SelectItem value="profit_factor">Profit Factor</SelectItem>
-            <SelectItem value="sharpe">Sharpe Ratio</SelectItem>
+            <SelectItem value="pl_signal_to_noise">P/L Signal-to-Noise</SelectItem>
           </SelectContent>
         </Select>
       </div>

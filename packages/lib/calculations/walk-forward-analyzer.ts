@@ -24,6 +24,7 @@ import {
 } from "./correlation.ts";
 import { performTailRiskAnalysis } from "./tail-risk-analysis.ts";
 import type { TailRiskAnalysisOptions } from "../models/tail-risk.ts";
+import { getNetPl } from "../utils/equity-curve.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MIN_IN_SAMPLE_TRADES = 10;
@@ -499,19 +500,28 @@ export class WalkForwardAnalyzer {
 
       const scale = positionMultiplier * strategyWeight;
       const scaledPl = trade.pl * scale;
+      const scaledOpeningCommissions = trade.openingCommissionsFees * Math.abs(scale);
+      const scaledClosingCommissions = trade.closingCommissionsFees * Math.abs(scale);
+      const scaledNetPl = getNetPl({
+        pl: scaledPl,
+        plBasis: trade.plBasis,
+        openingCommissionsFees: scaledOpeningCommissions,
+        closingCommissionsFees: scaledClosingCommissions,
+      });
 
-      runningEquity += scaledPl;
+      runningEquity += scaledNetPl;
 
       // Only include fields used by PortfolioStatsCalculator to reduce object copy overhead
       scaledTrades.push({
         pl: scaledPl,
+        plBasis: trade.plBasis,
         dateOpened: trade.dateOpened,
         timeOpened: trade.timeOpened,
         dateClosed: trade.dateClosed,
         timeClosed: trade.timeClosed,
         fundsAtClose: runningEquity,
-        openingCommissionsFees: trade.openingCommissionsFees * Math.abs(scale),
-        closingCommissionsFees: trade.closingCommissionsFees * Math.abs(scale),
+        openingCommissionsFees: scaledOpeningCommissions,
+        closingCommissionsFees: scaledClosingCommissions,
         strategy: trade.strategy,
       } as Trade);
     }

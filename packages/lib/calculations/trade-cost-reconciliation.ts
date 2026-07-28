@@ -7,6 +7,7 @@
 
 import type { ReportingTrade } from "../models/reporting-trade.ts";
 import type { Trade } from "../models/trade.ts";
+import { getGrossPl, getNetPl } from "../utils/equity-curve.ts";
 
 export type TradeCostScaling = "perContract" | "toActualContracts";
 
@@ -103,9 +104,9 @@ function isFiniteNumber(value: unknown): value is number {
 /**
  * Decompose model-vs-live P/L for a pair that the caller has already matched.
  *
- * Trade.pl is the model's gross P/L (the same invariant used by enrichTrades),
- * so model net is gross minus recorded commissions/fees. Actual gross is
- * reconstructed from the reporting log's opening premium and average closing cost:
+ * Model gross and net P/L are resolved from Trade.plBasis, so commissions are
+ * applied exactly once. Actual gross is reconstructed from the reporting log's
+ * opening premium and average closing cost:
  * `(initialPremium + avgClosingCost) * contracts * 100`.
  */
 export function reconcileTradeCosts(
@@ -199,9 +200,9 @@ export function reconcileTradeCosts(
     basis === "perContract" ? 1 / model.numContracts : actual.numContracts / model.numContracts;
   const actualScaleFactor = basis === "perContract" ? 1 / actual.numContracts : 1;
 
-  const modelGross = model.pl * modelScaleFactor;
+  const modelGross = getGrossPl(model) * modelScaleFactor;
   const modelFees = modelFeesTotal * modelScaleFactor;
-  const modelNet = modelGross - modelFees;
+  const modelNet = getNetPl(model) * modelScaleFactor;
   const actualGross = actualGrossTotal * actualScaleFactor;
   const actualFees = actualFeesTotal * actualScaleFactor;
   const actualNet = actual.pl * actualScaleFactor;

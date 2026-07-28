@@ -56,7 +56,7 @@ This document explains how TradeBlocks is structured and how to work effectively
 
 ### Calculations & Utilities
 
-- `packages/lib/calculations/portfolio-stats.ts` – Computes win rates, drawdowns, expectancy, and normalized metrics. Uses Math.js to mirror the legacy Python implementation (sample standard deviation on Sharpe, population on Sortino).
+- `packages/lib/calculations/portfolio-stats.ts` – Computes win rates, drawdowns, expectancy, and normalized metrics. Sharpe uses sample standard deviation (N-1), annualizes daily excess returns by 252, and defaults to historical FRED DTB3 rates. `AnalysisConfig.riskFreeRateAnnualPct` can supply a fixed annual percentage instead.
 - `packages/lib/calculations/risk/` – Monte Carlo simulation helpers powering the risk simulator.
 - `packages/lib/processing/trade-processor.ts` & `daily-log-processor.ts` – Convert raw CSV strings into typed models, handling alias headers and data validation (`packages/lib/models/validators.ts`).
 - `packages/lib/utils/date.ts`, `packages/lib/utils/number.ts` – Reusable formatting helpers.
@@ -73,6 +73,7 @@ This document explains how TradeBlocks is structured and how to work effectively
 
 - Expected headers match OptionOmega exports (`packages/lib/models/trade.ts`). Key columns:
   - `Date Opened`, `Time Opened`, `Legs`, `P/L`, `Strategy`
+  - Option Omega `P/L` is already net of its commission and fee columns. CSV ingestion stamps `plBasis: "net_includes_fees"` so fees remain available for attribution without being deducted twice.
   - `Opening Commissions + Fees`, `Closing Commissions + Fees`
   - Ratio columns such as `Opening Short/Long Ratio` are optional but supported.
 - Aliases in `TRADE_COLUMN_ALIASES` normalize variants (e.g., `Opening comms & fees`).

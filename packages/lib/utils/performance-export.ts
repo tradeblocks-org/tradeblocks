@@ -288,19 +288,30 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
   {
     id: "rolling-metrics",
     name: "Rolling Metrics",
-    description: "30-trade rolling win rate, Sharpe, and profit factor",
+    description:
+      "30-trade rolling win rate, nonannualized trade-P/L signal-to-noise, and profit factor",
     tab: "Returns Analysis",
     exportFn: (data) => {
       const lines = ["# Rolling Metrics (30-trade window)"];
-      lines.push(toCsvRow(["Date", "Win Rate (%)", "Sharpe Ratio", "Profit Factor", "Volatility"]));
+      lines.push(
+        toCsvRow([
+          "Date",
+          "Win Rate (%)",
+          "P/L Signal-to-Noise (Nonannualized)",
+          "Profit Factor",
+          "P/L Volatility ($)",
+          "Methodology",
+        ]),
+      );
       for (const m of data.rollingMetrics) {
         lines.push(
           toCsvRow([
             m.date,
             m.winRate.toFixed(2),
-            m.sharpeRatio.toFixed(2),
+            m.plSignalToNoise.toFixed(2),
             m.profitFactor.toFixed(2),
             m.volatility.toFixed(2),
+            m.metricMethodology,
           ]),
         );
       }

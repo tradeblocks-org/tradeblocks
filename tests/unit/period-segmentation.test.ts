@@ -322,8 +322,8 @@ describe("segmentByPeriod", () => {
 
     // 10/15 win rate
     expect(month.winRate).toBeCloseTo(10 / 15, 4);
-    // Profit factor: (10 * 200) / (5 * 150) = 2000 / 750
-    expect(month.profitFactor).toBeCloseTo(2000 / 750, 2);
+    // Profit factor uses net-after-fee P/L for both wins and losses.
+    expect(month.profitFactor).toBeCloseTo(2.5454545454545454, 2);
     // Kelly should be > 0 (more wins than implied by payoff ratio)
     expect(month.kellyPercent).toBeGreaterThan(0);
     // Net P&L: (10*200 - 5*150) - (15 * 4 commissions) = 1250 - 60

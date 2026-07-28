@@ -50,9 +50,9 @@ export interface PeriodMetrics {
   sharpeRatio: number | null;
   /** Average monthly return as a percentage of equity */
   avgMonthlyReturnPct: number;
-  /** Net P&L (gross P&L minus commissions) */
+  /** Net P&L with fees deducted exactly once according to source basis */
   netPl: number;
-  /** Gross P&L */
+  /** Reported source P&L (`Trade.pl`) */
   totalPl: number;
   /** Total commissions (opening + closing) */
   totalCommissions: number;

@@ -101,7 +101,10 @@ export interface AggregateStats {
   profitFactor: number;
   /** Max sequential drawdown from equity curve (cumsum of candidatePnls) */
   maxDrawdown: number;
-  /** mean/stddev of candidatePnls; null if < 2 trades */
+  /**
+   * Legacy nonannualized mean/stddev of candidatePnls; null if < 2 trades.
+   * Not comparable to daily-return Sharpe from get_statistics.
+   */
   sharpeRatio: number | null;
   maxWinStreak: number;
   maxLossStreak: number;
@@ -193,7 +196,8 @@ export function computeAggregateStats(tradeResults: TradeExitResult[]): Aggregat
     if (dd > maxDrawdown) maxDrawdown = dd;
   }
 
-  // Sharpe ratio: mean / sample stddev (N-1), null if < 2 trades
+  // Legacy trade-P/L signal-to-noise: mean / sample stddev (N-1).
+  // Retained under sharpeRatio for response compatibility; not portfolio Sharpe.
   let sharpeRatio: number | null = null;
   if (totalTrades >= 2) {
     const mean = avgPnl;
