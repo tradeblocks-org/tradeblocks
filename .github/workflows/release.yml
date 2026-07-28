@@ -55,11 +55,24 @@ jobs:
         run: |
           ROOT=$(node -p "require('./package.json').version")
           PKG=$(node -p "require('./packages/mcp-server/package.json').version")
-          if [ "$ROOT" != "$PKG" ]; then
-            echo "::error::Version divergence: root package.json ($ROOT) != packages/mcp-server/package.json ($PKG). This pipeline publishes off the mcp-server version, so a mismatch silently skips the npm publish (the release no-ops green and nothing ships). Bump both in lockstep before merging."
+          ROOT_LOCK=$(node -p "require('./package-lock.json').packages[''].version")
+          PKG_LOCK=$(node -p "require('./package-lock.json').packages['packages/mcp-server'].version")
+          if [ "$ROOT" != "$PKG" ] || [ "$ROOT" != "$ROOT_LOCK" ] || [ "$ROOT" != "$PKG_LOCK" ]; then
+            echo "::error::Version divergence: root=$ROOT, mcp=$PKG, root-lock=$ROOT_LOCK, mcp-lock=$PKG_LOCK. This pipeline publishes off the mcp-server version, so all four values must move in lockstep."
             exit 1
           fi
-          echo "Versions in sync: $ROOT"
+          echo "Manifest and lockfile versions in sync: $ROOT"
+
+      - name: Verify release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          NOTES="releases/v${VERSION}.md"
+          if [ ! -s "$NOTES" ]; then
+            echo "::error::Missing or empty release notes: $NOTES"
+            exit 1
+          fi
+          echo "Release notes found: $NOTES"
 
   publish-npm:
     name: Publish to npm
@@ -179,28 +192,4 @@ jobs:
           tag_name: v${{ needs.build.outputs.version }}
           name: v${{ needs.build.outputs.version }}
           generate_release_notes: true
-          body: |
-            ## Installation
-
-            ### npm (recommended)
-            ```bash
-            npx tradeblocks-mcp ~/path/to/backtests
-            ```
-
-            For Claude Desktop, add the server to `claude_desktop_config.json` with `command: npx`, `args: ["tradeblocks-mcp", "~/path/to/backtests"]`.
-
-            ### Docker
-            ```bash
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tradeblocks-mcp:${{ needs.build.outputs.version }}
-            docker run -p 3100:3100 -v ./data:/data --env-file .env ${{ secrets.DOCKERHUB_USERNAME }}/tradeblocks-mcp:${{ needs.build.outputs.version }}
-            ```
-
-            ### From Source
-            ```bash
-            git clone https://github.com/tradeblocks-org/tradeblocks
-            cd tradeblocks && npm install && npm run build:mcp
-            ```
-
-            ---
-
-            Note: the canonical repo is now `tradeblocks-org/tradeblocks`. GitHub redirects keep old `davidromeo/tradeblocks` URLs working.
+          body_path: releases/v${{ needs.build.outputs.version }}.md
