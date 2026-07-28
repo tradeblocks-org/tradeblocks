@@ -19,7 +19,7 @@ import {
 import { resolveTickerFromCsvRow } from "../utils/ticker.ts";
 import { convertToReportingTrade } from "../utils/block-loader.ts";
 import { discoverCsvFiles } from "../utils/csv-discovery.ts";
-import type { ReportingTrade } from "@tradeblocks/lib";
+import { PlBasis, type ReportingTrade } from "@tradeblocks/lib";
 
 /**
  * Result of syncing a single block
@@ -217,10 +217,20 @@ async function insertTradeBatch(
     );
     const ticker = resolveTickerFromCsvRow(record);
     const plBasis =
-      record["P/L Basis"] === "gross_before_fees" ? "gross_before_fees" : "net_includes_fees";
+      record["P/L Basis"] === PlBasis.GrossBeforeFees
+        ? PlBasis.GrossBeforeFees
+        : PlBasis.NetIncludesFees;
+    if (
+      plBasis === PlBasis.GrossBeforeFees &&
+      (!Number.isFinite(openingCommissions) || !Number.isFinite(closingCommissions))
+    ) {
+      throw new Error(
+        `Gross-before-fees P/L requires both opening and closing commission fields (CSV row ${startIdx + rowIdx + 2})`,
+      );
+    }
     const safeReportedPl = isNaN(reportedPl) ? 0 : reportedPl;
     const netPl =
-      plBasis === "gross_before_fees"
+      plBasis === PlBasis.GrossBeforeFees
         ? safeReportedPl -
           (isNaN(openingCommissions) ? 0 : openingCommissions) -
           (isNaN(closingCommissions) ? 0 : closingCommissions)
@@ -344,8 +354,9 @@ async function insertReportingBatch(
  *
  * v2: Use blockId as strategy fallback for empty Strategy columns
  * v3: Preserve reported P/L provenance and parse formatted/aliased Option Omega fields
+ * v4: Reject gross-before-fees rows whose fee fields are unavailable
  */
-const PARSE_VERSION = "v3";
+const PARSE_VERSION = "v4";
 
 function versionedHash(hash: string): string {
   return `${hash}:${PARSE_VERSION}`;

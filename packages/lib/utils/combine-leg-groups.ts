@@ -8,7 +8,7 @@
  * This utility groups trades by entry timestamp and combines them into single trade records.
  */
 
-import type { Trade } from "../models/trade.ts";
+import { PlBasis, type Trade } from "../models/trade.ts";
 import type { ReportingTrade } from "../models/reporting-trade.ts";
 import { yieldToMain, checkCancelled } from "./async-helpers.ts";
 import { getNetPl } from "./equity-curve.ts";
@@ -245,7 +245,7 @@ export function combineLegGroup(trades: Trade[]): CombinedTrade {
 
     // Aggregated values
     pl: totalPL,
-    plBasis: allBasesUndeclared ? undefined : "net_includes_fees",
+    plBasis: allBasesUndeclared ? undefined : PlBasis.NetIncludesFees,
     numContracts: totalContracts,
     fundsAtClose,
     marginReq: maxMargin,

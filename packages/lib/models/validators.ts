@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PlBasis } from "./trade.ts";
 
 /**
  * Zod schema for validating raw trade data from CSV
@@ -54,7 +55,7 @@ export const tradeSchema = z.object({
   avgClosingCost: z.number().finite().optional(),
   reasonForClose: z.string().optional(),
   pl: z.number().finite(),
-  plBasis: z.enum(["net_includes_fees", "gross_before_fees"]).optional(),
+  plBasis: z.nativeEnum(PlBasis).optional(),
   numContracts: z.number().int().positive(),
   fundsAtClose: z.number().finite(),
   marginReq: z.number().finite().min(0),

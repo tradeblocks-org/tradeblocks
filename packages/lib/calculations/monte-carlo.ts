@@ -5,7 +5,7 @@
  * and calculate risk metrics like Value at Risk (VaR) and maximum drawdown distributions.
  */
 
-import type { Trade } from "../models/trade.ts";
+import { PlBasis, type Trade } from "../models/trade.ts";
 
 /**
  * Parameters for Monte Carlo simulation
@@ -418,7 +418,7 @@ export function createSyntheticMaxLossTrades(
         avgClosingCost: 0,
         reasonForClose,
         pl: -maxAbsoluteLoss,
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
         numContracts: avgContracts,
         fundsAtClose: 0,
         marginReq: maxAbsoluteLoss,

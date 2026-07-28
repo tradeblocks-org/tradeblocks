@@ -16,7 +16,7 @@
  * ```
  */
 
-import type { Trade } from "../models/trade.ts";
+import { PlBasis, type Trade } from "../models/trade.ts";
 
 /**
  * Options for rebuilding equity curves.
@@ -115,7 +115,7 @@ export function calculateInitialCapital(
 export function getNetPl(
   trade: Pick<Trade, "pl" | "plBasis" | "openingCommissionsFees" | "closingCommissionsFees">,
 ): number {
-  if (trade.plBasis === "net_includes_fees") {
+  if (trade.plBasis === PlBasis.NetIncludesFees) {
     return trade.pl;
   }
   const openingComm = trade.openingCommissionsFees ?? 0;
@@ -129,7 +129,7 @@ export function getNetPl(
 export function getGrossPl(
   trade: Pick<Trade, "pl" | "plBasis" | "openingCommissionsFees" | "closingCommissionsFees">,
 ): number {
-  if (trade.plBasis !== "net_includes_fees") {
+  if (trade.plBasis !== PlBasis.NetIncludesFees) {
     return trade.pl;
   }
   const openingComm = trade.openingCommissionsFees ?? 0;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { WalkForwardAnalyzer, WalkForwardConfig, Trade } from "@tradeblocks/lib";
+import { PlBasis, WalkForwardAnalyzer, WalkForwardConfig, Trade } from "@tradeblocks/lib";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -50,7 +50,7 @@ describe("WalkForwardAnalyzer", () => {
     const analyzer = new WalkForwardAnalyzer();
     const grossTrade = {
       ...createTestTrades([110], "2026-01-02", 1, 990)[0],
-      plBasis: "gross_before_fees" as const,
+      plBasis: PlBasis.GrossBeforeFees,
       openingCommissionsFees: 5,
       closingCommissionsFees: 5,
       fundsAtClose: 1100,

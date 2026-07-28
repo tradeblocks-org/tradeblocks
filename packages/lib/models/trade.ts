@@ -2,6 +2,11 @@
  * Trade model based on legacy Python Trade class
  * Represents individual trade record from portfolio CSV
  */
+export enum PlBasis {
+  NetIncludesFees = "net_includes_fees",
+  GrossBeforeFees = "gross_before_fees",
+}
+
 export interface Trade {
   // Core trade identification
   dateOpened: Date;
@@ -31,7 +36,7 @@ export interface Trade {
    * callers that omit this field retain the legacy TradeBlocks assumption
    * that `pl` is gross and fees must be deducted once.
    */
-  plBasis?: "net_includes_fees" | "gross_before_fees";
+  plBasis?: PlBasis;
   numContracts: number;
   fundsAtClose: number;
   marginReq: number;

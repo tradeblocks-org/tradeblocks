@@ -409,7 +409,7 @@ describe("Sync Layer Integration", () => {
       const conn = await getConnection(testDir);
       await conn.run(
         `UPDATE trades._sync_metadata
-         SET tradelog_hash = replace(tradelog_hash, ':v3', ':v2')
+         SET tradelog_hash = replace(tradelog_hash, ':v4', ':v3')
          WHERE block_id = 'old-parser-block'`,
       );
       await conn.run(`UPDATE trades.trade_data SET pl = -999 WHERE block_id = 'old-parser-block'`);
@@ -424,7 +424,7 @@ describe("Sync Layer Integration", () => {
          WHERE d.block_id = 'old-parser-block'`,
       );
       expect(Number(reader.getRows()[0][0])).toBe(200);
-      expect(String(reader.getRows()[0][1])).toMatch(/:v3$/);
+      expect(String(reader.getRows()[0][1])).toMatch(/:v4$/);
     });
 
     it("persists gross P/L basis and reports basis-aware net P/L", async () => {
@@ -459,6 +459,29 @@ describe("Sync Layer Integration", () => {
       const block = listed.find((entry) => entry.blockId === "gross-basis-block");
       expect(block?.totalPl).toBe(1200);
       expect(block?.netPl).toBe(1197);
+    });
+
+    it("rejects gross-basis CSV rows when fee fields are unavailable", async () => {
+      const blockPath = path.join(testDir, "gross-without-fees-block");
+      await fs.mkdir(blockPath, { recursive: true });
+      const headers =
+        "Date Opened,Time Opened,Date Closed,Time Closed,Opening Price,Closing Price,Legs,Premium,No. of Contracts,P/L,Strategy,Reason For Close,Funds at Close,Margin Req.,P/L Basis";
+      const row =
+        "2024-01-02,09:35:00,2024-01-02,15:30:00,2.50,0.50,SPX 4800P/4750P,250,1,200,Sync Test Strategy,Target,10200,5000,gross_before_fees";
+      await fs.writeFile(path.join(blockPath, "tradelog.csv"), `${headers}\n${row}`);
+
+      const result = await syncAllBlocks(testDir);
+
+      expect(result.errors).toEqual([
+        {
+          blockId: "gross-without-fees-block",
+          error: expect.stringContaining(
+            "Gross-before-fees P/L requires both opening and closing commission fields",
+          ),
+        },
+      ]);
+      expect(await getTradeCount(testDir, "gross-without-fees-block")).toBe(0);
+      expect(await hasBlockMetadata(testDir, "gross-without-fees-block")).toBe(false);
     });
 
     it("handles empty block folder gracefully", async () => {

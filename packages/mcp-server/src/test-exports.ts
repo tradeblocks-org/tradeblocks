@@ -84,6 +84,7 @@ export {
   filterByStrategy,
   filterByDateRange,
   filterByRealizationDateRange,
+  realizationDateBounds,
   filterDailyLogsByDateRange,
 } from "./tools/shared/filters.ts";
 export {

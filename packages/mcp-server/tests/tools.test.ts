@@ -209,6 +209,30 @@ describe("block-loader", () => {
         expect(imported.trades.every((trade) => trade.plBasis === "gross_before_fees")).toBe(true);
       });
     });
+
+    it("rejects gross-before-fees imports without commission fields", async () => {
+      await withNestedBlocksFixture(async (dataRoot) => {
+        const sourceCsv = path.join(dataRoot, "gross-without-fees.csv");
+        await fs.writeFile(
+          sourceCsv,
+          ["Date Opened,P/L,Strategy", "2024-01-02,200,Gross Strategy"].join("\n"),
+        );
+
+        await expect(
+          importCsv(dataRoot, {
+            csvPath: sourceCsv,
+            blockName: "Gross Without Fees",
+            csvType: "tradelog",
+            plBasis: "gross_before_fees",
+          }),
+        ).rejects.toThrow(
+          "Gross-before-fees P/L requires both opening and closing commission fields",
+        );
+        await expect(
+          fs.access(path.join(dataRoot, "blocks", "gross-without-fees")),
+        ).rejects.toThrow();
+      });
+    });
   });
 
   describe("trade data validation", () => {

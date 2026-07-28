@@ -11,8 +11,11 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { Trade, DailyLogEntry, ReportingTrade } from "@tradeblocks/lib";
 import {
+  PlBasis,
+  type Trade,
+  type DailyLogEntry,
+  type ReportingTrade,
   REPORTING_TRADE_COLUMN_ALIASES,
   isTatFormat,
   convertTatRowToReportingTrade,
@@ -192,7 +195,7 @@ function parseCSVLine(line: string): string[] {
 function convertToTrade(
   raw: Record<string, string>,
   blockId?: string,
-  defaultPlBasis: Trade["plBasis"] = "net_includes_fees",
+  defaultPlBasis: Trade["plBasis"] = PlBasis.NetIncludesFees,
 ): Trade | null {
   try {
     const dateOpened = parseDatePreservingCalendarDay(raw["Date Opened"]);
@@ -223,7 +226,7 @@ function convertToTrade(
       reasonForClose: raw["Reason For Close"] || undefined,
       pl: parseNumber(raw["P/L"]),
       plBasis:
-        raw["P/L Basis"] === "gross_before_fees" || raw["P/L Basis"] === "net_includes_fees"
+        raw["P/L Basis"] === PlBasis.GrossBeforeFees || raw["P/L Basis"] === PlBasis.NetIncludesFees
           ? raw["P/L Basis"]
           : defaultPlBasis,
       numContracts: Math.round(parseNumber(raw["No. of Contracts"], 1)),
@@ -828,6 +831,7 @@ function toKebabCase(str: string): string {
 function validateCsvColumns(
   records: Record<string, string>[],
   csvType: "tradelog" | "dailylog" | "reportinglog",
+  plBasis: PlBasis = PlBasis.NetIncludesFees,
 ): { valid: boolean; error?: string } {
   if (records.length === 0) {
     return { valid: false, error: "CSV file is empty or has no data rows" };
@@ -845,6 +849,29 @@ function validateCsvColumns(
           valid: false,
           error: `Missing required columns for tradelog: ${missing.join(", ")}. Expected columns include: Date Opened, P/L, Strategy, Legs, etc.`,
         };
+      }
+      if (plBasis === PlBasis.GrossBeforeFees) {
+        const openingFeeAliases = ["Opening Commissions + Fees", "Opening comms & fees"];
+        const closingFeeAliases = ["Closing Commissions + Fees", "Closing comms & fees"];
+        const openingFeeColumn = openingFeeAliases.find((column) => headers.includes(column));
+        const closingFeeColumn = closingFeeAliases.find((column) => headers.includes(column));
+        if (!openingFeeColumn || !closingFeeColumn) {
+          return {
+            valid: false,
+            error: "Gross-before-fees P/L requires both opening and closing commission fields",
+          };
+        }
+        const incompleteRow = records.findIndex(
+          (record) =>
+            !Number.isFinite(parseNumber(record[openingFeeColumn], NaN)) ||
+            !Number.isFinite(parseNumber(record[closingFeeColumn], NaN)),
+        );
+        if (incompleteRow >= 0) {
+          return {
+            valid: false,
+            error: `Gross-before-fees P/L requires finite opening and closing commission values (CSV row ${incompleteRow + 2})`,
+          };
+        }
       }
       break;
     }
@@ -901,7 +928,7 @@ export async function importCsv(
   options: ImportCsvOptions,
 ): Promise<ImportCsvResult> {
   const { csvPath, blockName } = options;
-  const plBasis = options.plBasis ?? "net_includes_fees";
+  const plBasis = options.plBasis ?? PlBasis.NetIncludesFees;
   let { csvType = "tradelog" } = options;
   const blocksDir = resolveBlocksBaseDir(baseDir);
 
@@ -926,7 +953,7 @@ export async function importCsv(
   }
 
   // Validate CSV has required columns
-  const validation = validateCsvColumns(records, csvType);
+  const validation = validateCsvColumns(records, csvType, plBasis);
   if (!validation.valid) {
     throw new Error(validation.error);
   }

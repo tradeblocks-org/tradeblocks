@@ -9,7 +9,11 @@ import { fileURLToPath } from "url";
 
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { loadBlock } from "../../src/test-exports.ts";
+import {
+  filterByRealizationDateRange,
+  loadBlock,
+  realizationDateBounds,
+} from "../../src/test-exports.ts";
 
 // @ts-expect-error - importing from bundled output
 import { PortfolioStatsCalculator } from "../../src/test-exports.ts";
@@ -80,27 +84,6 @@ const STRESS_SCENARIOS: Record<
     description: "Post 90-day tariff pause rally, S&P +9.5% single day",
   },
 };
-
-/**
- * Filter trades by date range (mirrors tool implementation)
- */
-function filterByDateRange(
-  trades: Array<{ dateOpened: Date }>,
-  startDate?: string,
-  endDate?: string,
-) {
-  let filtered = trades;
-  if (startDate) {
-    const start = new Date(startDate);
-    filtered = filtered.filter((t) => new Date(t.dateOpened) >= start);
-  }
-  if (endDate) {
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-    filtered = filtered.filter((t) => new Date(t.dateOpened) <= end);
-  }
-  return filtered;
-}
 
 /**
  * Simulates the stress_test tool logic for testing
@@ -185,7 +168,11 @@ async function simulateStressTest(
   let scenariosWithTrades = 0;
 
   for (const scenario of scenariosToRun) {
-    const scenarioTrades = filterByDateRange(trades, scenario.startDate, scenario.endDate);
+    const scenarioTrades = filterByRealizationDateRange(
+      trades,
+      scenario.startDate,
+      scenario.endDate,
+    );
 
     if (scenarioTrades.length === 0) {
       scenarioResults.push({
@@ -423,6 +410,40 @@ describe("stress_test", () => {
       // Should include exactly the trade on 2024-01-15
       expect(result.scenarios[0].tradeCount).toBe(1);
       expect(result.scenarios[0].stats).not.toBeNull();
+    });
+
+    it("filters scenario P/L by realization date rather than entry date", () => {
+      const trades = [
+        {
+          dateOpened: new Date(2024, 0, 1),
+          dateClosed: new Date(2024, 0, 15),
+        },
+        {
+          dateOpened: new Date(2024, 0, 15),
+          dateClosed: new Date(2024, 1, 1),
+        },
+      ];
+
+      expect(filterByRealizationDateRange(trades, "2024-01-15", "2024-01-15")).toEqual([trades[0]]);
+    });
+
+    it("preserves local realization-day bounds in a positive UTC offset", () => {
+      const originalTimezone = process.env.TZ;
+      try {
+        process.env.TZ = "Asia/Tokyo";
+        const localMidnight = new Date(2024, 0, 15);
+
+        expect(realizationDateBounds([{ dateOpened: localMidnight }])).toEqual({
+          startDate: "2024-01-15",
+          endDate: "2024-01-15",
+        });
+      } finally {
+        if (originalTimezone === undefined) {
+          delete process.env.TZ;
+        } else {
+          process.env.TZ = originalTimezone;
+        }
+      }
     });
   });
 });

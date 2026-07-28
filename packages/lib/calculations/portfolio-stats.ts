@@ -17,7 +17,7 @@
  */
 
 import { std, mean, min, max } from "mathjs";
-import type { Trade } from "../models/trade.ts";
+import { PlBasis, type Trade } from "../models/trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
 import type {
   PortfolioStats,
@@ -125,7 +125,7 @@ export class PortfolioStatsCalculator {
     const metricTrades = validTrades.map((trade) => ({
       ...trade,
       pl: getMetricPl(trade),
-      plBasis: "net_includes_fees" as const,
+      plBasis: PlBasis.NetIncludesFees,
     }));
 
     // Basic statistics
@@ -872,8 +872,8 @@ export class PortfolioStatsCalculator {
   ): PortfolioCalculationMethodology {
     const returns = this.calculateDailyReturnsWithDates(trades, dailyLogEntries);
     const basisCounts = {
-      netIncludesFees: trades.filter((trade) => trade.plBasis === "net_includes_fees").length,
-      grossBeforeFees: trades.filter((trade) => trade.plBasis === "gross_before_fees").length,
+      netIncludesFees: trades.filter((trade) => trade.plBasis === PlBasis.NetIncludesFees).length,
+      grossBeforeFees: trades.filter((trade) => trade.plBasis === PlBasis.GrossBeforeFees).length,
       undeclaredAssumedGross: trades.filter((trade) => trade.plBasis === undefined).length,
     };
     const basisKinds = [

@@ -10,6 +10,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { PlBasis } from "@tradeblocks/lib";
 import { importCsv } from "../utils/block-loader.ts";
 import { createToolOutput } from "../utils/output-formatter.ts";
 
@@ -73,8 +74,8 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
               "'dailylog' for daily portfolio values, 'reportinglog' for actual/reported trades",
           ),
         plBasis: z
-          .enum(["net_includes_fees", "gross_before_fees"])
-          .default("net_includes_fees")
+          .nativeEnum(PlBasis)
+          .default(PlBasis.NetIncludesFees)
           .describe(
             "Basis of the tradelog P/L column. Use 'net_includes_fees' for Option Omega exports (default), or 'gross_before_fees' when commission/fee columns still need to be deducted.",
           ),

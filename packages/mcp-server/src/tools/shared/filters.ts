@@ -42,6 +42,20 @@ function toCalendarDateStr(date: Date | string): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Return the inclusive local-calendar bounds where the supplied trades realize P/L. */
+export function realizationDateBounds(trades: Pick<Trade, "dateOpened" | "dateClosed">[]): {
+  startDate: string | null;
+  endDate: string | null;
+} {
+  if (trades.length === 0) {
+    return { startDate: null, endDate: null };
+  }
+  const dates = trades
+    .map((trade) => toCalendarDateStr(trade.dateClosed ?? trade.dateOpened))
+    .sort();
+  return { startDate: dates[0], endDate: dates[dates.length - 1] };
+}
+
 /**
  * Filter trades by date range using string comparison on Eastern Time calendar dates.
  * Avoids timezone bugs from mixing UTC Date parsing with local time setHours.

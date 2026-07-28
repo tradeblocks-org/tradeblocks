@@ -15,7 +15,11 @@ import {
 } from "../../utils/output-formatter.ts";
 import { PortfolioStatsCalculator, rebuildEquityCurve } from "@tradeblocks/lib";
 import type { Trade } from "@tradeblocks/lib";
-import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
+import {
+  filterByStrategy,
+  filterByRealizationDateRange,
+  realizationDateBounds,
+} from "../shared/filters.ts";
 import { STRESS_SCENARIOS } from "./stress-scenarios.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 
@@ -64,16 +68,8 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
         const trades = block.trades;
 
         // Get portfolio date range for context and pre-filtering
-        const sortedTrades = [...trades].sort(
-          (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
-        );
-        const portfolioStartDate = sortedTrades[0]?.dateOpened
-          ? new Date(sortedTrades[0].dateOpened).toISOString().split("T")[0]
-          : null;
-        const lastTrade = sortedTrades[sortedTrades.length - 1];
-        const portfolioEndDate = lastTrade?.dateClosed
-          ? new Date(lastTrade.dateClosed).toISOString().split("T")[0]
-          : null;
+        const { startDate: portfolioStartDate, endDate: portfolioEndDate } =
+          realizationDateBounds(trades);
 
         // Build list of scenarios to run
         const scenariosToRun: Array<{
@@ -176,7 +172,11 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
 
         for (const scenario of scenariosToRun) {
           // Filter trades to scenario date range
-          const scenarioTrades = filterByDateRange(trades, scenario.startDate, scenario.endDate);
+          const scenarioTrades = filterByRealizationDateRange(
+            trades,
+            scenario.startDate,
+            scenario.endDate,
+          );
 
           if (scenarioTrades.length === 0) {
             // Genuine coverage gap (had date overlap but zero trades)

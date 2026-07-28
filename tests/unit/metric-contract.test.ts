@@ -2,6 +2,7 @@ import {
   combineAllLegGroups,
   combineLegGroup,
   getNetPl,
+  PlBasis,
   PerformanceCalculator,
   PortfolioStatsCalculator,
   type DailyLogEntry,
@@ -34,7 +35,7 @@ describe("P/L and Sharpe calculation contract", () => {
     const trades = [
       trade({
         pl: 231.44,
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
         openingCommissionsFees: 1.78,
         closingCommissionsFees: 1.78,
       }),
@@ -42,7 +43,7 @@ describe("P/L and Sharpe calculation contract", () => {
         dateOpened: new Date("2026-01-05"),
         dateClosed: new Date("2026-01-05"),
         pl: -305.12,
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
         openingCommissionsFees: 2.56,
         closingCommissionsFees: 2.56,
         fundsAtClose: 99726.32,
@@ -91,7 +92,7 @@ describe("P/L and Sharpe calculation contract", () => {
     ];
     const explicit = trades.map((item) => ({
       ...item,
-      plBasis: "gross_before_fees" as const,
+      plBasis: PlBasis.GrossBeforeFees,
     }));
     const calculator = new PortfolioStatsCalculator({ riskFreeRateAnnualPct: 0 });
     const undeclaredStats = calculator.calculatePortfolioStats(trades);
@@ -107,14 +108,14 @@ describe("P/L and Sharpe calculation contract", () => {
     const combined = combineLegGroup([
       trade({
         pl: 100,
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
         legs: "call spread",
         openingCommissionsFees: 2,
         closingCommissionsFees: 2,
       }),
       trade({
         pl: 100,
-        plBasis: "gross_before_fees",
+        plBasis: PlBasis.GrossBeforeFees,
         legs: "put spread",
         openingCommissionsFees: 3,
         closingCommissionsFees: 3,
@@ -139,7 +140,7 @@ describe("P/L and Sharpe calculation contract", () => {
           strategy: "Grouped OO",
           legs: "call spread",
           pl: groupPl * 0.6,
-          plBasis: "net_includes_fees",
+          plBasis: PlBasis.NetIncludesFees,
           openingCommissionsFees: 1.78,
           closingCommissionsFees: 0.78,
         }),
@@ -151,7 +152,7 @@ describe("P/L and Sharpe calculation contract", () => {
           strategy: "Grouped OO",
           legs: "put spread",
           pl: groupPl * 0.4,
-          plBasis: "net_includes_fees",
+          plBasis: PlBasis.NetIncludesFees,
           openingCommissionsFees: 1.78,
           closingCommissionsFees: 0.78,
         }),
@@ -176,18 +177,18 @@ describe("P/L and Sharpe calculation contract", () => {
 
   it("uses sample N-1 volatility and echoes a fixed annual RFR", () => {
     const trades = [
-      trade({ pl: 1000, plBasis: "net_includes_fees" }),
+      trade({ pl: 1000, plBasis: PlBasis.NetIncludesFees }),
       trade({
         dateOpened: new Date("2026-01-05"),
         dateClosed: new Date("2026-01-05"),
         pl: -505,
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
       }),
       trade({
         dateOpened: new Date("2026-01-06"),
         dateClosed: new Date("2026-01-06"),
         pl: 1004.95,
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
       }),
     ];
     const dailyLogs: DailyLogEntry[] = [
@@ -294,7 +295,7 @@ describe("P/L and Sharpe calculation contract", () => {
         dateClosed: new Date(date),
         pl: dailyLogs[index].dailyPl,
         fundsAtClose: dailyLogs[index].netLiquidity,
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
       }),
     );
 
@@ -310,12 +311,12 @@ describe("P/L and Sharpe calculation contract", () => {
 
   it("inserts zero-P/L weekdays for trade-only annualization", () => {
     const trades = [
-      trade({ dateClosed: new Date("2026-01-05"), plBasis: "net_includes_fees" }),
+      trade({ dateClosed: new Date("2026-01-05"), plBasis: PlBasis.NetIncludesFees }),
       trade({
         dateOpened: new Date("2026-01-16"),
         dateClosed: new Date("2026-01-16"),
         pl: -50,
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
       }),
     ];
 
@@ -332,12 +333,12 @@ describe("P/L and Sharpe calculation contract", () => {
 
   it("discloses rolling windows as realized-trade dates rather than days", () => {
     const trades = [
-      trade({ dateClosed: new Date("2026-01-05"), plBasis: "net_includes_fees" }),
+      trade({ dateClosed: new Date("2026-01-05"), plBasis: PlBasis.NetIncludesFees }),
       trade({
         dateOpened: new Date("2026-01-16"),
         dateClosed: new Date("2026-01-16"),
         pl: -50,
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
       }),
     ];
 
@@ -353,11 +354,11 @@ describe("P/L and Sharpe calculation contract", () => {
 
   it("discloses stale historical DTB3 observations", () => {
     const trades = [
-      trade({ dateClosed: new Date("2099-01-05"), plBasis: "net_includes_fees" }),
+      trade({ dateClosed: new Date("2099-01-05"), plBasis: PlBasis.NetIncludesFees }),
       trade({
         dateOpened: new Date("2099-01-06"),
         dateClosed: new Date("2099-01-06"),
-        plBasis: "net_includes_fees",
+        plBasis: PlBasis.NetIncludesFees,
       }),
     ];
 
