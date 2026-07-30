@@ -5,6 +5,7 @@ import {
   PlBasis,
   PerformanceCalculator,
   PortfolioStatsCalculator,
+  tradeSchema,
   type DailyLogEntry,
   type Trade,
 } from "@tradeblocks/lib";
@@ -34,6 +35,16 @@ describe("P/L and Sharpe calculation contract", () => {
   it("preserves the serialized P/L basis values", () => {
     expect(PlBasis.NetIncludesFees).toBe("net_includes_fees");
     expect(PlBasis.GrossBeforeFees).toBe("gross_before_fees");
+  });
+
+  it("validates only supported P/L basis values", () => {
+    const plBasisSchema = tradeSchema.shape.plBasis;
+
+    expect(plBasisSchema.safeParse(PlBasis.NetIncludesFees).success).toBe(true);
+    expect(plBasisSchema.safeParse(PlBasis.GrossBeforeFees).success).toBe(true);
+    expect(plBasisSchema.safeParse("net_includes_fee").success).toBe(false);
+    expect(plBasisSchema.safeParse("TOTALLY_BOGUS").success).toBe(false);
+    expect(plBasisSchema.safeParse(undefined).success).toBe(true);
   });
 
   it("does not deduct Option Omega fees a second time", () => {
