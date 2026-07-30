@@ -2,10 +2,11 @@
  * Trade model based on legacy Python Trade class
  * Represents individual trade record from portfolio CSV
  */
-export enum PlBasis {
-  NetIncludesFees = "net_includes_fees",
-  GrossBeforeFees = "gross_before_fees",
-}
+export const PlBasis = {
+  NetIncludesFees: "net_includes_fees",
+  GrossBeforeFees: "gross_before_fees",
+} as const;
+export type PlBasis = (typeof PlBasis)[keyof typeof PlBasis];
 
 export interface Trade {
   // Core trade identification

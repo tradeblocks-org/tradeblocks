@@ -31,6 +31,11 @@ function trade(overrides: Partial<Trade> = {}): Trade {
 }
 
 describe("P/L and Sharpe calculation contract", () => {
+  it("preserves the serialized P/L basis values", () => {
+    expect(PlBasis.NetIncludesFees).toBe("net_includes_fees");
+    expect(PlBasis.GrossBeforeFees).toBe("gross_before_fees");
+  });
+
   it("does not deduct Option Omega fees a second time", () => {
     const trades = [
       trade({

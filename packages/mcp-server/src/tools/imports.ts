@@ -74,7 +74,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
               "'dailylog' for daily portfolio values, 'reportinglog' for actual/reported trades",
           ),
         plBasis: z
-          .nativeEnum(PlBasis)
+          .enum(PlBasis)
           .default(PlBasis.NetIncludesFees)
           .describe(
             "Basis of the tradelog P/L column. Use 'net_includes_fees' for Option Omega exports (default), or 'gross_before_fees' when commission/fee columns still need to be deducted.",

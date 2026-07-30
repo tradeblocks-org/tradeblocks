@@ -55,7 +55,7 @@ export const tradeSchema = z.object({
   avgClosingCost: z.number().finite().optional(),
   reasonForClose: z.string().optional(),
   pl: z.number().finite(),
-  plBasis: z.nativeEnum(PlBasis).optional(),
+  plBasis: z.enum(PlBasis).optional(),
   numContracts: z.number().int().positive(),
   fundsAtClose: z.number().finite(),
   marginReq: z.number().finite().min(0),
