@@ -6,6 +6,7 @@ import {
   formatTradesWithTime,
   getDefaultSimulationPeriodFromHistory,
   getDefaultResamplePercentage,
+  convertPeriodUnit,
 } from "@tradeblocks/lib";
 
 describe("Time Conversion Utilities", () => {
@@ -125,6 +126,38 @@ describe("Time Conversion Utilities", () => {
       expect(tradesToTime(42, 252).displayText).toBe("2 months");
       expect(tradesToTime(1, 252).displayText).toContain("day");
       expect(tradesToTime(3, 252).displayText).toContain("days");
+    });
+  });
+
+  describe("convertPeriodUnit", () => {
+    // The bug this exists to prevent: reading the raw number under the new unit
+    // turned an 83-trade horizon into 83 years — 1,660 trades at this pace.
+    it("keeps the horizon the same length when the unit changes", () => {
+      const years = convertPeriodUnit(83, "trades", "years", 20);
+      expect(years).toBeCloseTo(4.15, 2);
+      expect(timeToTrades(years, "years", 20)).toBe(83);
+    });
+
+    it("round-trips back to the original trade count", () => {
+      for (const unit of ["years", "months", "days"] as const) {
+        const converted = convertPeriodUnit(83, "trades", unit, 20);
+        expect(convertPeriodUnit(converted, unit, "trades", 20)).toBe(83);
+      }
+    });
+
+    it("converts between two time units without going through the raw number", () => {
+      const asMonths = convertPeriodUnit(2, "years", "months", 20);
+      expect(asMonths).toBeCloseTo(24, 1);
+    });
+
+    it("is a no-op when the unit does not change", () => {
+      expect(convertPeriodUnit(83, "trades", "trades", 20)).toBe(83);
+      expect(convertPeriodUnit(2.5, "years", "years", 20)).toBe(2.5);
+    });
+
+    it("never returns a horizon of zero", () => {
+      expect(convertPeriodUnit(0.01, "years", "trades", 20)).toBeGreaterThanOrEqual(1);
+      expect(convertPeriodUnit(1, "trades", "years", 5000)).toBeGreaterThanOrEqual(0.01);
     });
   });
 

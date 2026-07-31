@@ -38,6 +38,7 @@ import {
   getBlock,
   getDailyLogsByBlock,
   getTradesByBlockWithOptions,
+  convertPeriodUnit,
   getDefaultSimulationPeriodFromHistory,
   percentageToTrades,
   timeToTrades,
@@ -802,8 +803,14 @@ export default function RiskSimulatorPage() {
                 <Select
                   value={simulationPeriodUnit}
                   onValueChange={(v) => {
-                    setSimulationPeriodEdited(true);
-                    setSimulationPeriodUnit(v as TimeUnit);
+                    // Changing the unit re-expresses the same horizon, it does not
+                    // request a different one, so carry the value across and leave
+                    // the edited flag alone — only typing a number pins the horizon.
+                    const nextUnit = v as TimeUnit;
+                    setSimulationPeriodValue((current) =>
+                      convertPeriodUnit(current, simulationPeriodUnit, nextUnit, tradesPerYear),
+                    );
+                    setSimulationPeriodUnit(nextUnit);
                   }}
                 >
                   <SelectTrigger className="w-28">

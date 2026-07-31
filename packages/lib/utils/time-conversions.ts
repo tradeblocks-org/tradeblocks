@@ -33,6 +33,38 @@ export function timeToTrades(value: number, unit: TimeUnit, tradesPerYear: numbe
 }
 
 /**
+ * Re-express a horizon in a different unit without changing how long it is.
+ *
+ * Switching the unit on its own is not a request for a different horizon, so the
+ * number has to move with it: 83 trades at 20 trades/year is 4.15 years, not
+ * 83 years. Reading the raw number under the new unit would silently turn an
+ * 83-trade run into a 1,660-trade one.
+ *
+ * The trade count is preserved as closely as the target unit allows — exactly
+ * for "trades", and to two decimals otherwise, which keeps the displayed value
+ * readable while staying within a trade of the original.
+ */
+export function convertPeriodUnit(
+  value: number,
+  fromUnit: TimeUnit,
+  toUnit: TimeUnit,
+  tradesPerYear: number,
+): number {
+  if (fromUnit === toUnit) {
+    return value;
+  }
+
+  const trades = timeToTrades(value, fromUnit, tradesPerYear);
+
+  if (toUnit === "trades") {
+    return Math.max(1, trades);
+  }
+
+  const converted = tradesToTime(trades, tradesPerYear, toUnit).value;
+  return Math.max(0.01, Math.round(converted * 100) / 100);
+}
+
+/**
  * Convert number of trades to time period based on trading frequency
  */
 export function tradesToTime(
