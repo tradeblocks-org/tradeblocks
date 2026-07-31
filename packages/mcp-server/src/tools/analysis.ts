@@ -516,11 +516,11 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           ),
         ruinThresholdPct: z
           .number()
-          .min(0)
+          .gt(0)
           .max(1)
           .optional()
           .describe(
-            "Ruin threshold as a decimal decline from initial capital (0.5 = equity at or below half of starting capital). When specified, statistics include probabilityOfRuin: the fraction of paths that ever touched the threshold.",
+            "Ruin threshold as a decimal decline from initial capital (0.5 = equity at or below half of starting capital). Must be greater than 0 and at most 1; 0 is rejected because it puts the ruin floor at starting capital, which would flag almost every path as ruined. When specified, statistics include probabilityOfRuin: the fraction of paths that ever touched the threshold. At exactly 1 the floor is a zero balance, so the figure matches zeroBalancePaths.",
           ),
         initialCapital: z
           .number()

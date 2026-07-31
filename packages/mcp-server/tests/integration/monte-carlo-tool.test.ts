@@ -119,6 +119,22 @@ describe("run_monte_carlo input schema", () => {
       ruinThresholdPct: 0.5,
     });
   });
+
+  it("rejects a zero ruinThresholdPct", () => {
+    // A zero threshold puts the ruin floor at starting capital, so essentially
+    // every path that ever dipped would read as ruined. Reject it rather than
+    // return a ~100% figure from a valid-looking request.
+    expect(() => schema.parse({ blockId: BLOCK_ID, ruinThresholdPct: 0 })).toThrow();
+  });
+
+  it("accepts a ruinThresholdPct of exactly 1", () => {
+    // A 100% decline floor is a zero balance: a well-defined question whose
+    // answer coincides with zeroBalancePaths, and the percent-scale input on
+    // the risk simulator page allows it, so keep the surfaces aligned.
+    expect(schema.parse({ blockId: BLOCK_ID, ruinThresholdPct: 1 })).toMatchObject({
+      ruinThresholdPct: 1,
+    });
+  });
 });
 
 describe("run_monte_carlo resampling echo", () => {

@@ -98,6 +98,12 @@ export interface MonteCarloParams {
    * (e.g. 0.5 = equity falling to or below 50% of initial capital).
    * When provided, statistics include probabilityOfRuin: the fraction of
    * paths whose equity touches the threshold at any step.
+   *
+   * Must be greater than zero. A zero threshold would put the ruin floor
+   * exactly at initial capital, so nearly every path that ever dipped below
+   * its starting value would count as ruined and the statistic would read
+   * ~100% regardless of the strategy. Zero and negative values are therefore
+   * treated as "no threshold requested" and probabilityOfRuin is omitted.
    */
   ruinThresholdPct?: number;
 }
@@ -323,6 +329,15 @@ function resampleWithReplacement<T>(data: T[], sampleSize: number, seed?: number
  */
 export function defaultMeanBlockLength(poolSize: number): number {
   return Math.max(1, Math.round(Math.cbrt(poolSize)));
+}
+
+/**
+ * A ruin threshold is only honored when it is strictly positive. Zero puts the
+ * ruin floor at initial capital, which would flag nearly every path as ruined;
+ * treat that (and any negative value) as "not requested".
+ */
+function normalizeRuinThresholdPct(ruinThresholdPct?: number): number | undefined {
+  return ruinThresholdPct !== undefined && ruinThresholdPct > 0 ? ruinThresholdPct : undefined;
 }
 
 /**
@@ -1154,6 +1169,8 @@ export function runMonteCarloSimulation(
       ? worstCaseTrades.slice(0, Math.min(worstCaseTrades.length, params.simulationLength))
       : [];
 
+  const ruinThresholdPct = normalizeRuinThresholdPct(params.ruinThresholdPct);
+
   // Run all simulations
   const simulations: SimulationPath[] = [];
 
@@ -1193,7 +1210,7 @@ export function runMonteCarloSimulation(
       params.initialCapital,
       params.tradesPerYear,
       isPercentageMode,
-      params.ruinThresholdPct,
+      ruinThresholdPct,
     );
 
     simulations.push(simulation);
@@ -1203,7 +1220,7 @@ export function runMonteCarloSimulation(
   const percentiles = calculatePercentiles(simulations);
 
   // Calculate statistics
-  const statistics = calculateStatistics(simulations, params.ruinThresholdPct);
+  const statistics = calculateStatistics(simulations, ruinThresholdPct);
 
   return {
     simulations,

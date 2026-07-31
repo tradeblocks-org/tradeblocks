@@ -322,6 +322,61 @@ describe("zero-balance and risk-of-ruin statistics", () => {
     expect(result.statistics.zeroBalancePaths).toBe(0);
   });
 
+  it.each([
+    ["zero", 0],
+    ["negative", -0.1],
+  ])("treats a %s ruin threshold as no threshold at all", (_label, ruinThresholdPct) => {
+    // Every path loses ground, so a floor sitting at initial capital would
+    // report ~100% ruin. That is a meaningless number, not a measurement, so
+    // the statistic must be omitted instead.
+    const params = {
+      numSimulations: 20,
+      simulationLength: 10,
+      resampleMethod: "percentage" as const,
+      precomputedReturns: Array(10).fill(-0.1),
+      initialCapital: 100_000,
+      tradesPerYear: 252,
+      randomSeed: 1,
+      ruinThresholdPct,
+    };
+
+    const result = runMonteCarloSimulation(fillerTrades(), params);
+
+    expect(result.statistics.probabilityOfRuin).toBeUndefined();
+    // The path really did fall below its starting value, which is what a zero
+    // floor would have counted.
+    expect(result.statistics.medianFinalValue).toBeLessThan(100_000);
+  });
+
+  it("reports less ruin as the threshold deepens", () => {
+    // A pool of small losses, one large loss, and small wins, so some paths dip
+    // a few percent (shallow ruin only) and others dip past half the account.
+    const baseParams = {
+      numSimulations: 300,
+      simulationLength: 8,
+      resampleMethod: "percentage" as const,
+      precomputedReturns: [-0.05, 0.1, -0.6, 0.1, -0.05, 0.1],
+      initialCapital: 100_000,
+      tradesPerYear: 252,
+      randomSeed: 3,
+    };
+
+    const shallow = runMonteCarloSimulation(fillerTrades(), {
+      ...baseParams,
+      ruinThresholdPct: 0.02,
+    });
+    const deep = runMonteCarloSimulation(fillerTrades(), { ...baseParams, ruinThresholdPct: 0.5 });
+
+    const touchedFraction = (result: typeof shallow, floorPct: number) =>
+      result.simulations.filter((sim) => Math.min(...sim.equityCurve) <= -floorPct).length /
+      result.simulations.length;
+
+    expect(shallow.statistics.probabilityOfRuin).toBeCloseTo(touchedFraction(shallow, 0.02), 10);
+    expect(deep.statistics.probabilityOfRuin).toBeCloseTo(touchedFraction(deep, 0.5), 10);
+    expect(shallow.statistics.probabilityOfRuin!).toBeGreaterThan(0);
+    expect(deep.statistics.probabilityOfRuin!).toBeLessThan(shallow.statistics.probabilityOfRuin!);
+  });
+
   it("counts a mid-path ruin touch even if the path recovers by the end", () => {
     // Deterministic single-value steps are impossible for a dip-and-recover
     // path, so drive it via a pool whose every value is the same each step:
