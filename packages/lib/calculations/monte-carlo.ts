@@ -332,6 +332,56 @@ export function defaultMeanBlockLength(poolSize: number): number {
 }
 
 /**
+ * Number of synthetic max-loss trades worst-case injection will create for a
+ * run: the requested percentage of the simulation length, at least one, never
+ * more than the simulation length itself.
+ *
+ * Shared by the engine and by callers that need to preview the injection
+ * before running, so a preview cannot drift from what the run actually does.
+ *
+ * @param simulationLength - Number of steps in each simulated path
+ * @param worstCasePercentage - Requested percentage of the path (0-100)
+ * @returns Number of synthetic trades that will be created
+ */
+export function worstCaseInjectionCount(
+  simulationLength: number,
+  worstCasePercentage: number,
+): number {
+  if (simulationLength <= 0 || worstCasePercentage <= 0) {
+    return 0;
+  }
+  const requested = Math.ceil((simulationLength * worstCasePercentage) / 100);
+  return Math.min(simulationLength, Math.max(1, requested));
+}
+
+/**
+ * Size of the resample pool a run will actually draw from.
+ *
+ * In "pool" mode the synthetic worst-case trades join the pool, so they count
+ * toward the pool size the automatic mean block length is derived from. In
+ * "guarantee" mode they are spliced into each path after resampling and leave
+ * the pool unchanged.
+ *
+ * @param basePoolSize - Pool size before worst-case injection
+ * @param worstCase - Worst-case injection settings for the run
+ * @returns Effective pool size
+ */
+export function effectiveResamplePoolSize(
+  basePoolSize: number,
+  worstCase: {
+    enabled: boolean;
+    mode: "pool" | "guarantee";
+    injectedCount: number;
+  },
+): number {
+  const base = Math.max(0, basePoolSize);
+  if (!worstCase.enabled || worstCase.mode !== "pool") {
+    return base;
+  }
+  return base + Math.max(0, worstCase.injectedCount);
+}
+
+/**
  * A ruin threshold is only honored when it is strictly positive. Zero puts the
  * ruin floor at initial capital, which would flag nearly every path as ruined;
  * treat that (and any negative value) as "not requested".
@@ -437,8 +487,7 @@ export function createSyntheticMaxLossTrades(
     return [];
   }
 
-  const requestedBudget = Math.ceil((simulationLength * percentage) / 100);
-  const cappedBudget = Math.min(simulationLength, Math.max(1, requestedBudget));
+  const cappedBudget = worstCaseInjectionCount(simulationLength, percentage);
 
   if (cappedBudget <= 0) {
     return [];

@@ -32,6 +32,8 @@ import {
   runMonteCarloSimulation,
   buildOriginalOrderEquityPath,
   defaultMeanBlockLength,
+  effectiveResamplePoolSize,
+  worstCaseInjectionCount,
   PortfolioStatsCalculator,
   getBlock,
   getDailyLogsByBlock,
@@ -55,6 +57,7 @@ import type {
   TimeUnit,
 } from "@tradeblocks/lib";
 import { useBlockStore } from "@tradeblocks/lib/stores";
+import { describeSimulationHorizon } from "./horizon-notice";
 import { Download, HelpCircle, Loader2, Play, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
@@ -244,11 +247,10 @@ export default function RiskSimulatorPage() {
   }, [simulationPeriodValue, simulationPeriodUnit, tradesPerYear]);
 
   const worstCaseSimulationBudget = useMemo(() => {
-    if (!worstCaseEnabled || simulationLength <= 0) {
+    if (!worstCaseEnabled) {
       return 0;
     }
-    const requested = Math.ceil((simulationLength * worstCasePercentage) / 100);
-    return Math.min(simulationLength, Math.max(1, requested));
+    return worstCaseInjectionCount(simulationLength, worstCasePercentage);
   }, [worstCaseEnabled, simulationLength, worstCasePercentage]);
 
   const historicalWorstCaseRequest = useMemo(() => {
@@ -288,9 +290,29 @@ export default function RiskSimulatorPage() {
     return count;
   }, [filteredTrades, resampleMethod, resamplePercentage]);
 
-  const autoBlockLength = defaultMeanBlockLength(Math.max(1, estimatedPoolSize));
+  // The block-length hint has to describe the pool the run will actually draw
+  // from: in "pool" mode the synthetic worst-case trades join the pool, so
+  // leaving them out understates the automatic block length.
+  const effectivePoolSize = effectiveResamplePoolSize(estimatedPoolSize, {
+    enabled: worstCaseEnabled,
+    mode: worstCaseMode,
+    injectedCount: worstCaseSimulationBudget,
+  });
+
+  const autoBlockLength = defaultMeanBlockLength(Math.max(1, effectivePoolSize));
   const effectiveBlockLength = meanBlockLength ?? autoBlockLength;
   const blockStepUnit = resampleMethod === "daily" ? "days" : "trades";
+
+  // A hand-typed horizon is deliberately kept across a strategy switch, so it
+  // can end up describing a different history than the one now in scope. Say so
+  // rather than letting the mismatch sit there silently.
+  const simulationHorizonNotice = describeSimulationHorizon({
+    isAtDefault: isSimulationPeriodAtDefault,
+    simulationLength,
+    historyTradeCount: filteredTrades.length,
+    unit: simulationPeriodUnit,
+    paceText: tradesToTime(simulationLength, tradesPerYear).displayText,
+  });
 
   const shouldShowHistoricalCapHint =
     worstCaseEnabled &&
@@ -780,18 +802,10 @@ export default function RiskSimulatorPage() {
                 </Select>
               </div>
               {isSimulationPeriodAtDefault ? (
-                <p className="text-xs text-muted-foreground">
-                  Matches your history ({simulationLength.toLocaleString()}{" "}
-                  {simulationLength === 1 ? "trade" : "trades"} ≈{" "}
-                  {tradesToTime(simulationLength, tradesPerYear).displayText})
-                </p>
+                <p className="text-xs text-muted-foreground">{simulationHorizonNotice}</p>
               ) : (
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    {simulationPeriodUnit === "trades"
-                      ? `${simulationLength.toLocaleString()} trades ≈ ${tradesToTime(simulationLength, tradesPerYear).displayText}`
-                      : `≈ ${simulationLength.toLocaleString()} trades at your pace`}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{simulationHorizonNotice}</p>
                   <Button
                     variant="link"
                     size="sm"
