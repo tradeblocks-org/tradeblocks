@@ -1,7 +1,7 @@
 import {
   timeToTrades,
   percentageToTrades,
-  getDefaultSimulationPeriod,
+  getDefaultSimulationPeriodFromHistory,
   getDefaultResamplePercentage,
   runMonteCarloSimulation,
   MonteCarloParams,
@@ -70,21 +70,26 @@ describe("Risk Simulator Parameter Flow", () => {
       expect(percentageToTrades(0.01, trades.length)).toBe(1);
     });
 
-    it("should set appropriate defaults based on trading frequency", () => {
-      // High frequency trader
-      let defaults = getDefaultSimulationPeriod(10000);
-      expect(defaults.value).toBe(3);
-      expect(defaults.unit).toBe("months");
+    it("should default the horizon to the history in scope", () => {
+      const trades = createMockTrades(83);
 
-      // Regular trader
-      defaults = getDefaultSimulationPeriod(252);
-      expect(defaults.value).toBe(1);
-      expect(defaults.unit).toBe("years");
+      const defaults = getDefaultSimulationPeriodFromHistory(trades.length);
+      expect(defaults).toEqual({ value: 83, unit: "trades" });
 
-      // Occasional trader
-      defaults = getDefaultSimulationPeriod(50);
-      expect(defaults.value).toBe(2);
-      expect(defaults.unit).toBe("years");
+      // The horizon survives the conversion exactly, at any pace. The old
+      // frequency buckets did not: 2 years at 20 trades/year is 40 trades.
+      expect(timeToTrades(defaults.value, defaults.unit, 20)).toBe(83);
+      expect(timeToTrades(2, "years", 20)).toBe(40);
+    });
+
+    it("should default a strategy-filtered horizon to that strategy's trade count", () => {
+      const trades = createMockTrades(100);
+      const filtered = trades.filter((_, i) => i % 4 === 0);
+
+      expect(getDefaultSimulationPeriodFromHistory(filtered.length)).toEqual({
+        value: 25,
+        unit: "trades",
+      });
     });
 
     it("should set appropriate resample percentage defaults", () => {
@@ -180,6 +185,35 @@ describe("Risk Simulator Parameter Flow", () => {
       expect(result.parameters.simulationLength).toBe(126); // 6 months = 126 trades
       expect(result.parameters.resampleWindow).toBe(126); // 50% of 252 trades
       expect(result.actualResamplePoolSize).toBeLessThanOrEqual(126);
+    });
+
+    it("should annualize a history-length horizon against the pace, not the trade count", () => {
+      // 83 trades at 20 trades/year is a ~4.15 year horizon. The horizon is an
+      // exact trade count; annualization still goes through the detected pace.
+      const trades = createMockTrades(83);
+      const tradesPerYear = 20;
+
+      const defaults = getDefaultSimulationPeriodFromHistory(trades.length);
+      const simulationLength = timeToTrades(defaults.value, defaults.unit, tradesPerYear);
+      expect(simulationLength).toBe(83);
+
+      const result = runMonteCarloSimulation(trades, {
+        numSimulations: 50,
+        simulationLength,
+        resampleMethod: "trades",
+        initialCapital: 100000,
+        tradesPerYear,
+        randomSeed: 7,
+      });
+
+      const yearsElapsed = simulationLength / tradesPerYear;
+      expect(yearsElapsed).toBeCloseTo(4.15, 2);
+
+      const path = result.simulations[0];
+      expect(path.annualizedReturn).toBeCloseTo(
+        Math.pow(1 + path.totalReturn, 1 / yearsElapsed) - 1,
+        6,
+      );
     });
 
     it("should handle high-frequency trading parameters", () => {

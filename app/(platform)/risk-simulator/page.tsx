@@ -36,9 +36,10 @@ import {
   getBlock,
   getDailyLogsByBlock,
   getTradesByBlockWithOptions,
-  getDefaultSimulationPeriod,
+  getDefaultSimulationPeriodFromHistory,
   percentageToTrades,
   timeToTrades,
+  tradesToTime,
   downloadCsv,
   downloadJson,
   generateExportFilename,
@@ -69,7 +70,9 @@ export default function RiskSimulatorPage() {
   // Simulation parameters
   const [numSimulations, setNumSimulations] = useState(1000);
   const [simulationPeriodValue, setSimulationPeriodValue] = useState(1);
-  const [simulationPeriodUnit, setSimulationPeriodUnit] = useState<TimeUnit>("years");
+  const [simulationPeriodUnit, setSimulationPeriodUnit] = useState<TimeUnit>("trades");
+  // Once the horizon is edited by hand, stop re-deriving it from the history
+  const [simulationPeriodEdited, setSimulationPeriodEdited] = useState(false);
   const [resamplePercentage, setResamplePercentage] = useState(100);
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
   const [initialCapital, setInitialCapital] = useState(100000);
@@ -119,7 +122,8 @@ export default function RiskSimulatorPage() {
     }));
   };
 
-  const tradesForWorstCase = useMemo(() => {
+  // Trades the simulation will actually sample from, after the strategy filter
+  const filteredTrades = useMemo(() => {
     if (selectedStrategies.length > 0) {
       const selected = new Set(selectedStrategies);
       return trades.filter((trade) => selected.has(trade.strategy || ""));
@@ -205,13 +209,34 @@ export default function RiskSimulatorPage() {
     const fallbackTradesPerYear = calculatedTradesPerYear > 0 ? calculatedTradesPerYear : 252;
     setTradesPerYear(fallbackTradesPerYear);
     setInitialCapital(calculatedInitialCapital);
-    // Set default simulation period based on trading frequency
-    const defaults = getDefaultSimulationPeriod(fallbackTradesPerYear);
-    setSimulationPeriodValue(defaults.value);
-    setSimulationPeriodUnit(defaults.unit);
     // Default to using the full history unless the user opts in to recency weighting
     setResamplePercentage(100);
   }, [calculatedTradesPerYear, calculatedInitialCapital, trades.length]);
+
+  // The horizon defaults to the history in scope (after the strategy filter), in
+  // exact trades, so a run projects as far as the data the user just looked at.
+  const defaultSimulationPeriod = useMemo(
+    () => getDefaultSimulationPeriodFromHistory(filteredTrades.length),
+    [filteredTrades.length],
+  );
+
+  const isSimulationPeriodAtDefault =
+    simulationPeriodUnit === defaultSimulationPeriod.unit &&
+    simulationPeriodValue === defaultSimulationPeriod.value;
+
+  const matchSimulationPeriodToHistory = () => {
+    setSimulationPeriodValue(defaultSimulationPeriod.value);
+    setSimulationPeriodUnit(defaultSimulationPeriod.unit);
+    setSimulationPeriodEdited(false);
+  };
+
+  // Follow the history whenever it changes (new block, different strategies),
+  // but never overwrite a horizon the user typed themselves.
+  useEffect(() => {
+    if (simulationPeriodEdited) return;
+    setSimulationPeriodValue(defaultSimulationPeriod.value);
+    setSimulationPeriodUnit(defaultSimulationPeriod.unit);
+  }, [defaultSimulationPeriod, simulationPeriodEdited]);
 
   // Calculate actual values from user-friendly inputs
   const simulationLength = useMemo(() => {
@@ -227,11 +252,11 @@ export default function RiskSimulatorPage() {
   }, [worstCaseEnabled, simulationLength, worstCasePercentage]);
 
   const historicalWorstCaseRequest = useMemo(() => {
-    if (!worstCaseEnabled || worstCaseBasedOn !== "historical" || tradesForWorstCase.length === 0) {
+    if (!worstCaseEnabled || worstCaseBasedOn !== "historical" || filteredTrades.length === 0) {
       return 0;
     }
 
-    const counts = tradesForWorstCase.reduce((acc, trade) => {
+    const counts = filteredTrades.reduce((acc, trade) => {
       const strategy = trade.strategy || "Unknown";
       acc.set(strategy, (acc.get(strategy) ?? 0) + 1);
       return acc;
@@ -242,30 +267,26 @@ export default function RiskSimulatorPage() {
       totalRequested += Math.max(1, Math.round((count * worstCasePercentage) / 100));
     }
     return totalRequested;
-  }, [tradesForWorstCase, worstCaseBasedOn, worstCaseEnabled, worstCasePercentage]);
+  }, [filteredTrades, worstCaseBasedOn, worstCaseEnabled, worstCasePercentage]);
 
   // Approximate size of the resample pool with the current settings, used to
   // preview the automatic mean block length for stationary-block resampling.
   const estimatedPoolSize = useMemo(() => {
-    const filtered =
-      selectedStrategies.length > 0
-        ? trades.filter((t) => selectedStrategies.includes(t.strategy || ""))
-        : trades;
-    if (filtered.length === 0) return 0;
+    if (filteredTrades.length === 0) return 0;
 
     let count: number;
     if (resampleMethod === "daily") {
-      count = new Set(filtered.map((t) => t.dateOpened.toISOString().split("T")[0])).size;
+      count = new Set(filteredTrades.map((t) => t.dateOpened.toISOString().split("T")[0])).size;
     } else {
-      count = filtered.length;
+      count = filteredTrades.length;
     }
 
     if (resamplePercentage < 100) {
-      const window = percentageToTrades(resamplePercentage, filtered.length);
+      const window = percentageToTrades(resamplePercentage, filteredTrades.length);
       if (window < count) count = window;
     }
     return count;
-  }, [trades, selectedStrategies, resampleMethod, resamplePercentage]);
+  }, [filteredTrades, resampleMethod, resamplePercentage]);
 
   const autoBlockLength = defaultMeanBlockLength(Math.max(1, estimatedPoolSize));
   const effectiveBlockLength = meanBlockLength ?? autoBlockLength;
@@ -290,12 +311,6 @@ export default function RiskSimulatorPage() {
     try {
       // Give React a chance to render the loading state before crunching numbers
       await new Promise((resolve) => setTimeout(resolve, 16));
-      // Filter trades by selected strategies if any are selected
-      const filteredTrades =
-        selectedStrategies.length > 0
-          ? trades.filter((t) => selectedStrategies.includes(t.strategy || ""))
-          : trades;
-
       const isStrategyFiltered = filteredTrades.length !== trades.length;
 
       if (filteredTrades.length === 0) {
@@ -397,6 +412,8 @@ export default function RiskSimulatorPage() {
       parameters: {
         numSimulations: result.parameters.numSimulations,
         simulationLength: result.parameters.simulationLength,
+        // The horizon is a step count; a step is a day in daily-resample mode
+        simulationLengthUnit: result.parameters.resampleMethod === "daily" ? "days" : "trades",
         resampleWindow: result.parameters.resampleWindow,
         resampleMethod: result.parameters.resampleMethod,
         resampleMode: result.parameters.resampleMode,
@@ -454,7 +471,14 @@ export default function RiskSimulatorPage() {
     lines.push(toCsvRow(["Block", activeBlock.name]));
     lines.push(toCsvRow(["Exported At", new Date().toISOString()]));
     lines.push(toCsvRow(["Number of Simulations", result.parameters.numSimulations]));
-    lines.push(toCsvRow(["Simulation Length (trades)", result.parameters.simulationLength]));
+    lines.push(
+      toCsvRow([
+        result.parameters.resampleMethod === "daily"
+          ? "Simulation Length (days)"
+          : "Simulation Length (trades)",
+        result.parameters.simulationLength,
+      ]),
+    );
     lines.push(toCsvRow(["Resample Method", result.parameters.resampleMethod]));
     lines.push(
       toCsvRow([
@@ -712,9 +736,10 @@ export default function RiskSimulatorPage() {
                           How far into the future to project your portfolio performance.
                         </p>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          Choose a timeframe in familiar units (days, months, or years). The
-                          simulator converts this to the number of trades based on your historical
-                          trading frequency. Longer periods show a wider range of possible outcomes
+                          Starts at the length of the history you loaded, counted in trades, so a
+                          run projects exactly as far as the data behind it. Switch to days, months,
+                          or years to pick a timeframe instead, and the simulator converts it using
+                          your trading pace. Longer periods show a wider range of possible outcomes
                           as uncertainty compounds over time.
                         </p>
                       </div>
@@ -727,29 +752,56 @@ export default function RiskSimulatorPage() {
                   id="sim-period"
                   type="number"
                   value={simulationPeriodValue}
-                  onChange={(e) => setSimulationPeriodValue(parseFloat(e.target.value) || 1)}
-                  min={0.1}
-                  max={10}
-                  step={0.1}
+                  onChange={(e) => {
+                    setSimulationPeriodEdited(true);
+                    setSimulationPeriodValue(parseFloat(e.target.value) || 1);
+                  }}
+                  min={simulationPeriodUnit === "trades" ? 1 : 0.1}
+                  max={simulationPeriodUnit === "trades" ? 100000 : 10}
+                  step={simulationPeriodUnit === "trades" ? 1 : 0.1}
                   className="flex-1"
                 />
                 <Select
                   value={simulationPeriodUnit}
-                  onValueChange={(v) => setSimulationPeriodUnit(v as TimeUnit)}
+                  onValueChange={(v) => {
+                    setSimulationPeriodEdited(true);
+                    setSimulationPeriodUnit(v as TimeUnit);
+                  }}
                 >
                   <SelectTrigger className="w-28">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="trades">Trades</SelectItem>
                     <SelectItem value="days">Days</SelectItem>
                     <SelectItem value="months">Months</SelectItem>
                     <SelectItem value="years">Years</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-xs text-muted-foreground">
-                ≈ {simulationLength.toLocaleString()} trades at your pace
-              </p>
+              {isSimulationPeriodAtDefault ? (
+                <p className="text-xs text-muted-foreground">
+                  Matches your history ({simulationLength.toLocaleString()}{" "}
+                  {simulationLength === 1 ? "trade" : "trades"} ≈{" "}
+                  {tradesToTime(simulationLength, tradesPerYear).displayText})
+                </p>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    {simulationPeriodUnit === "trades"
+                      ? `${simulationLength.toLocaleString()} trades ≈ ${tradesToTime(simulationLength, tradesPerYear).displayText}`
+                      : `≈ ${simulationLength.toLocaleString()} trades at your pace`}
+                  </p>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    onClick={matchSimulationPeriodToHistory}
+                  >
+                    Match my history
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Column 3 - Trades Per Year */}
@@ -796,7 +848,8 @@ export default function RiskSimulatorPage() {
                 step={5}
               />
               <p className="text-xs text-muted-foreground">
-                Auto-detected pace ≈ {calculatedTradesPerYear.toLocaleString()} trades/year.
+                Auto-detected pace ≈ {calculatedTradesPerYear.toLocaleString()} trades/year, used to
+                annualize returns.
               </p>
             </div>
 
