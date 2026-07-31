@@ -266,6 +266,14 @@ export interface MonteCarloResult {
 
   /** Number of trades/days actually available in resample pool */
   actualResamplePoolSize: number;
+
+  /**
+   * Mean block length actually used for stationary-block resampling, null when
+   * resampleMode is "iid". Reflects the auto default (cube root of the pool
+   * size, including any injected worst-case losses) when meanBlockLength was
+   * not supplied.
+   */
+  effectiveMeanBlockLength: number | null;
 }
 
 /**
@@ -1204,6 +1212,7 @@ export function runMonteCarloSimulation(
     parameters: params,
     timestamp,
     actualResamplePoolSize,
+    effectiveMeanBlockLength: useStationaryBlocks ? meanBlockLength : null,
   };
 }
 

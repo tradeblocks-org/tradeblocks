@@ -1120,6 +1120,17 @@ export function registerHealthBlockTools(server: McpServer, baseDir: string): vo
             });
           }
 
+          // Any simulated path that ran the account to a zero balance is worth
+          // reporting on its own, independent of the profit-probability
+          // threshold. Silent when no path went bust.
+          if (mcStats.zeroBalancePaths > 0) {
+            flags.push({
+              type: "info",
+              dimension: "consistency",
+              message: `Monte Carlo: ${formatPercent(mcStats.zeroBalancePaths * 100)} of simulated paths ran the account to a zero balance`,
+            });
+          }
+
           // MC median MDD vs historical MDD multiplier
           // mcStats.medianMaxDrawdown is a decimal (0.12 = 12%)
           // stats.maxDrawdown is a percentage (12 = 12%)
@@ -1371,6 +1382,7 @@ export function registerHealthBlockTools(server: McpServer, baseDir: string): vo
             avgCorrelation,
             avgTailDependence,
             mcProbabilityOfProfit: mcStats.probabilityOfProfit,
+            mcZeroBalancePaths: mcStats.zeroBalancePaths,
             mcMedianMdd: mcStats.medianMaxDrawdown,
             mcMddMultiplier,
             mcPctMedianMdd: mcPctStats.medianMaxDrawdown,

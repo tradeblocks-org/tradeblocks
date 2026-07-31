@@ -401,6 +401,7 @@ export default function RiskSimulatorPage() {
         resampleMethod: result.parameters.resampleMethod,
         resampleMode: result.parameters.resampleMode,
         meanBlockLength: result.parameters.meanBlockLength ?? null, // null = auto
+        effectiveMeanBlockLength: result.effectiveMeanBlockLength,
         initialCapital: result.parameters.initialCapital,
         tradesPerYear: result.parameters.tradesPerYear,
         randomSeed: result.parameters.randomSeed,
@@ -464,8 +465,7 @@ export default function RiskSimulatorPage() {
     lines.push(
       toCsvRow([
         "Mean Block Length",
-        result.parameters.meanBlockLength ??
-          `auto (${defaultMeanBlockLength(result.actualResamplePoolSize)})`,
+        result.parameters.meanBlockLength ?? `auto (${result.effectiveMeanBlockLength})`,
       ]),
     );
     lines.push(

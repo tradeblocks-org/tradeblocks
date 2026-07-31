@@ -500,6 +500,28 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           .describe(
             "What to resample: 'trades' (individual trade P&L), 'daily' (daily aggregated returns), 'percentage' (percentage returns for compounding strategies)",
           ),
+        resampleMode: z
+          .enum(["stationary-block", "iid"])
+          .default("stationary-block")
+          .describe(
+            "How to draw from the resample pool: 'stationary-block' (default) is the stationary bootstrap, which keeps consecutive trades together so the historical clustering of wins and losses survives into drawdown and tail estimates; 'iid' draws every step independently, which breaks that clustering and understates streak risk",
+          ),
+        meanBlockLength: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe(
+            "Mean block length for stationary-block resampling. If not specified, uses the cube root of the resample pool size. Ignored when resampleMode is 'iid'.",
+          ),
+        ruinThresholdPct: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe(
+            "Ruin threshold as a decimal decline from initial capital (0.5 = equity at or below half of starting capital). When specified, statistics include probabilityOfRuin: the fraction of paths that ever touched the threshold.",
+          ),
         initialCapital: z
           .number()
           .positive()
@@ -570,6 +592,9 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
       simulationLength: simulationLengthParam,
       resampleWindow,
       resampleMethod,
+      resampleMode,
+      meanBlockLength,
+      ruinThresholdPct,
       initialCapital: initialCapitalParam,
       tradesPerYear: tradesPerYearParam,
       randomSeed,
@@ -628,6 +653,9 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           simulationLength,
           resampleWindow,
           resampleMethod,
+          resampleMode,
+          meanBlockLength,
+          ruinThresholdPct,
           initialCapital,
           historicalInitialCapital,
           tradesPerYear,
@@ -646,7 +674,11 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
         const stats = result.statistics;
 
         // Brief summary for user display
-        const summary = `Monte Carlo: ${blockId}${strategy ? ` (${strategy})` : ""} | ${numSimulations} sims | Mean Return: ${formatPercent(stats.meanTotalReturn * 100)} | P(Profit): ${formatPercent(stats.probabilityOfProfit * 100)} | 95% VaR: ${formatPercent(stats.valueAtRisk.p5 * 100)}`;
+        const ruinNote =
+          stats.probabilityOfRuin !== undefined
+            ? ` | P(Ruin): ${formatPercent(stats.probabilityOfRuin * 100)}`
+            : "";
+        const summary = `Monte Carlo: ${blockId}${strategy ? ` (${strategy})` : ""} | ${numSimulations} sims | Mean Return: ${formatPercent(stats.meanTotalReturn * 100)} | P(Profit): ${formatPercent(stats.probabilityOfProfit * 100)} | 95% VaR: ${formatPercent(stats.valueAtRisk.p5 * 100)}${ruinNote}`;
 
         // Build structured data for Claude reasoning
         const structuredData = {
@@ -657,6 +689,11 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             simulationLength: params.simulationLength,
             resampleWindow: params.resampleWindow ?? null,
             resampleMethod: params.resampleMethod,
+            resampleMode: params.resampleMode,
+            // Effective value: the auto default (cube root of the pool) when
+            // meanBlockLength was omitted, null when resampleMode is 'iid'.
+            meanBlockLength: result.effectiveMeanBlockLength,
+            ruinThresholdPct: params.ruinThresholdPct ?? null,
             initialCapital: params.initialCapital,
             historicalInitialCapital: params.historicalInitialCapital ?? null,
             tradesPerYear: params.tradesPerYear,
@@ -680,6 +717,11 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             medianMaxDrawdown: stats.medianMaxDrawdown,
             meanSharpeRatio: stats.meanSharpeRatio,
             probabilityOfProfit: stats.probabilityOfProfit,
+            // Fraction of paths whose capital touched zero at any step
+            zeroBalancePaths: stats.zeroBalancePaths,
+            // Fraction of paths that ever fell to ruinThresholdPct below
+            // starting capital; null unless a threshold was supplied
+            probabilityOfRuin: stats.probabilityOfRuin ?? null,
           },
           valueAtRisk: {
             p5: stats.valueAtRisk.p5,
