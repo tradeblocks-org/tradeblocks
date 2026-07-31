@@ -396,8 +396,28 @@ function normalizeRuinThresholdPct(ruinThresholdPct?: number): number | undefine
  * Builds a sample by, at every step, either continuing with the next
  * consecutive pool element (wrapping at the end) or, with probability
  * 1 / meanBlockLength, starting a fresh block at a uniformly random index.
- * Block lengths are therefore geometric with the given mean, and the
- * historical ordering of consecutive values inside a block is preserved.
+ *
+ * Stable public API: a general-purpose stationary bootstrap over any array, not
+ * an internal detail of the Monte Carlo engine. Callers can rely on all of the
+ * following.
+ *
+ * - **Pool membership**: every returned element is one of the elements of
+ *   `data`. Nothing is interpolated, averaged, or synthesized.
+ * - **Length**: exactly `sampleSize` elements, except for an empty `data`,
+ *   which always yields an empty array.
+ * - **Block-length distribution**: blocks are geometric with mean
+ *   `meanBlockLength` — each step after the first restarts with probability
+ *   1 / `meanBlockLength`. A mean below 1 is clamped to 1, which restarts every
+ *   step and so degenerates to i.i.d. sampling with replacement.
+ * - **Wrap-around continuation**: inside a block, consecutive draws walk
+ *   forward through `data` in its existing order and wrap from the last element
+ *   to the first, so the pool is treated as circular and every element has the
+ *   same chance of appearing (the property that makes the bootstrap
+ *   stationary). A block therefore preserves the caller's ordering, which is
+ *   how serial structure — loss streaks, hot streaks — survives resampling.
+ * - **Determinism**: with `seed` supplied, the returned sequence is a pure
+ *   function of `data`, `sampleSize`, `meanBlockLength`, and `seed`. Without a
+ *   seed it draws from `Math.random` and is not reproducible.
  *
  * @param data - Array of values to sample from
  * @param sampleSize - Number of samples to draw
