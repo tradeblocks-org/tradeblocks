@@ -27,6 +27,25 @@ export interface MonteCarloParams {
   /** Resample from individual trades, daily returns, or percentage returns */
   resampleMethod: "trades" | "daily" | "percentage";
 
+  /**
+   * How to draw from the resample pool.
+   * - "iid" (default): each step is an independent draw with replacement.
+   * - "stationary-block": stationary bootstrap (Politis-Romano). Each step
+   *   either continues with the next consecutive pool element (wrapping at
+   *   the end) or, with probability 1/meanBlockLength, starts a fresh block
+   *   at a uniformly random pool index. This preserves the historical
+   *   clustering of consecutive trades (e.g. loss streaks) that independent
+   *   draws destroy. Applies to all three resample methods.
+   */
+  resampleMode?: "iid" | "stationary-block";
+
+  /**
+   * Mean block length for stationary-block resampling.
+   * Defaults to the cube root of the resample pool size (min 1), a standard
+   * rate-optimal choice for the stationary bootstrap.
+   */
+  meanBlockLength?: number;
+
   /** Starting capital for simulations */
   initialCapital: number;
 
@@ -70,6 +89,14 @@ export interface MonteCarloParams {
 
   /** How to size each synthetic loss: absolute historical dollars or scale to account capital */
   worstCaseSizing?: "absolute" | "relative";
+
+  /**
+   * Ruin threshold as a decimal drawdown from initial capital
+   * (e.g. 0.5 = equity falling to or below 50% of initial capital).
+   * When provided, statistics include probabilityOfRuin: the fraction of
+   * paths whose equity touches the threshold at any step.
+   */
+  ruinThresholdPct?: number;
 }
 
 /**
@@ -93,6 +120,12 @@ export interface SimulationPath {
 
   /** Sharpe ratio for this simulation */
   sharpeRatio: number;
+
+  /** Whether capital touched zero (or below) at any step */
+  touchedZero: boolean;
+
+  /** Whether equity touched the ruin threshold at any step (false when no threshold given) */
+  ruined: boolean;
 }
 
 /**
@@ -171,6 +204,19 @@ export interface SimulationStatistics {
     p10: number; // 10th percentile (90% VaR)
     p25: number; // 25th percentile
   };
+
+  /**
+   * Fraction of simulations whose capital touched zero (or below) at any step.
+   * @unit Decimal01 - 0.02 means 2% of paths
+   */
+  zeroBalancePaths: number;
+
+  /**
+   * Fraction of paths whose equity touched initialCapital * (1 - ruinThresholdPct)
+   * at any step. Only present when MonteCarloParams.ruinThresholdPct is provided.
+   * @unit Decimal01 - 0.05 means 5% of paths
+   */
+  probabilityOfRuin?: number;
 }
 
 /**
@@ -251,6 +297,61 @@ function resampleWithReplacement<T>(data: T[], sampleSize: number, seed?: number
   for (let i = 0; i < sampleSize; i++) {
     const randomIndex = Math.floor(rng() * data.length);
     result.push(data[randomIndex]);
+  }
+
+  return result;
+}
+
+/**
+ * Default mean block length for stationary-block resampling:
+ * the cube root of the pool size (min 1), a standard rate-optimal choice.
+ * On an ~83-trade pool this gives blocks of ~4 consecutive trades.
+ *
+ * @param poolSize - Number of values in the resample pool
+ * @returns Mean block length
+ */
+export function defaultMeanBlockLength(poolSize: number): number {
+  return Math.max(1, Math.round(Math.cbrt(poolSize)));
+}
+
+/**
+ * Stationary bootstrap resampling (Politis-Romano)
+ *
+ * Builds a sample by, at every step, either continuing with the next
+ * consecutive pool element (wrapping at the end) or, with probability
+ * 1 / meanBlockLength, starting a fresh block at a uniformly random index.
+ * Block lengths are therefore geometric with the given mean, and the
+ * historical ordering of consecutive values inside a block is preserved.
+ *
+ * @param data - Array of values to sample from
+ * @param sampleSize - Number of samples to draw
+ * @param meanBlockLength - Mean block length (restart probability is its inverse)
+ * @param seed - Optional random seed for reproducibility
+ * @returns Array of resampled values
+ */
+export function resampleStationaryBlocks<T>(
+  data: T[],
+  sampleSize: number,
+  meanBlockLength: number,
+  seed?: number,
+): T[] {
+  const rng = seed !== undefined ? createSeededRandom(seed) : Math.random;
+  const result: T[] = [];
+
+  if (data.length === 0) {
+    return result;
+  }
+
+  const restartProbability = 1 / Math.max(1, meanBlockLength);
+  let index = 0;
+
+  for (let i = 0; i < sampleSize; i++) {
+    if (i === 0 || rng() < restartProbability) {
+      index = Math.floor(rng() * data.length);
+    } else {
+      index = (index + 1) % data.length;
+    }
+    result.push(data[index]);
   }
 
   return result;
@@ -748,6 +849,7 @@ export function resampleDailyPLs(dailyPLs: number[], sampleSize: number, seed?: 
  * @param initialCapital - Starting capital
  * @param tradesPerYear - Number of trades per year for annualization
  * @param isPercentageMode - Whether values are percentage returns (true) or dollar P&L (false)
+ * @param ruinThresholdPct - Optional ruin threshold as decimal drawdown from initial capital
  * @returns SimulationPath with equity curve and metrics
  */
 function runSingleSimulation(
@@ -755,25 +857,45 @@ function runSingleSimulation(
   initialCapital: number,
   tradesPerYear: number,
   isPercentageMode: boolean = false,
+  ruinThresholdPct?: number,
 ): SimulationPath {
   // Track capital over time
   let capital = initialCapital;
   const equityCurve: number[] = [];
   const returns: number[] = [];
+  let touchedZero = false;
+  let ruined = false;
+  const ruinFloor =
+    ruinThresholdPct !== undefined ? initialCapital * (1 - ruinThresholdPct) : undefined;
 
   // Build equity curve (as cumulative returns from starting capital)
-  let cumulativeReturn = 0;
   for (const value of resampledValues) {
     const capitalBeforeTrade = capital;
 
     if (isPercentageMode) {
-      // Additive mode: sum percentage returns, then apply to initial capital
-      // Prevents blowup where sequential -99% returns compound to near-zero
-      cumulativeReturn += value;
-      capital = initialCapital * (1 + cumulativeReturn);
+      // Compound multiplicatively. The real constraint on percentage returns
+      // is that a single trade can never lose more than the account (clamp at
+      // -100%) and a bankrupt account stays bankrupt (capital absorbs at 0).
+      // Together with the -99% floor on margin-based returns from
+      // calculateMarginReturns, this is the blowup guard for pathological
+      // sequential near-total losses.
+      if (capital > 0) {
+        const clampedReturn = Math.max(value, -1);
+        capital = capital * (1 + clampedReturn);
+        if (capital <= 0) {
+          capital = 0;
+        }
+      }
     } else {
       // Value is dollar P&L - add it to capital
       capital += value;
+    }
+
+    if (capital <= 0) {
+      touchedZero = true;
+    }
+    if (ruinFloor !== undefined && capital <= ruinFloor) {
+      ruined = true;
     }
 
     const cumRet = (capital - initialCapital) / initialCapital;
@@ -810,6 +932,8 @@ function runSingleSimulation(
     annualizedReturn,
     maxDrawdown,
     sharpeRatio,
+    touchedZero,
+    ruined,
   };
 }
 
@@ -997,11 +1121,17 @@ export function runMonteCarloSimulation(
       });
     }
 
-    // If mode is "pool", add to resample pool
+    // If mode is "pool", add to resample pool. With stationary-block
+    // resampling the injected synthetic losses simply join the pool and can
+    // appear inside blocks; "guarantee" mode splices them into each path
+    // after resampling, exactly as in iid mode.
     if (params.worstCaseMode === "pool") {
       resamplePool = [...resamplePool, ...worstCaseTrades];
     }
   }
+
+  const useStationaryBlocks = params.resampleMode === "stationary-block";
+  const meanBlockLength = params.meanBlockLength ?? defaultMeanBlockLength(resamplePool.length);
 
   const enforcedGuaranteeTrades =
     params.worstCaseEnabled && params.worstCaseMode === "guarantee" && params.simulationLength > 0
@@ -1021,7 +1151,9 @@ export function runMonteCarloSimulation(
       ? Math.max(0, params.simulationLength - enforcedGuaranteeTrades.length)
       : params.simulationLength;
 
-    let resampledPLs = resampleWithReplacement(resamplePool, baselineSampleSize, seed);
+    let resampledPLs = useStationaryBlocks
+      ? resampleStationaryBlocks(resamplePool, baselineSampleSize, meanBlockLength, seed)
+      : resampleWithReplacement(resamplePool, baselineSampleSize, seed);
 
     if (guaranteeActive) {
       const combined = [...resampledPLs];
@@ -1045,6 +1177,7 @@ export function runMonteCarloSimulation(
       params.initialCapital,
       params.tradesPerYear,
       isPercentageMode,
+      params.ruinThresholdPct,
     );
 
     simulations.push(simulation);
@@ -1054,7 +1187,7 @@ export function runMonteCarloSimulation(
   const percentiles = calculatePercentiles(simulations);
 
   // Calculate statistics
-  const statistics = calculateStatistics(simulations);
+  const statistics = calculateStatistics(simulations, params.ruinThresholdPct);
 
   return {
     simulations,
@@ -1129,10 +1262,13 @@ function percentile(sortedData: number[], p: number): number {
  * Calculate aggregate statistics from all simulations
  *
  * @param simulations - Array of simulation paths
- * @param initialCapital - Starting capital
+ * @param ruinThresholdPct - Optional ruin threshold; when provided, probabilityOfRuin is included
  * @returns SimulationStatistics
  */
-function calculateStatistics(simulations: SimulationPath[]): SimulationStatistics {
+function calculateStatistics(
+  simulations: SimulationPath[],
+  ruinThresholdPct?: number,
+): SimulationStatistics {
   const finalValues = simulations.map((s) => s.finalValue);
   const totalReturns = simulations.map((s) => s.totalReturn);
   const annualizedReturns = simulations.map((s) => s.annualizedReturn);
@@ -1182,6 +1318,13 @@ function calculateStatistics(simulations: SimulationPath[]): SimulationStatistic
     p25: percentile(sortedTotalReturns, 25),
   };
 
+  // Zero-balance and ruin statistics
+  const zeroBalancePaths = simulations.filter((s) => s.touchedZero).length / simulations.length;
+  const probabilityOfRuin =
+    ruinThresholdPct !== undefined
+      ? simulations.filter((s) => s.ruined).length / simulations.length
+      : undefined;
+
   return {
     meanFinalValue,
     medianFinalValue,
@@ -1195,5 +1338,7 @@ function calculateStatistics(simulations: SimulationPath[]): SimulationStatistic
     meanSharpeRatio,
     probabilityOfProfit,
     valueAtRisk,
+    zeroBalancePaths,
+    ...(probabilityOfRuin !== undefined ? { probabilityOfRuin } : {}),
   };
 }

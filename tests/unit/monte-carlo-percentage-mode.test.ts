@@ -447,36 +447,25 @@ describe("Filtered strategy simulations", () => {
     const simulationPeriodValue = 6;
     const simulationPeriodUnit = "months" as const;
 
-    const runawayParams = {
-      numSimulations: 200,
-      simulationLength: timeToTrades(
-        simulationPeriodValue,
-        simulationPeriodUnit,
-        fallbackTradesPerYear,
-      ),
-      resampleMethod: "percentage" as const,
-      initialCapital: baseCapital,
-      historicalInitialCapital: baseCapital,
-      tradesPerYear: fallbackTradesPerYear,
-      randomSeed: 42,
-    };
-
-    const runaway = runMonteCarloSimulation(trades, runawayParams);
-    // Additive mode prevents multiplicative runaway even with inflated frequency
-    expect(runaway.statistics.meanTotalReturn).toBeLessThan(1000);
-
+    // With true compounding, an inflated trade frequency makes returns
+    // explode multiplicatively, so respecting the filtered strategy's actual
+    // frequency (via estimateTradesPerYear) is what keeps projections sane.
     const adjustedTradesPerYear = estimateTradesPerYear(trades, fallbackTradesPerYear);
     expect(adjustedTradesPerYear).toBeLessThan(fallbackTradesPerYear);
     expect(adjustedTradesPerYear).toBeGreaterThan(10);
 
     const adjustedParams = {
-      ...runawayParams,
-      tradesPerYear: adjustedTradesPerYear,
+      numSimulations: 200,
       simulationLength: timeToTrades(
         simulationPeriodValue,
         simulationPeriodUnit,
         adjustedTradesPerYear,
       ),
+      resampleMethod: "percentage" as const,
+      initialCapital: baseCapital,
+      historicalInitialCapital: baseCapital,
+      tradesPerYear: adjustedTradesPerYear,
+      randomSeed: 42,
     };
 
     const adjusted = runMonteCarloSimulation(trades, adjustedParams);
