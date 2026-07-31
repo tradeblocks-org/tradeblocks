@@ -16,6 +16,7 @@ import type {
   StrategyWeightSweepConfig,
 } from "../models/walk-forward.ts";
 import { toCsvRow } from "../utils/export-helpers.ts";
+import { generateId } from "../utils/id.ts";
 import type { Trade } from "../models/trade.ts";
 
 type WalkForwardPresetKey = "conservative" | "moderate" | "aggressive";
@@ -446,13 +447,6 @@ export const DEFAULT_WALK_FORWARD_CONFIG: WalkForwardConfig = {
   minInSampleTrades: 15,
   minOutOfSampleTrades: 5,
 };
-
-function generateId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `walk-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
 
 function buildCsvFromAnalysis(analysis: WalkForwardAnalysis | null): string | null {
   if (!analysis) return null;

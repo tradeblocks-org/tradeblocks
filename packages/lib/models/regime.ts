@@ -5,6 +5,8 @@
  * by market conditions (VIX levels, SLR bands, time of day, etc.)
  */
 
+import { generateId } from "../utils/id.ts";
+
 /**
  * Supported field types for regime filtering
  * Each type determines the UI component and validation logic
@@ -183,7 +185,7 @@ export function createNumericBucket(
   color?: string,
 ): NumericThresholdBucket {
   return {
-    id: crypto.randomUUID(),
+    id: generateId(),
     name,
     type: "numeric_threshold",
     min,
@@ -202,7 +204,7 @@ export function createTimeOfDayBucket(
   color?: string,
 ): TimeOfDayBucket {
   return {
-    id: crypto.randomUUID(),
+    id: generateId(),
     name,
     type: "time_of_day",
     startTime,
@@ -220,7 +222,7 @@ export function createDayOfWeekBucket(
   color?: string,
 ): DayOfWeekBucket {
   return {
-    id: crypto.randomUUID(),
+    id: generateId(),
     name,
     type: "day_of_week",
     days,

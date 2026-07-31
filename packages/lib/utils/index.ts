@@ -29,6 +29,7 @@ export function truncateStrategyName(strategyName: string, maxLength: number = 4
 }
 
 // Core utility modules
+export * from "./id.ts";
 export * from "./equity-curve.ts";
 export * from "./risk-free-rate.ts";
 export * from "./time-conversions.ts";

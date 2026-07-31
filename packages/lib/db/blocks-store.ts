@@ -3,6 +3,7 @@
  */
 
 import type { ProcessedBlock, Block } from "../models/block.ts";
+import { generateId } from "../utils/id.ts";
 import {
   STORES,
   withReadTransaction,
@@ -19,7 +20,7 @@ export async function createBlock(
 ): Promise<ProcessedBlock> {
   const block: ProcessedBlock = {
     ...blockData,
-    id: crypto.randomUUID(),
+    id: generateId(),
     created: new Date(),
     lastModified: new Date(),
   };

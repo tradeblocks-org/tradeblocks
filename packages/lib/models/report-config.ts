@@ -5,6 +5,8 @@
  * filter conditions and chart settings.
  */
 
+import { generateId } from "../utils/id.ts";
+
 /**
  * Filter operators for comparing trade field values
  */
@@ -778,7 +780,7 @@ export function createEmptyFilterConfig(): FilterConfig {
  */
 export function createFilterCondition(field: ReportField = "openingVix"): FilterCondition {
   return {
-    id: crypto.randomUUID(),
+    id: generateId(),
     field,
     operator: "gt",
     value: 0,

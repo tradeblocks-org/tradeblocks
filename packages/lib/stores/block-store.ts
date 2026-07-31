@@ -16,6 +16,7 @@ import {
 } from "../services/performance-snapshot.ts";
 import type { ProcessedBlock } from "../models/block.ts";
 import type { StrategyAlignment } from "../models/strategy-alignment.ts";
+import { generateId } from "../utils/id.ts";
 
 export interface Block {
   id: string;
@@ -300,7 +301,7 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
     try {
       const newBlock: Block = {
         ...blockData,
-        id: "id" in blockData ? blockData.id : crypto.randomUUID(), // Use provided ID or generate new one
+        id: "id" in blockData ? blockData.id : generateId(), // Use provided ID or generate new one
         created: new Date(),
         lastModified: new Date(),
       };
