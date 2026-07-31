@@ -29,13 +29,16 @@ export interface MonteCarloParams {
 
   /**
    * How to draw from the resample pool.
-   * - "iid" (default): each step is an independent draw with replacement.
-   * - "stationary-block": stationary bootstrap (Politis-Romano). Each step
-   *   either continues with the next consecutive pool element (wrapping at
-   *   the end) or, with probability 1/meanBlockLength, starts a fresh block
-   *   at a uniformly random pool index. This preserves the historical
-   *   clustering of consecutive trades (e.g. loss streaks) that independent
-   *   draws destroy. Applies to all three resample methods.
+   * - "stationary-block" (default): stationary bootstrap (Politis-Romano).
+   *   Each step either continues with the next consecutive pool element
+   *   (wrapping at the end) or, with probability 1/meanBlockLength, starts a
+   *   fresh block at a uniformly random pool index. This preserves the
+   *   historical clustering of consecutive trades (e.g. loss streaks), which
+   *   real P&L exhibits, so it is the more robust default for tail and
+   *   drawdown estimates; with uncorrelated data it converges to near-iid
+   *   behavior. Applies to all three resample methods.
+   * - "iid": explicit opt-out; each step is an independent draw with
+   *   replacement.
    */
   resampleMode?: "iid" | "stationary-block";
 
@@ -1130,7 +1133,12 @@ export function runMonteCarloSimulation(
     }
   }
 
-  const useStationaryBlocks = params.resampleMode === "stationary-block";
+  // Stationary-block resampling is the default: block resampling preserves
+  // the historical clustering of consecutive trades, which real P&L exhibits,
+  // so it is the more robust default for tail/drawdown estimates; with
+  // uncorrelated data it converges to near-iid behavior. "iid" is the
+  // explicit opt-out.
+  const useStationaryBlocks = (params.resampleMode ?? "stationary-block") === "stationary-block";
   const meanBlockLength = params.meanBlockLength ?? defaultMeanBlockLength(resamplePool.length);
 
   const enforcedGuaranteeTrades =
@@ -1340,5 +1348,110 @@ function calculateStatistics(
     valueAtRisk,
     zeroBalancePaths,
     ...(probabilityOfRuin !== undefined ? { probabilityOfRuin } : {}),
+  };
+}
+
+/**
+ * Parameters for reconstructing the actual historical equity path in
+ * original trade order (no resampling).
+ */
+export interface OriginalOrderPathParams {
+  /** Same resample method the simulation uses; determines step arithmetic */
+  resampleMethod: "trades" | "daily" | "percentage";
+
+  /** Starting capital the path is rebuilt from (the simulation's initialCapital) */
+  initialCapital: number;
+
+  /**
+   * Historical initial capital used to derive percentage returns for
+   * strategy-filtered multi-strategy portfolios. Same semantics as
+   * MonteCarloParams.historicalInitialCapital.
+   */
+  historicalInitialCapital?: number;
+
+  /** Scale trade P&L to 1-lot, same as MonteCarloParams.normalizeTo1Lot */
+  normalizeTo1Lot?: boolean;
+}
+
+/**
+ * The actual historical equity path in original order
+ */
+export interface OriginalOrderPath {
+  /** Equity value after each step (trade or day), in chronological order */
+  equity: number[];
+
+  /** Equity after the final step (initialCapital when there are no steps) */
+  finalValue: number;
+
+  /** Number of steps in the path */
+  stepCount: number;
+
+  /** Whether each step is a trade or a day */
+  stepUnit: "trades" | "days";
+}
+
+/**
+ * Reconstruct the actual historical equity path in original trade order,
+ * using the same per-step arithmetic as the Monte Carlo simulation:
+ * - "percentage": initialCapital compounded through the same percentage
+ *   returns the simulation resamples from (per-step return clamped at -100%,
+ *   capital absorbing at zero), so the path is directly comparable to the
+ *   simulated fan.
+ * - "trades": initialCapital plus the cumulative sum of per-trade P&L.
+ * - "daily": initialCapital plus the cumulative sum of per-day P&L.
+ *
+ * Pass the same (pre-filtered) trades and normalization settings given to
+ * runMonteCarloSimulation so the path reflects the same history the
+ * simulation samples from.
+ *
+ * @param trades - Historical trades (already filtered to the strategies being simulated)
+ * @param params - Reconstruction parameters
+ * @returns OriginalOrderPath with the chronological equity values
+ */
+export function buildOriginalOrderEquityPath(
+  trades: Trade[],
+  params: OriginalOrderPathParams,
+): OriginalOrderPath {
+  const equity: number[] = [];
+  let capital = params.initialCapital;
+  let stepUnit: "trades" | "days" = "trades";
+
+  if (params.resampleMethod === "percentage") {
+    const returns = calculatePercentageReturns(
+      trades,
+      params.normalizeTo1Lot,
+      params.historicalInitialCapital,
+    );
+    for (const r of returns) {
+      if (capital > 0) {
+        capital = capital * (1 + Math.max(r, -1));
+        if (capital <= 0) {
+          capital = 0;
+        }
+      }
+      equity.push(capital);
+    }
+  } else if (params.resampleMethod === "daily") {
+    stepUnit = "days";
+    const dailyReturns = calculateDailyReturns(trades, params.normalizeTo1Lot);
+    for (const day of dailyReturns) {
+      capital += day.dailyPL;
+      equity.push(capital);
+    }
+  } else {
+    const sortedTrades = [...trades].sort(
+      (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime(),
+    );
+    for (const trade of sortedTrades) {
+      capital += params.normalizeTo1Lot ? scaleTradeToOneLot(trade) : trade.pl;
+      equity.push(capital);
+    }
+  }
+
+  return {
+    equity,
+    finalValue: equity.length > 0 ? equity[equity.length - 1] : params.initialCapital,
+    stepCount: equity.length,
+    stepUnit,
   };
 }

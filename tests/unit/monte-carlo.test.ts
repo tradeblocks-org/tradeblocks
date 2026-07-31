@@ -419,6 +419,7 @@ describe("Monte Carlo Simulation", () => {
         numSimulations: 1,
         simulationLength: 2,
         resampleMethod: "trades",
+        resampleMode: "iid", // Pin the sampler so the seeded draw sequence stays stable
         initialCapital: 10000,
         tradesPerYear: 252,
         randomSeed: 3, // Picks trade indices 2 then 5 with our PRNG

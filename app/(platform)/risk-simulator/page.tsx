@@ -30,6 +30,8 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
   runMonteCarloSimulation,
+  buildOriginalOrderEquityPath,
+  defaultMeanBlockLength,
   PortfolioStatsCalculator,
   getBlock,
   getDailyLogsByBlock,
@@ -46,6 +48,7 @@ import {
 import type {
   MonteCarloParams,
   MonteCarloResult,
+  OriginalOrderPath,
   DailyLogEntry,
   Trade,
   TimeUnit,
@@ -74,6 +77,9 @@ export default function RiskSimulatorPage() {
   const [resampleMethod, setResampleMethod] = useState<"trades" | "daily" | "percentage">(
     "percentage",
   );
+  const [resampleMode, setResampleMode] = useState<"iid" | "stationary-block">("stationary-block");
+  const [meanBlockLength, setMeanBlockLength] = useState<number | null>(null); // null = auto
+  const [ruinThresholdPercent, setRuinThresholdPercent] = useState<number | null>(null); // null = off
   const [useFixedSeed, setUseFixedSeed] = useState(true);
   const [seedValue, setSeedValue] = useState(42);
   const [normalizeTo1Lot, setNormalizeTo1Lot] = useState(false);
@@ -94,6 +100,7 @@ export default function RiskSimulatorPage() {
   // Simulation state
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<MonteCarloResult | null>(null);
+  const [originalOrder, setOriginalOrder] = useState<OriginalOrderPath | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Get available strategies from active block
@@ -237,6 +244,33 @@ export default function RiskSimulatorPage() {
     return totalRequested;
   }, [tradesForWorstCase, worstCaseBasedOn, worstCaseEnabled, worstCasePercentage]);
 
+  // Approximate size of the resample pool with the current settings, used to
+  // preview the automatic mean block length for stationary-block resampling.
+  const estimatedPoolSize = useMemo(() => {
+    const filtered =
+      selectedStrategies.length > 0
+        ? trades.filter((t) => selectedStrategies.includes(t.strategy || ""))
+        : trades;
+    if (filtered.length === 0) return 0;
+
+    let count: number;
+    if (resampleMethod === "daily") {
+      count = new Set(filtered.map((t) => t.dateOpened.toISOString().split("T")[0])).size;
+    } else {
+      count = filtered.length;
+    }
+
+    if (resamplePercentage < 100) {
+      const window = percentageToTrades(resamplePercentage, filtered.length);
+      if (window < count) count = window;
+    }
+    return count;
+  }, [trades, selectedStrategies, resampleMethod, resamplePercentage]);
+
+  const autoBlockLength = defaultMeanBlockLength(Math.max(1, estimatedPoolSize));
+  const effectiveBlockLength = meanBlockLength ?? autoBlockLength;
+  const blockStepUnit = resampleMethod === "daily" ? "days" : "trades";
+
   const shouldShowHistoricalCapHint =
     worstCaseEnabled &&
     worstCaseBasedOn === "historical" &&
@@ -306,6 +340,8 @@ export default function RiskSimulatorPage() {
         simulationLength: effectiveSimulationLength,
         resampleWindow,
         resampleMethod,
+        resampleMode,
+        meanBlockLength: meanBlockLength ?? undefined, // undefined = auto (cube root of pool size)
         initialCapital,
         historicalInitialCapital, // Only set when simulating a subset of strategies
         strategy: undefined, // We pre-filter trades instead
@@ -317,10 +353,24 @@ export default function RiskSimulatorPage() {
         worstCaseMode,
         worstCaseBasedOn,
         worstCaseSizing,
+        ruinThresholdPct:
+          ruinThresholdPercent !== null && ruinThresholdPercent > 0
+            ? ruinThresholdPercent / 100
+            : undefined,
       };
 
       const simulationResult = runMonteCarloSimulation(filteredTrades, params);
       setResult(simulationResult);
+      // Reconstruct what actually happened, in original order, from the same
+      // filtered history and settings the simulation sampled from.
+      setOriginalOrder(
+        buildOriginalOrderEquityPath(filteredTrades, {
+          resampleMethod,
+          initialCapital,
+          historicalInitialCapital,
+          normalizeTo1Lot,
+        }),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Simulation failed");
     } finally {
@@ -330,6 +380,7 @@ export default function RiskSimulatorPage() {
 
   const resetSimulation = () => {
     setResult(null);
+    setOriginalOrder(null);
     setError(null);
   };
 
@@ -348,6 +399,8 @@ export default function RiskSimulatorPage() {
         simulationLength: result.parameters.simulationLength,
         resampleWindow: result.parameters.resampleWindow,
         resampleMethod: result.parameters.resampleMethod,
+        resampleMode: result.parameters.resampleMode,
+        meanBlockLength: result.parameters.meanBlockLength ?? null, // null = auto
         initialCapital: result.parameters.initialCapital,
         tradesPerYear: result.parameters.tradesPerYear,
         randomSeed: result.parameters.randomSeed,
@@ -357,6 +410,7 @@ export default function RiskSimulatorPage() {
         worstCaseMode: result.parameters.worstCaseMode,
         worstCaseBasedOn: result.parameters.worstCaseBasedOn,
         worstCaseSizing: result.parameters.worstCaseSizing,
+        ruinThresholdPct: result.parameters.ruinThresholdPct ?? null, // null = off
       },
       percentiles: {
         steps: result.percentiles.steps,
@@ -379,6 +433,8 @@ export default function RiskSimulatorPage() {
         meanSharpeRatio: result.statistics.meanSharpeRatio,
         probabilityOfProfit: result.statistics.probabilityOfProfit,
         valueAtRisk: result.statistics.valueAtRisk,
+        zeroBalancePaths: result.statistics.zeroBalancePaths,
+        probabilityOfRuin: result.statistics.probabilityOfRuin ?? null,
       },
       actualResamplePoolSize: result.actualResamplePoolSize,
       selectedStrategies: selectedStrategies.length > 0 ? selectedStrategies : "all",
@@ -399,6 +455,27 @@ export default function RiskSimulatorPage() {
     lines.push(toCsvRow(["Number of Simulations", result.parameters.numSimulations]));
     lines.push(toCsvRow(["Simulation Length (trades)", result.parameters.simulationLength]));
     lines.push(toCsvRow(["Resample Method", result.parameters.resampleMethod]));
+    lines.push(
+      toCsvRow([
+        "Resampling",
+        result.parameters.resampleMode === "iid" ? "iid (independent draws)" : "stationary-block",
+      ]),
+    );
+    lines.push(
+      toCsvRow([
+        "Mean Block Length",
+        result.parameters.meanBlockLength ??
+          `auto (${defaultMeanBlockLength(result.actualResamplePoolSize)})`,
+      ]),
+    );
+    lines.push(
+      toCsvRow([
+        "Ruin Threshold",
+        result.parameters.ruinThresholdPct !== undefined
+          ? `${(result.parameters.ruinThresholdPct * 100).toFixed(0)}%`
+          : "off",
+      ]),
+    );
     lines.push(toCsvRow(["Initial Capital", `$${result.parameters.initialCapital}`]));
     lines.push(toCsvRow(["Trades Per Year", result.parameters.tradesPerYear]));
     lines.push(toCsvRow(["Random Seed", result.parameters.randomSeed ?? "none"]));
@@ -476,6 +553,17 @@ export default function RiskSimulatorPage() {
         `${(result.statistics.valueAtRisk.p25 * 100).toFixed(2)}%`,
       ]),
     );
+    lines.push(
+      toCsvRow(["Zero-Balance Paths", `${(result.statistics.zeroBalancePaths * 100).toFixed(2)}%`]),
+    );
+    if (result.statistics.probabilityOfRuin !== undefined) {
+      lines.push(
+        toCsvRow([
+          "Probability of Ruin",
+          `${(result.statistics.probabilityOfRuin * 100).toFixed(2)}%`,
+        ]),
+      );
+    }
     lines.push("");
 
     // Percentile trajectories (cumulative returns as decimals, e.g., 0.50 = 50% return)
@@ -549,10 +637,12 @@ export default function RiskSimulatorPage() {
                       actual trade results.
                     </p>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Each simulation randomly samples from your historical performance to project
-                      potential outcomes. This helps understand risk ranges and probability
-                      distributions, but doesn&apos;t predict actual future results. Use these
-                      projections to stress-test your strategy and understand downside scenarios.
+                      Each simulation resamples your historical performance — either keeping short
+                      streaks of neighboring trades together or drawing every trade independently,
+                      depending on the Resampling setting — to project potential outcomes. This
+                      helps understand risk ranges and probability distributions, but doesn&apos;t
+                      predict actual future results. Use these projections to stress-test your
+                      strategy and understand downside scenarios.
                     </p>
                   </div>
                 </div>
@@ -814,10 +904,16 @@ export default function RiskSimulatorPage() {
                       <strong>Daily Returns</strong> only if you always trade fixed dollar amounts.
                       Enable normalization to compare across different lot sizes.
                     </p>
+                    <p>
+                      <strong>Resampling:</strong> Stationary blocks keep short streaks of
+                      neighboring trades together so historic loss clustering carries into the
+                      simulation; independent trades shuffle everything randomly. Blocks mainly
+                      widen the simulated drawdowns and tails — the typical outcome barely moves.
+                    </p>
                     <p className="pt-2 border-t border-blue-200 dark:border-blue-800">
-                      <strong>💡 Tip:</strong> If you&apos;re unsure, stick with Percentage Returns.
-                      It prevents unrealistic drawdown calculations and matches how most traders
-                      actually size positions.
+                      <strong>💡 Tip:</strong> If you&apos;re unsure, stick with Percentage Returns
+                      and stationary blocks. Together they match how most traders actually size
+                      positions and how wins and losses actually arrive in streaks.
                     </p>
                   </div>
                 </div>
@@ -859,7 +955,9 @@ export default function RiskSimulatorPage() {
                               Percentage Returns (Compounding):
                             </strong>{" "}
                             Converts each trade to a percentage return based on capital at trade
-                            time, then applies those percentages during simulation.{" "}
+                            time, then compounds those percentages trade by trade — each return is
+                            applied to the account&apos;s current value, the way a compounding
+                            account actually grows.{" "}
                             <strong className="text-primary">
                               Essential for compounding strategies
                             </strong>{" "}
@@ -889,6 +987,63 @@ export default function RiskSimulatorPage() {
               </Select>
               <p className="text-xs text-muted-foreground">
                 How to resample from your trade history
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label>Resampling</Label>
+                <HoverCard>
+                  <HoverCardTrigger asChild>
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                  </HoverCardTrigger>
+                  <HoverCardContent className="w-80 p-0 overflow-hidden">
+                    <div className="space-y-3">
+                      <div className="bg-primary/5 border-b px-4 py-3">
+                        <h4 className="text-sm font-semibold text-primary">Resampling</h4>
+                      </div>
+                      <div className="px-4 pb-4 space-y-3">
+                        <p className="text-sm font-medium text-foreground leading-relaxed">
+                          Choose how the simulator draws from your history.
+                        </p>
+                        <div className="space-y-2 text-xs text-muted-foreground">
+                          <p>
+                            <strong className="text-foreground">
+                              Stationary blocks (recommended):
+                            </strong>{" "}
+                            Keeps short runs of neighboring {blockStepUnit} together (about{" "}
+                            {effectiveBlockLength} {blockStepUnit} per block for the current pool),
+                            so historic loss streaks and hot streaks survive into the simulation.
+                            This mainly changes the spread and the tails of the results — drawdowns
+                            and best/worst cases — not the typical outcome.
+                          </p>
+                          <p>
+                            <strong className="text-foreground">Independent trades:</strong> A fully
+                            random shuffle. Every draw is independent, so real-life clustering of
+                            wins and losses is broken up.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </HoverCardContent>
+                </HoverCard>
+              </div>
+              <Select
+                value={resampleMode}
+                onValueChange={(value) => setResampleMode(value as "iid" | "stationary-block")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="stationary-block">Stationary blocks (recommended)</SelectItem>
+                  <SelectItem value="iid">Independent trades</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {resampleMode === "stationary-block"
+                  ? `Keeps neighboring ${blockStepUnit} together — about ${effectiveBlockLength} ${blockStepUnit} per block for your current pool`
+                  : "Fully random shuffle — every draw is independent"}
               </p>
             </div>
 
@@ -1407,6 +1562,112 @@ export default function RiskSimulatorPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">Enable for reproducible results</p>
                   </div>
+
+                  {/* Mean Block Length */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="mean-block-length">Mean Block Length</Label>
+                      <HoverCard>
+                        <HoverCardTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                        </HoverCardTrigger>
+                        <HoverCardContent className="w-80 p-0 overflow-hidden">
+                          <div className="space-y-3">
+                            <div className="bg-primary/5 border-b px-4 py-3">
+                              <h4 className="text-sm font-semibold text-primary">
+                                Mean Block Length
+                              </h4>
+                            </div>
+                            <div className="px-4 pb-4 space-y-3">
+                              <p className="text-sm font-medium text-foreground leading-relaxed">
+                                Average number of consecutive {blockStepUnit} kept together per
+                                block when resampling with stationary blocks.
+                              </p>
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                Leave blank to let the simulator pick automatically based on how
+                                much history you have ({autoBlockLength} for your current pool).
+                                Larger blocks preserve longer streaks; a length of 1 behaves like
+                                independent draws. This setting is ignored when resampling is set to
+                                independent trades.
+                              </p>
+                            </div>
+                          </div>
+                        </HoverCardContent>
+                      </HoverCard>
+                    </div>
+                    <Input
+                      id="mean-block-length"
+                      type="number"
+                      value={meanBlockLength ?? ""}
+                      placeholder={`Auto (${autoBlockLength})`}
+                      onChange={(e) => {
+                        const next = parseInt(e.target.value, 10);
+                        setMeanBlockLength(Number.isFinite(next) && next >= 1 ? next : null);
+                      }}
+                      min={1}
+                      max={1000}
+                      className="w-40"
+                      disabled={resampleMode !== "stationary-block"}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {resampleMode === "stationary-block"
+                        ? meanBlockLength === null
+                          ? `Auto: ${autoBlockLength} ${blockStepUnit} per block for your current pool`
+                          : `Blocks average ${meanBlockLength} ${blockStepUnit}; blank returns to auto`
+                        : "Only used with stationary-block resampling"}
+                    </p>
+                  </div>
+
+                  {/* Ruin Threshold */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="ruin-threshold">Ruin Threshold (%)</Label>
+                      <HoverCard>
+                        <HoverCardTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                        </HoverCardTrigger>
+                        <HoverCardContent className="w-80 p-0 overflow-hidden">
+                          <div className="space-y-3">
+                            <div className="bg-primary/5 border-b px-4 py-3">
+                              <h4 className="text-sm font-semibold text-primary">Ruin Threshold</h4>
+                            </div>
+                            <div className="px-4 pb-4 space-y-3">
+                              <p className="text-sm font-medium text-foreground leading-relaxed">
+                                Define how deep a decline from starting capital counts as ruin.
+                              </p>
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                For example, 50 means an account that ever falls 50% below its
+                                starting value is counted as ruined, even if it later recovers. When
+                                set, the results include a Probability of Ruin card showing what
+                                fraction of simulations ever touched that line. Leave blank to skip
+                                this statistic.
+                              </p>
+                            </div>
+                          </div>
+                        </HoverCardContent>
+                      </HoverCard>
+                    </div>
+                    <Input
+                      id="ruin-threshold"
+                      type="number"
+                      value={ruinThresholdPercent ?? ""}
+                      placeholder="Off"
+                      onChange={(e) => {
+                        const next = parseInt(e.target.value, 10);
+                        setRuinThresholdPercent(
+                          Number.isFinite(next) && next >= 1 && next <= 100 ? next : null,
+                        );
+                      }}
+                      min={1}
+                      max={100}
+                      className="w-40"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {ruinThresholdPercent !== null
+                        ? `A path ever down ${ruinThresholdPercent}% from starting capital counts as ruined`
+                        : "Optional: percent decline from starting capital that counts as ruin"}
+                    </p>
+                  </div>
                 </div>
               </AccordionContent>
             </AccordionItem>
@@ -1508,11 +1769,12 @@ export default function RiskSimulatorPage() {
               initialCapital={initialCapital}
               scaleType={scaleType}
               showIndividualPaths={showIndividualPaths}
+              originalOrder={originalOrder}
             />
           </Card>
 
           {/* Statistics Cards */}
-          <StatisticsCards result={result} />
+          <StatisticsCards result={result} originalOrder={originalOrder} />
 
           {/* Distribution Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1531,11 +1793,13 @@ function EquityCurveChart({
   initialCapital,
   scaleType,
   showIndividualPaths,
+  originalOrder,
 }: {
   result: MonteCarloResult;
   initialCapital: number;
   scaleType: "linear" | "log";
   showIndividualPaths: boolean;
+  originalOrder: OriginalOrderPath | null;
 }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -1619,6 +1883,27 @@ function EquityCurveChart({
       hoverinfo: "skip",
     });
 
+    // Actual historical path in original order, so the simulated fan is
+    // anchored to what really happened. Truncated to the simulated horizon
+    // when the history is longer.
+    if (originalOrder && originalOrder.equity.length > 0) {
+      const overlayLength = Math.min(originalOrder.equity.length, percentiles.steps.length);
+      const truncated = originalOrder.stepCount > overlayLength;
+      const overlayName = truncated
+        ? `Actual, first ${overlayLength} of ${originalOrder.stepCount} ${originalOrder.stepUnit}`
+        : "Actual (original order)";
+
+      traces.push({
+        x: percentiles.steps.slice(0, overlayLength),
+        y: originalOrder.equity.slice(0, overlayLength),
+        type: "scatter",
+        mode: "lines",
+        name: overlayName,
+        line: { color: isDark ? "#fbbf24" : "#d97706", width: 2.5, dash: "dashdot" },
+        hovertemplate: "<b>Actual</b><br>Step: %{x}<br>Value: $%{y:,.0f}<extra></extra>",
+      });
+    }
+
     const plotLayout = {
       paper_bgcolor: isDark ? "#020817" : "#ffffff",
       plot_bgcolor: isDark ? "#020817" : "#ffffff",
@@ -1670,7 +1955,7 @@ function EquityCurveChart({
     };
 
     return { data: traces, layout: plotLayout };
-  }, [result, initialCapital, scaleType, showIndividualPaths, isDark]);
+  }, [result, initialCapital, scaleType, showIndividualPaths, originalOrder, isDark]);
 
   return (
     <div className="w-full">

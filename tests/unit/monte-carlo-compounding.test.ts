@@ -206,7 +206,10 @@ describe("stationary block resampling", () => {
       randomSeed: 42,
     };
 
-    const iid = runMonteCarloSimulation(fillerTrades(), baseParams);
+    const iid = runMonteCarloSimulation(fillerTrades(), {
+      ...baseParams,
+      resampleMode: "iid" as const,
+    });
     const block = runMonteCarloSimulation(fillerTrades(), {
       ...baseParams,
       resampleMode: "stationary-block" as const,
@@ -395,39 +398,44 @@ describe("dollar modes are unchanged", () => {
 });
 
 describe("self-consistency regression: resimulating a log reproduces its own final equity", () => {
-  it("puts the median simulated final value within 5% of the log's actual final equity", () => {
-    // Deterministic compounding log: repeat (+4%, +3%, -2%) twenty times.
-    // Actual growth factor: (1.04 * 1.03 * 0.98)^20 = 2.6423x.
-    const pattern = [0.04, 0.03, -0.02];
-    const trades: Trade[] = [];
-    let capital = 100_000;
-    for (let i = 0; i < 60; i++) {
-      const r = pattern[i % pattern.length];
-      const pl = capital * r;
-      capital += pl;
-      trades.push(createMockTrade(pl, new Date(2024, 0, i + 1), capital));
-    }
-    const actualFinalEquity = capital;
+  it.each(["iid", "stationary-block"] as const)(
+    "puts the median simulated final value within 5%% of the log's actual final equity (%s)",
+    (resampleMode) => {
+      // Deterministic compounding log: repeat (+4%, +3%, -2%) twenty times.
+      // Actual growth factor: (1.04 * 1.03 * 0.98)^20 = 2.6423x.
+      const pattern = [0.04, 0.03, -0.02];
+      const trades: Trade[] = [];
+      let capital = 100_000;
+      for (let i = 0; i < 60; i++) {
+        const r = pattern[i % pattern.length];
+        const pl = capital * r;
+        capital += pl;
+        trades.push(createMockTrade(pl, new Date(2024, 0, i + 1), capital));
+      }
+      const actualFinalEquity = capital;
 
-    const params = {
-      numSimulations: 2000,
-      simulationLength: 60, // resimulate over the log's own length
-      resampleMethod: "percentage" as const,
-      initialCapital: 100_000,
-      tradesPerYear: 252,
-      randomSeed: 42,
-    };
+      const params = {
+        numSimulations: 2000,
+        simulationLength: 60, // resimulate over the log's own length
+        resampleMethod: "percentage" as const,
+        resampleMode,
+        initialCapital: 100_000,
+        tradesPerYear: 252,
+        randomSeed: 42,
+      };
 
-    const result = runMonteCarloSimulation(trades, params);
+      const result = runMonteCarloSimulation(trades, params);
 
-    // Tolerance rationale: the median of an iid bootstrap over the log's own
-    // length converges on the log's geometric-mean path, i.e. its actual
-    // final equity — the standard error of the median here is well under 1%.
-    // The old additive arithmetic lands ~24% low on this log (2.0x vs
-    // 2.6423x), so a 5% band is tight enough to fail additive arithmetic and
-    // loose enough to be robust to bootstrap noise.
-    const relativeError =
-      Math.abs(result.statistics.medianFinalValue - actualFinalEquity) / actualFinalEquity;
-    expect(relativeError).toBeLessThan(0.05);
-  });
+      // Tolerance rationale: the median of a bootstrap over the log's own
+      // length converges on the log's geometric-mean path, i.e. its actual
+      // final equity — the standard error of the median here is well under
+      // 1%, under either sampler (block resampling changes dispersion, not
+      // the median). The old additive arithmetic lands ~24% low on this log
+      // (2.0x vs 2.6423x), so a 5% band is tight enough to fail additive
+      // arithmetic and loose enough to be robust to bootstrap noise.
+      const relativeError =
+        Math.abs(result.statistics.medianFinalValue - actualFinalEquity) / actualFinalEquity;
+      expect(relativeError).toBeLessThan(0.05);
+    },
+  );
 });

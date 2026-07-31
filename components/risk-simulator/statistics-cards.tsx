@@ -2,11 +2,14 @@
 
 import { Card } from "@/components/ui/card";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import type { MonteCarloResult } from "@tradeblocks/lib";
+import type { MonteCarloResult, OriginalOrderPath } from "@tradeblocks/lib";
 import {
   AlertOctagon,
+  CircleOff,
   HelpCircle,
+  History,
   Percent,
+  ShieldAlert,
   Star,
   Target,
   TrendingDown,
@@ -15,9 +18,10 @@ import {
 
 interface StatisticsCardsProps {
   result: MonteCarloResult;
+  originalOrder?: OriginalOrderPath | null;
 }
 
-export function StatisticsCards({ result }: StatisticsCardsProps) {
+export function StatisticsCards({ result, originalOrder }: StatisticsCardsProps) {
   const { statistics, parameters } = result;
 
   // Calculate annualized return
@@ -66,9 +70,10 @@ export function StatisticsCards({ result }: StatisticsCardsProps) {
                     </p>
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       This represents the mean outcome if you continue trading with similar
-                      performance. It&apos;s the center point of your probability distribution -
-                      half of simulations ended above this level, half below. Use this as a baseline
-                      expectation, but remember actual results will vary significantly.
+                      performance. Because returns compound, a few very strong paths can pull this
+                      average above the median — see Most Likely Return for the middle-of-the-road
+                      outcome. Use this as a baseline expectation, but remember actual results will
+                      vary significantly.
                     </p>
                   </div>
                 </div>
@@ -162,6 +167,150 @@ export function StatisticsCards({ result }: StatisticsCardsProps) {
             <div className="text-xs text-muted-foreground mt-1">Mean worst decline</div>
           </div>
         </Card>
+      </div>
+
+      {/* Reality Check */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold text-muted-foreground">Reality Check</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Original Order */}
+          {originalOrder && originalOrder.stepCount > 0 && (
+            <Card className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <History className="h-5 w-5 text-amber-500" />
+                  <span className="text-sm font-medium text-muted-foreground">Original Order</span>
+                </div>
+                <HoverCard>
+                  <HoverCardTrigger asChild>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground/60 cursor-help" />
+                  </HoverCardTrigger>
+                  <HoverCardContent className="w-80 p-0 overflow-hidden">
+                    <div className="space-y-3">
+                      <div className="bg-primary/5 border-b px-4 py-3">
+                        <h4 className="text-sm font-semibold text-primary">Original Order</h4>
+                      </div>
+                      <div className="px-4 pb-4 space-y-3">
+                        <p className="text-sm font-medium text-foreground leading-relaxed">
+                          What your history actually produced, with trades replayed in the exact
+                          order they happened, starting from the simulation&apos;s initial capital.
+                        </p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          This anchors the simulated range to reality: the same trades the simulator
+                          reshuffles, played back once without reshuffling. It also appears on the
+                          growth chart as the &quot;Actual&quot; line. If the simulated median sits
+                          far from this value, check the simulation length against your history
+                          length.
+                        </p>
+                      </div>
+                    </div>
+                  </HoverCardContent>
+                </HoverCard>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                  $
+                  {originalOrder.finalValue.toLocaleString(undefined, {
+                    maximumFractionDigits: 0,
+                  })}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Actual final value over all {originalOrder.stepCount} {originalOrder.stepUnit}
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Zero-Balance Paths */}
+          <Card className="p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <CircleOff className="h-5 w-5 text-red-500" />
+                <span className="text-sm font-medium text-muted-foreground">
+                  Zero-Balance Paths
+                </span>
+              </div>
+              <HoverCard>
+                <HoverCardTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground/60 cursor-help" />
+                </HoverCardTrigger>
+                <HoverCardContent className="w-80 p-0 overflow-hidden">
+                  <div className="space-y-3">
+                    <div className="bg-primary/5 border-b px-4 py-3">
+                      <h4 className="text-sm font-semibold text-primary">Zero-Balance Paths</h4>
+                    </div>
+                    <div className="px-4 pb-4 space-y-3">
+                      <p className="text-sm font-medium text-foreground leading-relaxed">
+                        Percentage of simulations whose account value ever touched zero.
+                      </p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        A path counts even if the touch happened mid-simulation. For most strategies
+                        this should be 0% — anything above that means some reshuffled versions of
+                        your history wiped out the account entirely.
+                      </p>
+                    </div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            </div>
+            <div>
+              <div className="text-2xl font-bold">
+                {(statistics.zeroBalancePaths * 100).toFixed(1)}%
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Simulations that ever hit $0</div>
+            </div>
+          </Card>
+
+          {/* Probability of Ruin */}
+          {statistics.probabilityOfRuin !== undefined &&
+            parameters.ruinThresholdPct !== undefined && (
+              <Card className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="h-5 w-5 text-red-500" />
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Probability of Ruin
+                    </span>
+                  </div>
+                  <HoverCard>
+                    <HoverCardTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-muted-foreground/60 cursor-help" />
+                    </HoverCardTrigger>
+                    <HoverCardContent className="w-80 p-0 overflow-hidden">
+                      <div className="space-y-3">
+                        <div className="bg-primary/5 border-b px-4 py-3">
+                          <h4 className="text-sm font-semibold text-primary">
+                            Probability of Ruin
+                          </h4>
+                        </div>
+                        <div className="px-4 pb-4 space-y-3">
+                          <p className="text-sm font-medium text-foreground leading-relaxed">
+                            Percentage of simulations that ever fell{" "}
+                            {(parameters.ruinThresholdPct * 100).toFixed(0)}% or more below starting
+                            capital.
+                          </p>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            A path counts even if it later recovered — this measures whether the
+                            decline ever happened, not where the path ended. Set the threshold at
+                            the loss level you could not survive (financially or psychologically)
+                            and treat this as the chance of hitting it.
+                          </p>
+                        </div>
+                      </div>
+                    </HoverCardContent>
+                  </HoverCard>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                    {(statistics.probabilityOfRuin * 100).toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Ever down {(parameters.ruinThresholdPct * 100).toFixed(0)}% from start
+                  </div>
+                </div>
+              </Card>
+            )}
+        </div>
       </div>
 
       {/* Return Scenarios */}
