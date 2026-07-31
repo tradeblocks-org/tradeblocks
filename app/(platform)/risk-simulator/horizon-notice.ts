@@ -1,8 +1,16 @@
 import type { TimeUnit } from "@tradeblocks/lib";
 
 export interface HorizonNoticeInput {
-  /** True while the horizon still matches the loaded history exactly */
-  isAtDefault: boolean;
+  /**
+   * True once the user has typed a horizon by hand.
+   *
+   * This flag is the single source of truth for whether the horizon still
+   * follows the loaded history. Comparing the horizon to the current default
+   * would be a second, disagreeing answer: a hand-typed horizon that happens to
+   * equal the history now in scope is still a manual horizon, because the next
+   * history change will not move it.
+   */
+  horizonEdited: boolean;
   /** Horizon in trades, after converting whatever unit the user picked */
   simulationLength: number;
   /** Trades in the history currently in scope, after the strategy filter */
@@ -13,12 +21,20 @@ export interface HorizonNoticeInput {
   paceText: string;
 }
 
+export interface HorizonNotice {
+  /** True while the horizon still follows the loaded history */
+  followsHistory: boolean;
+  /** Helper text under the simulation-period input */
+  text: string;
+}
+
 function formatTradeCount(count: number): string {
   return `${count.toLocaleString()} ${count === 1 ? "trade" : "trades"}`;
 }
 
 /**
- * Helper text under the simulation-period input.
+ * Helper text under the simulation-period input, plus whether the horizon is
+ * still following the history.
  *
  * A horizon typed by hand is kept even when the strategy filter changes the
  * history, because comparing several sleeves at one fixed horizon is a real
@@ -26,11 +42,14 @@ function formatTradeCount(count: number): string {
  * history behind it, so when it doesn't, the text says so and names the
  * current history instead of leaving the mismatch invisible.
  */
-export function describeSimulationHorizon(input: HorizonNoticeInput): string {
-  const { isAtDefault, simulationLength, historyTradeCount, unit, paceText } = input;
+export function describeSimulationHorizon(input: HorizonNoticeInput): HorizonNotice {
+  const { horizonEdited, simulationLength, historyTradeCount, unit, paceText } = input;
 
-  if (isAtDefault) {
-    return `Matches your history (${formatTradeCount(simulationLength)} ≈ ${paceText})`;
+  if (!horizonEdited) {
+    return {
+      followsHistory: true,
+      text: `Matches your history (${formatTradeCount(simulationLength)} ≈ ${paceText})`,
+    };
   }
 
   const horizonText =
@@ -39,8 +58,11 @@ export function describeSimulationHorizon(input: HorizonNoticeInput): string {
       : `≈ ${simulationLength.toLocaleString()} trades at your pace`;
 
   if (simulationLength === historyTradeCount) {
-    return horizonText;
+    return { followsHistory: false, text: horizonText };
   }
 
-  return `Manual horizon: ${horizonText} — your history is ${formatTradeCount(historyTradeCount)}`;
+  return {
+    followsHistory: false,
+    text: `Manual horizon: ${horizonText} — your history is ${formatTradeCount(historyTradeCount)}`,
+  };
 }

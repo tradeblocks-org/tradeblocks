@@ -57,6 +57,11 @@ import type {
   TimeUnit,
 } from "@tradeblocks/lib";
 import { useBlockStore } from "@tradeblocks/lib/stores";
+import {
+  describeBlockLength,
+  describeBlockLengthSetting,
+  selectBlockLengthHint,
+} from "./block-length-hint";
 import { describeSimulationHorizon } from "./horizon-notice";
 import { Download, HelpCircle, Loader2, Play, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -223,10 +228,6 @@ export default function RiskSimulatorPage() {
     [filteredTrades.length],
   );
 
-  const isSimulationPeriodAtDefault =
-    simulationPeriodUnit === defaultSimulationPeriod.unit &&
-    simulationPeriodValue === defaultSimulationPeriod.value;
-
   const matchSimulationPeriodToHistory = () => {
     setSimulationPeriodValue(defaultSimulationPeriod.value);
     setSimulationPeriodUnit(defaultSimulationPeriod.unit);
@@ -300,14 +301,29 @@ export default function RiskSimulatorPage() {
   });
 
   const autoBlockLength = defaultMeanBlockLength(Math.max(1, effectivePoolSize));
-  const effectiveBlockLength = meanBlockLength ?? autoBlockLength;
   const blockStepUnit = resampleMethod === "daily" ? "days" : "trades";
+
+  // Prefer the block length a completed run reported over the pre-run estimate,
+  // so the hint stops guessing once the real number exists.
+  const blockLengthHint = selectBlockLengthHint({
+    lastRunBlockLength: result?.effectiveMeanBlockLength ?? null,
+    lastRunRequestedBlockLength: result?.parameters.meanBlockLength ?? null,
+    lastRunStepUnit: result
+      ? result.parameters.resampleMethod === "daily"
+        ? "days"
+        : "trades"
+      : null,
+    requestedBlockLength: meanBlockLength,
+    estimatedBlockLength: autoBlockLength,
+    stepUnit: blockStepUnit,
+  });
+  const blockLengthText = describeBlockLength(blockLengthHint);
 
   // A hand-typed horizon is deliberately kept across a strategy switch, so it
   // can end up describing a different history than the one now in scope. Say so
   // rather than letting the mismatch sit there silently.
-  const simulationHorizonNotice = describeSimulationHorizon({
-    isAtDefault: isSimulationPeriodAtDefault,
+  const simulationHorizon = describeSimulationHorizon({
+    horizonEdited: simulationPeriodEdited,
     simulationLength,
     historyTradeCount: filteredTrades.length,
     unit: simulationPeriodUnit,
@@ -801,11 +817,11 @@ export default function RiskSimulatorPage() {
                   </SelectContent>
                 </Select>
               </div>
-              {isSimulationPeriodAtDefault ? (
-                <p className="text-xs text-muted-foreground">{simulationHorizonNotice}</p>
+              {simulationHorizon.followsHistory ? (
+                <p className="text-xs text-muted-foreground">{simulationHorizon.text}</p>
               ) : (
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">{simulationHorizonNotice}</p>
+                  <p className="text-xs text-muted-foreground">{simulationHorizon.text}</p>
                   <Button
                     variant="link"
                     size="sm"
@@ -1078,11 +1094,10 @@ export default function RiskSimulatorPage() {
                             <strong className="text-foreground">
                               Stationary blocks (recommended):
                             </strong>{" "}
-                            Keeps short runs of neighboring {blockStepUnit} together (about{" "}
-                            {effectiveBlockLength} {blockStepUnit} per block for the current pool),
-                            so historic loss streaks and hot streaks survive into the simulation.
-                            This mainly changes the spread and the tails of the results — drawdowns
-                            and best/worst cases — not the typical outcome.
+                            Keeps short runs of neighboring {blockStepUnit} together (
+                            {blockLengthText}), so historic loss streaks and hot streaks survive
+                            into the simulation. This mainly changes the spread and the tails of the
+                            results — drawdowns and best/worst cases — not the typical outcome.
                           </p>
                           <p>
                             <strong className="text-foreground">Independent trades:</strong> A fully
@@ -1109,7 +1124,7 @@ export default function RiskSimulatorPage() {
               </Select>
               <p className="text-xs text-muted-foreground">
                 {resampleMode === "stationary-block"
-                  ? `Keeps neighboring ${blockStepUnit} together — about ${effectiveBlockLength} ${blockStepUnit} per block for your current pool`
+                  ? `Keeps neighboring ${blockStepUnit} together — ${blockLengthText}`
                   : "Fully random shuffle — every draw is independent"}
               </p>
             </div>
@@ -1652,10 +1667,10 @@ export default function RiskSimulatorPage() {
                               </p>
                               <p className="text-xs text-muted-foreground leading-relaxed">
                                 Leave blank to let the simulator pick automatically based on how
-                                much history you have ({autoBlockLength} for your current pool).
-                                Larger blocks preserve longer streaks; a length of 1 behaves like
-                                independent draws. This setting is ignored when resampling is set to
-                                independent trades.
+                                much history you have (about {autoBlockLength} for your current
+                                pool). Larger blocks preserve longer streaks; a length of 1 behaves
+                                like independent draws. This setting is ignored when resampling is
+                                set to independent trades.
                               </p>
                             </div>
                           </div>
@@ -1677,11 +1692,10 @@ export default function RiskSimulatorPage() {
                       disabled={resampleMode !== "stationary-block"}
                     />
                     <p className="text-xs text-muted-foreground">
-                      {resampleMode === "stationary-block"
-                        ? meanBlockLength === null
-                          ? `Auto: ${autoBlockLength} ${blockStepUnit} per block for your current pool`
-                          : `Blocks average ${meanBlockLength} ${blockStepUnit}; blank returns to auto`
-                        : "Only used with stationary-block resampling"}
+                      {describeBlockLengthSetting(
+                        blockLengthHint,
+                        resampleMode === "stationary-block",
+                      )}
                     </p>
                   </div>
 
