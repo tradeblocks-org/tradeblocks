@@ -14,6 +14,13 @@ next-env.d.ts
 public/
 gpt/
 
+# Transient bundles the mcp-server tests build beside their sources (the Jest
+# globalSetup builds the IV worker; the process-exit test builds its child).
+# Gitignored in packages/mcp-server/.gitignore, absent from a clean checkout.
+packages/mcp-server/src/utils/iv-solver-worker.js
+packages/mcp-server/src/utils/iv-solver-worker.js.map
+packages/mcp-server/src/utils/iv-solver-pool-exit-child.built.mjs
+
 # Lockfile
 package-lock.json
 
