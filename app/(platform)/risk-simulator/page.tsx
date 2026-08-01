@@ -63,8 +63,13 @@ import {
   selectBlockLengthHint,
 } from "./block-length-hint";
 import { describeSimulationHorizon } from "./horizon-notice";
+import {
+  applyOoStressPreset,
+  describePercentageStressDivergence,
+  matchesOoStressPreset,
+} from "./oo-stress-preset";
 import { describeWorstCaseBudget } from "./worst-case-copy";
-import { Download, HelpCircle, Loader2, Play, RotateCcw } from "lucide-react";
+import { Check, Download, HelpCircle, Loader2, Play, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
 import type { Data } from "plotly.js";
@@ -343,6 +348,24 @@ export default function RiskSimulatorPage() {
     worstCaseBasedOn === "historical" &&
     historicalWorstCaseRequest > worstCaseSimulationBudget &&
     worstCaseSimulationBudget > 0;
+
+  const ooStressPresetMatched = matchesOoStressPreset({
+    resampleMethod,
+    worstCaseMode,
+    worstCaseSizing: effectiveWorstCaseSizing,
+  });
+
+  const percentageStressDivergence = describePercentageStressDivergence({
+    worstCaseEnabled,
+    resampleMethod,
+  });
+
+  const handleApplyOoStressPreset = () => {
+    const next = applyOoStressPreset({ resampleMethod, worstCaseMode, worstCaseSizing });
+    setResampleMethod(next.resampleMethod);
+    setWorstCaseMode(next.worstCaseMode);
+    setWorstCaseSizing(next.worstCaseSizing);
+  };
 
   const runSimulation = async () => {
     if (!activeBlockId || trades.length === 0) {
@@ -1249,6 +1272,70 @@ export default function RiskSimulatorPage() {
 
                 {worstCaseEnabled && (
                   <div className="space-y-4 pl-6 border-l-2 border-primary/20">
+                    {/* Match OO stress test preset */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-sm font-medium">Option Omega comparison</Label>
+                        <HoverCard>
+                          <HoverCardTrigger asChild>
+                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                          </HoverCardTrigger>
+                          <HoverCardContent className="w-80 p-0 overflow-hidden">
+                            <div className="space-y-3">
+                              <div className="bg-primary/5 border-b px-4 py-3">
+                                <h4 className="text-sm font-semibold text-primary">
+                                  Match OO Stress Test
+                                </h4>
+                              </div>
+                              <div className="px-4 pb-4 space-y-3">
+                                <p className="text-sm font-medium text-foreground leading-relaxed">
+                                  One press sets the configuration validated against Option
+                                  Omega&apos;s Monte Carlo: Individual Trades sampling (actual
+                                  sizing), the loss count forced into every simulation, and
+                                  historical-dollar loss events.
+                                </p>
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                  Percentage Returns sizes each injected loss relative to the
+                                  account at the time instead of in fixed dollars, so its stress
+                                  reads differently from OO&apos;s. The preset leaves the
+                                  percentage, basis, and everything else untouched, and every
+                                  control stays editable afterwards.
+                                </p>
+                              </div>
+                            </div>
+                          </HoverCardContent>
+                        </HoverCard>
+                      </div>
+                      {ooStressPresetMatched ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Check className="h-4 w-4 text-primary" aria-hidden="true" />
+                          <span>
+                            Current settings match the configuration validated against Option
+                            Omega&apos;s stress test.
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleApplyOoStressPreset}
+                          >
+                            Match OO stress test
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            Sets Individual Trades sampling, forces the loss count into every
+                            simulation, and uses historical dollars — the injection percentage and
+                            basis stay put.
+                          </p>
+                        </>
+                      )}
+                      {percentageStressDivergence && (
+                        <p className="text-xs text-amber-600">{percentageStressDivergence}</p>
+                      )}
+                    </div>
+
                     {/* Percentage Slider */}
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
