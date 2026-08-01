@@ -1293,11 +1293,20 @@ export default function RiskSimulatorPage() {
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {worstCaseBasedOn === "simulation" ? (
-                          <>
-                            Exactly {worstCasePercentage}% of the simulation horizon (≈{" "}
-                            {worstCaseSimulationBudget} synthetic trades) split evenly across
-                            strategies.
-                          </>
+                          worstCaseMode === "probabilistic" ? (
+                            <>
+                              Each simulated trade has a literal {worstCasePercentage}% chance of
+                              becoming a max-loss event (≈ {worstCaseSimulationBudget} per
+                              simulation on average), with the loss sizes split evenly across
+                              strategies.
+                            </>
+                          ) : (
+                            <>
+                              Exactly {worstCasePercentage}% of the simulation horizon (≈{" "}
+                              {worstCaseSimulationBudget} synthetic trades) split evenly across
+                              strategies.
+                            </>
+                          )
                         ) : (
                           <>
                             Weighted by each strategy&apos;s historical trade count, but capped at{" "}

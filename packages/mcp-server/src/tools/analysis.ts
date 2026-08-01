@@ -557,13 +557,13 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           .max(100)
           .default(5)
           .describe(
-            "Percentage of simulation length that should be max-loss scenarios (0-100, default: 5)",
+            "Worst-case intensity (0-100, default: 5). In probabilistic mode this is the literal per-slot replacement chance (5 = each simulated step has a 5% chance of becoming a max-loss event); in guarantee mode it is the exact share of the simulation length forced into every path.",
           ),
         worstCaseMode: z
           .enum(["probabilistic", "pool", "guarantee"])
           .default("probabilistic")
           .describe(
-            "How to inject worst-case losses. Injection is a per-slot replacement layer applied after the sampler draws from real history — synthetic losses never join the resample pool, so block resampling cannot walk through them as a contiguous catastrophe run. 'probabilistic' (default): each simulated step is independently replaced with probability injectedCount / (poolSize + injectedCount); 'pool' is the legacy alias for the same behavior. 'guarantee' forces exactly the requested count into every simulation at independent random positions.",
+            "How to inject worst-case losses. Injection is a per-slot replacement layer applied after the sampler draws from real history — synthetic losses never join the resample pool, so block resampling cannot walk through them as a contiguous catastrophe run. 'probabilistic' (default): each simulated step is independently replaced with probability worstCasePercentage / 100, the literal per-slot chance; 'pool' is the legacy alias for the same behavior. 'guarantee' forces exactly the requested count into every simulation at independent random positions.",
           ),
         worstCaseSizing: z
           .enum(["absolute", "relative"])

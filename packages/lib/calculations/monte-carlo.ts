@@ -90,9 +90,8 @@ export interface MonteCarloParams {
    * losses never join the resample pool, so a stationary-block walk can
    * never step through them as a contiguous catastrophe run.
    * - "probabilistic" (default): each slot is independently replaced with
-   *   probability injectedCount / (poolSize + injectedCount) — the honest
-   *   per-slot meaning of the former pool membership. "pool" is accepted as
-   *   an alias for this mode.
+   *   probability worstCasePercentage / 100 — the literal per-slot chance
+   *   the field promises. "pool" is accepted as an alias for this mode.
    * - "guarantee": exactly the requested count is spliced into every
    *   simulation at independent random positions.
    */
@@ -1236,13 +1235,15 @@ export function runMonteCarloSimulation(
   // contiguous region a stationary-block walk could traverse, manufacturing
   // consecutive max-loss runs no user asked for. "probabilistic" (with
   // "pool" as its accepted alias, and the default) replaces each slot
-  // independently at the probability pool membership would have implied;
-  // "guarantee" splices the exact count at independent positions.
+  // independently at the literal chance the percentage field promises —
+  // worstCasePercentage / 100, not a ratio derived from a pool the
+  // synthetics no longer join. "guarantee" splices the exact count at
+  // independent positions.
   const worstCaseMode: "probabilistic" | "guarantee" =
     params.worstCaseMode === "guarantee" ? "guarantee" : "probabilistic";
   const replacementProbability =
     worstCaseMode === "probabilistic" && worstCaseTrades.length > 0
-      ? worstCaseTrades.length / (resamplePool.length + worstCaseTrades.length)
+      ? Math.min(1, (params.worstCasePercentage ?? 0) / 100)
       : 0;
 
   // Stationary-block resampling is the default: block resampling preserves

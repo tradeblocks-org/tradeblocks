@@ -3,9 +3,9 @@
  *
  * The sampler draws only real history; injection replaces slots AFTER the
  * draw. "probabilistic" (canonical name for the old "pool" value) replaces
- * each slot independently with probability injectedCount / (poolSize +
- * injectedCount); "guarantee" splices the exact count at independent
- * positions. Neither mode may produce synthetic losses that walk in as
+ * each slot independently with the literal chance the percentage field
+ * promises — worstCasePercentage / 100; "guarantee" splices the exact count
+ * at independent positions. Neither mode may produce synthetic losses that walk in as
  * contiguous blocks — that was the defect: synthetics appended to the pool
  * formed a contiguous region a stationary-block walk could traverse,
  * manufacturing catastrophe clusters no user asked for.
@@ -109,7 +109,9 @@ const WORST_CASE_PERCENTAGE = 5;
 const SIMULATION_LENGTH = 300;
 const NUM_SIMULATIONS = 500;
 const INJECTED_COUNT = worstCaseInjectionCount(SIMULATION_LENGTH, WORST_CASE_PERCENTAGE); // 15
-const REPLACEMENT_PROBABILITY = INJECTED_COUNT / (POOL_SIZE + INJECTED_COUNT);
+// The literal per-slot chance the percentage field promises: 5% means each
+// slot has exactly a 0.05 chance of being replaced.
+const REPLACEMENT_PROBABILITY = WORST_CASE_PERCENTAGE / 100;
 
 const fixtureParams: MonteCarloParams = {
   numSimulations: NUM_SIMULATIONS,
@@ -166,7 +168,7 @@ describe("per-slot replacement injection (probabilistic mode)", () => {
     expect(fixturePoolPls.some(isSyntheticStep)).toBe(false);
   });
 
-  it("replaces slots at the pool-membership-equivalent probability", () => {
+  it("replaces slots at the literal per-slot chance the percentage promises", () => {
     // Each slot is an independent Bernoulli(p) replacement, so across
     // numSimulations * simulationLength slots the observed fraction has
     // standard error sqrt(p * (1 - p) / N) with N = 150,000 — about 0.00055.
@@ -185,7 +187,7 @@ describe("per-slot replacement injection (probabilistic mode)", () => {
   it("synthetic events are never block-contiguous: adjacency matches independent replacement", () => {
     // Independent replacement puts a synthetic pair at consecutive slots with
     // probability p^2, so the expected adjacent-pair count is
-    // numSimulations * (simulationLength - 1) * p^2 ≈ 339. Pool-membership
+    // numSimulations * (simulationLength - 1) * p^2 ≈ 374. Pool-membership
     // injection under stationary blocks (the reverted behavior this test
     // exists to catch) walks through the contiguous synthetic region, giving
     // adjacency at roughly p * (1 - 1/meanBlockLength) per slot — more than
