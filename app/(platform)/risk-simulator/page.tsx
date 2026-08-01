@@ -32,7 +32,6 @@ import {
   runMonteCarloSimulation,
   buildOriginalOrderEquityPath,
   defaultMeanBlockLength,
-  effectiveResamplePoolSize,
   worstCaseInjectionCount,
   PortfolioStatsCalculator,
   getBlock,
@@ -99,11 +98,16 @@ export default function RiskSimulatorPage() {
   // Worst-case scenario parameters
   const [worstCaseEnabled, setWorstCaseEnabled] = useState(false);
   const [worstCasePercentage, setWorstCasePercentage] = useState(5);
-  const [worstCaseMode, setWorstCaseMode] = useState<"pool" | "guarantee">("pool");
+  const [worstCaseMode, setWorstCaseMode] = useState<"probabilistic" | "guarantee">(
+    "probabilistic",
+  );
   const [worstCaseBasedOn, setWorstCaseBasedOn] = useState<"simulation" | "historical">(
     "simulation",
   );
   const [worstCaseSizing, setWorstCaseSizing] = useState<"absolute" | "relative">("relative");
+  // Whether the last completed run used the percentage-mode default ruin
+  // threshold (a 50% decline) rather than a value the user typed.
+  const [ruinThresholdDefaulted, setRuinThresholdDefaulted] = useState(false);
 
   // Chart display options
   const [scaleType, setScaleType] = useState<"linear" | "log">("linear");
@@ -292,16 +296,10 @@ export default function RiskSimulatorPage() {
     return count;
   }, [filteredTrades, resampleMethod, resamplePercentage]);
 
-  // The block-length hint has to describe the pool the run will actually draw
-  // from: in "pool" mode the synthetic worst-case trades join the pool, so
-  // leaving them out understates the automatic block length.
-  const effectivePoolSize = effectiveResamplePoolSize(estimatedPoolSize, {
-    enabled: worstCaseEnabled,
-    mode: worstCaseMode,
-    injectedCount: worstCaseSimulationBudget,
-  });
-
-  const autoBlockLength = defaultMeanBlockLength(Math.max(1, effectivePoolSize));
+  // The resample pool holds only real history — worst-case injection replaces
+  // slots after the draw and never changes the pool size — so the automatic
+  // block length always derives from the base pool.
+  const autoBlockLength = defaultMeanBlockLength(Math.max(1, estimatedPoolSize));
   const blockStepUnit = resampleMethod === "daily" ? "days" : "trades";
 
   // Prefer the block length a completed run reported over the pre-run estimate,
@@ -330,6 +328,14 @@ export default function RiskSimulatorPage() {
     unit: simulationPeriodUnit,
     paceText: tradesToTime(simulationLength, tradesPerYear).displayText,
   });
+
+  // Fixed historical dollars are incoherent in a scale-free percentage-return
+  // stream, so the option is unavailable there and the run always uses
+  // capital-relative sizing under the percentage method.
+  const isPercentageMethod = resampleMethod === "percentage";
+  const effectiveWorstCaseSizing: "absolute" | "relative" = isPercentageMethod
+    ? "relative"
+    : worstCaseSizing;
 
   const shouldShowHistoricalCapHint =
     worstCaseEnabled &&
@@ -406,12 +412,21 @@ export default function RiskSimulatorPage() {
         worstCasePercentage,
         worstCaseMode,
         worstCaseBasedOn,
-        worstCaseSizing,
+        worstCaseSizing: effectiveWorstCaseSizing,
+        // Zero-balance is structurally dead under percentage returns (capital
+        // cannot cross zero), so percentage runs default the ruin threshold
+        // to a 50% decline when the user has not set one. The lib stays
+        // explicit: it only ever sees a concrete threshold.
         ruinThresholdPct:
           ruinThresholdPercent !== null && ruinThresholdPercent > 0
             ? ruinThresholdPercent / 100
-            : undefined,
+            : isPercentageMethod
+              ? 0.5
+              : undefined,
       };
+      setRuinThresholdDefaulted(
+        isPercentageMethod && (ruinThresholdPercent === null || ruinThresholdPercent <= 0),
+      );
 
       const simulationResult = runMonteCarloSimulation(filteredTrades, params);
       setResult(simulationResult);
@@ -992,7 +1007,10 @@ export default function RiskSimulatorPage() {
                     <p>
                       <strong>Fixed Sizing Modes:</strong> Use <strong>Individual Trades</strong> or{" "}
                       <strong>Daily Returns</strong> only if you always trade fixed dollar amounts.
-                      Enable normalization to compare across different lot sizes.
+                      Enable normalization to compare across different lot sizes. These are also the
+                      home of dollar stress tests: to reproduce an Option Omega-style worst-case
+                      run, pick <strong>Individual Trades</strong> and size the injected losses with
+                      “Use historical dollars.”
                     </p>
                     <p>
                       <strong>Resampling:</strong> Stationary blocks keep short streaks of
@@ -1247,14 +1265,15 @@ export default function RiskSimulatorPage() {
                               </div>
                               <div className="px-4 pb-4">
                                 <p className="text-xs text-muted-foreground leading-relaxed">
-                                  Controls how many max-loss trades are created. In pool mode,
-                                  they&apos;re added to the resample pool. In guarantee mode,
-                                  they&apos;re forced into every simulation. Loss size is scaled to
-                                  your starting capital by default so 1% really means “a 1% hit to
-                                  the account per strategy.” Disable that below if you want to
-                                  inject the raw historical dollar margins instead. When margin data
-                                  is missing, we automatically use that strategy&apos;s largest
-                                  recorded loss so the test still reflects its downside.
+                                  Controls how many max-loss trades are injected. In probabilistic
+                                  mode each simulated trade has this chance of being replaced by a
+                                  max-loss event; in guarantee mode the exact count is forced into
+                                  every simulation. Loss size is scaled to your starting capital by
+                                  default so 1% really means “a 1% hit to the account per strategy.”
+                                  Switch to historical dollars below if you want to inject the raw
+                                  dollar margins instead. When margin data is missing, we
+                                  automatically use that strategy&apos;s largest recorded loss so
+                                  the test still reflects its downside.
                                 </p>
                               </div>
                             </div>
@@ -1317,12 +1336,14 @@ export default function RiskSimulatorPage() {
                               <div className="px-4 pb-4 space-y-3">
                                 <div>
                                   <p className="text-xs font-medium text-foreground">
-                                    Add to resample pool:
+                                    Probabilistic (chance per slot):
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    Max-loss trades are added to the pool and sampled randomly. They
-                                    may appear 0, 1, or multiple times per simulation. More
-                                    conservative approach.
+                                    After each simulated trade is drawn from your real history, it
+                                    has an independent chance of being replaced by a max-loss event.
+                                    Some simulations see more losses than requested, some fewer —
+                                    like real disaster risk. The losses land at independent
+                                    positions, never as a manufactured back-to-back run.
                                   </p>
                                 </div>
                                 <div>
@@ -1345,18 +1366,18 @@ export default function RiskSimulatorPage() {
                         <div className="flex items-center gap-2">
                           <input
                             type="radio"
-                            id="worst-case-pool"
+                            id="worst-case-probabilistic"
                             name="worst-case-mode"
-                            checked={worstCaseMode === "pool"}
-                            onChange={() => setWorstCaseMode("pool")}
+                            checked={worstCaseMode === "probabilistic"}
+                            onChange={() => setWorstCaseMode("probabilistic")}
                             className="cursor-pointer"
-                            aria-label="worst-case-pool"
+                            aria-label="worst-case-probabilistic"
                           />
                           <Label
-                            htmlFor="worst-case-pool"
+                            htmlFor="worst-case-probabilistic"
                             className="cursor-pointer text-sm font-normal"
                           >
-                            Add to pool (may randomly appear)
+                            Probabilistic (chance per slot)
                           </Label>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1411,7 +1432,10 @@ export default function RiskSimulatorPage() {
                                   &nbsp;Injects the raw worst-case dollar amount from the trade log.
                                   Pick this if you want to replay the exact historical blow-ups and
                                   you&apos;re confident those dollar figures match today&apos;s
-                                  allocations.
+                                  allocations. Only available with the dollar sampling methods — a
+                                  fixed dollar loss has no stable meaning in a stream of percentage
+                                  returns. For an Option Omega-style dollar stress test, pair
+                                  Individual Trades sampling with this option.
                                 </p>
                               </div>
                             </div>
@@ -1424,7 +1448,7 @@ export default function RiskSimulatorPage() {
                             type="radio"
                             id="worst-case-sizing-relative"
                             name="worst-case-sizing"
-                            checked={worstCaseSizing === "relative"}
+                            checked={effectiveWorstCaseSizing === "relative"}
                             onChange={() => setWorstCaseSizing("relative")}
                             className="cursor-pointer"
                             aria-label="worst-case-sizing-relative"
@@ -1441,18 +1465,30 @@ export default function RiskSimulatorPage() {
                             type="radio"
                             id="worst-case-sizing-absolute"
                             name="worst-case-sizing"
-                            checked={worstCaseSizing === "absolute"}
+                            checked={effectiveWorstCaseSizing === "absolute"}
                             onChange={() => setWorstCaseSizing("absolute")}
-                            className="cursor-pointer"
+                            disabled={isPercentageMethod}
+                            className="cursor-pointer disabled:cursor-not-allowed"
                             aria-label="worst-case-sizing-absolute"
                           />
                           <Label
                             htmlFor="worst-case-sizing-absolute"
-                            className="cursor-pointer text-sm font-normal"
+                            className={
+                              isPercentageMethod
+                                ? "text-sm font-normal text-muted-foreground"
+                                : "cursor-pointer text-sm font-normal"
+                            }
                           >
                             Use historical dollars
                           </Label>
                         </div>
+                        {isPercentageMethod && (
+                          <p className="text-xs text-muted-foreground">
+                            Not available with Percentage Returns: a fixed dollar loss has no stable
+                            meaning when every path compounds at its own scale — switch to
+                            Individual Trades or Daily Returns to stress with historical dollars.
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -1727,8 +1763,10 @@ export default function RiskSimulatorPage() {
                                 For example, 50 means an account that ever falls 50% below its
                                 starting value is counted as ruined, even if it later recovers. When
                                 set, the results include a Probability of Ruin card showing what
-                                fraction of simulations ever touched that line. Leave blank to skip
-                                this statistic.
+                                fraction of simulations ever touched that line. With Percentage
+                                Returns this is the primary ruin statistic (an account there can
+                                shrink but never hit zero), so leaving it blank uses a default of
+                                50; with the dollar sampling methods, blank skips the statistic.
                               </p>
                             </div>
                           </div>
@@ -1739,7 +1777,7 @@ export default function RiskSimulatorPage() {
                       id="ruin-threshold"
                       type="number"
                       value={ruinThresholdPercent ?? ""}
-                      placeholder="Off"
+                      placeholder={isPercentageMethod ? "Default 50" : "Off"}
                       onChange={(e) => {
                         const next = parseInt(e.target.value, 10);
                         setRuinThresholdPercent(
@@ -1753,7 +1791,9 @@ export default function RiskSimulatorPage() {
                     <p className="text-xs text-muted-foreground">
                       {ruinThresholdPercent !== null
                         ? `A path ever down ${ruinThresholdPercent}% from starting capital counts as ruined`
-                        : "Optional: percent decline from starting capital that counts as ruin"}
+                        : isPercentageMethod
+                          ? "Blank uses the default: a path ever down 50% from starting capital counts as ruined"
+                          : "Optional: percent decline from starting capital that counts as ruin"}
                     </p>
                   </div>
                 </div>
@@ -1862,7 +1902,11 @@ export default function RiskSimulatorPage() {
           </Card>
 
           {/* Statistics Cards */}
-          <StatisticsCards result={result} originalOrder={originalOrder} />
+          <StatisticsCards
+            result={result}
+            originalOrder={originalOrder}
+            ruinThresholdDefaulted={ruinThresholdDefaulted}
+          />
 
           {/* Distribution Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

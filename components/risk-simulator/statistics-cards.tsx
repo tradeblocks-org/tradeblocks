@@ -19,10 +19,25 @@ import {
 interface StatisticsCardsProps {
   result: MonteCarloResult;
   originalOrder?: OriginalOrderPath | null;
+  /**
+   * True when the run's ruin threshold was the percentage-mode default (a 50%
+   * decline) rather than a value the user typed, so the card can say so.
+   */
+  ruinThresholdDefaulted?: boolean;
 }
 
-export function StatisticsCards({ result, originalOrder }: StatisticsCardsProps) {
+export function StatisticsCards({
+  result,
+  originalOrder,
+  ruinThresholdDefaulted = false,
+}: StatisticsCardsProps) {
   const { statistics, parameters } = result;
+
+  // A percentage return clamps at -100% of current equity, so a percentage
+  // path can shrink toward zero but never cross it. Zero-Balance Paths is
+  // structurally 0% there — never a live statistic. Probability of Ruin is
+  // the honest ruin figure for percentage mode.
+  const isPercentageMode = parameters.resampleMethod === "percentage";
 
   // Calculate annualized return
   const yearsSimulated = parameters.simulationLength / parameters.tradesPerYear;
@@ -221,47 +236,7 @@ export function StatisticsCards({ result, originalOrder }: StatisticsCardsProps)
             </Card>
           )}
 
-          {/* Zero-Balance Paths */}
-          <Card className="p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <CircleOff className="h-5 w-5 text-red-500" />
-                <span className="text-sm font-medium text-muted-foreground">
-                  Zero-Balance Paths
-                </span>
-              </div>
-              <HoverCard>
-                <HoverCardTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-muted-foreground/60 cursor-help" />
-                </HoverCardTrigger>
-                <HoverCardContent className="w-80 p-0 overflow-hidden">
-                  <div className="space-y-3">
-                    <div className="bg-primary/5 border-b px-4 py-3">
-                      <h4 className="text-sm font-semibold text-primary">Zero-Balance Paths</h4>
-                    </div>
-                    <div className="px-4 pb-4 space-y-3">
-                      <p className="text-sm font-medium text-foreground leading-relaxed">
-                        Percentage of simulations whose account value ever touched zero.
-                      </p>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        A path counts even if the touch happened mid-simulation. For most strategies
-                        this should be 0% — anything above that means some reshuffled versions of
-                        your history wiped out the account entirely.
-                      </p>
-                    </div>
-                  </div>
-                </HoverCardContent>
-              </HoverCard>
-            </div>
-            <div>
-              <div className="text-2xl font-bold">
-                {(statistics.zeroBalancePaths * 100).toFixed(1)}%
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">Simulations that ever hit $0</div>
-            </div>
-          </Card>
-
-          {/* Probability of Ruin */}
+          {/* Probability of Ruin — the primary ruin figure in percentage mode */}
           {statistics.probabilityOfRuin !== undefined &&
             parameters.ruinThresholdPct !== undefined && (
               <Card className="p-4">
@@ -295,21 +270,97 @@ export function StatisticsCards({ result, originalOrder }: StatisticsCardsProps)
                             the loss level you could not survive (financially or psychologically)
                             and treat this as the chance of hitting it.
                           </p>
+                          {ruinThresholdDefaulted && (
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              This run used the default 50%-decline threshold. Set Ruin Threshold in
+                              Advanced Settings to pick your own line.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </HoverCardContent>
                   </HoverCard>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                  <div
+                    className="text-2xl font-bold text-red-600 dark:text-red-400"
+                    data-testid="ruin-value"
+                  >
                     {(statistics.probabilityOfRuin * 100).toFixed(1)}%
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-xs text-muted-foreground mt-1" data-testid="ruin-caption">
                     Ever down {(parameters.ruinThresholdPct * 100).toFixed(0)}% from start
+                    {ruinThresholdDefaulted ? " (the default threshold)" : ""}
                   </div>
                 </div>
               </Card>
             )}
+
+          {/* Zero-Balance Paths — live only for dollar sampling methods */}
+          {isPercentageMode ? (
+            <Card className="p-4 opacity-60">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <CircleOff className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Zero-Balance Paths
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-muted-foreground">—</div>
+                <div
+                  className="text-xs text-muted-foreground mt-1"
+                  data-testid="zero-balance-unavailable"
+                >
+                  Not measurable with percentage returns: a percentage loss can never take the
+                  account below zero, so this would always read 0%. Probability of Ruin is the
+                  honest figure here; dollar sampling methods report zero-balance paths.
+                </div>
+              </div>
+            </Card>
+          ) : (
+            <Card className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <CircleOff className="h-5 w-5 text-red-500" />
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Zero-Balance Paths
+                  </span>
+                </div>
+                <HoverCard>
+                  <HoverCardTrigger asChild>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground/60 cursor-help" />
+                  </HoverCardTrigger>
+                  <HoverCardContent className="w-80 p-0 overflow-hidden">
+                    <div className="space-y-3">
+                      <div className="bg-primary/5 border-b px-4 py-3">
+                        <h4 className="text-sm font-semibold text-primary">Zero-Balance Paths</h4>
+                      </div>
+                      <div className="px-4 pb-4 space-y-3">
+                        <p className="text-sm font-medium text-foreground leading-relaxed">
+                          Percentage of simulations whose account value ever touched zero.
+                        </p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          A path counts even if the touch happened mid-simulation. For most
+                          strategies this should be 0% — anything above that means some reshuffled
+                          versions of your history wiped out the account entirely.
+                        </p>
+                      </div>
+                    </div>
+                  </HoverCardContent>
+                </HoverCard>
+              </div>
+              <div>
+                <div className="text-2xl font-bold" data-testid="zero-balance-value">
+                  {(statistics.zeroBalancePaths * 100).toFixed(1)}%
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Simulations that ever hit $0
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
       </div>
 
