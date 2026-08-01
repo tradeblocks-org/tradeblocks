@@ -246,6 +246,26 @@ describe("run_monte_carlo worst-case injection surface", () => {
     expect(result.content[0]?.text).toContain("'trades' or 'daily'");
   });
 
+  it("flags zeroBalancePaths as structurally 0 in percentage-mode summaries", async () => {
+    // The field stays in the output (consumers may key on it), but an agent
+    // reading the summary must not mistake it for a live risk signal:
+    // percentage-mode returns clamp at -100% of current equity, so capital
+    // can never cross zero and the field always reads 0.
+    const { data, summary } = await runTool({ ...BASE_INPUT, resampleMethod: "percentage" });
+
+    expect(data.statistics.zeroBalancePaths).toBe(0);
+    expect(summary).toMatch(/structurally 0/);
+    expect(summary).toMatch(/probabilityOfRuin/);
+  });
+
+  it("adds no zero-balance note for dollar sampling methods", async () => {
+    const trades = await runTool(BASE_INPUT);
+    expect(trades.summary).not.toMatch(/structurally 0/);
+
+    const daily = await runTool({ ...BASE_INPUT, resampleMethod: "daily" });
+    expect(daily.summary).not.toMatch(/structurally 0/);
+  });
+
   it("allows relative sizing under the percentage method", async () => {
     const { data } = await runTool({
       numSimulations: 200,

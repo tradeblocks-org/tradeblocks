@@ -221,6 +221,34 @@ describe("per-slot replacement injection (probabilistic mode)", () => {
     expect(rerun.statistics.zeroBalancePaths).toBe(result.statistics.zeroBalancePaths);
   });
 
+  it("reports the literal per-slot probability, never a pool-derived ratio", () => {
+    // The statistical calibration test above cannot distinguish the literal
+    // 0.05 from the old pool-ratio formula (15 / 315 ≈ 0.0476 — inside its
+    // noise band), so the engine reports the probability it actually used
+    // and this pins it deterministically: exactly worstCasePercentage / 100,
+    // and provably not the ratio a 300-trade pool would have produced.
+    expect(result.effectiveWorstCaseReplacementProbability).toBe(WORST_CASE_PERCENTAGE / 100);
+    expect(result.effectiveWorstCaseReplacementProbability).not.toBe(
+      INJECTED_COUNT / (POOL_SIZE + INJECTED_COUNT),
+    );
+  });
+
+  it("reports no replacement probability when injection is off or guaranteed", () => {
+    const disabled = runMonteCarloSimulation(fixtureTrades, {
+      ...fixtureParams,
+      numSimulations: 20,
+      worstCaseEnabled: false,
+    });
+    expect(disabled.effectiveWorstCaseReplacementProbability).toBeNull();
+
+    const guarantee = runMonteCarloSimulation(fixtureTrades, {
+      ...fixtureParams,
+      numSimulations: 20,
+      worstCaseMode: "guarantee",
+    });
+    expect(guarantee.effectiveWorstCaseReplacementProbability).toBeNull();
+  });
+
   it("defaults to probabilistic semantics when no mode is given", () => {
     const defaulted = runMonteCarloSimulation(fixtureTrades, {
       ...fixtureParams,

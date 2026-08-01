@@ -296,6 +296,14 @@ export interface MonteCarloResult {
    * changes the pool size.
    */
   effectiveMeanBlockLength: number | null;
+
+  /**
+   * Per-slot replacement probability the run actually used for probabilistic
+   * worst-case injection: exactly worstCasePercentage / 100 (clamped at 1),
+   * never a ratio derived from the pool. Null when injection is disabled,
+   * created no synthetic losses, or ran in "guarantee" mode.
+   */
+  effectiveWorstCaseReplacementProbability: number | null;
 }
 
 /**
@@ -1330,6 +1338,8 @@ export function runMonteCarloSimulation(
     timestamp,
     actualResamplePoolSize,
     effectiveMeanBlockLength: useStationaryBlocks ? meanBlockLength : null,
+    effectiveWorstCaseReplacementProbability:
+      replacementProbability > 0 ? replacementProbability : null,
   };
 }
 

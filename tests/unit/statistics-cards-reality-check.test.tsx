@@ -69,6 +69,7 @@ function buildResult(overrides: {
     timestamp: new Date("2026-01-01"),
     actualResamplePoolSize: 50,
     effectiveMeanBlockLength: 4,
+    effectiveWorstCaseReplacementProbability: null,
   };
 }
 

@@ -499,7 +499,7 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           .enum(["trades", "daily", "percentage"])
           .default("trades")
           .describe(
-            "What to resample: 'trades' (individual trade P&L), 'daily' (daily aggregated returns), 'percentage' (percentage returns for compounding strategies)",
+            "What to resample: 'trades' (individual trade P&L), 'daily' (daily aggregated returns), 'percentage' (percentage returns for compounding strategies). Under 'percentage', zeroBalancePaths is structurally 0 — per-step returns clamp at -100% of current equity, so capital can never cross zero — and probabilityOfRuin (via ruinThresholdPct) is the meaningful ruin statistic.",
           ),
         resampleMode: z
           .enum(["stationary-block", "iid"])
@@ -689,7 +689,11 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           stats.probabilityOfRuin !== undefined
             ? ` | P(Ruin): ${formatPercent(stats.probabilityOfRuin * 100)}`
             : "";
-        const summary = `Monte Carlo: ${blockId}${strategy ? ` (${strategy})` : ""} | ${numSimulations} sims | Mean Return: ${formatPercent(stats.meanTotalReturn * 100)} | P(Profit): ${formatPercent(stats.probabilityOfProfit * 100)} | 95% VaR: ${formatPercent(stats.valueAtRisk.p5 * 100)}${ruinNote}`;
+        const zeroBalanceNote =
+          resampleMethod === "percentage"
+            ? " | Note: zeroBalancePaths is structurally 0 under percentage returns (per-step losses clamp at -100% of current equity, so capital cannot cross zero) — read probabilityOfRuin for ruin risk."
+            : "";
+        const summary = `Monte Carlo: ${blockId}${strategy ? ` (${strategy})` : ""} | ${numSimulations} sims | Mean Return: ${formatPercent(stats.meanTotalReturn * 100)} | P(Profit): ${formatPercent(stats.probabilityOfProfit * 100)} | 95% VaR: ${formatPercent(stats.valueAtRisk.p5 * 100)}${ruinNote}${zeroBalanceNote}`;
 
         // Build structured data for Claude reasoning
         const structuredData = {
@@ -728,7 +732,10 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             medianMaxDrawdown: stats.medianMaxDrawdown,
             meanSharpeRatio: stats.meanSharpeRatio,
             probabilityOfProfit: stats.probabilityOfProfit,
-            // Fraction of paths whose capital touched zero at any step
+            // Fraction of paths whose capital touched zero at any step.
+            // Structurally 0 under resampleMethod "percentage" (per-step
+            // returns clamp at -100% of current equity, so capital can never
+            // cross zero) — probabilityOfRuin is the ruin statistic there.
             zeroBalancePaths: stats.zeroBalancePaths,
             // Fraction of paths that ever fell to ruinThresholdPct below
             // starting capital; null unless a threshold was supplied

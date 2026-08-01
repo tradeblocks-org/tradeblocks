@@ -63,6 +63,7 @@ import {
   selectBlockLengthHint,
 } from "./block-length-hint";
 import { describeSimulationHorizon } from "./horizon-notice";
+import { describeWorstCaseBudget } from "./worst-case-copy";
 import { Download, HelpCircle, Loader2, Play, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
@@ -1292,29 +1293,12 @@ export default function RiskSimulatorPage() {
                         <div className="w-16 text-right font-medium">{worstCasePercentage}%</div>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {worstCaseBasedOn === "simulation" ? (
-                          worstCaseMode === "probabilistic" ? (
-                            <>
-                              Each simulated trade has a literal {worstCasePercentage}% chance of
-                              becoming a max-loss event (≈ {worstCaseSimulationBudget} per
-                              simulation on average), with the loss sizes split evenly across
-                              strategies.
-                            </>
-                          ) : (
-                            <>
-                              Exactly {worstCasePercentage}% of the simulation horizon (≈{" "}
-                              {worstCaseSimulationBudget} synthetic trades) split evenly across
-                              strategies.
-                            </>
-                          )
-                        ) : (
-                          <>
-                            Weighted by each strategy&apos;s historical trade count, but capped at{" "}
-                            {worstCasePercentage}% of the simulation (≈ {worstCaseSimulationBudget}{" "}
-                            trades) so the &quot;Force {worstCasePercentage}%&quot; promise stays
-                            accurate.
-                          </>
-                        )}
+                        {describeWorstCaseBudget({
+                          mode: worstCaseMode,
+                          basedOn: worstCaseBasedOn,
+                          percentage: worstCasePercentage,
+                          budget: worstCaseSimulationBudget,
+                        })}
                       </p>
                       {shouldShowHistoricalCapHint && (
                         <p className="text-[11px] text-amber-600">
