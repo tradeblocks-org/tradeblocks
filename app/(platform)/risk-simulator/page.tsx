@@ -1332,7 +1332,9 @@ export default function RiskSimulatorPage() {
                         </>
                       )}
                       {percentageStressDivergence && (
-                        <p className="text-xs text-amber-600">{percentageStressDivergence}</p>
+                        <p className="text-xs text-amber-600 dark:text-amber-500">
+                          {percentageStressDivergence}
+                        </p>
                       )}
                     </div>
 
