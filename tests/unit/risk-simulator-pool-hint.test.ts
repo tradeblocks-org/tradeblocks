@@ -1,14 +1,14 @@
 /**
  * The risk simulator previews the automatic mean block length before a run,
- * from an estimate of the resample pool. Worst-case injection in "pool" mode
- * adds synthetic max-loss trades to that pool, so a preview that ignores them
- * understates the block length the run will actually use. These tests pin the
- * two derivations behind the preview and check them against a real run.
+ * from an estimate of the resample pool. The pool holds only real history —
+ * worst-case injection replaces slots after the draw and never changes the
+ * pool size — so the preview derives from the base pool in every mode. These
+ * tests pin the derivations behind the preview and check them against a real
+ * run.
  */
 
 import {
   defaultMeanBlockLength,
-  effectiveResamplePoolSize,
   runMonteCarloSimulation,
   worstCaseInjectionCount,
   Trade,
@@ -60,26 +60,6 @@ describe("worstCaseInjectionCount", () => {
   });
 });
 
-describe("effectiveResamplePoolSize", () => {
-  it("counts the injected trades in pool mode", () => {
-    expect(effectiveResamplePoolSize(27, { enabled: true, mode: "pool", injectedCount: 37 })).toBe(
-      64,
-    );
-  });
-
-  it("leaves the pool alone in guarantee mode", () => {
-    expect(
-      effectiveResamplePoolSize(27, { enabled: true, mode: "guarantee", injectedCount: 37 }),
-    ).toBe(27);
-  });
-
-  it("leaves the pool alone when worst-case injection is off", () => {
-    expect(effectiveResamplePoolSize(27, { enabled: false, mode: "pool", injectedCount: 37 })).toBe(
-      27,
-    );
-  });
-});
-
 describe("the previewed block length matches the run", () => {
   const trades = Array.from({ length: 27 }, (_, i) => createTrade(i));
   const simulationLength = 37;
@@ -99,50 +79,29 @@ describe("the previewed block length matches the run", () => {
     worstCaseSizing: "relative" as const,
   };
 
-  it("includes the injected trades in pool mode", () => {
+  it("derives the block length from the real pool in probabilistic mode", () => {
     const result = runMonteCarloSimulation(trades, {
       ...baseParams,
-      worstCaseMode: "pool" as const,
+      worstCaseMode: "probabilistic" as const,
     });
 
-    const injectedCount = worstCaseInjectionCount(simulationLength, worstCasePercentage);
-    const previewed = defaultMeanBlockLength(
-      effectiveResamplePoolSize(trades.length, {
-        enabled: true,
-        mode: "pool",
-        injectedCount,
-      }),
-    );
-
     expect(result.actualResamplePoolSize).toBe(trades.length);
-    expect(result.effectiveMeanBlockLength).toBe(previewed);
-    // The whole point: ignoring the injection would have previewed a shorter
-    // block than the run used.
-    expect(defaultMeanBlockLength(trades.length)).toBeLessThan(previewed);
+    expect(result.effectiveMeanBlockLength).toBe(defaultMeanBlockLength(trades.length));
   });
 
-  it("ignores the injected trades in guarantee mode", () => {
+  it("derives the block length from the real pool in guarantee mode", () => {
     const result = runMonteCarloSimulation(trades, {
       ...baseParams,
       worstCaseMode: "guarantee" as const,
     });
 
-    const previewed = defaultMeanBlockLength(
-      effectiveResamplePoolSize(trades.length, {
-        enabled: true,
-        mode: "guarantee",
-        injectedCount: worstCaseInjectionCount(simulationLength, worstCasePercentage),
-      }),
-    );
-
-    expect(result.effectiveMeanBlockLength).toBe(previewed);
-    expect(previewed).toBe(defaultMeanBlockLength(trades.length));
+    expect(result.effectiveMeanBlockLength).toBe(defaultMeanBlockLength(trades.length));
   });
 
   it("hands the run's own block length to the hint once the run finishes", () => {
     const result = runMonteCarloSimulation(trades, {
       ...baseParams,
-      worstCaseMode: "pool" as const,
+      worstCaseMode: "probabilistic" as const,
     });
 
     const hint = selectBlockLengthHint({

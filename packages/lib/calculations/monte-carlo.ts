@@ -84,13 +84,29 @@ export interface MonteCarloParams {
   /** Percentage of trades that should be max-loss scenarios (0-100) */
   worstCasePercentage?: number;
 
-  /** How to inject worst-case trades: add to pool or guarantee in every simulation */
-  worstCaseMode?: "pool" | "guarantee";
+  /**
+   * How to inject worst-case trades. Injection is a per-slot replacement
+   * layer applied AFTER the sampler draws from real history — synthetic
+   * losses never join the resample pool, so a stationary-block walk can
+   * never step through them as a contiguous catastrophe run.
+   * - "probabilistic" (default): each slot is independently replaced with
+   *   probability injectedCount / (poolSize + injectedCount) — the honest
+   *   per-slot meaning of the former pool membership. "pool" is accepted as
+   *   an alias for this mode.
+   * - "guarantee": exactly the requested count is spliced into every
+   *   simulation at independent random positions.
+   */
+  worstCaseMode?: "probabilistic" | "pool" | "guarantee";
 
   /** What to base the percentage on: simulation length (default) or historical data */
   worstCaseBasedOn?: "simulation" | "historical";
 
-  /** How to size each synthetic loss: absolute historical dollars or scale to account capital */
+  /**
+   * How to size each synthetic loss: absolute historical dollars or scale to
+   * account capital. "absolute" is only coherent when the simulation itself
+   * runs in dollars — combining it with resampleMethod "percentage" is a
+   * validation error (see ABSOLUTE_SIZING_PERCENTAGE_ERROR).
+   */
   worstCaseSizing?: "absolute" | "relative";
 
   /**
@@ -276,8 +292,9 @@ export interface MonteCarloResult {
   /**
    * Mean block length actually used for stationary-block resampling, null when
    * resampleMode is "iid". Reflects the auto default (cube root of the pool
-   * size, including any injected worst-case losses) when meanBlockLength was
-   * not supplied.
+   * size) when meanBlockLength was not supplied. The pool holds only real
+   * history — worst-case injection replaces slots after the draw and never
+   * changes the pool size.
    */
   effectiveMeanBlockLength: number | null;
 }
@@ -355,31 +372,17 @@ export function worstCaseInjectionCount(
 }
 
 /**
- * Size of the resample pool a run will actually draw from.
- *
- * In "pool" mode the synthetic worst-case trades join the pool, so they count
- * toward the pool size the automatic mean block length is derived from. In
- * "guarantee" mode they are spliced into each path after resampling and leave
- * the pool unchanged.
- *
- * @param basePoolSize - Pool size before worst-case injection
- * @param worstCase - Worst-case injection settings for the run
- * @returns Effective pool size
+ * Validation message for the one worst-case configuration that has no
+ * coherent meaning: a fixed historical-dollar loss injected into a stream of
+ * percentage returns. Percentage paths are scale-free, so a fixed dollar
+ * amount either gets pre-baked into a ratio of starting capital (neither
+ * dollars nor honest) or applied against live capital (ruinous, because the
+ * percentage stream lacks the grown-account dollar wins that offset fixed
+ * shocks in dollar resampling). Shared with the MCP schema so both surfaces
+ * reject the combination with the same words.
  */
-export function effectiveResamplePoolSize(
-  basePoolSize: number,
-  worstCase: {
-    enabled: boolean;
-    mode: "pool" | "guarantee";
-    injectedCount: number;
-  },
-): number {
-  const base = Math.max(0, basePoolSize);
-  if (!worstCase.enabled || worstCase.mode !== "pool") {
-    return base;
-  }
-  return base + Math.max(0, worstCase.injectedCount);
-}
+export const ABSOLUTE_SIZING_PERCENTAGE_ERROR =
+  "Historical-dollar loss sizing is not available with percentage returns: a fixed dollar amount has no stable meaning in a scale-free return stream. Use a dollar sampling method ('trades' or 'daily') for historical-dollar stress tests, or 'relative' sizing to scale each loss to account capital.";
 
 /**
  * A ruin threshold is only honored when it is strictly positive. Zero puts the
@@ -1115,6 +1118,19 @@ export function runMonteCarloSimulation(
     );
   }
 
+  const worstCaseRequested =
+    params.worstCaseEnabled === true &&
+    params.worstCasePercentage !== undefined &&
+    params.worstCasePercentage > 0;
+
+  if (
+    worstCaseRequested &&
+    params.resampleMethod === "percentage" &&
+    params.worstCaseSizing === "absolute"
+  ) {
+    throw new Error(ABSOLUTE_SIZING_PERCENTAGE_ERROR);
+  }
+
   const timestamp = new Date();
 
   // Get resample pool based on method
@@ -1175,7 +1191,7 @@ export function runMonteCarloSimulation(
 
   // Handle worst-case scenario injection
   let worstCaseTrades: number[] = [];
-  if (params.worstCaseEnabled && params.worstCasePercentage && params.worstCasePercentage > 0) {
+  if (worstCaseRequested && params.worstCasePercentage) {
     // Create synthetic max-loss trades
     const syntheticTrades = createSyntheticMaxLossTrades(
       trades,
@@ -1192,16 +1208,14 @@ export function runMonteCarloSimulation(
     const capitalBasis = capitalBasisRaw > 0 ? capitalBasisRaw : 1;
 
     if (params.resampleMethod === "percentage") {
+      // Absolute sizing is rejected above, so percentage-mode synthetics are
+      // always capital-relative losses.
       worstCaseTrades = syntheticTrades.map((t) => {
-        if (lossSizing === "relative") {
-          const ratio = t.syntheticCapitalRatio;
-          if (ratio && ratio > 0) {
-            return -Math.abs(ratio);
-          }
-          return t.pl / capitalBasis;
+        const ratio = t.syntheticCapitalRatio;
+        if (ratio && ratio > 0) {
+          return -Math.abs(ratio);
         }
-        const pl = params.normalizeTo1Lot ? scaleTradeToOneLot(t) : t.pl;
-        return pl / capitalBasis;
+        return t.pl / capitalBasis;
       });
     } else {
       worstCaseTrades = syntheticTrades.map((t) => {
@@ -1215,15 +1229,21 @@ export function runMonteCarloSimulation(
         return params.normalizeTo1Lot ? scaleTradeToOneLot(t) : t.pl;
       });
     }
-
-    // If mode is "pool", add to resample pool. With stationary-block
-    // resampling the injected synthetic losses simply join the pool and can
-    // appear inside blocks; "guarantee" mode splices them into each path
-    // after resampling, exactly as in iid mode.
-    if (params.worstCaseMode === "pool") {
-      resamplePool = [...resamplePool, ...worstCaseTrades];
-    }
   }
+
+  // Injection is a per-slot replacement layer applied after the draw, never
+  // pool membership: synthetics appended to the pool would sit in one
+  // contiguous region a stationary-block walk could traverse, manufacturing
+  // consecutive max-loss runs no user asked for. "probabilistic" (with
+  // "pool" as its accepted alias, and the default) replaces each slot
+  // independently at the probability pool membership would have implied;
+  // "guarantee" splices the exact count at independent positions.
+  const worstCaseMode: "probabilistic" | "guarantee" =
+    params.worstCaseMode === "guarantee" ? "guarantee" : "probabilistic";
+  const replacementProbability =
+    worstCaseMode === "probabilistic" && worstCaseTrades.length > 0
+      ? worstCaseTrades.length / (resamplePool.length + worstCaseTrades.length)
+      : 0;
 
   // Stationary-block resampling is the default: block resampling preserves
   // the historical clustering of consecutive trades, which real P&L exhibits,
@@ -1234,7 +1254,7 @@ export function runMonteCarloSimulation(
   const meanBlockLength = params.meanBlockLength ?? defaultMeanBlockLength(resamplePool.length);
 
   const enforcedGuaranteeTrades =
-    params.worstCaseEnabled && params.worstCaseMode === "guarantee" && params.simulationLength > 0
+    worstCaseMode === "guarantee" && params.simulationLength > 0
       ? worstCaseTrades.slice(0, Math.min(worstCaseTrades.length, params.simulationLength))
       : [];
 
@@ -1271,6 +1291,16 @@ export function runMonteCarloSimulation(
       }
 
       resampledPLs = combined;
+    } else if (replacementProbability > 0) {
+      // Per-slot replacement: each drawn slot is independently swapped for a
+      // synthetic max-loss event. A dedicated RNG stream keeps the baseline
+      // draw identical whether or not injection is enabled.
+      const rng = seed !== undefined ? createSeededRandom(seed + 999999) : Math.random;
+      for (let position = 0; position < resampledPLs.length; position++) {
+        if (rng() < replacementProbability) {
+          resampledPLs[position] = worstCaseTrades[Math.floor(rng() * worstCaseTrades.length)];
+        }
+      }
     }
 
     // Run simulation
