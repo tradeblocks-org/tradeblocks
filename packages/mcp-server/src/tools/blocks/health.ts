@@ -942,7 +942,7 @@ export function registerHealthBlockTools(server: McpServer, baseDir: string): vo
             tradesPerYear: calculatedTradesPerYear,
             worstCaseEnabled: true,
             worstCasePercentage: 5,
-            worstCaseMode: "pool",
+            worstCaseMode: "probabilistic",
             worstCaseBasedOn: "simulation",
             worstCaseSizing: "relative",
           };

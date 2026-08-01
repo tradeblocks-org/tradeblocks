@@ -201,3 +201,60 @@ describe("run_monte_carlo ruin statistics", () => {
     );
   });
 });
+
+describe("run_monte_carlo worst-case injection surface", () => {
+  it("defaults the injection mode to probabilistic", () => {
+    const parsed = schema.parse({ blockId: BLOCK_ID }) as Record<string, unknown>;
+    expect(parsed.worstCaseMode).toBe("probabilistic");
+  });
+
+  it("accepts 'pool' as a legacy alias and 'guarantee' unchanged", () => {
+    expect(schema.parse({ blockId: BLOCK_ID, worstCaseMode: "pool" })).toMatchObject({
+      worstCaseMode: "pool",
+    });
+    expect(schema.parse({ blockId: BLOCK_ID, worstCaseMode: "guarantee" })).toMatchObject({
+      worstCaseMode: "guarantee",
+    });
+  });
+
+  it("'pool' produces the same results as 'probabilistic'", async () => {
+    const input = {
+      numSimulations: 200,
+      randomSeed: 42,
+      includeWorstCase: true,
+      worstCasePercentage: 5,
+      worstCaseSizing: "absolute",
+    };
+    const probabilistic = await runTool({ ...input, worstCaseMode: "probabilistic" });
+    const pool = await runTool({ ...input, worstCaseMode: "pool" });
+    expect(pool.data.statistics).toEqual(probabilistic.data.statistics);
+  });
+
+  it("rejects absolute sizing under the percentage method with the shared message", async () => {
+    const parsed = schema.parse({
+      blockId: BLOCK_ID,
+      resampleMethod: "percentage",
+      worstCaseSizing: "absolute",
+      randomSeed: 42,
+    });
+    const result = await handler(parsed);
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain(
+      "Historical-dollar loss sizing is not available with percentage returns",
+    );
+    expect(result.content[0]?.text).toContain("'trades' or 'daily'");
+  });
+
+  it("allows relative sizing under the percentage method", async () => {
+    const { data } = await runTool({
+      numSimulations: 200,
+      randomSeed: 42,
+      resampleMethod: "percentage",
+      includeWorstCase: true,
+      worstCasePercentage: 5,
+      worstCaseSizing: "relative",
+    });
+    expect(data.parameters.resampleMethod).toBe("percentage");
+  });
+});

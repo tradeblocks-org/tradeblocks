@@ -16,6 +16,7 @@ import {
 } from "../utils/output-formatter.ts";
 import {
   WalkForwardAnalyzer,
+  ABSOLUTE_SIZING_PERCENTAGE_ERROR,
   assessResults,
   getRecommendedParameters,
   runMonteCarloSimulation,
@@ -559,16 +560,16 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             "Percentage of simulation length that should be max-loss scenarios (0-100, default: 5)",
           ),
         worstCaseMode: z
-          .enum(["pool", "guarantee"])
-          .default("pool")
+          .enum(["probabilistic", "pool", "guarantee"])
+          .default("probabilistic")
           .describe(
-            "How to inject worst-case: 'pool' adds synthetic losses to resample pool, 'guarantee' ensures worst-case appears in every simulation",
+            "How to inject worst-case losses. Injection is a per-slot replacement layer applied after the sampler draws from real history — synthetic losses never join the resample pool, so block resampling cannot walk through them as a contiguous catastrophe run. 'probabilistic' (default): each simulated step is independently replaced with probability injectedCount / (poolSize + injectedCount); 'pool' is the legacy alias for the same behavior. 'guarantee' forces exactly the requested count into every simulation at independent random positions.",
           ),
         worstCaseSizing: z
           .enum(["absolute", "relative"])
           .default("relative")
           .describe(
-            "Worst-case sizing: 'absolute' uses historical dollar amounts, 'relative' scales to account capital ratio",
+            "Worst-case sizing: 'absolute' uses historical dollar amounts, 'relative' scales to account capital ratio. 'absolute' requires a dollar sampling method ('trades' or 'daily') — combined with resampleMethod 'percentage' the tool returns an error, because a fixed dollar loss has no stable meaning in a scale-free return stream.",
           ),
         worstCaseBasedOn: z
           .enum(["simulation", "historical"])
@@ -607,6 +608,16 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
       historicalInitialCapital,
     }) => {
       try {
+        // Reject the one incoherent combination up front, with the same
+        // message the calculation library uses, so callers see it whether or
+        // not injection would have created any synthetic losses.
+        if (resampleMethod === "percentage" && worstCaseSizing === "absolute") {
+          return {
+            content: [{ type: "text", text: ABSOLUTE_SIZING_PERCENTAGE_ERROR }],
+            isError: true,
+          };
+        }
+
         const block = await loadBlock(baseDir, blockId);
         let trades = block.trades;
 
@@ -701,7 +712,7 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             normalizeTo1Lot: params.normalizeTo1Lot ?? false,
             worstCaseEnabled: includeWorstCase,
             worstCasePercentage: params.worstCasePercentage ?? 0,
-            worstCaseMode: params.worstCaseMode ?? "pool",
+            worstCaseMode: params.worstCaseMode ?? "probabilistic",
             worstCaseBasedOn: params.worstCaseBasedOn ?? "simulation",
             worstCaseSizing: params.worstCaseSizing ?? "relative",
           },
