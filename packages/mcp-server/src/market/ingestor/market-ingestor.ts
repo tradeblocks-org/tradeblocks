@@ -25,6 +25,11 @@ import {
   type QuoteGreeksStats,
 } from "../../utils/option-quote-greeks.ts";
 import { runCanonicalProvenanceRefresh } from "../provenance/refresh-completion.ts";
+import {
+  XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
+  XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
+  isXnysSessionDate,
+} from "../provenance/xnys-session-calendar.ts";
 
 export interface MarketIngestorDeps {
   stores: MarketStores;
@@ -124,24 +129,18 @@ function providerErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Identify dates the US options market is closed. Currently weekends only —
- * holiday list is intentional TODO. ThetaData (and likely other providers)
- * return junk data on weekends (zero-priced "quotes" for every contract on
- * Sundays in particular), so refresh() short-circuits these dates.
- *
- * Lower-level methods (ingestBars/ingestChain/ingestQuotes) are unchanged —
- * callers needing forensic per-weekend fetches can call them directly.
- */
+/** Identify dates known to be full-day XNYS closures. */
 function isNonTradingDay(asOf: string): boolean {
-  // asOf is YYYY-MM-DD. Use UTC noon to avoid TZ drift across the date
-  // boundary on hosts in negative-offset timezones.
   const d = new Date(`${asOf}T12:00:00Z`);
   const dow = d.getUTCDay();
   if (dow === 0 || dow === 6) return true;
-  // TODO: NYSE holiday calendar (MLK, Presidents, Good Friday, Memorial,
-  // Juneteenth, Independence, Labor, Thanksgiving, Christmas, New Year).
-  return false;
+  if (
+    asOf < XNYS_SESSION_CALENDAR_SUPPORTED_FROM ||
+    asOf > XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH
+  ) {
+    return false;
+  }
+  return !isXnysSessionDate(asOf);
 }
 
 function unsupportedProviderResult(
@@ -415,6 +414,52 @@ export class MarketIngestor {
     } catch {
       return result;
     }
+  }
+
+  private async enforceSpotRefreshCompleteness(
+    symbol: string,
+    asOf: string,
+    result: IngestResult,
+  ): Promise<IngestResult> {
+    if (result.rowsWritten > 0 || result.status !== "ok") return result;
+
+    try {
+      const coverage = await this.deps.stores.spot.getCoverage(symbol.toUpperCase(), asOf, asOf);
+      if (coverage.totalDates > 0) {
+        return {
+          status: "skipped",
+          rowsWritten: 0,
+          dateRange: { from: asOf, to: asOf },
+          details: {
+            ...(result.details ?? {}),
+            reason: "using_cached_coverage",
+            dataset: "spot",
+            symbol: symbol.toUpperCase(),
+            originalStatus: result.status,
+            cachedCoverage: {
+              totalDates: coverage.totalDates,
+              earliest: coverage.earliest,
+              latest: coverage.latest,
+            },
+          },
+        };
+      }
+    } catch {
+      // A failed coverage read cannot prove that the requested partition exists.
+    }
+
+    return {
+      status: "error",
+      rowsWritten: 0,
+      error: `Spot refresh for ${symbol.toUpperCase()} on ${asOf} returned zero rows and exact-date coverage remains absent`,
+      details: {
+        ...(result.details ?? {}),
+        reason: "zero_rows",
+        dataset: "spot",
+        symbol: symbol.toUpperCase(),
+        asOf,
+      },
+    };
   }
 
   private quoteGreeksSourceForProvider(
@@ -1269,7 +1314,8 @@ export class MarketIngestor {
         timespan: "1m",
         provider: opts.provider,
       });
-      const result = await this.applyCoverageFallback("spot", ticker, opts.asOf, rawResult);
+      const fallbackResult = await this.applyCoverageFallback("spot", ticker, opts.asOf, rawResult);
+      const result = await this.enforceSpotRefreshCompleteness(ticker, opts.asOf, fallbackResult);
       spotResults.push(result);
       if (result.status === "error") errors.push(`spot ${ticker}: ${result.error}`);
     }

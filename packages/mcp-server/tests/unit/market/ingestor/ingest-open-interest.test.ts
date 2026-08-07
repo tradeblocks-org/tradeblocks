@@ -221,7 +221,7 @@ describe("MarketIngestor.refresh open-interest gating", () => {
     });
 
     const result = await ingestor.refresh({
-      asOf: "2024-01-15",
+      asOf: "2024-01-16",
       spotTickers: [],
     });
 
@@ -242,7 +242,7 @@ describe("MarketIngestor.refresh open-interest gating", () => {
     });
 
     const result = await ingestor.refresh({
-      asOf: "2024-01-15",
+      asOf: "2024-01-16",
       spotTickers: [],
       openInterestUnderlyings: ["SPX"],
     });
