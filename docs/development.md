@@ -4,11 +4,11 @@ This document explains how TradeBlocks is structured and how to work effectively
 
 ## Environment & Tooling
 
-- **Runtime:** Node.js 20 LTS (Next.js 15 requires >=18.18, but we develop against 20 for parity with Vercel).
+- **Runtime:** Node.js 24 (see `.node-version`).
 - **Package manager:** npm (lockfile committed). Husky installs git hooks via `npm install`.
 - **Type system:** TypeScript with `strict` mode.
 - **Linting:** ESLint 9 + Next.js config (`npm run lint`).
-- **Formatting:** Rely on ESLint + Prettier-in-ESLint; no dedicated `format` script.
+- **Formatting:** Prettier (`npm run format` to write, `npm run format:check` to verify).
 - **Testing:** Jest 30 with `ts-jest` and `fake-indexeddb` to emulate browser storage.
 
 ### First-Time Setup
@@ -114,18 +114,12 @@ For questions or larger architectural changes, start with an architecture sketch
 
 ## AI-Assisted Development
 
-This project uses Claude Code for AI-assisted development. Key files and workflows:
+The root `CLAUDE.md` and `AGENTS.md` files provide the same concise repository orientation to AI
+coding assistants. Both are generated from `docs/ai-assistant-entry.md`; after changing the source,
+run `node scripts/generate-agent-entry-files.mjs` and commit both generated files.
 
-### CLAUDE.md
-
-The `.claude/CLAUDE.md` file provides project context to Claude Code, including:
-
-- Architecture overview and data flow
-- Key implementation details (timezone handling, P&L calculations, etc.)
-- Testing patterns and conventions
-- Charting library specifics (Plotly, not Recharts)
-
-When working with Claude Code, this file is automatically loaded to provide codebase context.
+Keep durable implementation guidance in `docs/` and link to it from the entry source instead of
+duplicating it there.
 
 ### MCP Server Integration
 
@@ -185,3 +179,32 @@ npm test
 3. **Agent skills**: Markdown files in `packages/agent-skills/` that provide guided workflows for AI assistants
 
 For MCP server development details, see [packages/mcp-server/README.md](../packages/mcp-server/README.md).
+
+## Implementation Conventions
+
+### Testing Requirements
+
+Every new utility module containing pure logic needs unit tests. This includes parsers, filters,
+builders, calculations, transformers, validators, and other exported input-to-output functions.
+Place tests with the matching test area (`tests/unit/` for shared library code and
+`packages/mcp-server/tests/unit/` for server utilities). If a server utility must be imported from
+the compiled package in tests, expose it through `packages/mcp-server/src/test-exports.ts`.
+
+Test empty input, single-record input, and missing optional data where applicable. Run
+`npm run typecheck` before the final commit; `npm run verify` also runs lint and formatting checks.
+
+### UI and State Patterns
+
+- Performance charts use Plotly through `react-plotly.js`, not Recharts. Build typed traces in
+  `useMemo()` and render them with `components/performance-charts/chart-wrapper.tsx` for consistent
+  styling, theming, tooltips, and configuration.
+- Number inputs that users can clear and retype use separate string display state and validated
+  numeric state. Validate on blur or Enter and restore the last valid value after invalid input.
+- Zustand stores coordinate UI state and cached derived data. IndexedDB store modules own durable
+  browser records; load referenced records explicitly when using a block.
+
+### Maintaining Treasury Rates
+
+Historical rates live in `packages/lib/data/treasury-rates.ts`. Follow the update instructions in
+that file, add the new `YYYY-MM-DD` entries from the FRED DTB3 series, and run
+`npm test -- tests/unit/risk-free-rate.test.ts`.

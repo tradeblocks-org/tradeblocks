@@ -15,6 +15,18 @@ All providers implement the same `MarketDataProvider` interface and normalize re
 
 ### Building a Custom Provider
 
+Provider integrations are optional and must not change the CSV-only experience. Keep credentials in
+environment variables and read them when a handler runs so tests can replace them safely. Never
+accept an API key as an MCP tool argument, because tool arguments can be retained in client history.
+
+The built-in Massive.com provider uses Node's native `fetch`, `AbortSignal.timeout()`, and Zod
+validation. Do not add an HTTP client or provider SDK unless the provider requires behavior that the
+platform APIs cannot supply. Parse and validate a complete response before writing rows so upstream
+schema drift fails without partial data. Tests should spy on `globalThis.fetch`, restore mocks after
+each case, and construct responses with the platform `Response` class.
+
+Missing credentials should produce a clear tool error instead of an unhandled exception.
+
 To add a new data provider:
 
 1. **Create the adapter** at `packages/mcp-server/src/utils/providers/<name>.ts`
