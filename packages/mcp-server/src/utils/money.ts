@@ -107,32 +107,64 @@ export function applyRatio(amount: Money, ratio: number): Money {
 }
 
 /**
- * Why a caller-supplied amount cannot be used as money here, or null if it can.
- *
- * `toMoney` deliberately snaps binary representation error back to the intended
- * decimal, which is the right behaviour for a value this code computed. It is the
- * WRONG behaviour for a value a caller typed: an amount finer than this domain
- * represents would be silently rounded into a different threshold, and one beyond
- * its range would raise where the caller expected an answer.
- *
- * Caller-supplied monetary inputs are therefore checked here, at the public
- * boundary, so an unusable amount is reported as what it is — a rejected input —
- * rather than silently becoming a different exit decision.
+ * Raised when an amount cannot be carried in this domain without changing what
+ * it means. Callers at the tool boundary turn it into a field-named input error.
  */
-export function moneyInputProblem(amount: number): string | null {
+export class MoneyDomainError extends Error {}
+
+/**
+ * Convert a monetary amount that ORIGINATES OUTSIDE this module — typed by a
+ * caller, or derived from caller-supplied prices — naming the field it came from.
+ *
+ * Two conversions are refused, because both would silently change an exit
+ * decision rather than merely round it:
+ *
+ *  - one that ANNIHILATES a non-zero amount. A threshold of a millionth of a
+ *    cent becomes zero, and a zero threshold is met by every position, so a stop
+ *    nobody could reach turns into one that fires immediately.
+ *  - one that OVERFLOWS the exact range, which would otherwise surface as an
+ *    unexplained failure part-way through an analysis.
+ *
+ * Everything else converts. Ordinary binary noise on a derived value —
+ * `7.780000000000001` from a price times a multiplier — is snapped back to the
+ * decimal it represents, which is the whole point. Rounding at the millionth of
+ * a dollar is below any resolution money is decided at here, and is not treated
+ * as an error.
+ *
+ * This is deliberately checked on the RESULT of the conversion rather than on the
+ * shape of the input, so it holds identically for a value a caller typed and one
+ * this code derived. An input-shaped check cannot do that: it never sees the
+ * derived value at all.
+ */
+export function toMoneyField(amount: number, field: string): Money {
   if (!Number.isFinite(amount)) {
-    return "must be a finite dollar amount";
+    throw new MoneyDomainError(`${field} must be a finite dollar amount`);
   }
-  if (Math.abs(amount) > MONEY_MAX_DOLLARS) {
-    return `must be within +/-${MONEY_MAX_DOLLARS} dollars`;
+  const scaled = Math.round(amount * SCALE);
+  if (!Number.isSafeInteger(scaled)) {
+    throw new MoneyDomainError(
+      `${field} is beyond the largest dollar amount this analysis can represent (about ${MONEY_MAX_DOLLARS.toLocaleString("en-US")})`,
+    );
   }
-  const scaled = amount * SCALE;
-  // A decimal with at most MONEY_DECIMAL_PLACES places lands within ordinary
-  // binary noise of an integer here; anything finer does not.
-  if (Math.abs(scaled - Math.round(scaled)) > 1e-6) {
-    return `must have at most ${MONEY_DECIMAL_PLACES} decimal places`;
+  if (scaled === 0 && amount !== 0) {
+    throw new MoneyDomainError(
+      `${field} is smaller than the smallest amount this analysis can represent (a millionth of a dollar)`,
+    );
   }
-  return null;
+  return scaled === 0 ? 0 : scaled;
+}
+
+/**
+ * Apply a caller-supplied ratio to a monetary amount, naming the field, and
+ * refuse a result the domain cannot carry. A percentage is a ratio rather than
+ * money and is not itself constrained — but the dollars it produces are, and
+ * that product is where an unusable percentage actually bites.
+ */
+export function applyRatioField(amount: Money, ratio: number, field: string): Money {
+  if (!Number.isFinite(ratio)) {
+    throw new MoneyDomainError(`${field} must be a finite number`);
+  }
+  return toMoneyField(fromMoney(amount) * ratio, field);
 }
 
 /** Inclusive "at least" — the profit-target direction. */
@@ -156,4 +188,17 @@ export function moneyAtMost(amount: Money, threshold: Money): boolean {
 export function formatMoney(value: Money): string {
   if (value % 10_000 === 0) return (value / SCALE).toFixed(2);
   return (value / SCALE).toFixed(6).replace(/(\.\d\d[0-9]*?)0+$/, "$1");
+}
+
+/**
+ * Render a ratio as a percentage without misstating it.
+ *
+ * Whole percentages print as before. A half-percent stop keeps its half: rounding
+ * to a whole number reported a 0.5% stop as "1%", so the detail line named a
+ * threshold the caller had not configured.
+ */
+export function formatPercent(ratio: number): string {
+  const pct = ratio * 100;
+  const rounded = Math.round(pct * 1000) / 1000;
+  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : String(rounded)}%`;
 }

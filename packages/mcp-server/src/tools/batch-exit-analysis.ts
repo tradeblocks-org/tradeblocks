@@ -12,7 +12,6 @@
  */
 
 import { z } from "zod";
-import { moneyInputProblem } from "../utils/money.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getConnection } from "../db/connection.ts";
 import { createToolOutput } from "../utils/output-formatter.ts";
@@ -77,95 +76,40 @@ const triggerTypeEnum = z.enum([
   "slRatioMove",
 ]);
 
-// Trigger types whose threshold, trail and step values are DOLLAR amounts and so
-// must lie inside the exact money domain the evaluators compare in. Percentage
-// units are ratios rather than money and are not constrained here; every other
-// trigger type carries a threshold in its own units (delta, points, ratio).
-const MONETARY_TRIGGER_TYPES = new Set([
-  "profitTarget",
-  "stopLoss",
-  "trailingStop",
-  "profitAction",
-]);
-
-function checkMoneyField(
-  ctx: z.RefinementCtx,
-  value: number | undefined,
-  path: (string | number)[],
-): void {
-  if (value == null) return;
-  const problem = moneyInputProblem(value);
-  if (problem) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path,
-      message: `${path.join(".")} ${problem}`,
-    });
-  }
-}
-
-/**
- * Reject a monetary input this analysis cannot represent exactly, rather than
- * rounding it into a different exit decision or raising mid-analysis.
- */
-function validateMonetaryInputs(
-  trigger: {
-    type: string;
-    unit?: string;
-    threshold?: number;
-    trailAmount?: number;
-    steps?: Array<{ armAt: number; stopAt: number }>;
-  },
-  ctx: z.RefinementCtx,
-): void {
-  if (!MONETARY_TRIGGER_TYPES.has(trigger.type)) return;
-  const isDollar = (trigger.unit ?? "dollar") === "dollar";
-  if (isDollar) {
-    checkMoneyField(ctx, trigger.threshold, ["threshold"]);
-    checkMoneyField(ctx, trigger.trailAmount, ["trailAmount"]);
-    trigger.steps?.forEach((step, i) => {
-      checkMoneyField(ctx, step.armAt, ["steps", i, "armAt"]);
-      checkMoneyField(ctx, step.stopAt, ["steps", i, "stopAt"]);
-    });
-  }
-}
-
-const triggerConfigSchema = z
-  .object({
-    type: triggerTypeEnum,
-    threshold: z.number(),
-    unit: z.enum(["percent", "dollar"]).default("dollar").optional(),
-    expiry: z.string().optional(),
-    openDate: z.string().optional(),
-    clockTime: z.string().optional(),
-    trailAmount: z.number().optional(),
-    steps: z
-      .array(
-        z.object({
-          armAt: z.number(),
-          stopAt: z.number(),
-          closeAllocationPct: z
-            .number()
-            .min(0)
-            .max(1)
-            .optional()
-            .describe("Fraction of REMAINING position to close at this milestone (0-1)"),
-        }),
-      )
-      .optional(),
-    spreadWidth: z.number().optional(),
-    contracts: z.number().optional(),
-    legIndex: z
-      .number()
-      .optional()
-      .describe("0-based leg index for perLegDelta — targets specific leg"),
-    exitAbove: z.number().optional().describe("Fire when value exceeds this (directional, no abs)"),
-    exitBelow: z
-      .number()
-      .optional()
-      .describe("Fire when value drops below this (directional, no abs)"),
-  })
-  .superRefine(validateMonetaryInputs);
+const triggerConfigSchema = z.object({
+  type: triggerTypeEnum,
+  threshold: z.number(),
+  unit: z.enum(["percent", "dollar"]).default("dollar").optional(),
+  expiry: z.string().optional(),
+  openDate: z.string().optional(),
+  clockTime: z.string().optional(),
+  trailAmount: z.number().optional(),
+  steps: z
+    .array(
+      z.object({
+        armAt: z.number(),
+        stopAt: z.number(),
+        closeAllocationPct: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("Fraction of REMAINING position to close at this milestone (0-1)"),
+      }),
+    )
+    .optional(),
+  spreadWidth: z.number().optional(),
+  contracts: z.number().optional(),
+  legIndex: z
+    .number()
+    .optional()
+    .describe("0-based leg index for perLegDelta — targets specific leg"),
+  exitAbove: z.number().optional().describe("Fire when value exceeds this (directional, no abs)"),
+  exitBelow: z
+    .number()
+    .optional()
+    .describe("Fire when value drops below this (directional, no abs)"),
+});
 
 // ---------------------------------------------------------------------------
 // Zod Schema

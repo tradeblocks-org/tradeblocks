@@ -154,37 +154,135 @@ describe("the full analysis surface agrees with the individual evaluators", () =
   });
 });
 
-describe("the published schema refuses money it cannot represent", () => {
-  // Worf gate on tradeblocks#419, findings F1 and F2. The tool schemas accept any
-  // finite number, but the comparison domain represents six decimal places. An
-  // amount finer than that would be silently rounded into a DIFFERENT threshold
-  // -- a $0.0000004 stop becomes $0.00 and fires on a flat position -- and one
-  // beyond the domain's range would raise mid-analysis where the caller expected
-  // an answer. Both are now rejected as what they are: unusable input.
-  function parse(threshold: number) {
-    return analyzeExitTriggersSchema.safeParse({
-      block_id: "test-block",
-      trade_index: 0,
-      triggers: [{ type: "stopLoss", threshold }],
-    });
-  }
-
-  it("rejects an amount finer than the represented precision", () => {
-    const result = parse(0.0000004);
-    expect(result.success).toBe(false);
+describe("money that cannot be represented is refused, whatever its origin", () => {
+  // Worf gate rounds 1 and 2. The harm is not "too many decimals" — it is an
+  // amount that silently becomes ZERO, because a zero threshold is met by every
+  // position, so a stop nobody could reach turns into one that fires at once.
+  // Checked on the conversion itself, so it holds for a threshold a caller typed
+  // AND for one derived from a caller's prices and percentages.
+  it("refuses a typed threshold that would vanish", () => {
+    const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 1e-12 };
+    expect(() => evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).toThrow(/smaller than/);
   });
 
-  it("rejects an amount beyond the represented range", () => {
-    const result = parse(1e10);
-    expect(result.success).toBe(false);
+  it("refuses a typed threshold beyond the represented range", () => {
+    const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 1e10 };
+    expect(() => evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).toThrow(/beyond the largest/);
+  });
+
+  it("refuses a DERIVED threshold that would vanish", () => {
+    // A percentage of a vanishing entry cost — the path no schema check reaches.
+    const trigger: ExitTriggerConfig = {
+      type: "stopLoss",
+      unit: "percent",
+      threshold: 0.01,
+      entryCost: 4e-9,
+    };
+    expect(() => evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).toThrow(/smaller than/);
+  });
+
+  it("refuses a DERIVED threshold that would overflow", () => {
+    const trigger: ExitTriggerConfig = {
+      type: "profitTarget",
+      unit: "percent",
+      threshold: 1e10,
+      entryCost: 500,
+      requiredHits: 1,
+    };
+    expect(() => evaluateTrigger(trigger, pathOf([0, 100]), LEGS)).toThrow(/beyond the largest/);
+  });
+
+  it("refuses a vanishing trail, which is used as dollars whatever the unit says", () => {
+    const trigger: ExitTriggerConfig = {
+      type: "trailingStop",
+      unit: "percent",
+      threshold: 0.0000004,
+      trailAmount: 0.0000004,
+    };
+    expect(() => evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).toThrow(/smaller than/);
   });
 
   it("accepts an ordinary sub-cent amount", () => {
-    expect(parse(0.005).success).toBe(true);
+    const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 0.005 };
+    expect(() => evaluateTrigger(trigger, pathOf([0, -0.005]), LEGS)).not.toThrow();
   });
 
-  it("accepts an ordinary dollar amount", () => {
-    expect(parse(250).success).toBe(true);
+  it("accepts a derived value carrying ordinary binary noise", () => {
+    // 0.0778 * 100 is 7.780000000000001 in binary. Snapping that is the point of
+    // the domain, not an error.
+    const trigger: ExitTriggerConfig = {
+      type: "stopLoss",
+      unit: "percent",
+      threshold: 1,
+      entryCost: 0.0778 * 100,
+    };
+    expect(() => evaluateTrigger(trigger, pathOf([0, -7.78]), LEGS)).not.toThrow();
+  });
+
+  it("does not reject fields the trigger type never uses", () => {
+    // The previous round validated every monetary-looking field on every trigger,
+    // which refused requests this tool had always accepted.
+    const trigger = {
+      type: "profitTarget",
+      threshold: 200,
+      requiredHits: 1,
+      trailAmount: 1e-12,
+    } as unknown as ExitTriggerConfig;
+    expect(() => evaluateTrigger(trigger, pathOf([0, 250]), LEGS)).not.toThrow();
+  });
+});
+
+describe("the published schema still accepts what it always accepted", () => {
+  // A previous round validated every monetary-looking field on every monetary
+  // trigger AT THE SCHEMA, including fields the evaluator ignores. That refused
+  // requests this tool had always accepted — a compatibility break on a published
+  // package. The schema now carries no money constraint at all; refusal happens
+  // where the money is actually formed, so an ignored field cannot cause one.
+  function parse(trigger: Record<string, unknown>) {
+    return analyzeExitTriggersSchema.safeParse({
+      block_id: "test-block",
+      trade_index: 0,
+      triggers: [trigger],
+    });
+  }
+
+  it("accepts a profit target carrying an unused trail amount", () => {
+    expect(parse({ type: "profitTarget", threshold: 200, trailAmount: 1e-12 }).success).toBe(true);
+  });
+
+  it("accepts a stop loss carrying unused steps", () => {
+    expect(
+      parse({ type: "stopLoss", threshold: 200, steps: [{ armAt: 1e-12, stopAt: 1e-12 }] }).success,
+    ).toBe(true);
+  });
+
+  it("still accepts an ordinary request", () => {
+    expect(parse({ type: "stopLoss", threshold: 250 }).success).toBe(true);
+  });
+});
+
+describe("a detail line states the figures actually compared", () => {
+  it("reports an exact sub-cent P&L against an exact sub-cent target", () => {
+    const trigger: ExitTriggerConfig = {
+      type: "profitTarget",
+      threshold: 0.175,
+      requiredHits: 1,
+    };
+    const result = evaluateTrigger(trigger, pathOf([0, 0.175]), LEGS);
+    expect(result).not.toBeNull();
+    expect(result!.detail).toContain("$0.175 >= target $0.175");
+  });
+
+  it("names the percentage the caller configured, not a rounded one", () => {
+    const trigger: ExitTriggerConfig = {
+      type: "stopLoss",
+      unit: "percent",
+      threshold: 0.005,
+      entryCost: 35,
+    };
+    const result = evaluateTrigger(trigger, pathOf([0, -0.175]), LEGS);
+    expect(result).not.toBeNull();
+    expect(result!.detail).toContain("0.5%");
   });
 });
 

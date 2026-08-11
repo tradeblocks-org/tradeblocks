@@ -9,14 +9,16 @@
 
 import type { PnlPoint, ReplayLeg } from "./trade-replay.ts";
 import {
-  applyRatio,
+  applyRatioField,
   formatMoney,
+  formatPercent,
   fromMoney,
   moneyAtLeast,
   moneyAtMost,
   negMoney,
   subMoney,
   toMoney,
+  toMoneyField,
 } from "./money.ts";
 
 // ---------------------------------------------------------------------------
@@ -198,17 +200,17 @@ export function evaluateProfitAction(
   const scale = trigger.unit === "percent" ? Math.abs(trigger.entryCost!) : 1;
   // Each step's arm and stop enter the money domain where they are DERIVED, so
   // the threshold reported back is the threshold compared against.
-  const entryCostMoney = trigger.unit === "percent" ? toMoney(scale) : 0;
-  const stepDollars = (value: number): number =>
+  const entryCostMoney = trigger.unit === "percent" ? toMoneyField(scale, "entry cost") : 0;
+  const stepDollars = (value: number, field: string): number =>
     trigger.unit === "percent"
-      ? fromMoney(applyRatio(entryCostMoney, value))
-      : fromMoney(toMoney(value));
+      ? fromMoney(applyRatioField(entryCostMoney, value, field))
+      : fromMoney(toMoneyField(value, field));
 
   const normalizedSteps = [...trigger.steps]
     .sort((a, b) => a.armAt - b.armAt)
     .map((step) => ({
-      armAt: stepDollars(step.armAt),
-      stopAt: stepDollars(step.stopAt),
+      armAt: stepDollars(step.armAt, "steps.armAt"),
+      stopAt: stepDollars(step.stopAt, "steps.stopAt"),
       closeAllocationPct: step.closeAllocationPct,
     }));
 
@@ -269,7 +271,7 @@ export function evaluateProfitAction(
       const effectivePnl = pnl * remainingAllocation;
       const detail =
         trigger.unit === "percent"
-          ? `Profit action: stop adjusted to ${((activeFloor / scale) * 100).toFixed(0)}% ($${formatMoney(toMoney(activeFloor))}) at max P&L $${formatMoney(toMoney(runningMaxPnl))}, hit at $${formatMoney(toMoney(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
+          ? `Profit action: stop adjusted to ${formatPercent(activeFloor / scale)} ($${formatMoney(toMoney(activeFloor))}) at max P&L $${formatMoney(toMoney(runningMaxPnl))}, hit at $${formatMoney(toMoney(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
           : `Profit action: stop adjusted to $${formatMoney(toMoney(activeFloor))} at max P&L $${formatMoney(toMoney(runningMaxPnl))}, hit at $${formatMoney(toMoney(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`;
 
       return {
@@ -332,16 +334,20 @@ export function evaluateTrigger(
         // figure reported below is the figure compared against.
         const ptThresholdMoney =
           trigger.unit === "percent"
-            ? applyRatio(toMoney(Math.abs(trigger.entryCost!)), threshold)
-            : toMoney(threshold);
+            ? applyRatioField(
+                toMoneyField(Math.abs(trigger.entryCost!), "entry cost"),
+                threshold,
+                "threshold",
+              )
+            : toMoneyField(threshold, "threshold");
         if (moneyAtLeast(toMoney(pnl), ptThresholdMoney)) {
           if (point.allLegsSync !== false) profitTargetHits++;
           if (profitTargetHits < requiredHits) break;
           fired = true;
           detail =
             trigger.unit === "percent"
-              ? `P&L $${pnl.toFixed(2)} >= ${(threshold * 100).toFixed(0)}% of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} ($${formatMoney(ptThresholdMoney)})`
-              : `P&L $${pnl.toFixed(2)} >= target $${formatMoney(ptThresholdMoney)}`;
+              ? `P&L $${formatMoney(toMoney(pnl))} >= ${formatPercent(threshold)} of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} ($${formatMoney(ptThresholdMoney)})`
+              : `P&L $${formatMoney(toMoney(pnl))} >= target $${formatMoney(ptThresholdMoney)}`;
         } else if (point.allLegsSync !== false) {
           profitTargetHits = 0;
         }
@@ -358,14 +364,18 @@ export function evaluateTrigger(
         // reached the stop the caller was shown.
         const slThresholdMoney =
           trigger.unit === "percent"
-            ? applyRatio(toMoney(Math.abs(trigger.entryCost!)), absThreshold)
-            : toMoney(absThreshold);
+            ? applyRatioField(
+                toMoneyField(Math.abs(trigger.entryCost!), "entry cost"),
+                absThreshold,
+                "threshold",
+              )
+            : toMoneyField(absThreshold, "threshold");
         if (moneyAtMost(toMoney(pnl), negMoney(slThresholdMoney))) {
           fired = true;
           detail =
             trigger.unit === "percent"
-              ? `P&L $${pnl.toFixed(2)} <= -${(absThreshold * 100).toFixed(0)}% of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} (-$${formatMoney(slThresholdMoney)})`
-              : `P&L $${pnl.toFixed(2)} <= stop -$${formatMoney(slThresholdMoney)}`;
+              ? `P&L $${formatMoney(toMoney(pnl))} <= -${formatPercent(absThreshold)} of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} (-$${formatMoney(slThresholdMoney)})`
+              : `P&L $${formatMoney(toMoney(pnl))} <= stop -$${formatMoney(slThresholdMoney)}`;
         }
         break;
       }
@@ -377,7 +387,9 @@ export function evaluateTrigger(
         // it is a real amount rather than the unarmed sentinel.
         const trailArmed = Number.isFinite(runningMaxPnl);
         const dropdownMoney = trailArmed ? subMoney(toMoney(runningMaxPnl), toMoney(pnl)) : 0;
-        if (trailArmed && moneyAtLeast(dropdownMoney, toMoney(trailAmt))) {
+        // trailAmount and threshold are used as DOLLARS here whatever `unit`
+        // says, so they are validated as dollars whatever `unit` says.
+        if (trailArmed && moneyAtLeast(dropdownMoney, toMoneyField(trailAmt, "trailAmount"))) {
           fired = true;
           detail = `Dropdown $${formatMoney(dropdownMoney)} from max $${formatMoney(toMoney(runningMaxPnl))} >= trail $${formatMoney(toMoney(trailAmt))}`;
         }
