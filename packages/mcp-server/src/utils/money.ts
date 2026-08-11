@@ -43,6 +43,12 @@
 /** Micro-dollars per dollar. */
 const SCALE = 1_000_000;
 
+/** Decimal places this domain represents exactly. */
+export const MONEY_DECIMAL_PLACES = 6;
+
+/** Largest magnitude representable exactly, in dollars. */
+export const MONEY_MAX_DOLLARS = Math.floor(Number.MAX_SAFE_INTEGER / SCALE);
+
 /** A monetary amount as an exact integer count of micro-dollars. */
 export type Money = number;
 
@@ -98,6 +104,35 @@ export function applyRatio(amount: Money, ratio: number): Money {
     throw new RangeError(`applyRatio: expected a finite ratio, got ${String(ratio)}`);
   }
   return assertExact(Math.round(amount * ratio), "applyRatio", `${amount} x ${ratio}`);
+}
+
+/**
+ * Why a caller-supplied amount cannot be used as money here, or null if it can.
+ *
+ * `toMoney` deliberately snaps binary representation error back to the intended
+ * decimal, which is the right behaviour for a value this code computed. It is the
+ * WRONG behaviour for a value a caller typed: an amount finer than this domain
+ * represents would be silently rounded into a different threshold, and one beyond
+ * its range would raise where the caller expected an answer.
+ *
+ * Caller-supplied monetary inputs are therefore checked here, at the public
+ * boundary, so an unusable amount is reported as what it is — a rejected input —
+ * rather than silently becoming a different exit decision.
+ */
+export function moneyInputProblem(amount: number): string | null {
+  if (!Number.isFinite(amount)) {
+    return "must be a finite dollar amount";
+  }
+  if (Math.abs(amount) > MONEY_MAX_DOLLARS) {
+    return `must be within +/-${MONEY_MAX_DOLLARS} dollars`;
+  }
+  const scaled = amount * SCALE;
+  // A decimal with at most MONEY_DECIMAL_PLACES places lands within ordinary
+  // binary noise of an integer here; anything finer does not.
+  if (Math.abs(scaled - Math.round(scaled)) > 1e-6) {
+    return `must have at most ${MONEY_DECIMAL_PLACES} decimal places`;
+  }
+  return null;
 }
 
 /** Inclusive "at least" — the profit-target direction. */

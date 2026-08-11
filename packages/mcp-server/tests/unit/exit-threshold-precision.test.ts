@@ -14,11 +14,15 @@
  * threshold being met — and it lands on exactly the round percentages callers
  * choose.
  */
+// Deliberately imported through the PUBLISHED entrypoint rather than the source
+// file: a green test against the internal module can coexist with a broken
+// package export or bundle wiring, and what a caller reaches is this surface.
 import {
   evaluateTrigger,
   analyzeExitTriggers,
+  analyzeExitTriggersSchema,
   type ExitTriggerConfig,
-} from "../../src/utils/exit-triggers.ts";
+} from "../../src/test-exports.ts";
 import type { PnlPoint, ReplayLeg } from "../../src/utils/trade-replay.ts";
 
 const LEGS: ReplayLeg[] = [
@@ -147,5 +151,69 @@ describe("the full analysis surface agrees with the individual evaluators", () =
     expect(result.overall.firstToFire).not.toBeNull();
     expect(result.overall.firstToFire!.type).toBe("stopLoss");
     expect(dollarsIn(result.overall.firstToFire!.detail ?? "")).toContain(0.35);
+  });
+});
+
+describe("the published schema refuses money it cannot represent", () => {
+  // Worf gate on tradeblocks#419, findings F1 and F2. The tool schemas accept any
+  // finite number, but the comparison domain represents six decimal places. An
+  // amount finer than that would be silently rounded into a DIFFERENT threshold
+  // -- a $0.0000004 stop becomes $0.00 and fires on a flat position -- and one
+  // beyond the domain's range would raise mid-analysis where the caller expected
+  // an answer. Both are now rejected as what they are: unusable input.
+  function parse(threshold: number) {
+    return analyzeExitTriggersSchema.safeParse({
+      block_id: "test-block",
+      trade_index: 0,
+      triggers: [{ type: "stopLoss", threshold }],
+    });
+  }
+
+  it("rejects an amount finer than the represented precision", () => {
+    const result = parse(0.0000004);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an amount beyond the represented range", () => {
+    const result = parse(1e10);
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts an ordinary sub-cent amount", () => {
+    expect(parse(0.005).success).toBe(true);
+  });
+
+  it("accepts an ordinary dollar amount", () => {
+    expect(parse(250).success).toBe(true);
+  });
+});
+
+describe("a stepped profit action reports the floor it compared", () => {
+  // Worf gate finding F3. The compared floor was exact while the reported figure
+  // was rounded to cents, so a sub-cent floor was reported as a number the
+  // analysis never used.
+  it("reports a sub-cent floor exactly", () => {
+    const trigger: ExitTriggerConfig = {
+      type: "profitAction",
+      unit: "percent",
+      entryCost: 35,
+      steps: [{ armAt: 0.009, stopAt: 0.005 }],
+    };
+    const result = evaluateTrigger(trigger, pathOf([0, 0.35, 0.175]), LEGS);
+    expect(result).not.toBeNull();
+    // 0.5% of $35 is $0.175 exactly. The detail must say so, not $0.17 or $0.18.
+    expect(result!.detail).toContain("0.175");
+  });
+});
+
+describe("the trailing stop repair is real", () => {
+  // Worf advisory: the original trailing test used a drop that already fired
+  // under the previous behaviour, so it proved nothing. This one does not.
+  it("fires on a drop whose binary form fell just short of the trail", () => {
+    // 0.03 - 0.01 is 0.019999999999999997 in binary, just under a 0.02 trail.
+    const trigger: ExitTriggerConfig = { type: "trailingStop", trailAmount: 0.02 };
+    const result = evaluateTrigger(trigger, pathOf([0, 0.03, 0.01]), LEGS);
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("trailingStop");
   });
 });

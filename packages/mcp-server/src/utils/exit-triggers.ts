@@ -269,8 +269,8 @@ export function evaluateProfitAction(
       const effectivePnl = pnl * remainingAllocation;
       const detail =
         trigger.unit === "percent"
-          ? `Profit action: stop adjusted to ${((activeFloor / scale) * 100).toFixed(0)}% ($${activeFloor.toFixed(2)}) at max P&L $${runningMaxPnl.toFixed(2)}, hit at $${pnl.toFixed(2)} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
-          : `Profit action: stop adjusted to $${activeFloor.toFixed(2)} at max P&L $${runningMaxPnl.toFixed(2)}, hit at $${pnl.toFixed(2)} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`;
+          ? `Profit action: stop adjusted to ${((activeFloor / scale) * 100).toFixed(0)}% ($${formatMoney(toMoney(activeFloor))}) at max P&L $${formatMoney(toMoney(runningMaxPnl))}, hit at $${formatMoney(toMoney(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
+          : `Profit action: stop adjusted to $${formatMoney(toMoney(activeFloor))} at max P&L $${formatMoney(toMoney(runningMaxPnl))}, hit at $${formatMoney(toMoney(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`;
 
       return {
         fireEvent: {
@@ -334,7 +334,6 @@ export function evaluateTrigger(
           trigger.unit === "percent"
             ? applyRatio(toMoney(Math.abs(trigger.entryCost!)), threshold)
             : toMoney(threshold);
-        const dollarThresholdPT = fromMoney(ptThresholdMoney);
         if (moneyAtLeast(toMoney(pnl), ptThresholdMoney)) {
           if (point.allLegsSync !== false) profitTargetHits++;
           if (profitTargetHits < requiredHits) break;
@@ -342,7 +341,7 @@ export function evaluateTrigger(
           detail =
             trigger.unit === "percent"
               ? `P&L $${pnl.toFixed(2)} >= ${(threshold * 100).toFixed(0)}% of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} ($${formatMoney(ptThresholdMoney)})`
-              : `P&L $${pnl.toFixed(2)} >= target $${dollarThresholdPT.toFixed(2)}`;
+              : `P&L $${pnl.toFixed(2)} >= target $${formatMoney(ptThresholdMoney)}`;
         } else if (point.allLegsSync !== false) {
           profitTargetHits = 0;
         }
@@ -361,13 +360,12 @@ export function evaluateTrigger(
           trigger.unit === "percent"
             ? applyRatio(toMoney(Math.abs(trigger.entryCost!)), absThreshold)
             : toMoney(absThreshold);
-        const dollarThresholdSL = fromMoney(slThresholdMoney);
         if (moneyAtMost(toMoney(pnl), negMoney(slThresholdMoney))) {
           fired = true;
           detail =
             trigger.unit === "percent"
               ? `P&L $${pnl.toFixed(2)} <= -${(absThreshold * 100).toFixed(0)}% of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} (-$${formatMoney(slThresholdMoney)})`
-              : `P&L $${pnl.toFixed(2)} <= stop -$${dollarThresholdSL.toFixed(2)}`;
+              : `P&L $${pnl.toFixed(2)} <= stop -$${formatMoney(slThresholdMoney)}`;
         }
         break;
       }
@@ -379,10 +377,9 @@ export function evaluateTrigger(
         // it is a real amount rather than the unarmed sentinel.
         const trailArmed = Number.isFinite(runningMaxPnl);
         const dropdownMoney = trailArmed ? subMoney(toMoney(runningMaxPnl), toMoney(pnl)) : 0;
-        const dropdown = trailArmed ? fromMoney(dropdownMoney) : runningMaxPnl - pnl;
         if (trailArmed && moneyAtLeast(dropdownMoney, toMoney(trailAmt))) {
           fired = true;
-          detail = `Dropdown $${dropdown.toFixed(2)} from max $${runningMaxPnl.toFixed(2)} >= trail $${trailAmt.toFixed(2)}`;
+          detail = `Dropdown $${formatMoney(dropdownMoney)} from max $${formatMoney(toMoney(runningMaxPnl))} >= trail $${formatMoney(toMoney(trailAmt))}`;
         }
         break;
       }
