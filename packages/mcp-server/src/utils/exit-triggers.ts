@@ -8,19 +8,7 @@
  */
 
 import type { PnlPoint, ReplayLeg } from "./trade-replay.ts";
-import {
-  applyRatioField,
-  formatMoney,
-  formatPercent,
-  fromMoney,
-  moneyAtLeast,
-  moneyAtMost,
-  negMoney,
-  subMoney,
-  toMoney,
-  toMoneyField,
-  toMoneyOperand,
-} from "./money.ts";
+import { applyRatioField, formatMoney, formatPercent, fromMoney, toMoneyField } from "./money.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -233,7 +221,7 @@ export function evaluateProfitAction(
         !stepPartialFired[s] &&
         step.closeAllocationPct &&
         Number.isFinite(runningMaxPnl) &&
-        moneyAtLeast(toMoneyOperand(runningMaxPnl), toMoney(step.armAt))
+        runningMaxPnl >= step.armAt
       ) {
         stepPartialFired[s] = true;
         const closeAmt = remainingAllocation * step.closeAllocationPct;
@@ -253,9 +241,8 @@ export function evaluateProfitAction(
     // domain, which correctly refuses a non-finite input.
     let activeFloor = -Infinity;
     if (Number.isFinite(runningMaxPnl)) {
-      const peakMoney = toMoneyOperand(runningMaxPnl);
       for (const step of normalizedSteps) {
-        if (moneyAtLeast(peakMoney, toMoney(step.armAt))) {
+        if (runningMaxPnl >= step.armAt) {
           activeFloor = Math.max(activeFloor, step.stopAt);
         }
       }
@@ -264,16 +251,12 @@ export function evaluateProfitAction(
     // Check if stop hit on remaining allocation
     // Scaled comparison: pnl * remainingAllocation <= activeFloor * remainingAllocation
     // Simplifies to: pnl <= activeFloor (when remainingAllocation > 0)
-    if (
-      activeFloor > -Infinity &&
-      remainingAllocation > 0 &&
-      moneyAtMost(toMoneyOperand(pnl), toMoneyOperand(activeFloor))
-    ) {
+    if (activeFloor > -Infinity && remainingAllocation > 0 && pnl <= activeFloor) {
       const effectivePnl = pnl * remainingAllocation;
       const detail =
         trigger.unit === "percent"
-          ? `Profit action: stop adjusted to ${formatPercent(activeFloor / scale)} ($${formatMoney(toMoneyOperand(activeFloor))}) at max P&L $${formatMoney(toMoneyOperand(runningMaxPnl))}, hit at $${formatMoney(toMoneyOperand(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
-          : `Profit action: stop adjusted to $${formatMoney(toMoneyOperand(activeFloor))} at max P&L $${formatMoney(toMoneyOperand(runningMaxPnl))}, hit at $${formatMoney(toMoneyOperand(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`;
+          ? `Profit action: stop adjusted to ${formatPercent(activeFloor / scale)} ($${formatMoney(toMoneyField(activeFloor, "steps.stopAt"))}) at max P&L $${runningMaxPnl.toFixed(2)}, hit at $${pnl.toFixed(2)} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
+          : `Profit action: stop adjusted to $${formatMoney(toMoneyField(activeFloor, "steps.stopAt"))} at max P&L $${runningMaxPnl.toFixed(2)}, hit at $${pnl.toFixed(2)} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`;
 
       return {
         fireEvent: {
@@ -341,14 +324,14 @@ export function evaluateTrigger(
                 "threshold",
               )
             : toMoneyField(threshold, "threshold");
-        if (moneyAtLeast(toMoneyOperand(pnl), ptThresholdMoney)) {
+        if (pnl >= fromMoney(ptThresholdMoney)) {
           if (point.allLegsSync !== false) profitTargetHits++;
           if (profitTargetHits < requiredHits) break;
           fired = true;
           detail =
             trigger.unit === "percent"
-              ? `P&L $${formatMoney(toMoneyOperand(pnl))} >= ${formatPercent(threshold)} of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} ($${formatMoney(ptThresholdMoney)})`
-              : `P&L $${formatMoney(toMoneyOperand(pnl))} >= target $${formatMoney(ptThresholdMoney)}`;
+              ? `P&L $${pnl.toFixed(2)} >= ${formatPercent(threshold)} of $${formatMoney(toMoneyField(Math.abs(trigger.entryCost!), "entry cost"))} ($${formatMoney(ptThresholdMoney)})`
+              : `P&L $${pnl.toFixed(2)} >= target $${formatMoney(ptThresholdMoney)}`;
         } else if (point.allLegsSync !== false) {
           profitTargetHits = 0;
         }
@@ -371,12 +354,12 @@ export function evaluateTrigger(
                 "threshold",
               )
             : toMoneyField(absThreshold, "threshold");
-        if (moneyAtMost(toMoneyOperand(pnl), negMoney(slThresholdMoney))) {
+        if (pnl <= -fromMoney(slThresholdMoney)) {
           fired = true;
           detail =
             trigger.unit === "percent"
-              ? `P&L $${formatMoney(toMoneyOperand(pnl))} <= -${formatPercent(absThreshold)} of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} (-$${formatMoney(slThresholdMoney)})`
-              : `P&L $${formatMoney(toMoneyOperand(pnl))} <= stop -$${formatMoney(slThresholdMoney)}`;
+              ? `P&L $${pnl.toFixed(2)} <= -${formatPercent(absThreshold)} of $${formatMoney(toMoneyField(Math.abs(trigger.entryCost!), "entry cost"))} (-$${formatMoney(slThresholdMoney)})`
+              : `P&L $${pnl.toFixed(2)} <= stop -$${formatMoney(slThresholdMoney)}`;
         }
         break;
       }
@@ -387,14 +370,12 @@ export function evaluateTrigger(
         // trail, so both live in the one domain. The peak is only converted once
         // it is a real amount rather than the unarmed sentinel.
         const trailArmed = Number.isFinite(runningMaxPnl);
-        const dropdownMoney = trailArmed
-          ? subMoney(toMoneyOperand(runningMaxPnl), toMoneyOperand(pnl))
-          : 0;
+        const dropdown = trailArmed ? runningMaxPnl - pnl : 0;
         // trailAmount and threshold are used as DOLLARS here whatever `unit`
         // says, so they are validated as dollars whatever `unit` says.
-        if (trailArmed && moneyAtLeast(dropdownMoney, toMoneyField(trailAmt, "trailAmount"))) {
+        if (trailArmed && dropdown >= fromMoney(toMoneyField(trailAmt, "trailAmount"))) {
           fired = true;
-          detail = `Dropdown $${formatMoney(dropdownMoney)} from max $${formatMoney(toMoneyOperand(runningMaxPnl))} >= trail $${formatMoney(toMoney(trailAmt))}`;
+          detail = `Dropdown $${dropdown.toFixed(2)} from max $${runningMaxPnl.toFixed(2)} >= trail $${formatMoney(toMoneyField(trailAmt, "trailAmount"))}`;
         }
         break;
       }
@@ -607,7 +588,7 @@ export function evaluateTrigger(
         // The canonical value, so the number reported and the number compared are
         // the same one. Reporting the raw accumulation here made the event say
         // 7.2749999999999995 while its own detail line said $7.275.
-        pnlAtFire: fromMoney(toMoneyOperand(pnl)),
+        pnlAtFire: pnl,
         index: i,
         detail,
       };
@@ -707,11 +688,11 @@ export function analyzeExitTriggers(config: {
     if (actualExitTimestamp > pnlPath[pnlPath.length - 1].timestamp) {
       closestIdx = pnlPath.length - 1;
     }
-    const actualPnlMoney = toMoneyOperand(pnlPath[closestIdx].strategyPnl);
+    const actualPnl = pnlPath[closestIdx].strategyPnl;
     actualExit = {
       timestamp: pnlPath[closestIdx].timestamp,
-      pnl: fromMoney(actualPnlMoney),
-      pnlDifference: fromMoney(subMoney(toMoneyOperand(firstToFire.pnlAtFire), actualPnlMoney)),
+      pnl: actualPnl,
+      pnlDifference: firstToFire.pnlAtFire - actualPnl,
     };
   }
 
@@ -720,14 +701,22 @@ export function analyzeExitTriggers(config: {
   if (!firstToFire) {
     summary = `No triggers fired across ${pnlPath.length} data points.`;
   } else if (actualExit) {
-    const betterWorse = actualExit.pnlDifference > 0 ? "better" : "worse";
+    // Zero is neither better nor worse. Reporting an identical exit as "$0.00
+    // worse" is a false statement about the trade, and exact thresholds make the
+    // equal case reachable rather than theoretical.
+    const betterWorse =
+      actualExit.pnlDifference > 0 ? "better" : actualExit.pnlDifference < 0 ? "worse" : "the same";
     summary =
-      `${firstToFire.type} fired at ${firstToFire.firedAt} (P&L $${formatMoney(toMoneyOperand(firstToFire.pnlAtFire))}). ` +
-      `Actual exit at ${actualExit.timestamp} (P&L $${formatMoney(toMoneyOperand(actualExit.pnl))}). ` +
-      `Trigger was $${formatMoney(Math.abs(toMoneyOperand(actualExit.pnlDifference)))} ${betterWorse}.`;
+      `${firstToFire.type} fired at ${firstToFire.firedAt} (P&L $${firstToFire.pnlAtFire.toFixed(2)}). ` +
+      `Actual exit at ${actualExit.timestamp} (P&L $${actualExit.pnl.toFixed(2)}). ` +
+      `Trigger was ${
+        actualExit.pnlDifference === 0
+          ? "the same"
+          : `$${Math.abs(actualExit.pnlDifference).toFixed(2)} ${betterWorse}`
+      }.`;
   } else {
     summary =
-      `${firstToFire.type} fired first at ${firstToFire.firedAt} (P&L $${formatMoney(toMoneyOperand(firstToFire.pnlAtFire))}). ` +
+      `${firstToFire.type} fired first at ${firstToFire.firedAt} (P&L $${firstToFire.pnlAtFire.toFixed(2)}). ` +
       `${fireEvents.length} trigger(s) fired total.`;
   }
 
@@ -789,7 +778,7 @@ export function analyzeExitTriggers(config: {
       }
 
       const groupSummary = groupFirstToFire
-        ? `${group.label}: ${groupFirstToFire.type} fired at ${groupFirstToFire.firedAt} (group P&L $${formatMoney(toMoneyOperand(groupFirstToFire.pnlAtFire))})`
+        ? `${group.label}: ${groupFirstToFire.type} fired at ${groupFirstToFire.firedAt} (group P&L $${groupFirstToFire.pnlAtFire.toFixed(2)})`
         : `${group.label}: No triggers fired.`;
 
       return {

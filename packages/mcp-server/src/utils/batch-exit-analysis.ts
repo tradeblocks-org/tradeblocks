@@ -15,7 +15,6 @@ import {
   type LegGroupConfig,
   type PartialClose,
 } from "./exit-triggers.ts";
-import { formatMoney, toMoneyOperand } from "./money.ts";
 import type { PnlPoint, ReplayLeg } from "./trade-replay.ts";
 
 // ---------------------------------------------------------------------------
@@ -405,7 +404,7 @@ export function analyzeBatch(trades: TradeInput[], config: BatchExitConfig): Bat
 
   const summary =
     `Analyzed ${trades.length} trades: candidate win rate ${(aggregate.winRate * 100).toFixed(1)}%, ` +
-    `total P&L $${formatMoney(toMoneyOperand(aggregate.totalPnl))} (delta $${formatMoney(toMoneyOperand(aggregate.totalPnlDelta))} vs baseline). ` +
+    `total P&L $${aggregate.totalPnl.toFixed(2)} (delta $${aggregate.totalPnlDelta.toFixed(2)} vs baseline). ` +
     topTriggerStr;
 
   return {

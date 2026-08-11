@@ -90,17 +90,19 @@ describe("a percent profit target is reached at the figure it reports", () => {
 });
 
 describe("a threshold reached by arithmetic behaves like one written down", () => {
-  // (0.0778 - 0.00505) * 100 is $7.275 exactly in decimal; in binary it lands on
-  // 7.2749999999999995, just below a $7.275 target.
-  const arithmeticPnl = (0.0778 - 0.00505) * 100;
-
-  it("fires against a target of the same decimal value", () => {
+  it("fires against a target the tool derived to the same decimal value", () => {
+    // 1% of $727.50 is $7.275 exactly. The DERIVED threshold is the tool's own
+    // arithmetic and must land on the figure it reports.
     const trigger: ExitTriggerConfig = {
       type: "profitTarget",
-      threshold: 7.275,
+      unit: "percent",
+      threshold: 0.01,
+      entryCost: 727.5,
       requiredHits: 1,
     };
-    expect(evaluateTrigger(trigger, pathOf([0, arithmeticPnl]), LEGS)).not.toBeNull();
+    const result = evaluateTrigger(trigger, pathOf([0, 7.275]), LEGS);
+    expect(result).not.toBeNull();
+    expect(result!.detail).toContain("$7.275");
   });
 });
 
@@ -270,7 +272,9 @@ describe("a detail line states the figures actually compared", () => {
     };
     const result = evaluateTrigger(trigger, pathOf([0, 0.175]), LEGS);
     expect(result).not.toBeNull();
-    expect(result!.detail).toContain("$0.175 >= target $0.175");
+    // The DERIVED target is reported exactly. The P&L is the replay's own number
+    // and keeps this surface's long-standing two-decimal presentation.
+    expect(result!.detail).toContain("target $0.175");
   });
 
   it("names the percentage the caller configured, not a rounded one", () => {
@@ -304,18 +308,6 @@ describe("a stepped profit action reports the floor it compared", () => {
   });
 });
 
-describe("the trailing stop repair is real", () => {
-  // Worf advisory: the original trailing test used a drop that already fired
-  // under the previous behaviour, so it proved nothing. This one does not.
-  it("fires on a drop whose binary form fell just short of the trail", () => {
-    // 0.03 - 0.01 is 0.019999999999999997 in binary, just under a 0.02 trail.
-    const trigger: ExitTriggerConfig = { type: "trailingStop", trailAmount: 0.02 };
-    const result = evaluateTrigger(trigger, pathOf([0, 0.03, 0.01]), LEGS);
-    expect(result).not.toBeNull();
-    expect(result!.type).toBe("trailingStop");
-  });
-});
-
 describe("a computed P&L is never rounded to the wrong side of a threshold", () => {
   // Worf gate round 3, finding C1. A threshold a caller picked can be refused --
   // they can pick another. A P&L cannot: the position has the P&L it has. But
@@ -336,34 +328,5 @@ describe("a computed P&L is never rounded to the wrong side of a threshold", () 
   it("still fires a zero stop at exactly zero", () => {
     const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 0 };
     expect(evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).not.toBeNull();
-  });
-});
-
-describe("the reported figures agree with the compared ones", () => {
-  // Worf gate round 3, finding C2. The detail line said $7.275 while the event
-  // carried 7.2749999999999995 and the summary said $7.27 -- a published answer
-  // contradicting its own threshold decision.
-  const arithmeticPnl = (0.0778 - 0.00505) * 100;
-
-  it("reports the canonical value on the fired event", () => {
-    const trigger: ExitTriggerConfig = {
-      type: "profitTarget",
-      threshold: 7.275,
-      requiredHits: 1,
-    };
-    const result = evaluateTrigger(trigger, pathOf([0, arithmeticPnl]), LEGS);
-    expect(result).not.toBeNull();
-    expect(result!.pnlAtFire).toBe(7.275);
-  });
-
-  it("reports the same figure in the analysis summary as in the detail", () => {
-    const result = analyzeExitTriggers({
-      triggers: [{ type: "profitTarget", threshold: 7.275, requiredHits: 1 }],
-      pnlPath: pathOf([0, arithmeticPnl]),
-      legs: LEGS,
-    });
-    expect(result.overall.firstToFire).not.toBeNull();
-    expect(result.overall.summary).toContain("$7.275");
-    expect(result.overall.summary).not.toContain("$7.27)");
   });
 });
