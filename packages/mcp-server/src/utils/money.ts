@@ -11,61 +11,77 @@
  * a stop it is being told it has reached, and the analysis answers that the stop
  * did not fire. The comparison and the reported figure were different numbers.
  *
- * SCOPE, AND WHY IT STOPS WHERE IT DOES. This module governs the amounts this
- * tool DERIVES — a threshold from a percentage and an entry cost, a step's arm
- * and stop. It deliberately does not touch the P&L path, which arrives already
- * computed from the replay. Making claims about the intended decimal value of a
- * number this tool did not compute means inventing a rounding policy for values
- * with no ground truth, and every such rule has an edge: promoting a sub-micro
- * P&L to keep its sign flips its decision against a one-micro threshold, while
- * rounding it to zero flips its decision against a zero threshold. Neither is
- * correct, because the question is unanswerable from here. So the tool derives
- * its own thresholds exactly, compares the P&L it was handed against them as
- * given, and claims nothing further.
+ * SCOPE, AND WHY IT STOPS WHERE IT DOES. This module governs the monetary amounts
+ * this tool converts or derives — direct thresholds and trails, percentage
+ * thresholds from an entry cost, and a step's arm and stop. It deliberately does
+ * not touch the P&L path, which arrives already computed from the replay. Making
+ * claims about the intended decimal value of a number this tool did not compute
+ * means inventing a rounding policy for values with no ground truth, and every
+ * such rule has an edge: promoting a sub-micro P&L to keep its sign flips its
+ * decision against a one-micro threshold, while rounding it to zero flips its
+ * decision against a zero threshold. Neither is correct, because the question is
+ * unanswerable from here. So the tool derives its own fixed-point thresholds
+ * exactly, compares the P&L it was handed against them as given, and claims
+ * nothing further.
  *
  * REPRESENTATION. A fixed-point integer count of micro-dollars (1e-6 USD) held in
  * an ordinary number. Integers below 2^53 are exact, covering roughly
  * $9,007,199,254 — far beyond any position these tools analyse — and the guards
- * below fail loudly rather than silently losing precision if that is ever untrue.
- * Micro-dollars rather than cents is deliberate: premiums quote in half-cent
- * steps, so a percentage of an entry cost lands on fractions of a cent routinely,
- * and a cent domain would have to round real money away.
+ * below fail loudly rather than silently losing precision in that integer count.
+ * Micro-dollars rather than cents is deliberate: option-price midpoints can land
+ * on half-cent increments, so a percentage of an entry cost routinely lands on
+ * fractions of a cent, and a cent domain would have to round real money away.
  *
- * The repair is representational rather than a tolerance. There is no epsilon
- * here and no rounding policy to choose between, because an exactly representable
- * derivation has no "just below half" case to have a policy about.
+ * DERIVATION AND BOUNDARY TOLERANCE. The thresholds this module derives are exact
+ * fixed-point amounts: comparison and reporting are produced from the same exact
+ * integer micro-dollar value. Bringing in a value produced by a caller's
+ * arithmetic does use a tolerance, however. Operations before this boundary can
+ * leave binary noise, so conversion absorbs noise at that scale and refuses
+ * anything larger.
+ * That is why `$0.0000010000000000287557` is accepted as one micro-dollar while
+ * `$0.0000006` is refused. This is a tolerance, not a representation-only repair;
+ * it is intended to repair boundary noise rather than generally round nearby
+ * monetary values. Its behavior at the extreme end of the domain is documented
+ * where it is defined.
+ *
+ * The tolerance could be removed for entry costs by deriving the entry cost
+ * through this module at its source in the handler: convert its operands before
+ * subtracting or reducing them instead of doing raw arithmetic and converting
+ * only the result. That broader change is not made here.
  */
 
 /** Micro-dollars per dollar. */
 const SCALE = 1_000_000;
 
-/** Largest magnitude representable exactly, in dollars. */
+/** Largest whole-dollar magnitude whose scaled count is a safe integer. */
 const MONEY_MAX_DOLLARS = Math.floor(Number.MAX_SAFE_INTEGER / SCALE);
 
 /** A monetary amount as an exact integer count of micro-dollars. */
 export type Money = number;
 
 /**
- * Raised when an amount cannot be carried in this domain without changing what it
- * means. The registered tool handlers surface it as a field-named input error.
+ * Raised when an amount cannot be carried in this domain under its conversion
+ * rules. Tool handlers return it as an error message identifying the affected
+ * field.
  */
 export class MoneyDomainError extends Error {}
 
 /**
  * Bring a dollar amount into the domain, naming the field it came from.
  *
- * Two conversions are refused, because both would silently change an exit
- * decision rather than merely round it:
+ * Non-finite inputs are refused first. Lossy conversions are then refused when:
  *
- *  - one that ANNIHILATES a non-zero amount. A threshold of a millionth of a cent
- *    becomes zero, and a zero threshold is met by every position, so a stop nobody
- *    could reach turns into one that fires immediately.
- *  - one that OVERFLOWS the exact range, which would otherwise surface as an
+ *  - the conversion ANNIHILATES a non-zero amount. A small non-zero stop becomes
+ *    zero, materially broadening it to fire at any non-positive P&L.
+ *  - it OVERFLOWS the exact range, which would otherwise surface as an
  *    unexplained failure part-way through an analysis.
+ *  - it differs from the nearest micro-dollar by more than the boundary
+ *    tolerance, which would otherwise substitute a nearby threshold the caller
+ *    did not set.
  *
- * Everything else converts. Ordinary binary noise — `0.35000000000000003` from a
- * percentage times an entry cost — snaps back to the decimal it was always meant
- * to be, which is the whole point.
+ * Ordinary binary noise within the tolerance — `0.35000000000000003` from a
+ * percentage times an entry cost, including noise introduced by cancellation
+ * before this boundary — snaps back to the decimal it was always meant to be.
  *
  * The check is on the RESULT of the conversion rather than the shape of the
  * input, so it holds identically for an amount a caller typed and one derived
@@ -82,18 +98,23 @@ export function toMoneyField(amount: number, field: string): Money {
       `${field} is beyond the largest dollar amount this analysis can represent (about ${MONEY_MAX_DOLLARS.toLocaleString("en-US")})`,
     );
   }
-  // Refuse ANY amount the domain cannot carry exactly, not only one that would
-  // vanish. Rounding $0.0000006 UP to $0.000001 silently substitutes a threshold
-  // the caller did not set; that the result stays non-zero makes it less visible
-  // than rounding to zero, not less wrong. The vanishing case keeps its own
-  // message because it is the one with an obvious consequence: a zero threshold
-  // is met by every position.
+  // The vanishing case keeps its own message because its consequence is distinct:
+  // a small non-zero stop becomes zero and fires at any non-positive P&L.
   if (scaled === 0 && amount !== 0) {
     throw new MoneyDomainError(
       `${field} is smaller than the smallest amount this analysis can represent (a millionth of a dollar)`,
     );
   }
-  if (Math.abs(scaled - amount * SCALE) > Math.abs(amount * SCALE) * 8 * Number.EPSILON) {
+  const scaledAmount = amount * SCALE;
+  // Caller-side cancellation noise scales with the operands that produced a
+  // small result, not with the result itself, so a relative tolerance alone can
+  // collapse near zero. The 1e-9 absolute floor is a judgment about the noise
+  // this conversion should absorb, not a derived constant. At roughly $281M the
+  // relative term reaches half a micro-dollar and therefore admits every
+  // fractional value within a micro-dollar interval; that is well beyond intended
+  // position sizes.
+  const conversionTolerance = Math.max(1e-9, Math.abs(scaledAmount) * 8 * Number.EPSILON);
+  if (Math.abs(scaled - scaledAmount) > conversionTolerance) {
     throw new MoneyDomainError(
       `${field} is finer than this analysis can represent (a millionth of a dollar)`,
     );
@@ -104,9 +125,9 @@ export function toMoneyField(amount: number, field: string): Money {
 /**
  * Apply a caller-supplied ratio to a monetary amount, naming the field.
  *
- * A percentage is a ratio rather than money and is not itself constrained — but
- * the dollars it produces are, and that product is where an unusable percentage
- * actually bites.
+ * A percentage is a ratio rather than money, so it is required to be finite but
+ * is not constrained to the monetary grid. The dollars it produces are, and that
+ * product is where an unusable percentage actually bites.
  */
 export function applyRatioField(amount: Money, ratio: number, field: string): Money {
   if (!Number.isFinite(ratio)) {
@@ -115,85 +136,24 @@ export function applyRatioField(amount: Money, ratio: number, field: string): Mo
   return toMoneyField(fromMoney(amount) * ratio, field);
 }
 
-/**
- * The dollar value of one option leg: (mark - entry) x quantity x multiplier.
- *
- * Prices enter the domain BEFORE the subtraction, which is what makes the result
- * exact. A mark of `1.0003` against an entry of `1.00` at a multiplier of 100 is
- * three cents, not `0.029999999999996696` — and a three-cent threshold should be
- * reached by a three-cent move.
- *
- * Integer addition is also associative, so the order legs are summed in cannot
- * change the total.
- */
-export function legValue(
-  markPrice: number,
-  entryPrice: number,
-  quantity: number,
-  multiplier: number,
-): Money {
-  if (!Number.isInteger(quantity) || !Number.isInteger(multiplier)) {
-    throw new MoneyDomainError("leg quantity and multiplier must be whole numbers");
-  }
-  const delta =
-    toMoneyField(markPrice, "leg mark price") - toMoneyField(entryPrice, "leg entry price");
-  const value = delta * quantity * multiplier;
-  if (!Number.isSafeInteger(value)) {
-    throw new MoneyDomainError("leg value is beyond the range this analysis can represent");
-  }
-  return value === 0 ? 0 : value;
-}
-
-/**
- * Bring a P&L this package DERIVED back into the domain.
- *
- * Safe without a refusal branch because of an invariant this package now
- * establishes: `legValue` yields whole micro-dollars, so every P&L built from it
- * already sits on the domain's grid and converting it loses nothing. This is not
- * a rounding policy for arbitrary values — a leg price finer than the domain is
- * refused at `legValue`, so such a P&L cannot reach here through the public
- * tools.
- */
-export function toMoneyPnl(amount: number): Money {
-  const scaled = Math.round(amount * SCALE);
-  if (!Number.isSafeInteger(scaled)) {
-    throw new MoneyDomainError("P&L is beyond the range this analysis can represent");
-  }
-  return scaled === 0 ? 0 : scaled;
-}
-
-/** Exact difference. */
-export function subMoney(a: Money, b: Money): Money {
-  const value = a - b;
-  if (!Number.isSafeInteger(value)) {
-    throw new MoneyDomainError("difference is beyond the range this analysis can represent");
-  }
-  return value === 0 ? 0 : value;
-}
-
-/** Exact sum of leg values. */
-export function sumMoney(values: Money[]): Money {
-  let total = 0;
-  for (const v of values) total += v;
-  if (!Number.isSafeInteger(total)) {
-    throw new MoneyDomainError("total value is beyond the range this analysis can represent");
-  }
-  return total === 0 ? 0 : total;
-}
-
 /** Convert back to dollars, for comparison against a P&L and for reporting. */
 export function fromMoney(value: Money): number {
   return value / SCALE;
 }
 
 /**
- * Render a derived threshold without misstating it.
+ * Render a derived threshold with up to six decimal places.
  *
  * Two decimals stays the house style: a whole number of cents formats exactly as
- * `toFixed(2)` always did, so the overwhelming majority of reported thresholds are
- * unchanged. One carrying real sub-cent precision keeps the digits it has, so the
- * figure reported is the figure compared — a stepped floor of `$0.175` reports as
- * `$0.175` rather than as `$0.17` or `$0.18`.
+ * `toFixed(2)` always did. At ordinary position sizes, a value carrying real
+ * sub-cent precision keeps its digits, so the figure reported is the figure
+ * compared — a stepped floor of `$0.175` reports as `$0.175` rather than as
+ * `$0.17` or `$0.18`.
+ *
+ * At the extreme edge of the safe-integer domain, converting the integer count
+ * back to a binary dollar number can shift the final micro-dollar before it is
+ * formatted. That range is far above the position sizes this module is designed
+ * to analyse, but the safe-integer guard does not prevent that display effect.
  */
 export function formatMoney(value: Money): string {
   if (value % 10_000 === 0) return (value / SCALE).toFixed(2);
@@ -201,7 +161,7 @@ export function formatMoney(value: Money): string {
 }
 
 /**
- * Render a ratio as a percentage without misstating it.
+ * Render a ratio as a percentage rounded to three decimal percentage points.
  *
  * Whole percentages print as before. A half-percent stop keeps its half: rounding
  * to a whole number reported a 0.5% stop as "1%", naming a threshold the caller

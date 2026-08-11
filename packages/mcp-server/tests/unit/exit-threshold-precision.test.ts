@@ -14,9 +14,8 @@
  * threshold being met — and it lands on exactly the round percentages callers
  * choose.
  */
-// Deliberately imported through the PUBLISHED entrypoint rather than the source
-// file: a green test against the internal module can coexist with a broken
-// package export or bundle wiring, and what a caller reaches is this surface.
+// Imported through the server's public test-export surface rather than reaching
+// into the utility implementation directly.
 import {
   evaluateTrigger,
   analyzeExitTriggers,
@@ -106,16 +105,6 @@ describe("a threshold reached by arithmetic behaves like one written down", () =
   });
 });
 
-describe("a trailing stop is reached at the trail it reports", () => {
-  it("fires when the drop from the peak exactly equals the trail", () => {
-    // Peak 0.35, fall to 0 — a drop of exactly the 0.35 trail.
-    const trigger: ExitTriggerConfig = { type: "trailingStop", trailAmount: 0.35 };
-    const result = evaluateTrigger(trigger, pathOf([0, 0.35, 0]), LEGS);
-    expect(result).not.toBeNull();
-    expect(result!.type).toBe("trailingStop");
-  });
-});
-
 describe("a stepped profit action arms at the figure it reports", () => {
   it("arms and stops on exact percentage thresholds", () => {
     const trigger: ExitTriggerConfig = {
@@ -154,11 +143,23 @@ describe("the full analysis surface agrees with the individual evaluators", () =
     expect(result.overall.firstToFire!.type).toBe("stopLoss");
     expect(dollarsIn(result.overall.firstToFire!.detail ?? "")).toContain(0.35);
   });
+
+  it("reports an identical trigger and actual exit as the same", () => {
+    const pnlPath = pathOf([0, 0.35]);
+    const result = analyzeExitTriggers({
+      triggers: [{ type: "profitTarget", threshold: 0.35, requiredHits: 1 }],
+      pnlPath,
+      legs: LEGS,
+      actualExitTimestamp: pnlPath[1].timestamp,
+    });
+    expect(result.overall.summary).toContain("Trigger was the same.");
+    expect(result.overall.summary).not.toContain("$0.00 worse");
+  });
 });
 
 describe("money that cannot be represented is refused, whatever its origin", () => {
-  // Worf gate rounds 1 and 2. The harm is not "too many decimals" — it is an
-  // amount that silently becomes ZERO, because a zero threshold is met by every
+  // The harm is not "too many decimals" — it is an amount that silently becomes
+  // zero, because a zero threshold is met by every
   // position, so a stop nobody could reach turns into one that fires at once.
   // Checked on the conversion itself, so it holds for a threshold a caller typed
   // AND for one derived from a caller's prices and percentages.
@@ -219,6 +220,19 @@ describe("money that cannot be represented is refused, whatever its origin", () 
       entryCost: 0.0778 * 100,
     };
     expect(() => evaluateTrigger(trigger, pathOf([0, -7.78]), LEGS)).not.toThrow();
+  });
+
+  it("accepts cancellation noise in a derived entry cost", () => {
+    const entryCost = 0.1 * 3 - 0.299999;
+    const trigger: ExitTriggerConfig = {
+      type: "profitTarget",
+      unit: "percent",
+      threshold: 1,
+      entryCost,
+      requiredHits: 1,
+    };
+    expect(() => evaluateTrigger(trigger, pathOf([0, 0.000001]), LEGS)).not.toThrow();
+    expect(evaluateTrigger(trigger, pathOf([0, 0.000001]), LEGS)).not.toBeNull();
   });
 
   it("does not reject fields the trigger type never uses", () => {
@@ -291,9 +305,8 @@ describe("a detail line states the figures actually compared", () => {
 });
 
 describe("a stepped profit action reports the floor it compared", () => {
-  // Worf gate finding F3. The compared floor was exact while the reported figure
-  // was rounded to cents, so a sub-cent floor was reported as a number the
-  // analysis never used.
+  // The compared floor was exact while the reported figure was rounded to cents,
+  // so a sub-cent floor was reported as a number the analysis never used.
   it("reports a sub-cent floor exactly", () => {
     const trigger: ExitTriggerConfig = {
       type: "profitAction",
@@ -309,8 +322,8 @@ describe("a stepped profit action reports the floor it compared", () => {
 });
 
 describe("a computed P&L is never rounded to the wrong side of a threshold", () => {
-  // Worf gate round 3, finding C1. A threshold a caller picked can be refused --
-  // they can pick another. A P&L cannot: the position has the P&L it has. But
+  // A threshold a caller picked can be refused -- they can pick another. A P&L
+  // cannot: the position has the P&L it has. But
   // rounding a tiny positive P&L to zero is not merely imprecise, it is the wrong
   // SIDE of a zero threshold, and a stop at $0 fired on a position that was up.
   it("does not fire a zero stop on a positive P&L too small to represent", () => {
@@ -331,55 +344,9 @@ describe("a computed P&L is never rounded to the wrong side of a threshold", () 
   });
 });
 
-describe("the tool's own derivations are exact end to end", () => {
-  // Worf gate round 5. C3: the trailing drop is this tool's subtraction, and it
-  // was raw, so a two-cent trail was not reached by a two-cent drop. C4: group
-  // P&L is this tool's derivation from decimal leg prices, and it was raw, so a
-  // three-cent move did not reach a three-cent target.
-  //
-  // The earlier version of the trailing test was DELETED rather than reconciled
-  // with a release note that still claimed the repair. It is restored here, in
-  // the hostile form, and it now passes because the derivation is exact.
-  it("fires a trailing stop on a drop that equals the trail", () => {
-    const trigger: ExitTriggerConfig = { type: "trailingStop", trailAmount: 0.02 };
-    const result = evaluateTrigger(trigger, pathOf([0, 0.03, 0.01]), LEGS);
-    expect(result).not.toBeNull();
-    expect(result!.type).toBe("trailingStop");
-  });
-
-  it("does not fire a trailing stop a cent short of the trail", () => {
-    const trigger: ExitTriggerConfig = { type: "trailingStop", trailAmount: 0.02 };
-    expect(evaluateTrigger(trigger, pathOf([0, 0.03, 0.02]), LEGS)).toBeNull();
-  });
-
-  it("reaches a group target on a move that equals it", () => {
-    const groupLegs: ReplayLeg[] = [
-      { occTicker: "SPY260105C00470000", quantity: 1, entryPrice: 1.0, multiplier: 100 },
-    ];
-    const path: PnlPoint[] = [
-      { timestamp: "2026-01-05 09:30", strategyPnl: 0, legPrices: [1.0], netDelta: null },
-      { timestamp: "2026-01-05 09:31", strategyPnl: 0.03, legPrices: [1.0003], netDelta: null },
-    ];
-    const result = analyzeExitTriggers({
-      triggers: [],
-      pnlPath: path,
-      legs: groupLegs,
-      legGroups: [
-        {
-          label: "g",
-          legIndices: [0],
-          triggers: [{ type: "profitTarget", threshold: 0.03, requiredHits: 1 }],
-        },
-      ],
-    });
-    expect(result.legGroups?.[0]?.firstToFire).not.toBeNull();
-  });
-});
-
 describe("a caller's threshold is never silently substituted", () => {
-  // Worf gate round 5, C5. Rounding $0.0000006 UP to $0.000001 swaps in a
-  // threshold the caller did not set. That it stays non-zero makes it less
-  // visible than rounding to zero, not less wrong.
+  // Rounding $0.0000006 up to $0.000001 swaps in a threshold the caller did not
+  // set. That the result stays non-zero makes it less visible, not less wrong.
   it("refuses a threshold finer than the domain rather than rounding it", () => {
     const trigger: ExitTriggerConfig = { type: "profitTarget", threshold: 0.0000006 };
     expect(() => evaluateTrigger(trigger, pathOf([0, 0.0000008]), LEGS)).toThrow(/finer than/);

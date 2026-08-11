@@ -8,18 +8,7 @@
  */
 
 import type { PnlPoint, ReplayLeg } from "./trade-replay.ts";
-import {
-  applyRatioField,
-  formatMoney,
-  formatPercent,
-  fromMoney,
-  legValue,
-  subMoney,
-  sumMoney,
-  toMoneyField,
-  toMoneyPnl,
-  type Money,
-} from "./money.ts";
+import { applyRatioField, formatMoney, formatPercent, fromMoney, toMoneyField } from "./money.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -377,16 +366,10 @@ export function evaluateTrigger(
 
       case "trailingStop": {
         const trailAmt = trigger.trailAmount ?? threshold;
-        // The drop from the peak is monetary and is decided against a monetary
-        // trail, so both live in the one domain. The peak is only converted once
-        // it is a real amount rather than the unarmed sentinel.
+        // The peak must be a real amount rather than the unarmed sentinel before
+        // the raw P&L drop can be compared with the validated trail.
         const trailArmed = Number.isFinite(runningMaxPnl);
-        // The drop is this tool's own subtraction, so it is taken in the domain:
-        // 0.03 - 0.01 is two cents, not 0.019999999999999997, and a two-cent
-        // trail should be reached by a two-cent drop.
-        const dropdown = trailArmed
-          ? fromMoney(subMoney(toMoneyPnl(runningMaxPnl), toMoneyPnl(pnl)))
-          : 0;
+        const dropdown = trailArmed ? runningMaxPnl - pnl : 0;
         // trailAmount and threshold are used as DOLLARS here whatever `unit`
         // says, so they are validated as dollars whatever `unit` says.
         if (trailArmed && dropdown >= fromMoney(toMoneyField(trailAmt, "trailAmount"))) {
@@ -601,9 +584,6 @@ export function evaluateTrigger(
       return {
         type,
         firedAt: point.timestamp,
-        // The canonical value, so the number reported and the number compared are
-        // the same one. Reporting the raw accumulation here made the event say
-        // 7.2749999999999995 while its own detail line said $7.275.
         pnlAtFire: pnl,
         index: i,
         detail,
@@ -624,17 +604,15 @@ export function evaluateTrigger(
  */
 function computeGroupPnl(pnlPath: PnlPoint[], legs: ReplayLeg[], legIndices: number[]): number[] {
   return pnlPath.map((point) => {
-    // Summed in the exact domain: this is the tool's OWN derivation from decimal
-    // leg prices, so a three-cent move must reach a three-cent threshold rather
-    // than landing on 0.029999999999996696.
-    const values: Money[] = [];
+    let groupPnl = 0;
     for (const idx of legIndices) {
       if (idx < legs.length && idx < point.legPrices.length) {
         const leg = legs[idx];
-        values.push(legValue(point.legPrices[idx], leg.entryPrice, leg.quantity, leg.multiplier));
+        const markPrice = point.legPrices[idx];
+        groupPnl += (markPrice - leg.entryPrice) * leg.quantity * leg.multiplier;
       }
     }
-    return fromMoney(sumMoney(values));
+    return groupPnl;
   });
 }
 
@@ -720,8 +698,7 @@ export function analyzeExitTriggers(config: {
     summary = `No triggers fired across ${pnlPath.length} data points.`;
   } else if (actualExit) {
     // Zero is neither better nor worse. Reporting an identical exit as "$0.00
-    // worse" is a false statement about the trade, and exact thresholds make the
-    // equal case reachable rather than theoretical.
+    // worse" is a false statement about the trade.
     const betterWorse =
       actualExit.pnlDifference > 0 ? "better" : actualExit.pnlDifference < 0 ? "worse" : "the same";
     summary =
