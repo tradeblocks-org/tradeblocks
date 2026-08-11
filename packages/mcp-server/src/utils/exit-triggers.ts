@@ -19,6 +19,7 @@ import {
   subMoney,
   toMoney,
   toMoneyField,
+  toMoneyOperand,
 } from "./money.ts";
 
 // ---------------------------------------------------------------------------
@@ -232,7 +233,7 @@ export function evaluateProfitAction(
         !stepPartialFired[s] &&
         step.closeAllocationPct &&
         Number.isFinite(runningMaxPnl) &&
-        moneyAtLeast(toMoney(runningMaxPnl), toMoney(step.armAt))
+        moneyAtLeast(toMoneyOperand(runningMaxPnl), toMoney(step.armAt))
       ) {
         stepPartialFired[s] = true;
         const closeAmt = remainingAllocation * step.closeAllocationPct;
@@ -252,7 +253,7 @@ export function evaluateProfitAction(
     // domain, which correctly refuses a non-finite input.
     let activeFloor = -Infinity;
     if (Number.isFinite(runningMaxPnl)) {
-      const peakMoney = toMoney(runningMaxPnl);
+      const peakMoney = toMoneyOperand(runningMaxPnl);
       for (const step of normalizedSteps) {
         if (moneyAtLeast(peakMoney, toMoney(step.armAt))) {
           activeFloor = Math.max(activeFloor, step.stopAt);
@@ -266,13 +267,13 @@ export function evaluateProfitAction(
     if (
       activeFloor > -Infinity &&
       remainingAllocation > 0 &&
-      moneyAtMost(toMoney(pnl), toMoney(activeFloor))
+      moneyAtMost(toMoneyOperand(pnl), toMoneyOperand(activeFloor))
     ) {
       const effectivePnl = pnl * remainingAllocation;
       const detail =
         trigger.unit === "percent"
-          ? `Profit action: stop adjusted to ${formatPercent(activeFloor / scale)} ($${formatMoney(toMoney(activeFloor))}) at max P&L $${formatMoney(toMoney(runningMaxPnl))}, hit at $${formatMoney(toMoney(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
-          : `Profit action: stop adjusted to $${formatMoney(toMoney(activeFloor))} at max P&L $${formatMoney(toMoney(runningMaxPnl))}, hit at $${formatMoney(toMoney(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`;
+          ? `Profit action: stop adjusted to ${formatPercent(activeFloor / scale)} ($${formatMoney(toMoneyOperand(activeFloor))}) at max P&L $${formatMoney(toMoneyOperand(runningMaxPnl))}, hit at $${formatMoney(toMoneyOperand(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`
+          : `Profit action: stop adjusted to $${formatMoney(toMoneyOperand(activeFloor))} at max P&L $${formatMoney(toMoneyOperand(runningMaxPnl))}, hit at $${formatMoney(toMoneyOperand(pnl))} (remaining ${(remainingAllocation * 100).toFixed(0)}%)`;
 
       return {
         fireEvent: {
@@ -340,14 +341,14 @@ export function evaluateTrigger(
                 "threshold",
               )
             : toMoneyField(threshold, "threshold");
-        if (moneyAtLeast(toMoney(pnl), ptThresholdMoney)) {
+        if (moneyAtLeast(toMoneyOperand(pnl), ptThresholdMoney)) {
           if (point.allLegsSync !== false) profitTargetHits++;
           if (profitTargetHits < requiredHits) break;
           fired = true;
           detail =
             trigger.unit === "percent"
-              ? `P&L $${formatMoney(toMoney(pnl))} >= ${formatPercent(threshold)} of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} ($${formatMoney(ptThresholdMoney)})`
-              : `P&L $${formatMoney(toMoney(pnl))} >= target $${formatMoney(ptThresholdMoney)}`;
+              ? `P&L $${formatMoney(toMoneyOperand(pnl))} >= ${formatPercent(threshold)} of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} ($${formatMoney(ptThresholdMoney)})`
+              : `P&L $${formatMoney(toMoneyOperand(pnl))} >= target $${formatMoney(ptThresholdMoney)}`;
         } else if (point.allLegsSync !== false) {
           profitTargetHits = 0;
         }
@@ -370,12 +371,12 @@ export function evaluateTrigger(
                 "threshold",
               )
             : toMoneyField(absThreshold, "threshold");
-        if (moneyAtMost(toMoney(pnl), negMoney(slThresholdMoney))) {
+        if (moneyAtMost(toMoneyOperand(pnl), negMoney(slThresholdMoney))) {
           fired = true;
           detail =
             trigger.unit === "percent"
-              ? `P&L $${formatMoney(toMoney(pnl))} <= -${formatPercent(absThreshold)} of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} (-$${formatMoney(slThresholdMoney)})`
-              : `P&L $${formatMoney(toMoney(pnl))} <= stop -$${formatMoney(slThresholdMoney)}`;
+              ? `P&L $${formatMoney(toMoneyOperand(pnl))} <= -${formatPercent(absThreshold)} of $${formatMoney(toMoney(Math.abs(trigger.entryCost!)))} (-$${formatMoney(slThresholdMoney)})`
+              : `P&L $${formatMoney(toMoneyOperand(pnl))} <= stop -$${formatMoney(slThresholdMoney)}`;
         }
         break;
       }
@@ -386,12 +387,14 @@ export function evaluateTrigger(
         // trail, so both live in the one domain. The peak is only converted once
         // it is a real amount rather than the unarmed sentinel.
         const trailArmed = Number.isFinite(runningMaxPnl);
-        const dropdownMoney = trailArmed ? subMoney(toMoney(runningMaxPnl), toMoney(pnl)) : 0;
+        const dropdownMoney = trailArmed
+          ? subMoney(toMoneyOperand(runningMaxPnl), toMoneyOperand(pnl))
+          : 0;
         // trailAmount and threshold are used as DOLLARS here whatever `unit`
         // says, so they are validated as dollars whatever `unit` says.
         if (trailArmed && moneyAtLeast(dropdownMoney, toMoneyField(trailAmt, "trailAmount"))) {
           fired = true;
-          detail = `Dropdown $${formatMoney(dropdownMoney)} from max $${formatMoney(toMoney(runningMaxPnl))} >= trail $${formatMoney(toMoney(trailAmt))}`;
+          detail = `Dropdown $${formatMoney(dropdownMoney)} from max $${formatMoney(toMoneyOperand(runningMaxPnl))} >= trail $${formatMoney(toMoney(trailAmt))}`;
         }
         break;
       }
@@ -601,7 +604,10 @@ export function evaluateTrigger(
       return {
         type,
         firedAt: point.timestamp,
-        pnlAtFire: pnl,
+        // The canonical value, so the number reported and the number compared are
+        // the same one. Reporting the raw accumulation here made the event say
+        // 7.2749999999999995 while its own detail line said $7.275.
+        pnlAtFire: fromMoney(toMoneyOperand(pnl)),
         index: i,
         detail,
       };
@@ -701,11 +707,11 @@ export function analyzeExitTriggers(config: {
     if (actualExitTimestamp > pnlPath[pnlPath.length - 1].timestamp) {
       closestIdx = pnlPath.length - 1;
     }
-    const actualPnl = pnlPath[closestIdx].strategyPnl;
+    const actualPnlMoney = toMoneyOperand(pnlPath[closestIdx].strategyPnl);
     actualExit = {
       timestamp: pnlPath[closestIdx].timestamp,
-      pnl: actualPnl,
-      pnlDifference: firstToFire.pnlAtFire - actualPnl,
+      pnl: fromMoney(actualPnlMoney),
+      pnlDifference: fromMoney(subMoney(toMoneyOperand(firstToFire.pnlAtFire), actualPnlMoney)),
     };
   }
 
@@ -716,12 +722,12 @@ export function analyzeExitTriggers(config: {
   } else if (actualExit) {
     const betterWorse = actualExit.pnlDifference > 0 ? "better" : "worse";
     summary =
-      `${firstToFire.type} fired at ${firstToFire.firedAt} (P&L $${firstToFire.pnlAtFire.toFixed(2)}). ` +
-      `Actual exit at ${actualExit.timestamp} (P&L $${actualExit.pnl.toFixed(2)}). ` +
-      `Trigger was $${Math.abs(actualExit.pnlDifference).toFixed(2)} ${betterWorse}.`;
+      `${firstToFire.type} fired at ${firstToFire.firedAt} (P&L $${formatMoney(toMoneyOperand(firstToFire.pnlAtFire))}). ` +
+      `Actual exit at ${actualExit.timestamp} (P&L $${formatMoney(toMoneyOperand(actualExit.pnl))}). ` +
+      `Trigger was $${formatMoney(Math.abs(toMoneyOperand(actualExit.pnlDifference)))} ${betterWorse}.`;
   } else {
     summary =
-      `${firstToFire.type} fired first at ${firstToFire.firedAt} (P&L $${firstToFire.pnlAtFire.toFixed(2)}). ` +
+      `${firstToFire.type} fired first at ${firstToFire.firedAt} (P&L $${formatMoney(toMoneyOperand(firstToFire.pnlAtFire))}). ` +
       `${fireEvents.length} trigger(s) fired total.`;
   }
 
@@ -783,7 +789,7 @@ export function analyzeExitTriggers(config: {
       }
 
       const groupSummary = groupFirstToFire
-        ? `${group.label}: ${groupFirstToFire.type} fired at ${groupFirstToFire.firedAt} (group P&L $${groupFirstToFire.pnlAtFire.toFixed(2)})`
+        ? `${group.label}: ${groupFirstToFire.type} fired at ${groupFirstToFire.firedAt} (group P&L $${formatMoney(toMoneyOperand(groupFirstToFire.pnlAtFire))})`
         : `${group.label}: No triggers fired.`;
 
       return {

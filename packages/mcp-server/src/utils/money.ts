@@ -107,6 +107,29 @@ export function applyRatio(amount: Money, ratio: number): Money {
 }
 
 /**
+ * Convert an amount this code COMPUTED and must compare — a replay-derived P&L,
+ * a drop from a running peak — never annihilating it.
+ *
+ * A threshold that cannot be represented is refused, because a caller can pick a
+ * different one. A computed P&L cannot be refused: the position has the P&L it
+ * has, and aborting an analysis over a fraction of a millionth of a dollar would
+ * be worse than any rounding. But it must not be rounded to ZERO either, because
+ * zero is not just an imprecise answer — it is the wrong SIDE of every threshold
+ * at or around zero. A stop at $0 fired on a positive P&L of $0.0000004 for
+ * exactly that reason.
+ *
+ * So a non-zero amount too small to represent becomes the smallest amount of its
+ * OWN SIGN rather than zero. The magnitude shifts by less than a millionth of a
+ * dollar, far below any resolution money is decided at here, and the sign and
+ * ordering that actually decide the exit are preserved.
+ */
+export function toMoneyOperand(amount: number): Money {
+  const value = toMoney(amount);
+  if (value === 0 && amount !== 0) return amount > 0 ? 1 : -1;
+  return value;
+}
+
+/**
  * Raised when an amount cannot be carried in this domain without changing what
  * it means. Callers at the tool boundary turn it into a field-named input error.
  */

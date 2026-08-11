@@ -315,3 +315,55 @@ describe("the trailing stop repair is real", () => {
     expect(result!.type).toBe("trailingStop");
   });
 });
+
+describe("a computed P&L is never rounded to the wrong side of a threshold", () => {
+  // Worf gate round 3, finding C1. A threshold a caller picked can be refused --
+  // they can pick another. A P&L cannot: the position has the P&L it has. But
+  // rounding a tiny positive P&L to zero is not merely imprecise, it is the wrong
+  // SIDE of a zero threshold, and a stop at $0 fired on a position that was up.
+  it("does not fire a zero stop on a positive P&L too small to represent", () => {
+    const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 0 };
+    expect(evaluateTrigger(trigger, pathOf([4e-7, 4e-7]), LEGS)).toBeNull();
+  });
+
+  it("still fires a zero stop on a negative P&L too small to represent", () => {
+    const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 0 };
+    const result = evaluateTrigger(trigger, pathOf([-4e-7, -4e-7]), LEGS);
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("stopLoss");
+  });
+
+  it("still fires a zero stop at exactly zero", () => {
+    const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 0 };
+    expect(evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).not.toBeNull();
+  });
+});
+
+describe("the reported figures agree with the compared ones", () => {
+  // Worf gate round 3, finding C2. The detail line said $7.275 while the event
+  // carried 7.2749999999999995 and the summary said $7.27 -- a published answer
+  // contradicting its own threshold decision.
+  const arithmeticPnl = (0.0778 - 0.00505) * 100;
+
+  it("reports the canonical value on the fired event", () => {
+    const trigger: ExitTriggerConfig = {
+      type: "profitTarget",
+      threshold: 7.275,
+      requiredHits: 1,
+    };
+    const result = evaluateTrigger(trigger, pathOf([0, arithmeticPnl]), LEGS);
+    expect(result).not.toBeNull();
+    expect(result!.pnlAtFire).toBe(7.275);
+  });
+
+  it("reports the same figure in the analysis summary as in the detail", () => {
+    const result = analyzeExitTriggers({
+      triggers: [{ type: "profitTarget", threshold: 7.275, requiredHits: 1 }],
+      pnlPath: pathOf([0, arithmeticPnl]),
+      legs: LEGS,
+    });
+    expect(result.overall.firstToFire).not.toBeNull();
+    expect(result.overall.summary).toContain("$7.275");
+    expect(result.overall.summary).not.toContain("$7.27)");
+  });
+});
