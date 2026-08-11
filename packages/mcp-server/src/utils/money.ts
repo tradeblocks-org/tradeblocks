@@ -82,9 +82,20 @@ export function toMoneyField(amount: number, field: string): Money {
       `${field} is beyond the largest dollar amount this analysis can represent (about ${MONEY_MAX_DOLLARS.toLocaleString("en-US")})`,
     );
   }
+  // Refuse ANY amount the domain cannot carry exactly, not only one that would
+  // vanish. Rounding $0.0000006 UP to $0.000001 silently substitutes a threshold
+  // the caller did not set; that the result stays non-zero makes it less visible
+  // than rounding to zero, not less wrong. The vanishing case keeps its own
+  // message because it is the one with an obvious consequence: a zero threshold
+  // is met by every position.
   if (scaled === 0 && amount !== 0) {
     throw new MoneyDomainError(
       `${field} is smaller than the smallest amount this analysis can represent (a millionth of a dollar)`,
+    );
+  }
+  if (Math.abs(scaled - amount * SCALE) > Math.abs(amount * SCALE) * 8 * Number.EPSILON) {
+    throw new MoneyDomainError(
+      `${field} is finer than this analysis can represent (a millionth of a dollar)`,
     );
   }
   return scaled === 0 ? 0 : scaled;
@@ -102,6 +113,72 @@ export function applyRatioField(amount: Money, ratio: number, field: string): Mo
     throw new MoneyDomainError(`${field} must be a finite number`);
   }
   return toMoneyField(fromMoney(amount) * ratio, field);
+}
+
+/**
+ * The dollar value of one option leg: (mark - entry) x quantity x multiplier.
+ *
+ * Prices enter the domain BEFORE the subtraction, which is what makes the result
+ * exact. A mark of `1.0003` against an entry of `1.00` at a multiplier of 100 is
+ * three cents, not `0.029999999999996696` — and a three-cent threshold should be
+ * reached by a three-cent move.
+ *
+ * Integer addition is also associative, so the order legs are summed in cannot
+ * change the total.
+ */
+export function legValue(
+  markPrice: number,
+  entryPrice: number,
+  quantity: number,
+  multiplier: number,
+): Money {
+  if (!Number.isInteger(quantity) || !Number.isInteger(multiplier)) {
+    throw new MoneyDomainError("leg quantity and multiplier must be whole numbers");
+  }
+  const delta =
+    toMoneyField(markPrice, "leg mark price") - toMoneyField(entryPrice, "leg entry price");
+  const value = delta * quantity * multiplier;
+  if (!Number.isSafeInteger(value)) {
+    throw new MoneyDomainError("leg value is beyond the range this analysis can represent");
+  }
+  return value === 0 ? 0 : value;
+}
+
+/**
+ * Bring a P&L this package DERIVED back into the domain.
+ *
+ * Safe without a refusal branch because of an invariant this package now
+ * establishes: `legValue` yields whole micro-dollars, so every P&L built from it
+ * already sits on the domain's grid and converting it loses nothing. This is not
+ * a rounding policy for arbitrary values — a leg price finer than the domain is
+ * refused at `legValue`, so such a P&L cannot reach here through the public
+ * tools.
+ */
+export function toMoneyPnl(amount: number): Money {
+  const scaled = Math.round(amount * SCALE);
+  if (!Number.isSafeInteger(scaled)) {
+    throw new MoneyDomainError("P&L is beyond the range this analysis can represent");
+  }
+  return scaled === 0 ? 0 : scaled;
+}
+
+/** Exact difference. */
+export function subMoney(a: Money, b: Money): Money {
+  const value = a - b;
+  if (!Number.isSafeInteger(value)) {
+    throw new MoneyDomainError("difference is beyond the range this analysis can represent");
+  }
+  return value === 0 ? 0 : value;
+}
+
+/** Exact sum of leg values. */
+export function sumMoney(values: Money[]): Money {
+  let total = 0;
+  for (const v of values) total += v;
+  if (!Number.isSafeInteger(total)) {
+    throw new MoneyDomainError("total value is beyond the range this analysis can represent");
+  }
+  return total === 0 ? 0 : total;
 }
 
 /** Convert back to dollars, for comparison against a P&L and for reporting. */

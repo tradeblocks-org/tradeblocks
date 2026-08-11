@@ -330,3 +330,63 @@ describe("a computed P&L is never rounded to the wrong side of a threshold", () 
     expect(evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).not.toBeNull();
   });
 });
+
+describe("the tool's own derivations are exact end to end", () => {
+  // Worf gate round 5. C3: the trailing drop is this tool's subtraction, and it
+  // was raw, so a two-cent trail was not reached by a two-cent drop. C4: group
+  // P&L is this tool's derivation from decimal leg prices, and it was raw, so a
+  // three-cent move did not reach a three-cent target.
+  //
+  // The earlier version of the trailing test was DELETED rather than reconciled
+  // with a release note that still claimed the repair. It is restored here, in
+  // the hostile form, and it now passes because the derivation is exact.
+  it("fires a trailing stop on a drop that equals the trail", () => {
+    const trigger: ExitTriggerConfig = { type: "trailingStop", trailAmount: 0.02 };
+    const result = evaluateTrigger(trigger, pathOf([0, 0.03, 0.01]), LEGS);
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("trailingStop");
+  });
+
+  it("does not fire a trailing stop a cent short of the trail", () => {
+    const trigger: ExitTriggerConfig = { type: "trailingStop", trailAmount: 0.02 };
+    expect(evaluateTrigger(trigger, pathOf([0, 0.03, 0.02]), LEGS)).toBeNull();
+  });
+
+  it("reaches a group target on a move that equals it", () => {
+    const groupLegs: ReplayLeg[] = [
+      { occTicker: "SPY260105C00470000", quantity: 1, entryPrice: 1.0, multiplier: 100 },
+    ];
+    const path: PnlPoint[] = [
+      { timestamp: "2026-01-05 09:30", strategyPnl: 0, legPrices: [1.0], netDelta: null },
+      { timestamp: "2026-01-05 09:31", strategyPnl: 0.03, legPrices: [1.0003], netDelta: null },
+    ];
+    const result = analyzeExitTriggers({
+      triggers: [],
+      pnlPath: path,
+      legs: groupLegs,
+      legGroups: [
+        {
+          label: "g",
+          legIndices: [0],
+          triggers: [{ type: "profitTarget", threshold: 0.03, requiredHits: 1 }],
+        },
+      ],
+    });
+    expect(result.legGroups?.[0]?.firstToFire).not.toBeNull();
+  });
+});
+
+describe("a caller's threshold is never silently substituted", () => {
+  // Worf gate round 5, C5. Rounding $0.0000006 UP to $0.000001 swaps in a
+  // threshold the caller did not set. That it stays non-zero makes it less
+  // visible than rounding to zero, not less wrong.
+  it("refuses a threshold finer than the domain rather than rounding it", () => {
+    const trigger: ExitTriggerConfig = { type: "profitTarget", threshold: 0.0000006 };
+    expect(() => evaluateTrigger(trigger, pathOf([0, 0.0000008]), LEGS)).toThrow(/finer than/);
+  });
+
+  it("still accepts a threshold the domain carries exactly", () => {
+    const trigger: ExitTriggerConfig = { type: "profitTarget", threshold: 0.000001 };
+    expect(() => evaluateTrigger(trigger, pathOf([0, 0.000001]), LEGS)).not.toThrow();
+  });
+});

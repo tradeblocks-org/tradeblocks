@@ -8,6 +8,7 @@
  */
 
 import type { BarRow } from "./market-provider.ts";
+import { fromMoney, legValue, sumMoney, type Money } from "./money.ts";
 import { computeLegGreeks, type GreeksResult } from "./black-scholes.ts";
 
 // ---------------------------------------------------------------------------
@@ -391,7 +392,7 @@ export function computeStrategyPnlPath(
   for (const ts of sortedTimestamps) {
     let complete = true;
     const legPrices: number[] = [];
-    let strategyPnl = 0;
+    const legValues: Money[] = [];
 
     for (let i = 0; i < legs.length; i++) {
       const bar = legMaps[i].get(ts);
@@ -405,11 +406,18 @@ export function computeStrategyPnlPath(
       }
       const hl2 = markPrice(effective);
       legPrices.push(hl2);
-      strategyPnl += (hl2 - legs[i].entryPrice) * legs[i].quantity * legs[i].multiplier;
+      legValues.push(legValue(hl2, legs[i].entryPrice, legs[i].quantity, legs[i].multiplier));
     }
 
     if (complete) {
-      const point: PnlPoint = { timestamp: ts, strategyPnl, legPrices };
+      // Accumulated in the exact domain (see utils/money.ts): the P&L this
+      // package derives from decimal leg prices is the P&L its thresholds are
+      // compared against, so the two cannot disagree.
+      const point: PnlPoint = {
+        timestamp: ts,
+        strategyPnl: fromMoney(sumMoney(legValues)),
+        legPrices,
+      };
 
       // Compute greeks if config provided
       if (greeksConfig) {
