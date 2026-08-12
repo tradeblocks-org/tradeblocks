@@ -304,7 +304,9 @@ export async function handleBatchExitAnalysis(
           injectedConn,
         );
 
-        // Compute entry cost for percentage-based triggers (D-11)
+        // Binary accumulation is deliberate: tradeEntryCost enters the money domain
+        // before any percentage threshold is derived. Its snap was measured to remove
+        // the order-dependent accumulation noise across the tool's realistic range.
         const tradeEntryCost = replayResult.legs.reduce((sum: number, leg) => {
           return sum + leg.entryPrice * leg.quantity * leg.multiplier;
         }, 0);

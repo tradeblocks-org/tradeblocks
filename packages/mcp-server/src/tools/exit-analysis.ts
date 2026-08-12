@@ -279,7 +279,9 @@ export async function handleAnalyzeExitTriggers(
   const pnlPath = replayResult.pnlPath;
   const replayLegs = replayResult.legs;
 
-  // Compute entry cost for percentage-based triggers
+  // Binary accumulation is deliberate: entryCost enters the money domain before
+  // any percentage threshold is derived. Its snap was measured to remove the
+  // order-dependent accumulation noise across the tool's realistic range.
   const entryCost = replayLegs.reduce((sum, leg) => {
     return sum + leg.entryPrice * leg.quantity * leg.multiplier;
   }, 0);

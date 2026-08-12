@@ -101,6 +101,8 @@ export function legPnlMoney(
   if (!Number.isFinite(scaled)) {
     throw new MoneyDomainError("leg P&L must be a finite dollar amount");
   }
+  // Fractional scaling resolves each leg independently to the micro-dollar grid;
+  // callers then add those integers, so the result remains independent of leg order.
   return Number.isSafeInteger(scaled)
     ? scaled === 0
       ? 0
