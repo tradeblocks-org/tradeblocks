@@ -16,7 +16,7 @@
  * This ensures our calculations match the legacy Python implementation exactly.
  */
 
-import { std, mean, min, max } from "mathjs";
+import { mean, min, max } from "mathjs";
 import { PlBasis, type Trade } from "../models/trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
 import type {
@@ -34,6 +34,7 @@ import {
   resolveTreasuryRateByKey,
 } from "../utils/risk-free-rate.ts";
 import { getNetPl } from "../utils/equity-curve.ts";
+import { sharpeRatioFromReturns, sortinoRatioFromReturns } from "./return-series-stats.ts";
 
 /**
  * Daily return with associated date for date-based risk-free rate calculations.
@@ -409,41 +410,19 @@ export class PortfolioStatsCalculator {
    * Uses historical 3-month T-bill rates from Phase 25 utility for each day's
    * excess return calculation instead of a fixed rate.
    *
-   * Formula: (mean(excessReturns) / std(returns)) * sqrt(252)
+   * Formula: (mean(excessReturns) / std(excessReturns)) * sqrt(252)
    * Where excessReturn[i] = return[i] - (getRiskFreeRate(date[i]) / 100 / 252)
    */
   private calculateSharpeRatio(
     trades: Trade[],
     dailyLogEntries?: DailyLogEntry[],
   ): number | undefined {
-    // Get daily returns with dates for date-based risk-free rate lookup
     const dailyReturnsWithDates = this.calculateDailyReturnsWithDates(trades, dailyLogEntries);
-
-    if (dailyReturnsWithDates.length < 2) return undefined;
-
-    // Calculate excess returns using per-day Treasury rates
-    const excessReturns: number[] = [];
-
-    for (const { date, return: dailyReturn } of dailyReturnsWithDates) {
-      // Get the actual Treasury rate for this specific date
-      const annualRate = this.getAnnualRiskFreeRatePct(date);
-      const dailyRiskFreeRate = annualRate / 100 / this.config.annualizationFactor;
-
-      excessReturns.push(dailyReturn - dailyRiskFreeRate);
-    }
-
-    // Calculate Sharpe ratio using math.js for statistical consistency
-    // With date-varying risk-free rates, we must use std of excess returns (not raw returns)
-    // because std(rawReturns) != std(excessReturns) when rates change materially
-    const avgExcessReturn = mean(excessReturns) as number;
-    const stdDev = std(excessReturns, "unbiased") as number;
-
-    if (stdDev === 0) return undefined;
-
-    // Annualize the Sharpe ratio
-    const sharpeRatio = (avgExcessReturn / stdDev) * Math.sqrt(this.config.annualizationFactor);
-
-    return sharpeRatio;
+    return sharpeRatioFromReturns(
+      dailyReturnsWithDates,
+      (date) => this.getAnnualRiskFreeRatePct(date),
+      this.config.annualizationFactor,
+    );
   }
 
   /**
@@ -517,43 +496,12 @@ export class PortfolioStatsCalculator {
   ): number | undefined {
     if (trades.length < 2) return undefined;
 
-    // Get daily returns with dates for date-based risk-free rate lookup
     const dailyReturnsWithDates = this.calculateDailyReturnsWithDates(trades, dailyLogEntries);
-    if (dailyReturnsWithDates.length < 2) return undefined;
-
-    // Calculate excess returns using per-day Treasury rates
-    const excessReturns: number[] = [];
-
-    for (const { date, return: dailyReturn } of dailyReturnsWithDates) {
-      // Get the actual Treasury rate for this specific date
-      const annualRate = this.getAnnualRiskFreeRatePct(date);
-      const dailyRiskFreeRate = annualRate / 100 / this.config.annualizationFactor;
-
-      excessReturns.push(dailyReturn - dailyRiskFreeRate);
-    }
-
-    const avgExcessReturn = mean(excessReturns) as number;
-
-    // Calculate downside deviation: RMS of negative excess returns from zero
-    // using ALL N observations. Positive excess returns contribute 0 to the sum.
-    const N = excessReturns.length;
-    const sumSquaredDownside = excessReturns.reduce((sum, ret) => {
-      const downside = Math.min(ret, 0);
-      return sum + downside * downside;
-    }, 0);
-
-    // If no negative excess returns, downside deviation is 0 — return undefined
-    if (sumSquaredDownside === 0) return undefined;
-
-    const downsideDeviation = Math.sqrt(sumSquaredDownside / N);
-
-    // Check for near-zero downside deviation to prevent overflow
-    if (downsideDeviation < 1e-10) return undefined;
-
-    const sortinoRatio =
-      (avgExcessReturn / downsideDeviation) * Math.sqrt(this.config.annualizationFactor);
-
-    return sortinoRatio;
+    return sortinoRatioFromReturns(
+      dailyReturnsWithDates,
+      (date) => this.getAnnualRiskFreeRatePct(date),
+      this.config.annualizationFactor,
+    );
   }
 
   /**
