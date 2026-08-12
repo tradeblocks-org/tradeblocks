@@ -25,6 +25,7 @@ import {
 import { getProfile } from "../db/profile-schemas.ts";
 import type { ExitTriggerConfig, LegGroupConfig } from "../utils/exit-triggers.ts";
 import type { MarketStores } from "../market/stores/index.ts";
+import { addMoney, fromMoney, toMoneyField, type Money } from "../utils/money.ts";
 
 // ---------------------------------------------------------------------------
 // Concurrency limiter — hand-rolled semaphore, no external dependency (D-15)
@@ -304,10 +305,15 @@ export async function handleBatchExitAnalysis(
           injectedConn,
         );
 
-        // Compute entry cost for percentage-based triggers (D-11)
-        const tradeEntryCost = replayResult.legs.reduce((sum: number, leg) => {
-          return sum + leg.entryPrice * leg.quantity * leg.multiplier;
-        }, 0);
+        let tradeEntryCostMoney: Money = 0;
+        for (const leg of replayResult.legs) {
+          tradeEntryCostMoney = addMoney(
+            tradeEntryCostMoney,
+            toMoneyField(leg.entryPrice * leg.quantity * leg.multiplier, "leg entry cost"),
+            "entry cost",
+          );
+        }
+        const tradeEntryCost = fromMoney(tradeEntryCostMoney);
 
         return {
           ok: true,

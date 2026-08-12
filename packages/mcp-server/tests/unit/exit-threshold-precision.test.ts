@@ -19,8 +19,10 @@ import {
   evaluateTrigger,
   analyzeExitTriggers,
   analyzeExitTriggersSchema,
+  computeStrategyPnlPath,
   type ExitTriggerConfig,
 } from "../../src/test-exports.ts";
+import type { BarRow } from "../../src/utils/market-provider.ts";
 import type { PnlPoint, ReplayLeg } from "../../src/utils/trade-replay.ts";
 
 const LEGS: ReplayLeg[] = [
@@ -35,6 +37,38 @@ function pathOf(pnls: number[]): PnlPoint[] {
     legPrices: [5.0, 3.0],
     netDelta: null,
   }));
+}
+
+const EXACT_POSITION = [
+  { mark: 0.865, entry: 0.845, quantity: 1 },
+  { mark: 1.59, entry: 0.255, quantity: -1 },
+  { mark: 1.635, entry: 0.095, quantity: 1 },
+  { mark: 1.54, entry: 1.505, quantity: -1 },
+];
+
+function replayPosition(
+  values: typeof EXACT_POSITION,
+  quantitySign: 1 | -1 = 1,
+): { legs: ReplayLeg[]; pnlPath: PnlPoint[] } {
+  const legs: ReplayLeg[] = values.map((leg, index) => ({
+    occTicker: `LEG${index}`,
+    quantity: leg.quantity * quantitySign,
+    entryPrice: leg.entry,
+    multiplier: 100,
+  }));
+  const bars: BarRow[][] = values.map((leg, index) => [
+    {
+      date: "2026-01-05",
+      time: "09:30",
+      open: leg.mark,
+      high: leg.mark,
+      low: leg.mark,
+      close: leg.mark,
+      volume: 10,
+      ticker: `LEG${index}`,
+    },
+  ]);
+  return { legs, pnlPath: computeStrategyPnlPath(legs, bars) };
 }
 
 /** Dollar figures a detail line reports, e.g. "... (-$0.35)" -> [0.35]. */
@@ -101,6 +135,76 @@ describe("a threshold reached by arithmetic behaves like one written down", () =
     const result = evaluateTrigger(trigger, pathOf([0, 7.275]), LEGS);
     expect(result).not.toBeNull();
     expect(result!.detail).toContain("$7.275");
+  });
+});
+
+describe("replayed P&L reaches exact exit boundaries independent of leg order", () => {
+  it("fires a profit target in both authored orders", () => {
+    for (const values of [EXACT_POSITION, [...EXACT_POSITION].reverse()]) {
+      const { legs, pnlPath } = replayPosition(values);
+      const result = evaluateTrigger(
+        { type: "profitTarget", threshold: 19, requiredHits: 1 },
+        pnlPath,
+        legs,
+      );
+      expect(result?.type).toBe("profitTarget");
+    }
+  });
+
+  it("fires a stop loss in both authored orders", () => {
+    for (const values of [EXACT_POSITION, [...EXACT_POSITION].reverse()]) {
+      const { legs, pnlPath } = replayPosition(values, -1);
+      const result = evaluateTrigger({ type: "stopLoss", threshold: 19 }, pnlPath, legs);
+      expect(result?.type).toBe("stopLoss");
+    }
+  });
+
+  it("arms and stops a profit action at an arithmetic equality", () => {
+    const { legs, pnlPath } = replayPosition(EXACT_POSITION);
+    const result = evaluateTrigger(
+      {
+        type: "profitAction",
+        threshold: 0,
+        steps: [{ armAt: 19, stopAt: 19 }],
+      },
+      pnlPath,
+      legs,
+    );
+    expect(result?.type).toBe("profitAction");
+  });
+});
+
+describe("a trailing stop is reached when its exact dropdown equals the trail", () => {
+  it.each([
+    [300_013 / 1_000_000, 125_013 / 1_000_000],
+    [-300_013 / 1_000_000, -475_013 / 1_000_000],
+  ])("fires from a peak of %s to a P&L of %s", (peak, pnl) => {
+    const result = evaluateTrigger(
+      { type: "trailingStop", threshold: 0.175 },
+      pathOf([peak, pnl]),
+      LEGS,
+    );
+    expect(result?.type).toBe("trailingStop");
+  });
+});
+
+describe("actual-exit P&L differences stay in the exact money domain", () => {
+  it("reports equivalent arithmetic P&Ls as the same", () => {
+    const authored = replayPosition(EXACT_POSITION).pnlPath[0];
+    const reversed = replayPosition([...EXACT_POSITION].reverse()).pnlPath[0];
+    const pnlPath = [
+      { ...authored, timestamp: "2026-01-05 09:30" },
+      { ...reversed, timestamp: "2026-01-05 09:31" },
+    ];
+    const result = analyzeExitTriggers({
+      triggers: [{ type: "clockTimeExit", threshold: 0, clockTime: "09:30" }],
+      pnlPath,
+      legs: LEGS,
+      actualExitTimestamp: pnlPath[1].timestamp,
+    });
+
+    expect(result.overall.actualExit?.pnlDifference).toBe(0);
+    expect(result.overall.summary).toContain("Trigger was the same.");
   });
 });
 

@@ -22,6 +22,7 @@ import {
 } from "../utils/exit-triggers.ts";
 import { decomposeGreeks, type LegGroupDef } from "../utils/greeks-decomposition.ts";
 import { markPrice } from "../utils/trade-replay.ts";
+import { addMoney, fromMoney, toMoneyField, type Money } from "../utils/money.ts";
 
 // ---------------------------------------------------------------------------
 // Shared trigger type enum
@@ -279,10 +280,15 @@ export async function handleAnalyzeExitTriggers(
   const pnlPath = replayResult.pnlPath;
   const replayLegs = replayResult.legs;
 
-  // Compute entry cost for percentage-based triggers
-  const entryCost = replayLegs.reduce((sum, leg) => {
-    return sum + leg.entryPrice * leg.quantity * leg.multiplier;
-  }, 0);
+  let entryCostMoney: Money = 0;
+  for (const leg of replayLegs) {
+    entryCostMoney = addMoney(
+      entryCostMoney,
+      toMoneyField(leg.entryPrice * leg.quantity * leg.multiplier, "leg entry cost"),
+      "entry cost",
+    );
+  }
+  const entryCost = fromMoney(entryCostMoney);
 
   if (pnlPath.length === 0) {
     return {

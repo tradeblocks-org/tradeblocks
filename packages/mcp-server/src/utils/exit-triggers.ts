@@ -8,7 +8,16 @@
  */
 
 import type { PnlPoint, ReplayLeg } from "./trade-replay.ts";
-import { applyRatioField, formatMoney, formatPercent, fromMoney, toMoneyField } from "./money.ts";
+import {
+  addMoney,
+  applyRatioField,
+  formatMoney,
+  formatPercent,
+  fromMoney,
+  legPnlMoney,
+  toMoneyField,
+  type Money,
+} from "./money.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -367,14 +376,22 @@ export function evaluateTrigger(
       case "trailingStop": {
         const trailAmt = trigger.trailAmount ?? threshold;
         // The peak must be a real amount rather than the unarmed sentinel before
-        // the raw P&L drop can be compared with the validated trail.
+        // the exact P&L drop can be compared with the validated trail.
         const trailArmed = Number.isFinite(runningMaxPnl);
-        const dropdown = trailArmed ? runningMaxPnl - pnl : 0;
+        const dropdownMoney = trailArmed
+          ? addMoney(
+              toMoneyField(runningMaxPnl, "running maximum P&L"),
+              -toMoneyField(pnl, "P&L"),
+              "P&L dropdown",
+            )
+          : 0;
+        const trailMoney = toMoneyField(trailAmt, "trailAmount");
         // trailAmount and threshold are used as DOLLARS here whatever `unit`
         // says, so they are validated as dollars whatever `unit` says.
-        if (trailArmed && dropdown >= fromMoney(toMoneyField(trailAmt, "trailAmount"))) {
+        if (trailArmed && dropdownMoney >= trailMoney) {
+          const dropdown = fromMoney(dropdownMoney);
           fired = true;
-          detail = `Dropdown $${dropdown.toFixed(2)} from max $${runningMaxPnl.toFixed(2)} >= trail $${formatMoney(toMoneyField(trailAmt, "trailAmount"))}`;
+          detail = `Dropdown $${dropdown.toFixed(2)} from max $${runningMaxPnl.toFixed(2)} >= trail $${formatMoney(trailMoney)}`;
         }
         break;
       }
@@ -604,15 +621,19 @@ export function evaluateTrigger(
  */
 function computeGroupPnl(pnlPath: PnlPoint[], legs: ReplayLeg[], legIndices: number[]): number[] {
   return pnlPath.map((point) => {
-    let groupPnl = 0;
+    let groupPnlMoney: Money = 0;
     for (const idx of legIndices) {
       if (idx < legs.length && idx < point.legPrices.length) {
         const leg = legs[idx];
         const markPrice = point.legPrices[idx];
-        groupPnl += (markPrice - leg.entryPrice) * leg.quantity * leg.multiplier;
+        groupPnlMoney = addMoney(
+          groupPnlMoney,
+          legPnlMoney(markPrice, leg.entryPrice, leg.quantity, leg.multiplier),
+          "leg group P&L",
+        );
       }
     }
-    return groupPnl;
+    return fromMoney(groupPnlMoney);
   });
 }
 
@@ -685,10 +706,17 @@ export function analyzeExitTriggers(config: {
       closestIdx = pnlPath.length - 1;
     }
     const actualPnl = pnlPath[closestIdx].strategyPnl;
+    const pnlDifference = fromMoney(
+      addMoney(
+        toMoneyField(firstToFire.pnlAtFire, "trigger P&L"),
+        -toMoneyField(actualPnl, "actual exit P&L"),
+        "exit P&L difference",
+      ),
+    );
     actualExit = {
       timestamp: pnlPath[closestIdx].timestamp,
       pnl: actualPnl,
-      pnlDifference: firstToFire.pnlAtFire - actualPnl,
+      pnlDifference,
     };
   }
 
@@ -765,10 +793,17 @@ export function analyzeExitTriggers(config: {
           closestIdx = pnlPath.length - 1;
         }
         const actualGroupPnl = groupPnlArr[closestIdx];
+        const pnlDifference = fromMoney(
+          addMoney(
+            toMoneyField(groupFirstToFire.pnlAtFire, "group trigger P&L"),
+            -toMoneyField(actualGroupPnl, "group actual exit P&L"),
+            "group exit P&L difference",
+          ),
+        );
         groupActualExit = {
           timestamp: pnlPath[closestIdx].timestamp,
           pnl: actualGroupPnl,
-          pnlDifference: groupFirstToFire.pnlAtFire - actualGroupPnl,
+          pnlDifference,
         };
       }
 

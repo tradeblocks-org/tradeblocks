@@ -11,18 +11,15 @@
  * a stop it is being told it has reached, and the analysis answers that the stop
  * did not fire. The comparison and the reported figure were different numbers.
  *
- * SCOPE, AND WHY IT STOPS WHERE IT DOES. This module governs the monetary amounts
- * this tool converts or derives — direct thresholds and trails, percentage
- * thresholds from an entry cost, and a step's arm and stop. It deliberately does
- * not touch the P&L path, which arrives already computed from the replay. Making
- * claims about the intended decimal value of a number this tool did not compute
- * means inventing a rounding policy for values with no ground truth, and every
- * such rule has an edge: promoting a sub-micro P&L to keep its sign flips its
- * decision against a one-micro threshold, while rounding it to zero flips its
- * decision against a zero threshold. Neither is correct, because the question is
- * unanswerable from here. So the tool derives its own fixed-point thresholds
- * exactly, compares the P&L it was handed against them as given, and claims
- * nothing further.
+ * SCOPE. This module governs the monetary amounts the exit-analysis tool computes:
+ * direct thresholds and trails, percentage thresholds from an entry cost, a
+ * step's arm and stop, and replayed P&L. Each replay leg enters the domain before
+ * its price difference is taken, then leg values are resolved and added in the
+ * domain. Integral position scaling stays integer throughout; fractional scaling
+ * accepted by the public replay interface resolves back into the domain per leg.
+ * A P&L leaves the domain only once, after the position or leg group has been
+ * accumulated. Differences used for exit decisions and comparisons are also
+ * taken in the domain.
  *
  * REPRESENTATION. A fixed-point integer count of micro-dollars (1e-6 USD) held in
  * an ordinary number. Integers below 2^53 are exact, covering roughly
@@ -74,6 +71,43 @@ export function toMoneyField(amount: number, field: string): Money {
     );
   }
   return scaled === 0 ? 0 : scaled;
+}
+
+function checkedMoney(value: number, field: string): Money {
+  if (!Number.isSafeInteger(value)) {
+    throw new MoneyDomainError(`${field} is beyond the exact monetary range`);
+  }
+  return value === 0 ? 0 : value;
+}
+
+/** Add two monetary values without leaving the fixed-point domain. */
+export function addMoney(left: Money, right: Money, field: string): Money {
+  return checkedMoney(left + right, field);
+}
+
+/** Compute one replay leg's P&L with the price difference taken in the domain. */
+export function legPnlMoney(
+  markPrice: number,
+  entryPrice: number,
+  quantity: number,
+  multiplier: number,
+): Money {
+  const priceDifference = addMoney(
+    toMoneyField(markPrice, "mark price"),
+    -toMoneyField(entryPrice, "entry price"),
+    "price difference",
+  );
+  const scaled = priceDifference * quantity * multiplier;
+  if (!Number.isFinite(scaled)) {
+    throw new MoneyDomainError("leg P&L must be a finite dollar amount");
+  }
+  // Fractional scaling resolves each leg independently to the micro-dollar grid;
+  // callers then add those integers, so the result remains independent of leg order.
+  return Number.isSafeInteger(scaled)
+    ? scaled === 0
+      ? 0
+      : scaled
+    : toMoneyField(fromMoney(priceDifference) * quantity * multiplier, "leg P&L");
 }
 
 /**

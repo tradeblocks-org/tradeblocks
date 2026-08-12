@@ -211,6 +211,40 @@ describe("buildOccTicker", () => {
 });
 
 describe("computeStrategyPnlPath", () => {
+  it("produces exact order-invariant P&L across multiple legs", () => {
+    const legValues = [
+      { mark: 0.865, entry: 0.845, quantity: 1 },
+      { mark: 1.59, entry: 0.255, quantity: -1 },
+      { mark: 1.635, entry: 0.095, quantity: 1 },
+      { mark: 1.54, entry: 1.505, quantity: -1 },
+    ];
+
+    const replay = (values: typeof legValues) => {
+      const legs: ReplayLeg[] = values.map((leg, index) => ({
+        occTicker: `LEG${index}`,
+        quantity: leg.quantity,
+        entryPrice: leg.entry,
+        multiplier: 100,
+      }));
+      const bars: BarRow[][] = values.map((leg, index) => [
+        {
+          date: "2025-01-17",
+          time: "09:31",
+          open: leg.mark,
+          high: leg.mark,
+          low: leg.mark,
+          close: leg.mark,
+          volume: 10,
+          ticker: `LEG${index}`,
+        },
+      ]);
+      return computeStrategyPnlPath(legs, bars)[0].strategyPnl;
+    };
+
+    expect(replay(legValues)).toBe(19);
+    expect(replay([...legValues].reverse())).toBe(19);
+  });
+
   it("computes P&L for single leg with 3 bars", () => {
     const legs: ReplayLeg[] = [
       { occTicker: "SPY250117C00470000", quantity: 1, entryPrice: 5.0, multiplier: 100 },
