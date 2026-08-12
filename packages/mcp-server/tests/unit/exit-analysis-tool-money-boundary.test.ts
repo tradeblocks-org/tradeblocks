@@ -72,6 +72,8 @@ const BASE_LEG = {
   expiry: "2026-01-05",
 };
 
+const OUT_OF_DOMAIN_ENTRY_PRICE = 9_007_199_255;
+
 function pnlPath(values: number[]) {
   return values.map((strategyPnl, index) => ({
     timestamp: `2026-01-05 09:${String(30 + index).padStart(2, "0")}`,
@@ -255,6 +257,24 @@ describe("registered analyze_exit_triggers money boundaries", () => {
     expect(data.overall.firstToFire!.pnlAtFire).toBe(resolvedTarget);
     expect(data.overall.firstToFire!.detail).toContain("target $281474976.710656");
   });
+
+  it("returns an explicit error for an out-of-domain entry cost", async () => {
+    const result = await runAnalyzeTool(
+      {
+        legs: [{ ...BASE_LEG, quantity: 1, entry_price: OUT_OF_DOMAIN_ENTRY_PRICE }],
+        multiplier: 1,
+        triggers: [{ type: "profitTarget", unit: "dollar", threshold: 1 }],
+      },
+      [0],
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(result.content[0]?.text).toContain("Error analyzing exit triggers");
+    expect(result.content[0]?.text).toContain(
+      "leg entry cost is beyond the largest dollar amount this analysis can represent",
+    );
+  });
 });
 
 describe("registered batch_exit_analysis money boundaries", () => {
@@ -286,5 +306,70 @@ describe("registered batch_exit_analysis money boundaries", () => {
     }
 
     expect(results).toEqual(["noTrigger", "noTrigger"]);
+  });
+
+  it("skips an out-of-domain entry cost while completing the rest of the batch", async () => {
+    runAndReadAll.mockResolvedValueOnce({
+      getRows: () => [
+        [0, 10, "2026-01-05"],
+        [1, 20, "2026-01-06"],
+      ],
+    });
+    handleReplayTrade
+      .mockResolvedValueOnce({
+        pnlPath: pnlPath([0]),
+        legs: [
+          {
+            occTicker: BASE_LEG.ticker,
+            quantity: 1,
+            entryPrice: OUT_OF_DOMAIN_ENTRY_PRICE,
+            multiplier: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        pnlPath: pnlPath([0, 1]),
+        legs: [
+          {
+            occTicker: BASE_LEG.ticker,
+            quantity: 1,
+            entryPrice: 1,
+            multiplier: 1,
+          },
+        ],
+      });
+
+    const result = await batchHandler(
+      batchSchema.parse({
+        block_id: "out-of-domain-entry-cost",
+        candidate_policy: [{ type: "profitTarget", unit: "dollar", threshold: 1 }],
+        baseline_mode: "actual",
+        limit: 2,
+        multiplier: 1,
+        format: "full",
+      }),
+    );
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toBeDefined();
+    const data = result.structuredContent as {
+      summary: string;
+      perTrade: Array<{ tradeIndex: number; triggerFired: string; candidatePnl: number }>;
+      skippedTrades: Array<{ tradeIndex: number; dateOpened: string; error: string }>;
+    };
+    expect(data.summary).toContain("Analyzed 1 trades (1 skipped due to replay errors)");
+    expect(data.perTrade).toHaveLength(1);
+    expect(data.perTrade[0]?.tradeIndex).toBe(1);
+    expect(data.perTrade[0]?.triggerFired).toBe("noTrigger");
+    expect(data.perTrade[0]?.candidatePnl).toBe(1);
+    expect(data.skippedTrades).toEqual([
+      {
+        tradeIndex: 0,
+        dateOpened: "2026-01-05",
+        error: expect.stringContaining(
+          "leg entry cost is beyond the largest dollar amount this analysis can represent",
+        ),
+      },
+    ]);
   });
 });
