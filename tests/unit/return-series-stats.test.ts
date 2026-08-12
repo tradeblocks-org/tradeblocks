@@ -65,4 +65,37 @@ describe("return-series statistics public API", () => {
     expect(cvarFromReturns([])).toBeUndefined();
     expect(ulcerPerformanceIndexFromReturns([], 252)).toBeUndefined();
   });
+
+  it("handles a single observation for every export", () => {
+    const returns = datedReturns([-0.25]);
+
+    // N = 1 cannot produce a sample standard deviation, so Sharpe is undefined.
+    expect(sharpeRatioFromReturns(returns, 0, 1)).toBeUndefined();
+    // N = 1 is below Sortino's two-observation minimum, so it is undefined.
+    expect(sortinoRatioFromReturns(returns, 0, 1)).toBeUndefined();
+    // Equity falls from 1 to 0.75, so maximum drawdown is 25%.
+    expect(maxDrawdownFromReturns(returns)).toBe(25);
+    // The only return is both the interpolated cutoff and the discrete tail mean.
+    expect(cvarFromReturns(returns)).toBe(-0.25);
+    // Annualized return is -0.25 and the Ulcer Index is 25%, so UPI is -0.25 / 0.25 = -1.
+    expect(ulcerPerformanceIndexFromReturns(returns, 1)).toBe(-1);
+  });
+
+  it("refuses invalid compounded equity paths at the observation that crosses the boundary", () => {
+    const exactWipeout = datedReturns([-1]);
+    expect(maxDrawdownFromReturns(exactWipeout)).toBe(100);
+    expect(ulcerPerformanceIndexFromReturns(exactWipeout, 252)).toBeUndefined();
+
+    const negativeEquityCrossing = datedReturns([-2]);
+    expect(maxDrawdownFromReturns(negativeEquityCrossing)).toBeUndefined();
+    expect(ulcerPerformanceIndexFromReturns(negativeEquityCrossing, 252)).toBeUndefined();
+
+    const signFlip = datedReturns([-2, -2]);
+    expect(maxDrawdownFromReturns(signFlip)).toBeUndefined();
+    expect(ulcerPerformanceIndexFromReturns(signFlip, 252)).toBeUndefined();
+
+    const drawdownPastOneHundredPercent = maxDrawdownFromReturns(datedReturns([-2, 0.5]));
+    expect(drawdownPastOneHundredPercent).toBeUndefined();
+    expect(drawdownPastOneHundredPercent).not.toBe(250);
+  });
 });

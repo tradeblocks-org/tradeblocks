@@ -69,16 +69,19 @@ export function sortinoRatioFromReturns(
 /**
  * Calculate maximum drawdown as a positive percentage from decimal returns.
  * Observations are compounded in their supplied order from an initial equity of 1.
+ * Returns undefined when an observation makes equity negative because subsequent drawdowns are meaningless.
  */
 export function maxDrawdownFromReturns(
   returns: ReadonlyArray<{ date: Date; return: number }>,
-): number {
+): number | undefined {
   let equity = 1;
   let peak = 1;
   let maxDrawdown = 0;
 
   for (const observation of returns) {
     equity *= 1 + observation.return;
+    if (equity < 0) return undefined;
+
     peak = Math.max(peak, equity);
     maxDrawdown = Math.max(maxDrawdown, ((peak - equity) / peak) * 100);
   }
@@ -89,6 +92,7 @@ export function maxDrawdownFromReturns(
 /**
  * Calculate CVaR at 95% in the same decimal unit and sign as the input returns.
  * The 5th-percentile cutoff uses linear interpolation between order statistics.
+ * The tail mean includes the discrete observations at or below that cutoff without fractional weighting.
  */
 export function cvarFromReturns(
   returns: ReadonlyArray<{ date: Date; return: number }>,
@@ -113,6 +117,7 @@ export function cvarFromReturns(
  * The numerator is the compounded geometric return annualized from the number
  * of observations. This matches the compounded equity curve used for the Ulcer
  * Index and does not assume that calendar dates are evenly spaced.
+ * Returns undefined when an observation makes equity non-positive because geometric return is then undefined.
  */
 export function ulcerPerformanceIndexFromReturns(
   returns: ReadonlyArray<{ date: Date; return: number }>,
@@ -126,13 +131,15 @@ export function ulcerPerformanceIndexFromReturns(
 
   for (const observation of returns) {
     equity *= 1 + observation.return;
+    if (equity <= 0) return undefined;
+
     peak = Math.max(peak, equity);
     const drawdownPct = ((equity - peak) / peak) * 100;
     sumSquaredDrawdownPct += drawdownPct * drawdownPct;
   }
 
   const ulcerIndexPct = Math.sqrt(sumSquaredDrawdownPct / returns.length);
-  if (ulcerIndexPct === 0 || equity < 0) return undefined;
+  if (ulcerIndexPct === 0) return undefined;
 
   const annualizedReturn = Math.pow(equity, annualizationFactor / returns.length) - 1;
   return annualizedReturn / (ulcerIndexPct / 100);
