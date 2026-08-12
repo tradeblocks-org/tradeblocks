@@ -10,9 +10,8 @@
  * floating point is not the decimal figure the caller configured. A 1% stop on a
  * $35 entry cost evaluates to 0.35000000000000003 while being reported as
  * "-$0.35", so a position whose P&L is exactly -$0.35 was answered as not having
- * reached its stop. The error always resolves the same direction — against the
- * threshold being met — and it lands on exactly the round percentages callers
- * choose.
+ * reached its stop. Depending on the binary approximation, the old comparison
+ * could resolve on either side of the decimal threshold callers configured.
  */
 // Imported through the server's public test-export surface rather than reaching
 // into the utility implementation directly.
@@ -157,31 +156,15 @@ describe("the full analysis surface agrees with the individual evaluators", () =
   });
 });
 
-describe("money that cannot be represented is refused, whatever its origin", () => {
-  // The harm is not "too many decimals" — it is an amount that silently becomes
-  // zero, because a zero threshold is met by every
-  // position, so a stop nobody could reach turns into one that fires at once.
-  // Checked on the conversion itself, so it holds for a threshold a caller typed
-  // AND for one derived from a caller's prices and percentages.
-  it("refuses a typed threshold that would vanish", () => {
-    const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 1e-12 };
-    expect(() => evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).toThrow(/smaller than/);
+describe("money outside the exact representable range is refused", () => {
+  it("refuses a non-finite threshold", () => {
+    const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: Number.POSITIVE_INFINITY };
+    expect(() => evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).toThrow(/finite/);
   });
 
   it("refuses a typed threshold beyond the represented range", () => {
     const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 1e10 };
     expect(() => evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).toThrow(/beyond the largest/);
-  });
-
-  it("refuses a DERIVED threshold that would vanish", () => {
-    // A percentage of a vanishing entry cost — the path no schema check reaches.
-    const trigger: ExitTriggerConfig = {
-      type: "stopLoss",
-      unit: "percent",
-      threshold: 0.01,
-      entryCost: 4e-9,
-    };
-    expect(() => evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).toThrow(/smaller than/);
   });
 
   it("refuses a DERIVED threshold that would overflow", () => {
@@ -193,16 +176,6 @@ describe("money that cannot be represented is refused, whatever its origin", () 
       requiredHits: 1,
     };
     expect(() => evaluateTrigger(trigger, pathOf([0, 100]), LEGS)).toThrow(/beyond the largest/);
-  });
-
-  it("refuses a vanishing trail, which is used as dollars whatever the unit says", () => {
-    const trigger: ExitTriggerConfig = {
-      type: "trailingStop",
-      unit: "percent",
-      threshold: 0.0000004,
-      trailAmount: 0.0000004,
-    };
-    expect(() => evaluateTrigger(trigger, pathOf([0, 0]), LEGS)).toThrow(/smaller than/);
   });
 
   it("accepts an ordinary sub-cent amount", () => {
@@ -302,6 +275,19 @@ describe("a detail line states the figures actually compared", () => {
     expect(result).not.toBeNull();
     expect(result!.detail).toContain("0.5%");
   });
+
+  it("does not round a small configured percentage to zero", () => {
+    const trigger: ExitTriggerConfig = {
+      type: "profitTarget",
+      unit: "percent",
+      threshold: 0.000001,
+      entryCost: 1_000_000,
+      requiredHits: 1,
+    };
+    const result = evaluateTrigger(trigger, pathOf([0, 1]), LEGS);
+    expect(result).not.toBeNull();
+    expect(result!.detail).toContain("0.0001% of");
+  });
 });
 
 describe("a stepped profit action reports the floor it compared", () => {
@@ -322,8 +308,8 @@ describe("a stepped profit action reports the floor it compared", () => {
 });
 
 describe("a computed P&L is never rounded to the wrong side of a threshold", () => {
-  // A threshold a caller picked can be refused -- they can pick another. A P&L
-  // cannot: the position has the P&L it has. But
+  // A threshold resolves in this module's documented domain. A P&L cannot: the
+  // position has the P&L it has. But
   // rounding a tiny positive P&L to zero is not merely imprecise, it is the wrong
   // SIDE of a zero threshold, and a stop at $0 fired on a position that was up.
   it("does not fire a zero stop on a positive P&L too small to represent", () => {
@@ -344,12 +330,18 @@ describe("a computed P&L is never rounded to the wrong side of a threshold", () 
   });
 });
 
-describe("a caller's threshold is never silently substituted", () => {
-  // Rounding $0.0000006 up to $0.000001 swaps in a threshold the caller did not
-  // set. That the result stays non-zero makes it less visible, not less wrong.
-  it("refuses a threshold finer than the domain rather than rounding it", () => {
-    const trigger: ExitTriggerConfig = { type: "profitTarget", threshold: 0.0000006 };
-    expect(() => evaluateTrigger(trigger, pathOf([0, 0.0000008]), LEGS)).toThrow(/finer than/);
+describe("money resolves to the nearest millionth of a dollar", () => {
+  it("accepts a finer threshold and compares and reports the resolved amount", () => {
+    const trigger: ExitTriggerConfig = {
+      type: "profitTarget",
+      threshold: 0.0000006,
+      requiredHits: 1,
+    };
+    expect(evaluateTrigger(trigger, pathOf([0, 0.0000009]), LEGS)).toBeNull();
+
+    const result = evaluateTrigger(trigger, pathOf([0, 0.000001]), LEGS);
+    expect(result).not.toBeNull();
+    expect(result!.detail).toContain("target $0.000001");
   });
 
   it("still accepts a threshold the domain carries exactly", () => {

@@ -32,22 +32,13 @@
  * on half-cent increments, so a percentage of an entry cost routinely lands on
  * fractions of a cent, and a cent domain would have to round real money away.
  *
- * DERIVATION AND BOUNDARY TOLERANCE. The thresholds this module derives are exact
- * fixed-point amounts: comparison and reporting are produced from the same exact
- * integer micro-dollar value. Bringing in a value produced by a caller's
- * arithmetic does use a tolerance, however. Operations before this boundary can
- * leave binary noise, so conversion absorbs noise at that scale and refuses
- * anything larger.
- * That is why `$0.0000010000000000287557` is accepted as one micro-dollar while
- * `$0.0000006` is refused. This is a tolerance, not a representation-only repair;
- * it is intended to repair boundary noise rather than generally round nearby
- * monetary values. Its behavior at the extreme end of the domain is documented
- * where it is defined.
- *
- * The tolerance could be removed for entry costs by deriving the entry cost
- * through this module at its source in the handler: convert its operands before
- * subtracting or reducing them instead of doing raw arithmetic and converting
- * only the result. That broader change is not made here.
+ * RESOLUTION. Every finite amount in range resolves to the nearest micro-dollar.
+ * Comparison and reporting are then produced from that same exact integer value.
+ * This applies equally to a configured dollar amount and to a value produced by
+ * earlier caller or handler arithmetic: `$0.0000006` resolves to `$0.000001`, and
+ * binary noise around a micro-dollar resolves to that micro-dollar. The boundary
+ * does not try to infer which finer digits are intentional because the number
+ * alone cannot answer that question.
  */
 
 /** Micro-dollars per dollar. */
@@ -60,33 +51,17 @@ const MONEY_MAX_DOLLARS = Math.floor(Number.MAX_SAFE_INTEGER / SCALE);
 export type Money = number;
 
 /**
- * Raised when an amount cannot be carried in this domain under its conversion
- * rules. Tool handlers return it as an error message identifying the affected
- * field.
+ * Raised when an amount cannot be carried in this domain. Tool handlers return
+ * it as an error message identifying the affected field.
  */
 export class MoneyDomainError extends Error {}
 
 /**
  * Bring a dollar amount into the domain, naming the field it came from.
  *
- * Non-finite inputs are refused first. Lossy conversions are then refused when:
- *
- *  - the conversion ANNIHILATES a non-zero amount. A small non-zero stop becomes
- *    zero, materially broadening it to fire at any non-positive P&L.
- *  - it OVERFLOWS the exact range, which would otherwise surface as an
- *    unexplained failure part-way through an analysis.
- *  - it differs from the nearest micro-dollar by more than the boundary
- *    tolerance, which would otherwise substitute a nearby threshold the caller
- *    did not set.
- *
- * Ordinary binary noise within the tolerance — `0.35000000000000003` from a
- * percentage times an entry cost, including noise introduced by cancellation
- * before this boundary — snaps back to the decimal it was always meant to be.
- *
- * The check is on the RESULT of the conversion rather than the shape of the
- * input, so it holds identically for an amount a caller typed and one derived
- * from caller-supplied prices. An input-shaped check cannot do that: it never
- * sees the derived value at all.
+ * Non-finite inputs and values beyond the exact integer range are refused. Every
+ * other amount resolves to the nearest micro-dollar, including amounts finer than
+ * that resolution and binary noise left by arithmetic before this boundary.
  */
 export function toMoneyField(amount: number, field: string): Money {
   if (!Number.isFinite(amount)) {
@@ -96,27 +71,6 @@ export function toMoneyField(amount: number, field: string): Money {
   if (!Number.isSafeInteger(scaled)) {
     throw new MoneyDomainError(
       `${field} is beyond the largest dollar amount this analysis can represent (about ${MONEY_MAX_DOLLARS.toLocaleString("en-US")})`,
-    );
-  }
-  // The vanishing case keeps its own message because its consequence is distinct:
-  // a small non-zero stop becomes zero and fires at any non-positive P&L.
-  if (scaled === 0 && amount !== 0) {
-    throw new MoneyDomainError(
-      `${field} is smaller than the smallest amount this analysis can represent (a millionth of a dollar)`,
-    );
-  }
-  const scaledAmount = amount * SCALE;
-  // Caller-side cancellation noise scales with the operands that produced a
-  // small result, not with the result itself, so a relative tolerance alone can
-  // collapse near zero. The 1e-9 absolute floor is a judgment about the noise
-  // this conversion should absorb, not a derived constant. At roughly $281M the
-  // relative term reaches half a micro-dollar and therefore admits every
-  // fractional value within a micro-dollar interval; that is well beyond intended
-  // position sizes.
-  const conversionTolerance = Math.max(1e-9, Math.abs(scaledAmount) * 8 * Number.EPSILON);
-  if (Math.abs(scaled - scaledAmount) > conversionTolerance) {
-    throw new MoneyDomainError(
-      `${field} is finer than this analysis can represent (a millionth of a dollar)`,
     );
   }
   return scaled === 0 ? 0 : scaled;
@@ -160,15 +114,25 @@ export function formatMoney(value: Money): string {
   return (value / SCALE).toFixed(6).replace(/(\.\d\d[0-9]*?)0+$/, "$1");
 }
 
-/**
- * Render a ratio as a percentage rounded to three decimal percentage points.
- *
- * Whole percentages print as before. A half-percent stop keeps its half: rounding
- * to a whole number reported a 0.5% stop as "1%", naming a threshold the caller
- * had not configured.
- */
+/** Render a configured ratio as a percentage without rounding it. */
 export function formatPercent(ratio: number): string {
-  const pct = ratio * 100;
-  const rounded = Math.round(pct * 1000) / 1000;
-  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : String(rounded)}%`;
+  const negative = ratio < 0;
+  const [coefficient, exponentText] = Math.abs(ratio).toString().split("e");
+  const exponent = Number(exponentText ?? 0);
+  const decimalAt = coefficient.indexOf(".");
+  const digits = coefficient.replace(".", "");
+  const shiftedDecimalAt = (decimalAt === -1 ? digits.length : decimalAt) + exponent + 2;
+
+  let percentage: string;
+  if (shiftedDecimalAt <= 0) {
+    percentage = `0.${"0".repeat(-shiftedDecimalAt)}${digits}`;
+  } else if (shiftedDecimalAt >= digits.length) {
+    percentage = `${digits}${"0".repeat(shiftedDecimalAt - digits.length)}`;
+  } else {
+    percentage = `${digits.slice(0, shiftedDecimalAt)}.${digits.slice(shiftedDecimalAt)}`;
+  }
+
+  percentage = percentage.replace(/^0+(?=\d)/, "");
+  if (percentage.includes(".")) percentage = percentage.replace(/0+$/, "").replace(/\.$/, "");
+  return `${negative ? "-" : ""}${percentage}%`;
 }
