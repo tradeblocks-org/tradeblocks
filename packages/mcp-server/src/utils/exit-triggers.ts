@@ -10,11 +10,11 @@
 import type { PnlPoint, ReplayLeg } from "./trade-replay.ts";
 import {
   addMoney,
-  applyRatioField,
   formatMoney,
-  formatPercent,
   fromMoney,
   legPnlMoney,
+  moneyAtLeast,
+  thresholdFromEntryCost,
   toMoneyField,
   type Money,
 } from "./money.ts";
@@ -170,6 +170,29 @@ function adjustLegDeltaForPosition(rawDelta: number, leg?: ReplayLeg): number {
   return leg != null && leg.quantity < 0 ? -rawDelta : rawDelta;
 }
 
+/** Render a configured ratio as a percentage without rounding it. */
+function formatPercent(ratio: number): string {
+  const negative = ratio < 0;
+  const [coefficient, exponentText] = Math.abs(ratio).toString().split("e");
+  const exponent = Number(exponentText ?? 0);
+  const decimalAt = coefficient.indexOf(".");
+  const digits = coefficient.replace(".", "");
+  const shiftedDecimalAt = (decimalAt === -1 ? digits.length : decimalAt) + exponent + 2;
+
+  let percentage: string;
+  if (shiftedDecimalAt <= 0) {
+    percentage = `0.${"0".repeat(-shiftedDecimalAt)}${digits}`;
+  } else if (shiftedDecimalAt >= digits.length) {
+    percentage = `${digits}${"0".repeat(shiftedDecimalAt - digits.length)}`;
+  } else {
+    percentage = `${digits.slice(0, shiftedDecimalAt)}.${digits.slice(shiftedDecimalAt)}`;
+  }
+
+  percentage = percentage.replace(/^0+(?=\d)/, "");
+  if (percentage.includes(".")) percentage = percentage.replace(/0+$/, "").replace(/\.$/, "");
+  return `${negative ? "-" : ""}${percentage}%`;
+}
+
 // ---------------------------------------------------------------------------
 // evaluateProfitAction — partial close aware evaluator
 // ---------------------------------------------------------------------------
@@ -201,7 +224,7 @@ export function evaluateProfitAction(
   const entryCostMoney = trigger.unit === "percent" ? toMoneyField(scale, "entry cost") : 0;
   const stepDollars = (value: number, field: string): number =>
     trigger.unit === "percent"
-      ? fromMoney(applyRatioField(entryCostMoney, value, field))
+      ? fromMoney(thresholdFromEntryCost(entryCostMoney, value, field))
       : fromMoney(toMoneyField(value, field));
 
   const normalizedSteps = [...trigger.steps]
@@ -327,7 +350,7 @@ export function evaluateTrigger(
         // figure reported below is the figure compared against.
         const ptThresholdMoney =
           trigger.unit === "percent"
-            ? applyRatioField(
+            ? thresholdFromEntryCost(
                 toMoneyField(Math.abs(trigger.entryCost!), "entry cost"),
                 threshold,
                 "threshold",
@@ -357,7 +380,7 @@ export function evaluateTrigger(
         // reached the stop the caller was shown.
         const slThresholdMoney =
           trigger.unit === "percent"
-            ? applyRatioField(
+            ? thresholdFromEntryCost(
                 toMoneyField(Math.abs(trigger.entryCost!), "entry cost"),
                 absThreshold,
                 "threshold",
@@ -388,7 +411,7 @@ export function evaluateTrigger(
         const trailMoney = toMoneyField(trailAmt, "trailAmount");
         // trailAmount and threshold are used as DOLLARS here whatever `unit`
         // says, so they are validated as dollars whatever `unit` says.
-        if (trailArmed && dropdownMoney >= trailMoney) {
+        if (trailArmed && moneyAtLeast(dropdownMoney, trailMoney)) {
           const dropdown = fromMoney(dropdownMoney);
           fired = true;
           detail = `Dropdown $${dropdown.toFixed(2)} from max $${runningMaxPnl.toFixed(2)} >= trail $${formatMoney(trailMoney)}`;

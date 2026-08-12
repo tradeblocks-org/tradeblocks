@@ -85,6 +85,24 @@ export function addMoney(left: Money, right: Money, field: string): Money {
   return checkedMoney(left + right, field);
 }
 
+/** Subtract two monetary values without leaving the fixed-point domain. */
+export function subMoney(left: Money, right: Money, field: string): Money {
+  return addMoney(left, -right, field);
+}
+
+/** Negate a monetary value, keeping zero canonical. */
+export function negMoney(value: Money): Money {
+  return value === 0 ? 0 : -value;
+}
+
+/** Multiply a monetary value by an integer quantity or multiplier. */
+export function scaleMoney(value: Money, factor: number, field: string): Money {
+  if (!Number.isInteger(factor)) {
+    throw new MoneyDomainError(`${field} must be an integer`);
+  }
+  return checkedMoney(value * factor, field);
+}
+
 /** Compute one replay leg's P&L with the price difference taken in the domain. */
 export function legPnlMoney(
   markPrice: number,
@@ -121,12 +139,41 @@ export function applyRatioField(amount: Money, ratio: number, field: string): Mo
   if (!Number.isFinite(ratio)) {
     throw new MoneyDomainError(`${field} must be a finite number`);
   }
-  return toMoneyField(fromMoney(amount) * ratio, field);
+  // The amount is already resolved to an exact integer and the ratio is finite.
+  // Their direct product avoids a micro-to-dollar round trip and is exact when
+  // floating-point error cannot move the product across a half-integer boundary.
+  const scaled = Math.round(amount * ratio);
+  if (!Number.isSafeInteger(scaled)) {
+    throw new MoneyDomainError(
+      `${field} is beyond the largest dollar amount this analysis can represent (about ${MONEY_MAX_DOLLARS.toLocaleString("en-US")})`,
+    );
+  }
+  return scaled === 0 ? 0 : scaled;
+}
+
+/**
+ * Derive a percentage-of-entry-cost threshold as the domain operation call sites
+ * intend, rather than as cosmetic duplication of general ratio application.
+ */
+export function thresholdFromEntryCost(entryCost: Money, ratio: number, field: string): Money {
+  return applyRatioField(entryCost, ratio, field);
 }
 
 /** Convert back to dollars, for comparison against a P&L and for reporting. */
 export function fromMoney(value: Money): number {
   return value / SCALE;
+}
+
+/**
+ * Inclusive comparisons used by the public analyzer, whose trigger detail lines
+ * already describe their boundaries with inclusive language.
+ */
+export function moneyAtLeast(amount: Money, threshold: Money): boolean {
+  return amount >= threshold;
+}
+
+export function moneyAtMost(amount: Money, threshold: Money): boolean {
+  return amount <= threshold;
 }
 
 /**
@@ -146,27 +193,4 @@ export function fromMoney(value: Money): number {
 export function formatMoney(value: Money): string {
   if (value % 10_000 === 0) return (value / SCALE).toFixed(2);
   return (value / SCALE).toFixed(6).replace(/(\.\d\d[0-9]*?)0+$/, "$1");
-}
-
-/** Render a configured ratio as a percentage without rounding it. */
-export function formatPercent(ratio: number): string {
-  const negative = ratio < 0;
-  const [coefficient, exponentText] = Math.abs(ratio).toString().split("e");
-  const exponent = Number(exponentText ?? 0);
-  const decimalAt = coefficient.indexOf(".");
-  const digits = coefficient.replace(".", "");
-  const shiftedDecimalAt = (decimalAt === -1 ? digits.length : decimalAt) + exponent + 2;
-
-  let percentage: string;
-  if (shiftedDecimalAt <= 0) {
-    percentage = `0.${"0".repeat(-shiftedDecimalAt)}${digits}`;
-  } else if (shiftedDecimalAt >= digits.length) {
-    percentage = `${digits}${"0".repeat(shiftedDecimalAt - digits.length)}`;
-  } else {
-    percentage = `${digits.slice(0, shiftedDecimalAt)}.${digits.slice(shiftedDecimalAt)}`;
-  }
-
-  percentage = percentage.replace(/^0+(?=\d)/, "");
-  if (percentage.includes(".")) percentage = percentage.replace(/0+$/, "").replace(/\.$/, "");
-  return `${negative ? "-" : ""}${percentage}%`;
 }
