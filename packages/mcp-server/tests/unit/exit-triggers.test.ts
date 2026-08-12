@@ -956,6 +956,68 @@ describe("analyzeExitTriggers", () => {
 // ---------------------------------------------------------------------------
 
 describe("leg groups", () => {
+  const exactGroupLegs: ReplayLeg[] = [
+    { occTicker: "LEG0", quantity: 1, entryPrice: 0.845, multiplier: 100 },
+    { occTicker: "LEG1", quantity: -1, entryPrice: 0.255, multiplier: 100 },
+    { occTicker: "LEG2", quantity: 1, entryPrice: 0.095, multiplier: 100 },
+    { occTicker: "LEG3", quantity: -1, entryPrice: 1.505, multiplier: 100 },
+  ];
+  const exactGroupPath = buildTestPath([19], {
+    legPrices: [[0.865, 1.59, 1.635, 1.54]],
+  });
+
+  it("produces exact group P&L independent of the group's leg order", () => {
+    const result = analyzeExitTriggers({
+      pnlPath: exactGroupPath,
+      legs: exactGroupLegs,
+      triggers: [],
+      legGroups: [
+        { label: "authored", legIndices: [0, 1, 2, 3], triggers: [] },
+        { label: "reversed", legIndices: [3, 2, 1, 0], triggers: [] },
+      ],
+    });
+
+    expect(result.legGroups?.[0].groupPnl[0]).toBe(19);
+    expect(result.legGroups?.[1].groupPnl[0]).toBe(19);
+  });
+
+  it("fires group profit targets at arithmetic equality in either leg order", () => {
+    const trigger: ExitTriggerConfig = {
+      type: "profitTarget",
+      threshold: 19,
+      requiredHits: 1,
+    };
+    const result = analyzeExitTriggers({
+      pnlPath: exactGroupPath,
+      legs: exactGroupLegs,
+      triggers: [],
+      legGroups: [
+        { label: "authored", legIndices: [0, 1, 2, 3], triggers: [trigger] },
+        { label: "reversed", legIndices: [3, 2, 1, 0], triggers: [trigger] },
+      ],
+    });
+
+    expect(result.legGroups?.[0].result.firstToFire?.type).toBe("profitTarget");
+    expect(result.legGroups?.[1].result.firstToFire?.type).toBe("profitTarget");
+  });
+
+  it("fires group stop losses at arithmetic equality in either leg order", () => {
+    const lossLegs = exactGroupLegs.map((leg) => ({ ...leg, quantity: -leg.quantity }));
+    const trigger: ExitTriggerConfig = { type: "stopLoss", threshold: 19 };
+    const result = analyzeExitTriggers({
+      pnlPath: exactGroupPath,
+      legs: lossLegs,
+      triggers: [],
+      legGroups: [
+        { label: "authored", legIndices: [0, 1, 2, 3], triggers: [trigger] },
+        { label: "reversed", legIndices: [3, 2, 1, 0], triggers: [trigger] },
+      ],
+    });
+
+    expect(result.legGroups?.[0].result.firstToFire?.type).toBe("stopLoss");
+    expect(result.legGroups?.[1].result.firstToFire?.type).toBe("stopLoss");
+  });
+
   it("computes per-group P&L correctly", () => {
     // Two legs: leg 0 (short call, qty=-1, entry=5.0), leg 1 (long call, qty=1, entry=3.0)
     const legPrices = [

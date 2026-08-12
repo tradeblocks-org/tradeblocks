@@ -9,6 +9,7 @@
 
 import type { BarRow } from "./market-provider.ts";
 import { computeLegGreeks, type GreeksResult } from "./black-scholes.ts";
+import { addMoney, fromMoney, legPnlMoney, type Money } from "./money.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -391,7 +392,7 @@ export function computeStrategyPnlPath(
   for (const ts of sortedTimestamps) {
     let complete = true;
     const legPrices: number[] = [];
-    let strategyPnl = 0;
+    let strategyPnlMoney: Money = 0;
 
     for (let i = 0; i < legs.length; i++) {
       const bar = legMaps[i].get(ts);
@@ -405,10 +406,15 @@ export function computeStrategyPnlPath(
       }
       const hl2 = markPrice(effective);
       legPrices.push(hl2);
-      strategyPnl += (hl2 - legs[i].entryPrice) * legs[i].quantity * legs[i].multiplier;
+      strategyPnlMoney = addMoney(
+        strategyPnlMoney,
+        legPnlMoney(hl2, legs[i].entryPrice, legs[i].quantity, legs[i].multiplier),
+        "strategy P&L",
+      );
     }
 
     if (complete) {
+      const strategyPnl = fromMoney(strategyPnlMoney);
       const point: PnlPoint = { timestamp: ts, strategyPnl, legPrices };
 
       // Compute greeks if config provided
