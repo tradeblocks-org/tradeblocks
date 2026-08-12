@@ -37,6 +37,9 @@ describe("return-series statistics public API", () => {
     const returns = datedReturns([0.1, -0.2, 0.05]);
     // Equity is 1.1, 0.88, 0.924. The trough is (1.1 - 0.88) / 1.1 = 20%.
     expect(maxDrawdownFromReturns(returns)).toBeCloseTo(20, 12);
+
+    // Equity is 0 after the wipeout and stays 0, so every later drawdown remains exactly 100%.
+    expect(maxDrawdownFromReturns(datedReturns([-1, 0.5, -2]))).toBe(100);
   });
 
   it("calculates CVaR from the linear-interpolated 5th-percentile tail", () => {
@@ -56,6 +59,10 @@ describe("return-series statistics public API", () => {
       0.0395 / (ulcerIndexPct / 100),
       12,
     );
+
+    // Equity rises from 1 to 1.1 to 1.155, so UI = sqrt((0^2 + 0^2) / 2) = 0.
+    // Return per unit of ulcer is undefined when the denominator is zero, not a large number.
+    expect(ulcerPerformanceIndexFromReturns(datedReturns([0.1, 0.05]), 2)).toBeUndefined();
   });
 
   it("handles empty and insufficient series", () => {
