@@ -87,8 +87,7 @@ export interface TradeCostReconciliationAvailable {
 }
 
 export type TradeCostReconciliation =
-  | TradeCostReconciliationAvailable
-  | TradeCostReconciliationUnavailable;
+  TradeCostReconciliationAvailable | TradeCostReconciliationUnavailable;
 
 function unavailable(
   reason: TradeCostReconciliationUnavailableReason,

@@ -32,8 +32,7 @@ export const PARTITION_HEAD_VERSION = 1 as const;
 export type PartitionCommitClassification = "append" | "repair";
 
 export type LogicalCoverage =
-  | { kind: "date-range"; from: string; through: string }
-  | { kind: "empty" };
+  { kind: "date-range"; from: string; through: string } | { kind: "empty" };
 
 export interface PartitionQualityCounts {
   inputRows: number;
@@ -1599,8 +1598,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
         const previous = await this.authorityWithRebuiltHead(captured);
         let stored: StoredPartitionCommit;
         let pendingEvent:
-          | { receipt: StoredPartitionCommit; previousEvent?: CanonicalJsonAddress }
-          | undefined;
+          { receipt: StoredPartitionCommit; previousEvent?: CanonicalJsonAddress } | undefined;
         if (previous && sameCommitContent(previous.commit.receipt, captured)) {
           stored = previous.commit;
         } else {

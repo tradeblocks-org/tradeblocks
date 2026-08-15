@@ -82,8 +82,7 @@ export interface DatasetDef {
 }
 
 export type DatasetWriteQuality =
-  | { inputRows: number; droppedRows: number }
-  | { kind: "writer-input-complete" };
+  { inputRows: number; droppedRows: number } | { kind: "writer-input-complete" };
 
 function provenanceOptions(
   dataset: string,

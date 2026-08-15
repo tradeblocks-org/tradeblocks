@@ -52,10 +52,7 @@ export interface BackfillConcreteFallbackInput {
 }
 
 export type BackfillManifestStatus =
-  | "prepared"
-  | "committed"
-  | "failed"
-  | "committed_manifest_failed";
+  "prepared" | "committed" | "failed" | "committed_manifest_failed";
 
 export interface BackfillManifestEntry {
   status: BackfillManifestStatus;

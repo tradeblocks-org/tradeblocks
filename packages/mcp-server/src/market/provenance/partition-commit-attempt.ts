@@ -76,8 +76,7 @@ export async function runPartitionCommitAttempt<T>(
 
 /** @internal Package-internal canonical writer hook; omitted from the public barrel. */
 export function activePartitionCommitAttempt():
-  | Pick<ActivePartitionCommitAttempt, "attemptId" | "recorder">
-  | undefined {
+  Pick<ActivePartitionCommitAttempt, "attemptId" | "recorder"> | undefined {
   return attempts.getStore();
 }
 

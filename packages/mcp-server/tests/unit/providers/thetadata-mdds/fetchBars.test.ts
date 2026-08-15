@@ -51,9 +51,11 @@ interface ThetaProviderFetchBarsTestDeps {
 }
 
 function createProvider(deps: ThetaProviderFetchBarsTestDeps): ThetaDataProvider {
-  return new (ThetaDataProvider as unknown as {
-    new (deps: ThetaProviderFetchBarsTestDeps): ThetaDataProvider;
-  })(deps);
+  return new (
+    ThetaDataProvider as unknown as {
+      new (deps: ThetaProviderFetchBarsTestDeps): ThetaDataProvider;
+    }
+  )(deps);
 }
 
 function createClient(): ThetaMddsClient {

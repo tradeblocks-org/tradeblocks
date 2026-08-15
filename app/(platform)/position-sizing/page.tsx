@@ -48,12 +48,7 @@ interface RunConfig {
 }
 
 type StrategySortOption =
-  | "name-asc"
-  | "winrate-desc"
-  | "kelly-desc"
-  | "applied-desc"
-  | "capital-desc"
-  | "trades-desc";
+  "name-asc" | "winrate-desc" | "kelly-desc" | "applied-desc" | "capital-desc" | "trades-desc";
 
 const normalizeKellyValue = (value: number): number => {
   if (!Number.isFinite(value)) return 0;

@@ -6,8 +6,7 @@ export interface DatasetPartitionIdentity {
 }
 
 export type DatasetProvenancePosture =
-  | { kind: "bounded-session"; sessionKey: string }
-  | { kind: "unbounded-unsupported" };
+  { kind: "bounded-session"; sessionKey: string } | { kind: "unbounded-unsupported" };
 
 export interface MarketDatasetDefinition {
   subdir: string;

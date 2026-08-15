@@ -75,9 +75,7 @@ export interface MaterializedResolverClassV1 {
 }
 
 export type InputResolverClassV1 =
-  | PartitionedResolverClassV1
-  | StaticResolverClassV1
-  | MaterializedResolverClassV1;
+  PartitionedResolverClassV1 | StaticResolverClassV1 | MaterializedResolverClassV1;
 
 export interface InputResolverRegistryV1 {
   kind: typeof INPUT_RESOLVER_REGISTRY_KIND;
@@ -152,10 +150,7 @@ export interface MissingProbeProjectionV1 {
 }
 
 export type SemanticInputSourceV1 =
-  | PartitionProjectionV1
-  | MaterializedSliceV1
-  | ControlFileProjectionV1
-  | MissingProbeProjectionV1;
+  PartitionProjectionV1 | MaterializedSliceV1 | ControlFileProjectionV1 | MissingProbeProjectionV1;
 
 export interface SemanticInputLeafV1 {
   kind: typeof SEMANTIC_INPUT_LEAF_KIND;
