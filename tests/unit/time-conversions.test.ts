@@ -4,8 +4,9 @@ import {
   percentageToTrades,
   tradesToPercentage,
   formatTradesWithTime,
-  getDefaultSimulationPeriod,
+  getDefaultSimulationPeriodFromHistory,
   getDefaultResamplePercentage,
+  convertPeriodUnit,
 } from "@tradeblocks/lib";
 
 describe("Time Conversion Utilities", () => {
@@ -31,10 +32,18 @@ describe("Time Conversion Utilities", () => {
       expect(timeToTrades(5, "days", 252)).toBe(3);
     });
 
+    it("should pass trades through unchanged, whatever the pace", () => {
+      expect(timeToTrades(83, "trades", 20)).toBe(83);
+      expect(timeToTrades(83, "trades", 10000)).toBe(83);
+      expect(timeToTrades(1, "trades", 252)).toBe(1);
+      expect(timeToTrades(82.6, "trades", 252)).toBe(83); // Rounded to whole trades
+    });
+
     it("should handle edge cases", () => {
       expect(timeToTrades(0, "years", 252)).toBe(0);
       expect(timeToTrades(0.001, "years", 252)).toBe(0); // Rounds down to 0
       expect(timeToTrades(100, "years", 252)).toBe(25200);
+      expect(timeToTrades(0, "trades", 252)).toBe(0);
     });
   });
 
@@ -77,6 +86,21 @@ describe("Time Conversion Utilities", () => {
       expect(result.value).toBeCloseTo(0.5);
       expect(result.unit).toBe("years");
       expect(result.displayText).toBe("0.5 years");
+
+      result = tradesToTime(83, 20, "trades");
+      expect(result.value).toBe(83);
+      expect(result.unit).toBe("trades");
+      expect(result.displayText).toBe("83 trades");
+
+      result = tradesToTime(1, 20, "trades");
+      expect(result.displayText).toBe("1 trade");
+    });
+
+    it("should never auto-select trades as the unit", () => {
+      // Auto-selection describes a horizon in time; "trades" is only ever an
+      // explicit request, so the auto path stays time-based.
+      expect(tradesToTime(83, 20).unit).toBe("years");
+      expect(tradesToTime(5, 252).unit).toBe("days");
     });
 
     it("should handle high-frequency traders correctly", () => {
@@ -102,6 +126,38 @@ describe("Time Conversion Utilities", () => {
       expect(tradesToTime(42, 252).displayText).toBe("2 months");
       expect(tradesToTime(1, 252).displayText).toContain("day");
       expect(tradesToTime(3, 252).displayText).toContain("days");
+    });
+  });
+
+  describe("convertPeriodUnit", () => {
+    // The bug this exists to prevent: reading the raw number under the new unit
+    // turned an 83-trade horizon into 83 years — 1,660 trades at this pace.
+    it("keeps the horizon the same length when the unit changes", () => {
+      const years = convertPeriodUnit(83, "trades", "years", 20);
+      expect(years).toBeCloseTo(4.15, 2);
+      expect(timeToTrades(years, "years", 20)).toBe(83);
+    });
+
+    it("round-trips back to the original trade count", () => {
+      for (const unit of ["years", "months", "days"] as const) {
+        const converted = convertPeriodUnit(83, "trades", unit, 20);
+        expect(convertPeriodUnit(converted, unit, "trades", 20)).toBe(83);
+      }
+    });
+
+    it("converts between two time units without going through the raw number", () => {
+      const asMonths = convertPeriodUnit(2, "years", "months", 20);
+      expect(asMonths).toBeCloseTo(24, 1);
+    });
+
+    it("is a no-op when the unit does not change", () => {
+      expect(convertPeriodUnit(83, "trades", "trades", 20)).toBe(83);
+      expect(convertPeriodUnit(2.5, "years", "years", 20)).toBe(2.5);
+    });
+
+    it("never returns a horizon of zero", () => {
+      expect(convertPeriodUnit(0.01, "years", "trades", 20)).toBeGreaterThanOrEqual(1);
+      expect(convertPeriodUnit(1, "trades", "years", 5000)).toBeGreaterThanOrEqual(0.01);
     });
   });
 
@@ -160,35 +216,27 @@ describe("Time Conversion Utilities", () => {
     });
   });
 
-  describe("getDefaultSimulationPeriod", () => {
-    it("should return appropriate defaults for different trading frequencies", () => {
-      // High frequency trader (10k+ trades/year)
-      let defaults = getDefaultSimulationPeriod(15000);
-      expect(defaults.value).toBe(3);
-      expect(defaults.unit).toBe("months");
+  describe("getDefaultSimulationPeriodFromHistory", () => {
+    it("should default to the history length in exact trades", () => {
+      expect(getDefaultSimulationPeriodFromHistory(83)).toEqual({ value: 83, unit: "trades" });
+      expect(getDefaultSimulationPeriodFromHistory(1500)).toEqual({ value: 1500, unit: "trades" });
+    });
 
-      // Active trader (1k-10k trades/year)
-      defaults = getDefaultSimulationPeriod(5000);
-      expect(defaults.value).toBe(6);
-      expect(defaults.unit).toBe("months");
-
-      // Regular trader (100-1k trades/year)
-      defaults = getDefaultSimulationPeriod(252);
-      expect(defaults.value).toBe(1);
-      expect(defaults.unit).toBe("years");
-
-      // Occasional trader (<100 trades/year)
-      defaults = getDefaultSimulationPeriod(50);
-      expect(defaults.value).toBe(2);
-      expect(defaults.unit).toBe("years");
+    it("should not depend on trading frequency", () => {
+      // Same history length always gives the same horizon; frequency only
+      // affects how that horizon is described in time.
+      const slow = getDefaultSimulationPeriodFromHistory(83);
+      const fast = getDefaultSimulationPeriodFromHistory(83);
+      expect(slow).toEqual(fast);
+      expect(timeToTrades(slow.value, slow.unit, 20)).toBe(83);
+      expect(timeToTrades(fast.value, fast.unit, 5000)).toBe(83);
     });
 
     it("should handle edge cases", () => {
-      expect(getDefaultSimulationPeriod(10000).value).toBe(3);
-      expect(getDefaultSimulationPeriod(1000).value).toBe(6);
-      expect(getDefaultSimulationPeriod(100).value).toBe(1);
-      expect(getDefaultSimulationPeriod(99).value).toBe(2);
-      expect(getDefaultSimulationPeriod(0).value).toBe(2);
+      expect(getDefaultSimulationPeriodFromHistory(0)).toEqual({ value: 1, unit: "trades" });
+      expect(getDefaultSimulationPeriodFromHistory(1)).toEqual({ value: 1, unit: "trades" });
+      expect(getDefaultSimulationPeriodFromHistory(-5)).toEqual({ value: 1, unit: "trades" });
+      expect(getDefaultSimulationPeriodFromHistory(82.6)).toEqual({ value: 83, unit: "trades" });
     });
   });
 

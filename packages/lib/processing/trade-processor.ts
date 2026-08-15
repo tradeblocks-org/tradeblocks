@@ -6,6 +6,7 @@
  */
 
 import {
+  PlBasis,
   type Trade,
   TRADE_COLUMN_ALIASES,
   REQUIRED_TRADE_COLUMNS,
@@ -418,6 +419,7 @@ export class TradeProcessor {
           : undefined,
         reasonForClose: rawData["Reason For Close"] || undefined,
         pl: parseNumber(rawData["P/L"], "P/L"),
+        plBasis: PlBasis.NetIncludesFees,
         numContracts: Math.round(parseNumber(rawData["No. of Contracts"], "No. of Contracts")),
         fundsAtClose: parseNumber(rawData["Funds at Close"], "Funds at Close"),
         marginReq: parseNumber(rawData["Margin Req."], "Margin Req."),

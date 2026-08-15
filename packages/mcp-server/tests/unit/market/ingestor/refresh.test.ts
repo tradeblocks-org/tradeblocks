@@ -10,7 +10,7 @@ import { TickerRegistry } from "../../../../src/market/tickers/registry.ts";
 import type { MarketDataProvider, BarRow } from "../../../../src/utils/market-provider.ts";
 
 // ---------------------------------------------------------------------------
-// Non-trading day short-circuit (weekend skip)
+// Non-trading day short-circuit (weekend and full-day XNYS closure skip)
 // ---------------------------------------------------------------------------
 describe("MarketIngestor.refresh — weekend short-circuit", () => {
   let dataDir: string;
@@ -175,6 +175,44 @@ describe("MarketIngestor.refresh — weekend short-circuit", () => {
     expect(result.perOperation.chain).toHaveLength(0);
     expect(result.perOperation.quotes).toHaveLength(0);
     expect(result.perOperation.vixContext).toBeNull();
+    expect(result.errors).toHaveLength(0);
+    expect(fetchBarsCalled).toBe(false);
+  });
+
+  it("returns status=skipped without provider calls for an XNYS full-day closure", async () => {
+    let fetchBarsCalled = false;
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => ({
+        name: "spy",
+        capabilities: () => ({
+          tradeBars: true,
+          quotes: false,
+          greeks: false,
+          flatFiles: false,
+          bulkByRoot: false,
+          perTicker: true,
+          minuteBars: true,
+          dailyBars: true,
+        }),
+        fetchBars: async () => {
+          fetchBarsCalled = true;
+          return [];
+        },
+        fetchOptionSnapshot: async () => ({ contracts: [] }),
+      }),
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-07-03",
+      spotTickers: ["SPX"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("skipped");
+    expect(result.perOperation.spot).toHaveLength(0);
     expect(result.errors).toHaveLength(0);
     expect(fetchBarsCalled).toBe(false);
   });
@@ -350,6 +388,74 @@ describe("MarketIngestor.refresh", () => {
       expect.objectContaining({ ticker: "SPX", timespan: "minute", multiplier: 1 }),
       expect.objectContaining({ ticker: "QQQ", timespan: "minute", multiplier: 1 }),
     ]);
+  });
+
+  it("fails a trading-day spot refresh when the provider returns zero rows and coverage is absent", async () => {
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => makeBarsProvider([]),
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-07-30",
+      spotTickers: ["SPX"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("error");
+    expect(result.perOperation.spot).toEqual([
+      expect.objectContaining({
+        status: "error",
+        rowsWritten: 0,
+        error: expect.stringMatching(/SPX.*2026-07-30.*zero rows.*coverage remains absent/i),
+        details: expect.objectContaining({ reason: "zero_rows", symbol: "SPX" }),
+      }),
+    ]);
+    expect(result.errors).toEqual([
+      expect.stringMatching(/spot SPX:.*SPX.*2026-07-30.*zero rows/i),
+    ]);
+  });
+
+  it("accepts zero newly written rows when exact-date spot coverage already exists", async () => {
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    await stores.spot.writeBars("SPX", "2026-07-30", [
+      {
+        ticker: "SPX",
+        date: "2026-07-30",
+        time: "09:30",
+        open: 6400,
+        high: 6405,
+        low: 6395,
+        close: 6401,
+        volume: 0,
+      },
+    ]);
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => makeBarsProvider([]),
+    });
+
+    const result = await ingestor.refresh({
+      asOf: "2026-07-30",
+      spotTickers: ["SPX"],
+      computeVixContext: false,
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.perOperation.spot).toEqual([
+      expect.objectContaining({
+        status: "skipped",
+        rowsWritten: 0,
+        details: expect.objectContaining({
+          reason: "using_cached_coverage",
+          symbol: "SPX",
+        }),
+      }),
+    ]);
+    expect(result.errors).toHaveLength(0);
   });
 
   it("runs ingestBars per spot ticker and reports per-operation results", async () => {

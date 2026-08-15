@@ -2099,10 +2099,6 @@ Purpose: Build comprehensive understanding of WFA calculations before making cha
 Output: SUMMARY.md documenting calculation logic, data models, identified gaps, and concerns
 </objective>
 
-<execution_context>
-@~/.claude/get-shit-done/workflows/execute-phase.md
-@~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -2416,10 +2412,6 @@ Purpose: Complete the WFA understanding by mapping UI flow, state handling, and 
 Output: SUMMARY.md documenting UI flow, state management, and UX gaps relevant to future phases
 </objective>
 
-<execution_context>
-@~/.claude/get-shit-done/workflows/execute-phase.md
-@~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -3081,11 +3073,6 @@ Purpose: Achieve consistent container UX across all WFA configuration sections. 
 Output: Parameter controls wrapped in Collapsible, preset buttons removed, collapsed by default.
 </objective>
 
-<execution_context>
-@~/.claude/get-shit-done/workflows/execute-phase.md
-@~/.claude/get-shit-done/templates/summary.md
-@~/.claude/get-shit-done/references/checkpoints.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -3516,7 +3503,6 @@ Output: Updated period-selector.tsx with relaxed constraints AND improved input 
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -3915,10 +3901,6 @@ Purpose: Users can currently select diversification targets (minAvgCorrelation, 
 Output: Clean target dropdown with only working options (8 targets), diversification constraints continue to work correctly.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -4194,17 +4176,13 @@ Purpose: Make WFA results clear and accessible - users should understand what th
 Output: Restructured results page with prominent summary, visual status indicators, and clear metric explanations.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
 @.planning/ROADMAP.md
 @.planning/STATE.md
 
-# Phase context (from /gsd:discuss-phase):
+# Phase context:
 @.planning/phases/06-results-summary-view/06-CONTEXT.md
 
 # Prior phase context:
@@ -4512,7 +4490,6 @@ Output: Enhanced tooltips across WFA components with deeper, genuinely helpful e
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -4808,10 +4785,6 @@ Purpose: Establish the foundation for interpretation guidance by creating functi
 Output: New interpretation module and Analysis tab visible in results UI (content populated in Plan 02).
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -5057,11 +5030,6 @@ Purpose: Build the complete Analysis tab content that helps users understand wha
 Output: Fully functional Analysis tab with plain-language explanations, contextual red flags, and non-prescriptive insights.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-~/.claude/get-shit-done/references/checkpoints.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -5361,10 +5329,6 @@ Purpose: ISS-003 identified that the Analysis tab only evaluates output metrics 
 Output: Configuration Observations section in Analysis tab that flags short windows, aggressive IS/OOS ratios, and other config-driven concerns.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -6114,7 +6078,6 @@ Output: Verified calculation formulas with comprehensive tests and documented th
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -6772,7 +6735,6 @@ Output: Configuration card with contextual guidance that helps users set appropr
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -7018,9 +6980,7 @@ Output: Verified flow from configuration → run → results with all states han
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
-~/.claude/get-shit-done/references/checkpoints.md
 </execution_context>
 
 <context>
@@ -7308,7 +7268,6 @@ Output: Clean codebase, updated documentation, closed issues, milestone ready fo
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -7648,7 +7607,6 @@ Output: Working monorepo structure with packages/mcp-server/ scaffold and TypeSc
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -7968,9 +7926,7 @@ Output: Working MCP server with list_backtests tool, testable via npx.
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
-~/.claude/get-shit-done/references/checkpoints.md
 </execution_context>
 
 <context>
@@ -9508,10 +9464,6 @@ Purpose: Establish the data loading foundation and expose core query capabilitie
 Output: Working MCP server with block loading utils and 6 core tools (list_backtests, get_block_info, get_statistics, get_strategy_comparison, compare_blocks, get_trades).
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary-frontmatter.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -9924,10 +9876,6 @@ Source: 12-02-ISSUES.md
 Priority: 0 critical, 1 major, 0 minor
 </objective>
 
-<execution_context>
-@~/.claude/get-shit-done/workflows/execute-phase.md
-@~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/STATE.md
@@ -10146,7 +10094,7 @@ Then update `.planning/phases/12-core-integration-layer/12-02-ISSUES.md` to move
 
 **Tested:** 2026-01-14
 **Source:** .planning/phases/12-core-integration-layer/12-02-SUMMARY.md
-**Tester:** User via /gsd:verify-work
+**Tester:** User
 
 ## Open Issues
 
@@ -10209,10 +10157,6 @@ Purpose: Expose TradeBlocks' advanced analysis capabilities via MCP tools.
 Output: 5 analysis tools (run_walk_forward, run_monte_carlo, get_correlation_matrix, get_tail_risk, get_position_sizing) callable from Claude.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary-frontmatter.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -10574,10 +10518,6 @@ Purpose: Complete the MCP tool suite with performance visualization data and tra
 Output: 3 performance tools (get_performance_charts, get_period_returns, compare_backtest_to_actual) completing the Phase 12 tool set.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary-frontmatter.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -11627,10 +11567,6 @@ Purpose: Complete the MCP server's analysis capabilities by exposing the Report 
 Output: 4 new MCP tools (list_available_fields, run_filtered_query, get_field_statistics, aggregate_by_field) bringing total to 18 tools.
 </objective>
 
-<execution_context>
-@~/.claude/get-shit-done/workflows/execute-phase.md
-@~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -11871,10 +11807,6 @@ Purpose: Enable Claude to analyze any CSV file without requiring pre-configured 
 Output: New MCP tool `import_csv` that copies CSVs into the blocks directory and returns a usable block ID.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -12126,10 +12058,6 @@ Purpose: Enable Claude, OpenAI, and Gemini agents to guide users through strateg
 Output: Three working SKILL.md files in packages/agent-skills/ directory with supporting references.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -12433,10 +12361,6 @@ Purpose: Enable agents to help users compare strategies, make portfolio decision
 Output: Three working SKILL.md files with supporting references.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -12767,10 +12691,6 @@ Purpose: Enable users to install TradeBlocks via their preferred method.
 Output: Skills documentation, MCP server manifest.json, and installation guides for both paths.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -13305,10 +13225,6 @@ Purpose: Enable skills to be bundled with the MCP server npm package and install
 Output: Portable skill structure, package.json updates, and skill installer module for Phase 15.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -14271,10 +14187,6 @@ Purpose: Enable programmatic skill installation and resolve ISS-006 which blocks
 Output: Working `tradeblocks-mcp install-skills` command and flexible block discovery.
 </objective>
 
-<execution_context>
-@~/.claude/get-shit-done/workflows/execute-phase.md
-@~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -14576,10 +14488,6 @@ Purpose: Enable automated releases with .mcpb bundles on GitHub, ensure MCP tool
 Output: Automated release pipeline, passing integration tests, comprehensive usage docs.
 </objective>
 
-<execution_context>
-@~/.claude/get-shit-done/workflows/execute-phase.md
-@~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -15165,7 +15073,6 @@ Output: README as navigation hub, development.md with current architecture, cons
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./16-01-SUMMARY.md
 </execution_context>
 
@@ -15533,10 +15440,6 @@ Purpose: Enable users to understand what changed between two portfolio versions 
 Output: New `block_diff` tool in the MCP server with JSON-first output pattern.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -15986,7 +15889,6 @@ Output: Working stress_test MCP tool with comprehensive integration tests.
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -16310,10 +16212,6 @@ Purpose: Enable users to understand which strategies are responsible for the wor
 Output: Working MCP tool with integration tests, verified via CLI test mode.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -16440,7 +16338,6 @@ Before declaring phase complete:
 
 <output>
 After completion, create `.planning/phases/19-drawdown-attribution/19-01-SUMMARY.md` using template:
-~/.claude/get-shit-done/templates/summary.md
 </output>
 ````
 
@@ -16577,10 +16474,6 @@ Purpose: Answer "How much does adding/removing strategy X improve or hurt my Sha
 Output: Working MCP tool with per-strategy marginal Sharpe/Sortino contributions, integration tests, CLI verification.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -21559,10 +21452,6 @@ Purpose: Answer "Which strategies are too similar and might be adding risk witho
 Output: Working MCP tool with similarity scoring, redundancy flags, and actionable recommendations, plus integration tests with CLI verification.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -21917,10 +21806,6 @@ Purpose: Answer "what if I scaled strategy X to 0.5x?" questions - optimizing st
 Output: MCP tool (Tool 11) with before/after portfolio comparison and per-strategy breakdown.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary-frontmatter.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -22251,7 +22136,6 @@ Output: Working MCP tool with integration tests, CLI verification ready.
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -22685,7 +22569,6 @@ Output: WEB-PLATFORMS.md guide with platform-specific setup instructions.
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -23047,11 +22930,6 @@ Purpose: Enable accurate Sharpe/Sortino calculations by using the actual 3-month
 Output: Static data file with ~3,000 daily rates (2013-2025) and a lookup function with fallback behavior.
 </objective>
 
-<execution_context>
-@~/.claude/get-shit-done/workflows/execute-phase.md
-@~/.claude/get-shit-done/templates/summary.md
-@~/.claude/get-shit-done/references/tdd.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -23182,10 +23060,6 @@ Purpose: Replace fixed 2% risk-free rate with actual historical rates, making ri
 Output: Portfolio stats calculations that use per-day Treasury rates for accurate Sharpe/Sortino ratios.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/references/tdd.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -23450,7 +23324,6 @@ Output: Types and calculations no longer reference riskFreeRate parameter.
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./27-01-summary.md
 </execution_context>
 
@@ -23668,7 +23541,6 @@ Output: Stores, services, and UI no longer reference riskFreeRate. User cannot m
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./27-02-summary.md
 </execution_context>
 
@@ -23918,7 +23790,6 @@ Output: MCP server no longer accepts riskFreeRate parameter. All tests pass with
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./27-03-summary.md
 </execution_context>
 
@@ -24187,10 +24058,6 @@ Purpose: 6 failing tests (unrelated to v2.2) have been blocking clean test runs.
 Output: All 989 tests passing, v2.2 milestone ready to ship.
 </objective>
 
-<execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
-~/.claude/get-shit-done/templates/summary.md
-</execution_context>
 
 <context>
 @.planning/PROJECT.md
@@ -24452,7 +24319,6 @@ Output: Working `packages/lib/` package with proper TypeScript configuration and
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./29-01-SUMMARY.md
 </execution_context>
 
@@ -24768,7 +24634,6 @@ Output: MCP server using clean workspace package imports, with simplified build 
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./30-01-SUMMARY.md
 </execution_context>
 
@@ -25129,7 +24994,6 @@ Output: All app/ and components/ files using clean @tradeblocks/lib imports.
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./30-02-SUMMARY.md
 </execution_context>
 
@@ -25446,7 +25310,6 @@ Output: Clean codebase with no @/lib/* imports, working builds, and passing test
 </objective>
 
 <execution_context>
-~/.claude/get-shit-done/workflows/execute-phase.md
 ./summary.md
 </execution_context>
 
@@ -47847,7 +47710,7 @@ Key decisions from v2.2 milestone now captured in PROJECT.md Key Decisions table
 Last session: 2026-01-19
 Stopped at: Completed 31-01-PLAN.md
 Resume file: None
-Next: Complete milestone v2.3 (/gsd:complete-milestone)
+Next: Complete milestone v2.3
 
 ## Testing Infrastructure
 

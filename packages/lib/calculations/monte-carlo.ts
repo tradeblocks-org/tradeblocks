@@ -5,7 +5,7 @@
  * and calculate risk metrics like Value at Risk (VaR) and maximum drawdown distributions.
  */
 
-import type { Trade } from "../models/trade.ts";
+import { PlBasis, type Trade } from "../models/trade.ts";
 
 /**
  * Parameters for Monte Carlo simulation
@@ -26,6 +26,28 @@ export interface MonteCarloParams {
 
   /** Resample from individual trades, daily returns, or percentage returns */
   resampleMethod: "trades" | "daily" | "percentage";
+
+  /**
+   * How to draw from the resample pool.
+   * - "stationary-block" (default): stationary bootstrap (Politis-Romano).
+   *   Each step either continues with the next consecutive pool element
+   *   (wrapping at the end) or, with probability 1/meanBlockLength, starts a
+   *   fresh block at a uniformly random pool index. This preserves the
+   *   historical clustering of consecutive trades (e.g. loss streaks), which
+   *   real P&L exhibits, so it is the more robust default for tail and
+   *   drawdown estimates; with uncorrelated data it converges to near-iid
+   *   behavior. Applies to all three resample methods.
+   * - "iid": explicit opt-out; each step is an independent draw with
+   *   replacement.
+   */
+  resampleMode?: "iid" | "stationary-block";
+
+  /**
+   * Mean block length for stationary-block resampling.
+   * Defaults to the cube root of the resample pool size (min 1), a standard
+   * rate-optimal choice for the stationary bootstrap.
+   */
+  meanBlockLength?: number;
 
   /** Starting capital for simulations */
   initialCapital: number;
@@ -62,14 +84,43 @@ export interface MonteCarloParams {
   /** Percentage of trades that should be max-loss scenarios (0-100) */
   worstCasePercentage?: number;
 
-  /** How to inject worst-case trades: add to pool or guarantee in every simulation */
-  worstCaseMode?: "pool" | "guarantee";
+  /**
+   * How to inject worst-case trades. Injection is a per-slot replacement
+   * layer applied AFTER the sampler draws from real history — synthetic
+   * losses never join the resample pool, so a stationary-block walk can
+   * never step through them as a contiguous catastrophe run.
+   * - "probabilistic" (default): each slot is independently replaced with
+   *   probability worstCasePercentage / 100 — the literal per-slot chance
+   *   the field promises. "pool" is accepted as an alias for this mode.
+   * - "guarantee": exactly the requested count is spliced into every
+   *   simulation at independent random positions.
+   */
+  worstCaseMode?: "probabilistic" | "pool" | "guarantee";
 
   /** What to base the percentage on: simulation length (default) or historical data */
   worstCaseBasedOn?: "simulation" | "historical";
 
-  /** How to size each synthetic loss: absolute historical dollars or scale to account capital */
+  /**
+   * How to size each synthetic loss: absolute historical dollars or scale to
+   * account capital. "absolute" is only coherent when the simulation itself
+   * runs in dollars — combining it with resampleMethod "percentage" is a
+   * validation error (see ABSOLUTE_SIZING_PERCENTAGE_ERROR).
+   */
   worstCaseSizing?: "absolute" | "relative";
+
+  /**
+   * Ruin threshold as a decimal drawdown from initial capital
+   * (e.g. 0.5 = equity falling to or below 50% of initial capital).
+   * When provided, statistics include probabilityOfRuin: the fraction of
+   * paths whose equity touches the threshold at any step.
+   *
+   * Must be greater than zero. A zero threshold would put the ruin floor
+   * exactly at initial capital, so nearly every path that ever dipped below
+   * its starting value would count as ruined and the statistic would read
+   * ~100% regardless of the strategy. Zero and negative values are therefore
+   * treated as "no threshold requested" and probabilityOfRuin is omitted.
+   */
+  ruinThresholdPct?: number;
 }
 
 /**
@@ -93,6 +144,12 @@ export interface SimulationPath {
 
   /** Sharpe ratio for this simulation */
   sharpeRatio: number;
+
+  /** Whether capital touched zero (or below) at any step */
+  touchedZero: boolean;
+
+  /** Whether equity touched the ruin threshold at any step (false when no threshold given) */
+  ruined: boolean;
 }
 
 /**
@@ -171,6 +228,19 @@ export interface SimulationStatistics {
     p10: number; // 10th percentile (90% VaR)
     p25: number; // 25th percentile
   };
+
+  /**
+   * Fraction of simulations whose capital touched zero (or below) at any step.
+   * @unit Decimal01 - 0.02 means 2% of paths
+   */
+  zeroBalancePaths: number;
+
+  /**
+   * Fraction of paths whose equity touched initialCapital * (1 - ruinThresholdPct)
+   * at any step. Only present when MonteCarloParams.ruinThresholdPct is provided.
+   * @unit Decimal01 - 0.05 means 5% of paths
+   */
+  probabilityOfRuin?: number;
 }
 
 /**
@@ -217,6 +287,23 @@ export interface MonteCarloResult {
 
   /** Number of trades/days actually available in resample pool */
   actualResamplePoolSize: number;
+
+  /**
+   * Mean block length actually used for stationary-block resampling, null when
+   * resampleMode is "iid". Reflects the auto default (cube root of the pool
+   * size) when meanBlockLength was not supplied. The pool holds only real
+   * history — worst-case injection replaces slots after the draw and never
+   * changes the pool size.
+   */
+  effectiveMeanBlockLength: number | null;
+
+  /**
+   * Per-slot replacement probability the run actually used for probabilistic
+   * worst-case injection: exactly worstCasePercentage / 100 (clamped at 1),
+   * never a ratio derived from the pool. Null when injection is disabled,
+   * created no synthetic losses, or ran in "guarantee" mode.
+   */
+  effectiveWorstCaseReplacementProbability: number | null;
 }
 
 /**
@@ -251,6 +338,126 @@ function resampleWithReplacement<T>(data: T[], sampleSize: number, seed?: number
   for (let i = 0; i < sampleSize; i++) {
     const randomIndex = Math.floor(rng() * data.length);
     result.push(data[randomIndex]);
+  }
+
+  return result;
+}
+
+/**
+ * Default mean block length for stationary-block resampling:
+ * the cube root of the pool size (min 1), a standard rate-optimal choice.
+ * On an ~83-trade pool this gives blocks of ~4 consecutive trades.
+ *
+ * @param poolSize - Number of values in the resample pool
+ * @returns Mean block length
+ */
+export function defaultMeanBlockLength(poolSize: number): number {
+  return Math.max(1, Math.round(Math.cbrt(poolSize)));
+}
+
+/**
+ * Number of synthetic max-loss trades worst-case injection will create for a
+ * run: the requested percentage of the simulation length, at least one, never
+ * more than the simulation length itself.
+ *
+ * Shared by the engine and by callers that need to preview the injection
+ * before running, so a preview cannot drift from what the run actually does.
+ *
+ * @param simulationLength - Number of steps in each simulated path
+ * @param worstCasePercentage - Requested percentage of the path (0-100)
+ * @returns Number of synthetic trades that will be created
+ */
+export function worstCaseInjectionCount(
+  simulationLength: number,
+  worstCasePercentage: number,
+): number {
+  if (simulationLength <= 0 || worstCasePercentage <= 0) {
+    return 0;
+  }
+  const requested = Math.ceil((simulationLength * worstCasePercentage) / 100);
+  return Math.min(simulationLength, Math.max(1, requested));
+}
+
+/**
+ * Validation message for the one worst-case configuration that has no
+ * coherent meaning: a fixed historical-dollar loss injected into a stream of
+ * percentage returns. Percentage paths are scale-free, so a fixed dollar
+ * amount either gets pre-baked into a ratio of starting capital (neither
+ * dollars nor honest) or applied against live capital (ruinous, because the
+ * percentage stream lacks the grown-account dollar wins that offset fixed
+ * shocks in dollar resampling). Shared with the MCP schema so both surfaces
+ * reject the combination with the same words.
+ */
+export const ABSOLUTE_SIZING_PERCENTAGE_ERROR =
+  "Historical-dollar loss sizing is not available with percentage returns: a fixed dollar amount has no stable meaning in a scale-free return stream. Use a dollar sampling method ('trades' or 'daily') for historical-dollar stress tests, or 'relative' sizing to scale each loss to account capital.";
+
+/**
+ * A ruin threshold is only honored when it is strictly positive. Zero puts the
+ * ruin floor at initial capital, which would flag nearly every path as ruined;
+ * treat that (and any negative value) as "not requested".
+ */
+function normalizeRuinThresholdPct(ruinThresholdPct?: number): number | undefined {
+  return ruinThresholdPct !== undefined && ruinThresholdPct > 0 ? ruinThresholdPct : undefined;
+}
+
+/**
+ * Stationary bootstrap resampling (Politis-Romano)
+ *
+ * Builds a sample by, at every step, either continuing with the next
+ * consecutive pool element (wrapping at the end) or, with probability
+ * 1 / meanBlockLength, starting a fresh block at a uniformly random index.
+ *
+ * Stable public API: a general-purpose stationary bootstrap over any array, not
+ * an internal detail of the Monte Carlo engine. Callers can rely on all of the
+ * following.
+ *
+ * - **Pool membership**: every returned element is one of the elements of
+ *   `data`. Nothing is interpolated, averaged, or synthesized.
+ * - **Length**: exactly `sampleSize` elements, except for an empty `data`,
+ *   which always yields an empty array.
+ * - **Block-length distribution**: blocks are geometric with mean
+ *   `meanBlockLength` — each step after the first restarts with probability
+ *   1 / `meanBlockLength`. A mean below 1 is clamped to 1, which restarts every
+ *   step and so degenerates to i.i.d. sampling with replacement.
+ * - **Wrap-around continuation**: inside a block, consecutive draws walk
+ *   forward through `data` in its existing order and wrap from the last element
+ *   to the first, so the pool is treated as circular and every element has the
+ *   same chance of appearing (the property that makes the bootstrap
+ *   stationary). A block therefore preserves the caller's ordering, which is
+ *   how serial structure — loss streaks, hot streaks — survives resampling.
+ * - **Determinism**: with `seed` supplied, the returned sequence is a pure
+ *   function of `data`, `sampleSize`, `meanBlockLength`, and `seed`. Without a
+ *   seed it draws from `Math.random` and is not reproducible.
+ *
+ * @param data - Array of values to sample from
+ * @param sampleSize - Number of samples to draw
+ * @param meanBlockLength - Mean block length (restart probability is its inverse)
+ * @param seed - Optional random seed for reproducibility
+ * @returns Array of resampled values
+ */
+export function resampleStationaryBlocks<T>(
+  data: T[],
+  sampleSize: number,
+  meanBlockLength: number,
+  seed?: number,
+): T[] {
+  const rng = seed !== undefined ? createSeededRandom(seed) : Math.random;
+  const result: T[] = [];
+
+  if (data.length === 0) {
+    return result;
+  }
+
+  const restartProbability = 1 / Math.max(1, meanBlockLength);
+  let index = 0;
+
+  for (let i = 0; i < sampleSize; i++) {
+    if (i === 0 || rng() < restartProbability) {
+      index = Math.floor(rng() * data.length);
+    } else {
+      index = (index + 1) % data.length;
+    }
+    result.push(data[index]);
   }
 
   return result;
@@ -310,8 +517,7 @@ export function createSyntheticMaxLossTrades(
     return [];
   }
 
-  const requestedBudget = Math.ceil((simulationLength * percentage) / 100);
-  const cappedBudget = Math.min(simulationLength, Math.max(1, requestedBudget));
+  const cappedBudget = worstCaseInjectionCount(simulationLength, percentage);
 
   if (cappedBudget <= 0) {
     return [];
@@ -418,6 +624,7 @@ export function createSyntheticMaxLossTrades(
         avgClosingCost: 0,
         reasonForClose,
         pl: -maxAbsoluteLoss,
+        plBasis: PlBasis.NetIncludesFees,
         numContracts: avgContracts,
         fundsAtClose: 0,
         marginReq: maxAbsoluteLoss,
@@ -747,6 +954,7 @@ export function resampleDailyPLs(dailyPLs: number[], sampleSize: number, seed?: 
  * @param initialCapital - Starting capital
  * @param tradesPerYear - Number of trades per year for annualization
  * @param isPercentageMode - Whether values are percentage returns (true) or dollar P&L (false)
+ * @param ruinThresholdPct - Optional ruin threshold as decimal drawdown from initial capital
  * @returns SimulationPath with equity curve and metrics
  */
 function runSingleSimulation(
@@ -754,25 +962,45 @@ function runSingleSimulation(
   initialCapital: number,
   tradesPerYear: number,
   isPercentageMode: boolean = false,
+  ruinThresholdPct?: number,
 ): SimulationPath {
   // Track capital over time
   let capital = initialCapital;
   const equityCurve: number[] = [];
   const returns: number[] = [];
+  let touchedZero = false;
+  let ruined = false;
+  const ruinFloor =
+    ruinThresholdPct !== undefined ? initialCapital * (1 - ruinThresholdPct) : undefined;
 
   // Build equity curve (as cumulative returns from starting capital)
-  let cumulativeReturn = 0;
   for (const value of resampledValues) {
     const capitalBeforeTrade = capital;
 
     if (isPercentageMode) {
-      // Additive mode: sum percentage returns, then apply to initial capital
-      // Prevents blowup where sequential -99% returns compound to near-zero
-      cumulativeReturn += value;
-      capital = initialCapital * (1 + cumulativeReturn);
+      // Compound multiplicatively. The real constraint on percentage returns
+      // is that a single trade can never lose more than the account (clamp at
+      // -100%) and a bankrupt account stays bankrupt (capital absorbs at 0).
+      // Together with the -99% floor on margin-based returns from
+      // calculateMarginReturns, this is the blowup guard for pathological
+      // sequential near-total losses.
+      if (capital > 0) {
+        const clampedReturn = Math.max(value, -1);
+        capital = capital * (1 + clampedReturn);
+        if (capital <= 0) {
+          capital = 0;
+        }
+      }
     } else {
       // Value is dollar P&L - add it to capital
       capital += value;
+    }
+
+    if (capital <= 0) {
+      touchedZero = true;
+    }
+    if (ruinFloor !== undefined && capital <= ruinFloor) {
+      ruined = true;
     }
 
     const cumRet = (capital - initialCapital) / initialCapital;
@@ -809,6 +1037,8 @@ function runSingleSimulation(
     annualizedReturn,
     maxDrawdown,
     sharpeRatio,
+    touchedZero,
+    ruined,
   };
 }
 
@@ -895,6 +1125,19 @@ export function runMonteCarloSimulation(
     );
   }
 
+  const worstCaseRequested =
+    params.worstCaseEnabled === true &&
+    params.worstCasePercentage !== undefined &&
+    params.worstCasePercentage > 0;
+
+  if (
+    worstCaseRequested &&
+    params.resampleMethod === "percentage" &&
+    params.worstCaseSizing === "absolute"
+  ) {
+    throw new Error(ABSOLUTE_SIZING_PERCENTAGE_ERROR);
+  }
+
   const timestamp = new Date();
 
   // Get resample pool based on method
@@ -955,7 +1198,7 @@ export function runMonteCarloSimulation(
 
   // Handle worst-case scenario injection
   let worstCaseTrades: number[] = [];
-  if (params.worstCaseEnabled && params.worstCasePercentage && params.worstCasePercentage > 0) {
+  if (worstCaseRequested && params.worstCasePercentage) {
     // Create synthetic max-loss trades
     const syntheticTrades = createSyntheticMaxLossTrades(
       trades,
@@ -972,16 +1215,14 @@ export function runMonteCarloSimulation(
     const capitalBasis = capitalBasisRaw > 0 ? capitalBasisRaw : 1;
 
     if (params.resampleMethod === "percentage") {
+      // Absolute sizing is rejected above, so percentage-mode synthetics are
+      // always capital-relative losses.
       worstCaseTrades = syntheticTrades.map((t) => {
-        if (lossSizing === "relative") {
-          const ratio = t.syntheticCapitalRatio;
-          if (ratio && ratio > 0) {
-            return -Math.abs(ratio);
-          }
-          return t.pl / capitalBasis;
+        const ratio = t.syntheticCapitalRatio;
+        if (ratio && ratio > 0) {
+          return -Math.abs(ratio);
         }
-        const pl = params.normalizeTo1Lot ? scaleTradeToOneLot(t) : t.pl;
-        return pl / capitalBasis;
+        return t.pl / capitalBasis;
       });
     } else {
       worstCaseTrades = syntheticTrades.map((t) => {
@@ -995,17 +1236,38 @@ export function runMonteCarloSimulation(
         return params.normalizeTo1Lot ? scaleTradeToOneLot(t) : t.pl;
       });
     }
-
-    // If mode is "pool", add to resample pool
-    if (params.worstCaseMode === "pool") {
-      resamplePool = [...resamplePool, ...worstCaseTrades];
-    }
   }
 
+  // Injection is a per-slot replacement layer applied after the draw, never
+  // pool membership: synthetics appended to the pool would sit in one
+  // contiguous region a stationary-block walk could traverse, manufacturing
+  // consecutive max-loss runs no user asked for. "probabilistic" (with
+  // "pool" as its accepted alias, and the default) replaces each slot
+  // independently at the literal chance the percentage field promises —
+  // worstCasePercentage / 100, not a ratio derived from a pool the
+  // synthetics no longer join. "guarantee" splices the exact count at
+  // independent positions.
+  const worstCaseMode: "probabilistic" | "guarantee" =
+    params.worstCaseMode === "guarantee" ? "guarantee" : "probabilistic";
+  const replacementProbability =
+    worstCaseMode === "probabilistic" && worstCaseTrades.length > 0
+      ? Math.min(1, (params.worstCasePercentage ?? 0) / 100)
+      : 0;
+
+  // Stationary-block resampling is the default: block resampling preserves
+  // the historical clustering of consecutive trades, which real P&L exhibits,
+  // so it is the more robust default for tail/drawdown estimates; with
+  // uncorrelated data it converges to near-iid behavior. "iid" is the
+  // explicit opt-out.
+  const useStationaryBlocks = (params.resampleMode ?? "stationary-block") === "stationary-block";
+  const meanBlockLength = params.meanBlockLength ?? defaultMeanBlockLength(resamplePool.length);
+
   const enforcedGuaranteeTrades =
-    params.worstCaseEnabled && params.worstCaseMode === "guarantee" && params.simulationLength > 0
+    worstCaseMode === "guarantee" && params.simulationLength > 0
       ? worstCaseTrades.slice(0, Math.min(worstCaseTrades.length, params.simulationLength))
       : [];
+
+  const ruinThresholdPct = normalizeRuinThresholdPct(params.ruinThresholdPct);
 
   // Run all simulations
   const simulations: SimulationPath[] = [];
@@ -1020,7 +1282,9 @@ export function runMonteCarloSimulation(
       ? Math.max(0, params.simulationLength - enforcedGuaranteeTrades.length)
       : params.simulationLength;
 
-    let resampledPLs = resampleWithReplacement(resamplePool, baselineSampleSize, seed);
+    let resampledPLs = useStationaryBlocks
+      ? resampleStationaryBlocks(resamplePool, baselineSampleSize, meanBlockLength, seed)
+      : resampleWithReplacement(resamplePool, baselineSampleSize, seed);
 
     if (guaranteeActive) {
       const combined = [...resampledPLs];
@@ -1036,6 +1300,16 @@ export function runMonteCarloSimulation(
       }
 
       resampledPLs = combined;
+    } else if (replacementProbability > 0) {
+      // Per-slot replacement: each drawn slot is independently swapped for a
+      // synthetic max-loss event. A dedicated RNG stream keeps the baseline
+      // draw identical whether or not injection is enabled.
+      const rng = seed !== undefined ? createSeededRandom(seed + 999999) : Math.random;
+      for (let position = 0; position < resampledPLs.length; position++) {
+        if (rng() < replacementProbability) {
+          resampledPLs[position] = worstCaseTrades[Math.floor(rng() * worstCaseTrades.length)];
+        }
+      }
     }
 
     // Run simulation
@@ -1044,6 +1318,7 @@ export function runMonteCarloSimulation(
       params.initialCapital,
       params.tradesPerYear,
       isPercentageMode,
+      ruinThresholdPct,
     );
 
     simulations.push(simulation);
@@ -1053,7 +1328,7 @@ export function runMonteCarloSimulation(
   const percentiles = calculatePercentiles(simulations);
 
   // Calculate statistics
-  const statistics = calculateStatistics(simulations);
+  const statistics = calculateStatistics(simulations, ruinThresholdPct);
 
   return {
     simulations,
@@ -1062,6 +1337,9 @@ export function runMonteCarloSimulation(
     parameters: params,
     timestamp,
     actualResamplePoolSize,
+    effectiveMeanBlockLength: useStationaryBlocks ? meanBlockLength : null,
+    effectiveWorstCaseReplacementProbability:
+      replacementProbability > 0 ? replacementProbability : null,
   };
 }
 
@@ -1128,10 +1406,13 @@ function percentile(sortedData: number[], p: number): number {
  * Calculate aggregate statistics from all simulations
  *
  * @param simulations - Array of simulation paths
- * @param initialCapital - Starting capital
+ * @param ruinThresholdPct - Optional ruin threshold; when provided, probabilityOfRuin is included
  * @returns SimulationStatistics
  */
-function calculateStatistics(simulations: SimulationPath[]): SimulationStatistics {
+function calculateStatistics(
+  simulations: SimulationPath[],
+  ruinThresholdPct?: number,
+): SimulationStatistics {
   const finalValues = simulations.map((s) => s.finalValue);
   const totalReturns = simulations.map((s) => s.totalReturn);
   const annualizedReturns = simulations.map((s) => s.annualizedReturn);
@@ -1181,6 +1462,13 @@ function calculateStatistics(simulations: SimulationPath[]): SimulationStatistic
     p25: percentile(sortedTotalReturns, 25),
   };
 
+  // Zero-balance and ruin statistics
+  const zeroBalancePaths = simulations.filter((s) => s.touchedZero).length / simulations.length;
+  const probabilityOfRuin =
+    ruinThresholdPct !== undefined
+      ? simulations.filter((s) => s.ruined).length / simulations.length
+      : undefined;
+
   return {
     meanFinalValue,
     medianFinalValue,
@@ -1194,5 +1482,112 @@ function calculateStatistics(simulations: SimulationPath[]): SimulationStatistic
     meanSharpeRatio,
     probabilityOfProfit,
     valueAtRisk,
+    zeroBalancePaths,
+    ...(probabilityOfRuin !== undefined ? { probabilityOfRuin } : {}),
+  };
+}
+
+/**
+ * Parameters for reconstructing the actual historical equity path in
+ * original trade order (no resampling).
+ */
+export interface OriginalOrderPathParams {
+  /** Same resample method the simulation uses; determines step arithmetic */
+  resampleMethod: "trades" | "daily" | "percentage";
+
+  /** Starting capital the path is rebuilt from (the simulation's initialCapital) */
+  initialCapital: number;
+
+  /**
+   * Historical initial capital used to derive percentage returns for
+   * strategy-filtered multi-strategy portfolios. Same semantics as
+   * MonteCarloParams.historicalInitialCapital.
+   */
+  historicalInitialCapital?: number;
+
+  /** Scale trade P&L to 1-lot, same as MonteCarloParams.normalizeTo1Lot */
+  normalizeTo1Lot?: boolean;
+}
+
+/**
+ * The actual historical equity path in original order
+ */
+export interface OriginalOrderPath {
+  /** Equity value after each step (trade or day), in chronological order */
+  equity: number[];
+
+  /** Equity after the final step (initialCapital when there are no steps) */
+  finalValue: number;
+
+  /** Number of steps in the path */
+  stepCount: number;
+
+  /** Whether each step is a trade or a day */
+  stepUnit: "trades" | "days";
+}
+
+/**
+ * Reconstruct the actual historical equity path in original trade order,
+ * using the same per-step arithmetic as the Monte Carlo simulation:
+ * - "percentage": initialCapital compounded through the same percentage
+ *   returns the simulation resamples from (per-step return clamped at -100%,
+ *   capital absorbing at zero), so the path is directly comparable to the
+ *   simulated fan.
+ * - "trades": initialCapital plus the cumulative sum of per-trade P&L.
+ * - "daily": initialCapital plus the cumulative sum of per-day P&L.
+ *
+ * Pass the same (pre-filtered) trades and normalization settings given to
+ * runMonteCarloSimulation so the path reflects the same history the
+ * simulation samples from.
+ *
+ * @param trades - Historical trades (already filtered to the strategies being simulated)
+ * @param params - Reconstruction parameters
+ * @returns OriginalOrderPath with the chronological equity values
+ */
+export function buildOriginalOrderEquityPath(
+  trades: Trade[],
+  params: OriginalOrderPathParams,
+): OriginalOrderPath {
+  const equity: number[] = [];
+  let capital = params.initialCapital;
+  let stepUnit: "trades" | "days" = "trades";
+
+  if (params.resampleMethod === "percentage") {
+    const returns = calculatePercentageReturns(
+      trades,
+      params.normalizeTo1Lot,
+      params.historicalInitialCapital,
+    );
+    for (const r of returns) {
+      if (capital > 0) {
+        capital = capital * (1 + Math.max(r, -1));
+        if (capital <= 0) {
+          capital = 0;
+        }
+      }
+      equity.push(capital);
+    }
+  } else if (params.resampleMethod === "daily") {
+    stepUnit = "days";
+    const dailyReturns = calculateDailyReturns(trades, params.normalizeTo1Lot);
+    for (const day of dailyReturns) {
+      capital += day.dailyPL;
+      equity.push(capital);
+    }
+  } else {
+    const sortedTrades = [...trades].sort(
+      (a, b) => a.dateOpened.getTime() - b.dateOpened.getTime(),
+    );
+    for (const trade of sortedTrades) {
+      capital += params.normalizeTo1Lot ? scaleTradeToOneLot(trade) : trade.pl;
+      equity.push(capital);
+    }
+  }
+
+  return {
+    equity,
+    finalValue: equity.length > 0 ? equity[equity.length - 1] : params.initialCapital,
+    stepCount: equity.length,
+    stepUnit,
   };
 }

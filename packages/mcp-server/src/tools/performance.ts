@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock, loadReportingLog } from "../utils/block-loader.ts";
 import { createToolOutput, formatPercent, formatCurrency } from "../utils/output-formatter.ts";
+import { filterByRealizationDateRange } from "./shared/filters.ts";
 import type { Trade, ReportingTrade } from "@tradeblocks/lib";
 import {
   normalizeToOneLot,
@@ -17,7 +18,14 @@ import {
   calculateScaledPl,
   applyStrategyFilter,
   applyDateRangeFilter,
+  getNetPl,
+  getGrossPl,
+  PortfolioStatsCalculator,
 } from "@tradeblocks/lib";
+
+function getRealizationDate(trade: Trade): Date {
+  return new Date(trade.dateClosed ?? trade.dateOpened);
+}
 
 /**
  * MFE/MAE data point for a single trade's excursion metrics
@@ -117,8 +125,8 @@ function calculateTradeExcursionMetrics(trade: Trade, tradeNumber: number): MFEM
     strategy: trade.strategy || "Unknown",
     mfe: totalMFE || 0,
     mae: totalMAE || 0,
-    pl: trade.pl,
-    isWinner: trade.pl > 0,
+    pl: getNetPl(trade),
+    isWinner: getNetPl(trade) > 0,
     basis,
   };
 
@@ -134,7 +142,7 @@ function calculateTradeExcursionMetrics(trade: Trade, tradeNumber: number): MFEM
 
   // Profit capture: what % of max profit was actually captured
   if (totalMFE && totalMFE > 0) {
-    dataPoint.profitCapturePercent = (trade.pl / totalMFE) * 100;
+    dataPoint.profitCapturePercent = (getNetPl(trade) / totalMFE) * 100;
   }
 
   // Excursion ratio: reward/risk
@@ -225,7 +233,7 @@ function getISOWeekNumber(date: Date): number {
 /**
  * Calculate equity curve from trades
  */
-function buildEquityCurve(trades: Trade[]): Array<{
+export function buildEquityCurve(trades: Trade[]): Array<{
   date: string;
   equity: number;
   highWaterMark: number;
@@ -236,12 +244,11 @@ function buildEquityCurve(trades: Trade[]): Array<{
   }
 
   const sortedTrades = [...trades].sort(
-    (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
+    (a, b) => getRealizationDate(a).getTime() - getRealizationDate(b).getTime(),
   );
 
   // Calculate initial capital from first trade
-  const firstTrade = sortedTrades[0];
-  let initialCapital = firstTrade.fundsAtClose - firstTrade.pl;
+  let initialCapital = PortfolioStatsCalculator.calculateInitialCapital(sortedTrades);
   if (!isFinite(initialCapital) || initialCapital <= 0) {
     initialCapital = 100000;
   }
@@ -256,7 +263,7 @@ function buildEquityCurve(trades: Trade[]): Array<{
     tradeNumber: number;
   }> = [
     {
-      date: formatDateKey(new Date(sortedTrades[0].dateOpened)),
+      date: formatDateKey(getRealizationDate(sortedTrades[0])),
       equity: runningEquity,
       highWaterMark,
       tradeNumber: 0,
@@ -264,11 +271,11 @@ function buildEquityCurve(trades: Trade[]): Array<{
   ];
 
   sortedTrades.forEach((trade, index) => {
-    runningEquity += trade.pl;
+    runningEquity += getNetPl(trade);
     highWaterMark = Math.max(highWaterMark, runningEquity);
 
     curve.push({
-      date: formatDateKey(new Date(trade.dateOpened)),
+      date: formatDateKey(getRealizationDate(trade)),
       equity: runningEquity,
       highWaterMark,
       tradeNumber: index + 1,
@@ -296,22 +303,22 @@ function buildDrawdownSeries(
 /**
  * Calculate monthly returns matrix
  */
-function buildMonthlyReturns(trades: Trade[]): Record<number, Record<number, number>> {
+export function buildMonthlyReturns(trades: Trade[]): Record<number, Record<number, number>> {
   const monthlyData: Record<string, number> = {};
 
   trades.forEach((trade) => {
-    const date = new Date(trade.dateOpened);
+    const date = getRealizationDate(trade);
     const year = date.getFullYear();
     const month = date.getMonth() + 1;
     const monthKey = `${year}-${String(month).padStart(2, "0")}`;
-    monthlyData[monthKey] = (monthlyData[monthKey] || 0) + trade.pl;
+    monthlyData[monthKey] = (monthlyData[monthKey] || 0) + getNetPl(trade);
   });
 
   const monthlyReturns: Record<number, Record<number, number>> = {};
   const years = new Set<number>();
 
   trades.forEach((trade) => {
-    years.add(new Date(trade.dateOpened).getFullYear());
+    years.add(getRealizationDate(trade).getFullYear());
   });
 
   Array.from(years)
@@ -336,7 +343,7 @@ function buildReturnDistribution(
 ): Array<{ rangeStart: number; rangeEnd: number; count: number }> {
   if (trades.length === 0) return [];
 
-  const returns = trades.map((t) => t.pl);
+  const returns = trades.map(getNetPl);
   const minReturn = Math.min(...returns);
   const maxReturn = Math.max(...returns);
   const range = maxReturn - minReturn || 1;
@@ -376,7 +383,7 @@ function buildDayOfWeekData(trades: Trade[]): Array<{
   > = {};
 
   trades.forEach((trade) => {
-    const date = new Date(trade.dateOpened);
+    const date = getRealizationDate(trade);
     const jsDay = date.getDay();
     const pythonWeekday = jsDay === 0 ? 6 : jsDay - 1;
     const day = dayNames[pythonWeekday];
@@ -385,11 +392,11 @@ function buildDayOfWeekData(trades: Trade[]): Array<{
       dayData[day] = { count: 0, totalPl: 0, totalPlPercent: 0, percentCount: 0 };
     }
     dayData[day].count++;
-    dayData[day].totalPl += trade.pl;
+    dayData[day].totalPl += getNetPl(trade);
 
     // Calculate ROM if margin available
     if (trade.marginReq && trade.marginReq > 0) {
-      dayData[day].totalPlPercent += (trade.pl / trade.marginReq) * 100;
+      dayData[day].totalPlPercent += (getNetPl(trade) / trade.marginReq) * 100;
       dayData[day].percentCount++;
     }
   });
@@ -426,7 +433,7 @@ function buildStreakData(trades: Trade[]): {
   } | null;
 } {
   const sortedTrades = [...trades].sort(
-    (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
+    (a, b) => getRealizationDate(a).getTime() - getRealizationDate(b).getTime(),
   );
 
   const winStreaks: number[] = [];
@@ -435,7 +442,7 @@ function buildStreakData(trades: Trade[]): {
   let isWinStreak = false;
 
   sortedTrades.forEach((trade) => {
-    const isWin = trade.pl > 0;
+    const isWin = getNetPl(trade) > 0;
 
     if (currentStreak === 0) {
       currentStreak = 1;
@@ -503,7 +510,7 @@ function calculateRunsTest(trades: Trade[]): {
 } | null {
   if (trades.length < 20) return null;
 
-  const outcomes = trades.map((t) => (t.pl > 0 ? 1 : 0));
+  const outcomes = trades.map((t) => (getNetPl(t) > 0 ? 1 : 0));
   const n1 = outcomes.filter((o) => o === 1).length;
   const n0 = outcomes.filter((o) => o === 0).length;
 
@@ -584,9 +591,9 @@ function buildTradeSequence(trades: Trade[]): Array<{
       typeof trade.marginReq === "number" && isFinite(trade.marginReq) ? trade.marginReq : null;
     return {
       tradeNumber: index + 1,
-      pl: trade.pl,
-      rom: marginReq && marginReq > 0 ? (trade.pl / marginReq) * 100 : null,
-      date: formatDateKey(new Date(trade.dateOpened)),
+      pl: getNetPl(trade),
+      rom: marginReq && marginReq > 0 ? (getNetPl(trade) / marginReq) * 100 : null,
+      date: formatDateKey(getRealizationDate(trade)),
       marginReq,
       strategy: trade.strategy || "Unknown",
     };
@@ -603,8 +610,8 @@ function buildRomTimeline(
     .map((trade, index) => {
       if (!trade.marginReq || trade.marginReq <= 0) return null;
       return {
-        date: formatDateKey(new Date(trade.dateOpened)),
-        rom: (trade.pl / trade.marginReq) * 100,
+        date: formatDateKey(getRealizationDate(trade)),
+        rom: (getNetPl(trade) / trade.marginReq) * 100,
         tradeNumber: index + 1,
       };
     })
@@ -612,9 +619,10 @@ function buildRomTimeline(
 }
 
 /**
- * Build rolling metrics (30-trade rolling window)
- * Note: Uses fixed 2.0% risk-free rate for Sharpe as a simplification for visualization.
- * The accurate date-based Sharpe is computed by portfolio-stats.ts for actual statistics.
+ * Build rolling metrics (30-trade rolling window).
+ *
+ * `sharpeRatio` is retained for response compatibility but is a nonannualized
+ * trade-P/L signal-to-noise visualization, not portfolio daily-return Sharpe.
  */
 function buildRollingMetrics(
   trades: Trade[],
@@ -640,7 +648,7 @@ function buildRollingMetrics(
     avgPl: number;
   }> = [];
 
-  const plValues = trades.map((t) => t.pl);
+  const plValues = trades.map(getNetPl);
 
   // Initialize window state
   let windowSum = 0;
@@ -679,14 +687,10 @@ function buildRollingMetrics(
           ? 999
           : 0;
 
-    // Sharpe uses fixed 2.0% risk-free rate approximation for visualization
-    // The accurate date-based rate is used in portfolio-stats.ts calculations
-    const dailyRfr = 2.0 / 100 / 252;
-    const excessReturn = avgReturn - dailyRfr;
-    const sharpeRatio = volatility > 0 ? excessReturn / volatility : 0;
+    const sharpeRatio = volatility > 0 ? avgReturn / volatility : 0;
 
     metrics.push({
-      date: formatDateKey(new Date(trades[i].dateOpened)),
+      date: formatDateKey(getRealizationDate(trades[i])),
       tradeNumber: i + 1,
       winRate,
       sharpeRatio,
@@ -746,10 +750,10 @@ function buildExitReasonBreakdown(trades: Trade[]): Array<{
       romCount: 0,
     };
     current.count += 1;
-    current.totalPl += trade.pl;
+    current.totalPl += getNetPl(trade);
 
     if (trade.marginReq && trade.marginReq > 0) {
-      current.totalRom += (trade.pl / trade.marginReq) * 100;
+      current.totalRom += (getNetPl(trade) / trade.marginReq) * 100;
       current.romCount++;
     }
 
@@ -794,7 +798,7 @@ function buildHoldingPeriods(trades: Trade[]): Array<{
       dateClosed: closeDate ? formatDateKey(closeDate) : null,
       durationHours,
       durationDays: durationHours / 24,
-      pl: trade.pl,
+      pl: getNetPl(trade),
       strategy: trade.strategy || "Unknown",
     };
   });
@@ -816,13 +820,13 @@ function buildPremiumEfficiency(trades: Trade[]): Array<{
       typeof trade.premium === "number" && isFinite(trade.premium) ? trade.premium : null;
     let efficiencyPct: number | null = null;
     if (premium !== null && premium !== 0) {
-      efficiencyPct = (trade.pl / Math.abs(premium)) * 100;
+      efficiencyPct = (getNetPl(trade) / Math.abs(premium)) * 100;
     }
 
     return {
       tradeNumber: index + 1,
-      date: formatDateKey(new Date(trade.dateOpened)),
-      pl: trade.pl,
+      date: formatDateKey(getRealizationDate(trade)),
+      pl: getNetPl(trade),
       premium,
       efficiencyPct,
       strategy: trade.strategy || "Unknown",
@@ -898,7 +902,7 @@ function buildMarginUtilization(
         fundsAtClose,
         utilizationPct: fundsAtClose > 0 ? (marginReq / fundsAtClose) * 100 : null,
         numContracts,
-        pl: trade.pl,
+        pl: getNetPl(trade),
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -933,8 +937,9 @@ function buildVolatilityRegimes(trades: Trade[]): Array<{
         date: formatDateKey(new Date(trade.dateOpened)),
         openingVix,
         closingVix,
-        pl: trade.pl,
-        rom: trade.marginReq && trade.marginReq > 0 ? (trade.pl / trade.marginReq) * 100 : null,
+        pl: getNetPl(trade),
+        rom:
+          trade.marginReq && trade.marginReq > 0 ? (getNetPl(trade) / trade.marginReq) * 100 : null,
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -949,12 +954,11 @@ function buildMonthlyReturnsPercent(trades: Trade[]): Record<number, Record<numb
 
   // Sort trades by date
   const sortedTrades = [...trades].sort(
-    (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
+    (a, b) => getRealizationDate(a).getTime() - getRealizationDate(b).getTime(),
   );
 
   // Calculate initial capital from first trade
-  const firstTrade = sortedTrades[0];
-  let runningCapital = firstTrade.fundsAtClose - firstTrade.pl;
+  let runningCapital = PortfolioStatsCalculator.calculateInitialCapital(sortedTrades);
   if (!isFinite(runningCapital) || runningCapital <= 0) {
     runningCapital = 100000;
   }
@@ -964,7 +968,7 @@ function buildMonthlyReturnsPercent(trades: Trade[]): Record<number, Record<numb
   const years = new Set<number>();
 
   sortedTrades.forEach((trade) => {
-    const date = new Date(trade.dateOpened);
+    const date = getRealizationDate(trade);
     const year = date.getFullYear();
     const month = date.getMonth() + 1;
     const monthKey = `${year}-${String(month).padStart(2, "0")}`;
@@ -978,7 +982,7 @@ function buildMonthlyReturnsPercent(trades: Trade[]): Record<number, Record<numb
       };
     }
 
-    monthlyData[monthKey].pl += trade.pl;
+    monthlyData[monthKey].pl += getNetPl(trade);
   });
 
   // Calculate percentage returns
@@ -1029,20 +1033,6 @@ function buildMonthlyReturnsPercent(trades: Trade[]): Record<number, Record<numb
     });
 
   return monthlyReturnsPercent;
-}
-
-/**
- * Apply date range filter to trades
- */
-function filterByDateRange(trades: Trade[], fromDate?: string, toDate?: string): Trade[] {
-  if (!fromDate && !toDate) return trades;
-
-  return trades.filter((trade) => {
-    const tradeDate = formatDateKey(new Date(trade.dateOpened));
-    if (fromDate && tradeDate < fromDate) return false;
-    if (toDate && tradeDate > toDate) return false;
-    return true;
-  });
 }
 
 // Note: normalizeTradesToOneLot was removed and replaced with shared utility
@@ -1205,7 +1195,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
 
         // Apply date range filter
         if (dateRange) {
-          trades = filterByDateRange(trades, dateRange.from, dateRange.to);
+          trades = filterByRealizationDateRange(trades, dateRange.from, dateRange.to);
         }
 
         // Apply normalization if requested
@@ -1324,6 +1314,11 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
 
         if (charts.includes("rolling_metrics")) {
           chartData.rollingMetrics = buildRollingMetrics(trades, rollingWindowSize);
+          chartData.rollingMetricsMethodology = {
+            sharpeRatio:
+              "Legacy nonannualized mean trade P/L divided by population standard deviation; not comparable to get_statistics daily-return Sharpe.",
+            window: `${rollingWindowSize} trades`,
+          };
           dataPoints += (chartData.rollingMetrics as unknown[]).length;
         }
 
@@ -1541,7 +1536,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
     "get_period_returns",
     {
       description:
-        "Get P&L breakdown by period (monthly, weekly, or daily) with gross P/L, commissions, and net P/L",
+        "Get P&L breakdown by period (monthly, weekly, or daily) with reported P/L, commissions, and basis-aware net P/L. Option Omega reported P/L already includes fees.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
@@ -1575,10 +1570,12 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
         trades = filterByStrategy(trades, strategy);
 
         // Apply date range filter (takes precedence over year)
+        const realizedDate = (trade: Trade): Date => new Date(trade.dateClosed ?? trade.dateOpened);
+
         if (dateRange) {
-          trades = filterByDateRange(trades, dateRange.from, dateRange.to);
+          trades = filterByRealizationDateRange(trades, dateRange.from, dateRange.to);
         } else if (year !== undefined) {
-          trades = trades.filter((t) => new Date(t.dateOpened).getFullYear() === year);
+          trades = trades.filter((trade) => realizedDate(trade).getFullYear() === year);
         }
 
         // Apply normalization if requested
@@ -1606,6 +1603,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
         const periodData: Map<
           string,
           {
+            reportedPl: number;
             grossPl: number;
             commissions: number;
             netPl: number;
@@ -1614,7 +1612,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
         > = new Map();
 
         trades.forEach((trade) => {
-          const date = new Date(trade.dateOpened);
+          const date = realizedDate(trade);
           let periodKey: string;
 
           if (period === "monthly") {
@@ -1631,6 +1629,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
           }
 
           const existing = periodData.get(periodKey) || {
+            reportedPl: 0,
             grossPl: 0,
             commissions: 0,
             netPl: 0,
@@ -1640,9 +1639,10 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
           const totalCommissions =
             (trade.openingCommissionsFees ?? 0) + (trade.closingCommissionsFees ?? 0);
 
-          existing.grossPl += trade.pl;
+          existing.reportedPl += trade.pl;
+          existing.grossPl += getGrossPl(trade);
           existing.commissions += totalCommissions;
-          existing.netPl += trade.pl - totalCommissions;
+          existing.netPl += getNetPl(trade);
           existing.tradeCount += 1;
           periodData.set(periodKey, existing);
         });
@@ -1657,6 +1657,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
 
         // Calculate totals
         const totals = {
+          reportedPl: periods.reduce((sum, p) => sum + p.reportedPl, 0),
           grossPl: periods.reduce((sum, p) => sum + p.grossPl, 0),
           commissions: periods.reduce((sum, p) => sum + p.commissions, 0),
           netPl: periods.reduce((sum, p) => sum + p.netPl, 0),
@@ -1688,6 +1689,12 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
           periodCount: periods.length,
           periods,
           totals,
+          calculationMethodology: {
+            attribution: "date_closed_fallback_date_opened",
+            reportedPl: "source_reported_basis",
+            grossPl: "gross_before_fees_reconstructed_from_declared_basis",
+            netPl: "net_after_fees_deducted_exactly_once",
+          },
         };
 
         return createToolOutput(summary, structuredData);
@@ -1947,8 +1954,9 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
               // Calculate scaling
               const btContracts = btTrade.numContracts;
               const actualContracts = actualTrade.numContracts;
+              const btNetPl = getNetPl(btTrade);
               const { scaledBtPl, scaledActualPl: actualPl } = calculateScaledPl(
-                btTrade.pl,
+                btNetPl,
                 actualTrade.pl,
                 btContracts,
                 actualContracts,
@@ -2025,9 +2033,9 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
               // P/L difference
               differences.push({
                 field: "pl",
-                backtest: btTrade.pl,
+                backtest: btNetPl,
                 actual: actualTrade.pl,
-                delta: actualTrade.pl - btTrade.pl,
+                delta: actualTrade.pl - btNetPl,
               });
 
               comparisons.push({
@@ -2035,7 +2043,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
                 strategy: btTrade.strategy,
                 timeOpened: timeKey,
                 matched: true,
-                backtestPl: btTrade.pl,
+                backtestPl: btNetPl,
                 actualPl: actualTrade.pl,
                 scaledBacktestPl: scaledBtPl,
                 slippage,
@@ -2058,17 +2066,18 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
               });
             } else {
               // Unmatched backtest trade
+              const btNetPl = getNetPl(btTrade);
               const scaledBtPl =
                 scaling === "perContract" && btTrade.numContracts > 0
-                  ? btTrade.pl / btTrade.numContracts
-                  : btTrade.pl;
+                  ? btNetPl / btTrade.numContracts
+                  : btNetPl;
 
               comparisons.push({
                 date: dateKey,
                 strategy: btTrade.strategy,
                 timeOpened: timeKey,
                 matched: false,
-                backtestPl: btTrade.pl,
+                backtestPl: btNetPl,
                 actualPl: 0,
                 scaledBacktestPl: scaledBtPl,
                 slippage: 0,
@@ -2140,7 +2149,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
               contracts: 0,
             };
             existing.trades.push(trade);
-            existing.totalPl += trade.pl;
+            existing.totalPl += getNetPl(trade);
             existing.contracts += trade.numContracts;
             backtestByDateStrategy.set(key, existing);
           });

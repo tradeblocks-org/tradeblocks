@@ -225,4 +225,79 @@ describe("DuckdbQuoteStore.readWindow", () => {
     // entry/data.test.ts MinuteQuoteRow assertions.
     await conn.close();
   });
+
+  it("honors neededGreeks: only requested greeks populate, rest are null, stamped", async () => {
+    const { store, conn } = await setUpDuckdbStoreWithFixtures();
+    const rows = await store.readWindow({
+      underlying: "SPX",
+      date: "2024-01-15",
+      timeStart: "09:35",
+      timeEnd: "09:35",
+      legEnvelopes: [
+        { contractType: "put", dteMin: 7, dteMax: 11, strikeMin: 4700, strikeMax: 4700 },
+      ],
+      neededGreeks: ["delta", "iv"],
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    const row = rows[0];
+    expect(row.delta).toBeCloseTo(0.5, 5);
+    expect(row.iv).toBeCloseTo(0.2, 5);
+    expect(row.gamma).toBeNull();
+    expect(row.theta).toBeNull();
+    expect(row.vega).toBeNull();
+    expect(row.projectedGreeks).toEqual(["delta", "iv"]);
+    await conn.close();
+  });
+
+  it("default read carries no projectedGreeks stamp (byte-identity)", async () => {
+    const { store, conn } = await setUpDuckdbStoreWithFixtures();
+    const rows = await store.readWindow({
+      underlying: "SPX",
+      date: "2024-01-15",
+      timeStart: "09:35",
+      timeEnd: "09:35",
+      legEnvelopes: [
+        { contractType: "put", dteMin: 7, dteMax: 11, strikeMin: 4700, strikeMax: 4700 },
+      ],
+    });
+    // Byte-identity: the exact historic key set (symmetric with the parquet-side
+    // assertion), no projectedGreeks key present.
+    expect(Object.keys(rows[0]).sort()).toEqual(
+      [
+        "ticker",
+        "time",
+        "contract_type",
+        "strike",
+        "expiration",
+        "dte",
+        "bid",
+        "ask",
+        "delta",
+        "gamma",
+        "theta",
+        "vega",
+        "iv",
+        "greeks_source",
+      ].sort(),
+    );
+    expect("projectedGreeks" in rows[0]).toBe(false);
+    await conn.close();
+  });
+
+  it("rejects an unknown greek name with a clear error", async () => {
+    const { store, conn } = await setUpDuckdbStoreWithFixtures();
+    await expect(
+      store.readWindow({
+        underlying: "SPX",
+        date: "2024-01-15",
+        timeStart: "09:35",
+        timeEnd: "09:35",
+        legEnvelopes: [
+          { contractType: "put", dteMin: 7, dteMax: 11, strikeMin: 4700, strikeMax: 4700 },
+        ],
+        neededGreeks: ["rho"] as never,
+      }),
+    ).rejects.toThrow(/Unknown greek "rho"/);
+    await conn.close();
+  });
 });

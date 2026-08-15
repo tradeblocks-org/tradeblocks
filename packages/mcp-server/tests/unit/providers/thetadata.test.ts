@@ -25,9 +25,11 @@ interface ThetaProviderTestDeps {
 }
 
 function createProvider(deps: ThetaProviderTestDeps): ThetaDataProvider {
-  return new (ThetaDataProvider as unknown as {
-    new (deps: ThetaProviderTestDeps): ThetaDataProvider;
-  })(deps);
+  return new (
+    ThetaDataProvider as unknown as {
+      new (deps: ThetaProviderTestDeps): ThetaDataProvider;
+    }
+  )(deps);
 }
 
 function createClient(): ThetaMddsClient {

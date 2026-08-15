@@ -12,9 +12,11 @@ import {
   PortfolioStatsCalculator,
   calculateCorrelationMatrix,
   performTailRiskAnalysis,
+  getNetPl,
+  rebuildEquityCurve,
 } from "@tradeblocks/lib";
 import type { Trade } from "@tradeblocks/lib";
-import { filterByDateRange, filterDailyLogsByDateRange } from "../shared/filters.ts";
+import { filterByRealizationDateRange } from "../shared/filters.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
@@ -27,6 +29,71 @@ const SIMILARITY_DEFAULTS = {
   minSharedDays: 30,
   topN: 5,
 };
+
+export type ScaledTrade = Trade & {
+  scaledPl: number;
+  scaledOpeningComm: number;
+  scaledClosingComm: number;
+  weight: number;
+};
+
+export function getScaledNetPl(trade: ScaledTrade): number {
+  return getNetPl({
+    ...trade,
+    pl: trade.scaledPl,
+    openingCommissionsFees: trade.scaledOpeningComm,
+    closingCommissionsFees: trade.scaledClosingComm,
+  });
+}
+
+export function rebuildCounterfactualBaseline(trades: Trade[]): Trade[] {
+  return rebuildEquityCurve(trades, {
+    initialCapital: PortfolioStatsCalculator.calculateInitialCapital(trades),
+    useNetPl: true,
+  });
+}
+
+/** Rebuild a scaled equity curve using net P/L in the trade's declared basis. */
+export function buildModifiedTrades(scaledTrades: ScaledTrade[], originalTrades: Trade[]): Trade[] {
+  const sortedOriginal = [...originalTrades]
+    .filter((trade) => trade.dateClosed && trade.fundsAtClose !== undefined)
+    .sort((a, b) => {
+      const dateA = new Date(a.dateClosed!);
+      const dateB = new Date(b.dateClosed!);
+      const cmp = dateA.getTime() - dateB.getTime();
+      if (cmp !== 0) return cmp;
+      return (a.timeClosed || "").localeCompare(b.timeClosed || "");
+    });
+  const originalInitialCapital =
+    sortedOriginal.length > 0
+      ? PortfolioStatsCalculator.calculateInitialCapital(sortedOriginal)
+      : 1000000;
+
+  const sortedScaled = [...scaledTrades]
+    .filter((trade) => trade.dateClosed)
+    .sort((a, b) => {
+      const dateA = new Date(a.dateClosed!);
+      const dateB = new Date(b.dateClosed!);
+      const cmp = dateA.getTime() - dateB.getTime();
+      if (cmp !== 0) return cmp;
+      return (a.timeClosed || "").localeCompare(b.timeClosed || "");
+    });
+
+  let runningEquity = originalInitialCapital;
+  const scaledFundsMap = new Map<ScaledTrade, number>();
+  for (const trade of sortedScaled) {
+    runningEquity += getScaledNetPl(trade);
+    scaledFundsMap.set(trade, runningEquity);
+  }
+
+  return scaledTrades.map((trade) => ({
+    ...trade,
+    pl: trade.scaledPl,
+    openingCommissionsFees: trade.scaledOpeningComm,
+    closingCommissionsFees: trade.scaledClosingComm,
+    fundsAtClose: scaledFundsMap.get(trade) ?? trade.fundsAtClose,
+  }));
+}
 
 /**
  * Register similarity block tools
@@ -412,14 +479,6 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
             return [];
           }
 
-          // Shared type for scaled trades
-          type ScaledTrade = Trade & {
-            scaledPl: number;
-            scaledOpeningComm: number;
-            scaledClosingComm: number;
-            weight: number;
-          };
-
           // Helper: build scaled trades with optional maxContractsPerTrade ceilings
           function buildScaledTrades(
             tradesToScale: Trade[],
@@ -455,52 +514,6 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
               } as ScaledTrade);
             }
             return { scaledTrades: scaled, cappedStrategies };
-          }
-
-          // Helper: build modified Trade[] with recalculated fundsAtClose for portfolio stats
-          function buildModifiedTrades(
-            scaledTrades: ScaledTrade[],
-            originalTrades: Trade[],
-          ): Trade[] {
-            const sortedOriginal = [...originalTrades]
-              .filter((t) => t.dateClosed && t.fundsAtClose !== undefined)
-              .sort((a, b) => {
-                const dateA = new Date(a.dateClosed!);
-                const dateB = new Date(b.dateClosed!);
-                const cmp = dateA.getTime() - dateB.getTime();
-                if (cmp !== 0) return cmp;
-                return (a.timeClosed || "").localeCompare(b.timeClosed || "");
-              });
-            const originalInitialCapital =
-              sortedOriginal.length > 0
-                ? PortfolioStatsCalculator.calculateInitialCapital(sortedOriginal)
-                : 1000000;
-
-            const sortedScaled = [...scaledTrades]
-              .filter((t) => t.dateClosed)
-              .sort((a, b) => {
-                const dateA = new Date(a.dateClosed!);
-                const dateB = new Date(b.dateClosed!);
-                const cmp = dateA.getTime() - dateB.getTime();
-                if (cmp !== 0) return cmp;
-                return (a.timeClosed || "").localeCompare(b.timeClosed || "");
-              });
-
-            let runningEquity = originalInitialCapital;
-            const scaledFundsMap = new Map<number, number>();
-            for (const st of sortedScaled) {
-              runningEquity += st.scaledPl;
-              const idx = scaledTrades.indexOf(st);
-              scaledFundsMap.set(idx, runningEquity);
-            }
-
-            return scaledTrades.map((st, idx) => ({
-              ...st,
-              pl: st.scaledPl,
-              openingCommissionsFees: st.scaledOpeningComm,
-              closingCommissionsFees: st.scaledClosingComm,
-              fundsAtClose: scaledFundsMap.get(idx) ?? st.fundsAtClose,
-            }));
           }
 
           // Helper: calculate comparison deltas
@@ -580,7 +593,7 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
               try {
                 const entryBlock = await loadBlock(baseDir, tradeSourceBlockId);
                 entryTrades = filterTradesByStrategy(entryBlock.trades, entry.strategyName);
-                entryTrades = filterByDateRange(entryTrades, startDate, endDate);
+                entryTrades = filterByRealizationDateRange(entryTrades, startDate, endDate);
               } catch {
                 // Block load failed - skip this strategy
                 perStrategyBreakdown.push({
@@ -635,11 +648,11 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
               // Calculate strategy P&L
               let origNetPl = 0;
               for (const t of entryTrades) {
-                origNetPl += t.pl - t.openingCommissionsFees - t.closingCommissionsFees;
+                origNetPl += getNetPl(t);
               }
               let scaledNetPl = 0;
               for (const st of entryScaled) {
-                scaledNetPl += st.scaledPl - st.scaledOpeningComm - st.scaledClosingComm;
+                scaledNetPl += getScaledNetPl(st);
               }
 
               const breakdown: MultiStrategyBreakdown = {
@@ -683,6 +696,7 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
               undefined,
               true,
             );
+            const combinedMethodology = calculator.getCalculationMethodology(modifiedTrades);
 
             // Build uncapped comparison if requested and any strategy was capped
             let uncappedComparison: Record<string, unknown> | undefined;
@@ -699,7 +713,7 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
                 try {
                   const entryBlock = await loadBlock(baseDir, tradeSourceBlockId);
                   let entryTrades = filterTradesByStrategy(entryBlock.trades, entry.strategyName);
-                  entryTrades = filterByDateRange(entryTrades, startDate, endDate);
+                  entryTrades = filterByRealizationDateRange(entryTrades, startDate, endDate);
                   const wm: Record<string, number> = {};
                   for (const name of new Set(entryTrades.map((t) => t.strategy))) {
                     wm[name] = entry.scaleFactor;
@@ -740,6 +754,10 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
                 netPl: combinedStats.netPl,
                 totalTrades: combinedStats.totalTrades,
               },
+              calculationMethodology: {
+                comparisonBasis: "realized_trade_pl_for_all_counterfactual_arms",
+                combined: combinedMethodology,
+              },
               perStrategy: perStrategyBreakdown,
               dataAvailability,
             };
@@ -758,7 +776,7 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
           let trades = block.trades;
 
           // Apply date range filter
-          trades = filterByDateRange(trades, startDate, endDate);
+          trades = filterByRealizationDateRange(trades, startDate, endDate);
 
           if (trades.length === 0) {
             return {
@@ -834,7 +852,7 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
                 try {
                   const backtestBlock = await loadBlock(baseDir, lookup.profile.blockId);
                   let backtestTrades = filterTradesByStrategy(backtestBlock.trades, strategy);
-                  backtestTrades = filterByDateRange(backtestTrades, startDate, endDate);
+                  backtestTrades = filterByRealizationDateRange(backtestTrades, startDate, endDate);
 
                   if (backtestTrades.length > 0) {
                     tradesToUse = tradesToUse.filter(
@@ -860,15 +878,10 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
             }
           }
 
-          // Calculate baseline portfolio metrics (from original trades, before substitution)
-          const dailyLogs =
-            block.dailyLogs && block.dailyLogs.length > 0
-              ? filterDailyLogsByDateRange(block.dailyLogs, startDate, endDate)
-              : undefined;
-          const baselineStats = calculator.calculatePortfolioStats(
-            trades,
-            dailyLogs && dailyLogs.length > 0 ? dailyLogs : undefined,
-          );
+          // Counterfactual arms cannot reuse a full-portfolio daily log after
+          // strategy weights change, so every arm uses the same trade-only basis.
+          const baselineTrades = rebuildCounterfactualBaseline(trades);
+          const baselineStats = calculator.calculatePortfolioStats(baselineTrades, undefined, true);
 
           // Build scaled trades with optional ceilings
           const hasCeilings = Object.keys(maxContractsCeilings).length > 0;
@@ -880,6 +893,8 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
 
           const modifiedTrades = buildModifiedTrades(scaledTrades, trades);
           const scaledStats = calculator.calculatePortfolioStats(modifiedTrades, undefined, true);
+          const baselineMethodology = calculator.getCalculationMethodology(baselineTrades);
+          const scaledMethodology = calculator.getCalculationMethodology(modifiedTrades);
 
           // Uncapped comparison if requested and any strategy was capped
           let uncappedComparison: Record<string, unknown> | undefined;
@@ -964,7 +979,7 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
               originalByStrategy[trade.strategy] = { trades: 0, netPl: 0 };
             }
             originalByStrategy[trade.strategy].trades++;
-            const netPl = trade.pl - trade.openingCommissionsFees - trade.closingCommissionsFees;
+            const netPl = getNetPl(trade);
             originalByStrategy[trade.strategy].netPl += netPl;
             totalOriginalPl += netPl;
           }
@@ -975,7 +990,7 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
               scaledByStrategy[st.strategy] = { trades: 0, netPl: 0 };
             }
             scaledByStrategy[st.strategy].trades++;
-            const netPl = st.scaledPl - st.scaledOpeningComm - st.scaledClosingComm;
+            const netPl = getScaledNetPl(st);
             scaledByStrategy[st.strategy].netPl += netPl;
             totalScaledPl += netPl;
           }
@@ -1056,6 +1071,11 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
             unknownStrategies: unknownStrategies.length > 0 ? unknownStrategies : undefined,
             comparison,
             perStrategy,
+            calculationMethodology: {
+              comparisonBasis: "realized_trade_pl_for_all_counterfactual_arms",
+              baseline: baselineMethodology,
+              scaled: scaledMethodology,
+            },
           };
 
           // Add profile-aware metadata only when profiles were found

@@ -11,8 +11,8 @@
  * Parquet directory layout (v3.0 — produced by import pipelines when TRADEBLOCKS_PARQUET=true):
  *   {dataDir}/market/
  *     spot/ticker=X/date=Y/data.parquet                   (ticker-first Hive-partitioned minute bars)
- *     enriched/ticker=X/data.parquet                      (per-ticker daily indicator Parquet)
- *     enriched/context/data.parquet                       (cross-ticker derived-fields Parquet)
+ *     enriched/ticker=X/date=Y/data.parquet               (bounded ticker indicator Parquet)
+ *     enriched/context/date=Y/data.parquet                (bounded cross-ticker context Parquet)
  *     option_chain/date=YYYY-MM-DD/data.parquet           (Hive-partitioned)
  *     option_quote_minutes/date=YYYY-MM-DD/data.parquet   (Hive-partitioned)
  *
@@ -80,24 +80,41 @@ function hasParquetPartitions(dir: string, partitionKey: string = "date"): boole
 }
 
 /**
- * True if `<dir>/ticker=<X>/data.parquet` exists for at least one ticker.
- * Used by the enriched view (no date partition under ticker — single file per ticker).
+ * True if `<dir>/ticker=<X>/date=<Y>/data.parquet` exists for at least one slice.
  */
 function hasEnrichedTickerFiles(dir: string): boolean {
   if (!existsSync(dir)) return false;
   try {
     return readdirSync(dir).some((entry) => {
       if (!entry.startsWith("ticker=")) return false;
-      return existsSync(path.join(dir, entry, "data.parquet"));
+      const tickerDir = path.join(dir, entry);
+      try {
+        return readdirSync(tickerDir).some(
+          (dateEntry) =>
+            dateEntry.startsWith("date=") &&
+            existsSync(path.join(tickerDir, dateEntry, "data.parquet")),
+        );
+      } catch {
+        return false;
+      }
     });
   } catch {
     return false;
   }
 }
 
-/** True if `<dir>/context/data.parquet` exists (single global file). */
+/** True if `<dir>/context/date=<Y>/data.parquet` exists for at least one slice. */
 function hasEnrichedContextFile(dir: string): boolean {
-  return existsSync(path.join(dir, "context", "data.parquet"));
+  const contextDir = path.join(dir, "context");
+  if (!existsSync(contextDir)) return false;
+  try {
+    return readdirSync(contextDir).some(
+      (entry) =>
+        entry.startsWith("date=") && existsSync(path.join(contextDir, entry, "data.parquet")),
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -279,7 +296,7 @@ export async function createMarketParquetViews(
     tablesKept.push("spot");
   }
 
-  // market.enriched — per-ticker single file: enriched/ticker=X/data.parquet (no date partition)
+  // market.enriched — bounded ticker/session files: enriched/ticker=X/date=Y/data.parquet
   const enrichedDir = path.join(resolveMarketDir(dataDir), "enriched");
   if (hasEnrichedTickerFiles(enrichedDir)) {
     try {
@@ -294,7 +311,7 @@ export async function createMarketParquetViews(
     }
     await conn.run(
       `CREATE OR REPLACE VIEW market.enriched AS
-       SELECT * FROM read_parquet('${enrichedDir}/ticker=*/data.parquet', hive_partitioning=true)`,
+       SELECT * FROM read_parquet('${enrichedDir}/ticker=*/date=*/data.parquet', hive_partitioning=true)`,
     );
     viewsCreated.push("enriched");
   } else {
@@ -306,7 +323,7 @@ export async function createMarketParquetViews(
     tablesKept.push("enriched");
   }
 
-  // market.enriched_context — global single file: enriched/context/data.parquet (no partition)
+  // market.enriched_context — bounded sessions: enriched/context/date=Y/data.parquet
   if (hasEnrichedContextFile(enrichedDir)) {
     try {
       await conn.run("DROP VIEW  IF EXISTS market.enriched_context");
@@ -320,7 +337,7 @@ export async function createMarketParquetViews(
     }
     await conn.run(
       `CREATE OR REPLACE VIEW market.enriched_context AS
-       SELECT * FROM read_parquet('${path.join(enrichedDir, "context", "data.parquet")}')`,
+       SELECT * FROM read_parquet('${path.join(enrichedDir, "context", "date=*", "data.parquet")}', hive_partitioning=true)`,
     );
     viewsCreated.push("enriched_context");
   } else {

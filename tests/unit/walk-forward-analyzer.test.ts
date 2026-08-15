@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { WalkForwardAnalyzer, WalkForwardConfig, Trade } from "@tradeblocks/lib";
+import { PlBasis, WalkForwardAnalyzer, WalkForwardConfig, Trade } from "@tradeblocks/lib";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -46,6 +46,37 @@ function createTestTrades(
 }
 
 describe("WalkForwardAnalyzer", () => {
+  it("builds gross-basis scenario equity from scaled net P/L", () => {
+    const analyzer = new WalkForwardAnalyzer();
+    const grossTrade = {
+      ...createTestTrades([110], "2026-01-02", 1, 990)[0],
+      plBasis: PlBasis.GrossBeforeFees,
+      openingCommissionsFees: 5,
+      closingCommissionsFees: 5,
+      fundsAtClose: 1100,
+    };
+    const scenarioBuilder = (
+      analyzer as unknown as {
+        applyScenario: (
+          trades: Trade[],
+          params: Record<string, number>,
+          baseline: { baseKellyFraction: number; avgContracts: number },
+          initialCapitalOverride?: number,
+        ) => Trade[];
+      }
+    ).applyScenario.bind(analyzer);
+
+    const [scaled] = scenarioBuilder(
+      [grossTrade],
+      { fixedFractionPct: 2 },
+      { baseKellyFraction: 0, avgContracts: 1 },
+      1000,
+    );
+
+    expect(scaled.pl).toBe(110);
+    expect(scaled.fundsAtClose).toBe(1100);
+  });
+
   it("segments trades and optimizes parameters across rolling windows", async () => {
     const trades = createTestTrades(
       [500, -250, 650, -100, 300, -400, 700, 200, -150, 450, -200, 550],

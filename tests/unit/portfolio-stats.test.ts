@@ -239,10 +239,10 @@ describe("PortfolioStatsCalculator", () => {
       expect(stats.totalTrades).toBe(5);
       expect(stats.totalPl).toBe(900); // 500 - 100 + 200 + 400 - 100
       expect(stats.winRate).toBeCloseTo(0.6); // 3 wins out of 5
-      expect(stats.avgWin).toBeCloseTo(366.67, 1); // (500 + 200 + 400) / 3
-      expect(stats.avgLoss).toBeCloseTo(-100); // (-100 + -100) / 2
-      expect(stats.maxWin).toBe(500);
-      expect(stats.maxLoss).toBe(-100);
+      expect(stats.avgWin).toBeCloseTo(346.67, 1); // Net of declared commission fields
+      expect(stats.avgLoss).toBeCloseTo(-124);
+      expect(stats.maxWin).toBe(480);
+      expect(stats.maxLoss).toBe(-130);
     });
 
     it("should calculate drawdown metrics correctly", () => {
@@ -254,7 +254,7 @@ describe("PortfolioStatsCalculator", () => {
 
     it("should calculate initial capital correctly", () => {
       const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(mockTrades);
-      expect(initialCapital).toBe(100000); // 100500 - 500
+      expect(initialCapital).toBe(100000); // Legacy provenance-free funds use reported P/L
     });
   });
 
@@ -409,7 +409,7 @@ describe("PortfolioStatsCalculator", () => {
       expect(stats.totalTrades).toBe(2);
       expect(stats.totalPl).toBe(700); // 500 + 200
       expect(stats.winRate).toBe(1.0); // Both trades were winners
-      expect(stats.avgWin).toBeCloseTo(350); // (500 + 200) / 2
+      expect(stats.avgWin).toBeCloseTo(332); // Net of declared commission fields
       expect(stats.avgLoss).toBe(0); // No losses
     });
 

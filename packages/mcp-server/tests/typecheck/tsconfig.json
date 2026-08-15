@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true
+  },
+  "include": ["market-datasets-public-compat.ts"]
+}

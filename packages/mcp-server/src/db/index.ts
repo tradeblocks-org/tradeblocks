@@ -21,6 +21,7 @@ export type {
   MarketOnlyConnection,
   MarketParquetConnection,
   MarketReadOnlyConnection,
+  MarketConnectionOptions,
 } from "./connection.ts";
 export {
   ensureSyncTables,

@@ -113,8 +113,18 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
             hypothesis: false,
           },
           pl: {
-            description: "Gross P&L before commissions (DOUBLE)",
+            description:
+              "Canonical net P&L after fees (DOUBLE), normalized during sync for analytics queries.",
             hypothesis: true,
+          },
+          reported_pl: {
+            description: "Source-reported P&L before basis normalization. Interpret with pl_basis.",
+            hypothesis: false,
+          },
+          pl_basis: {
+            description:
+              "P/L provenance: net_includes_fees or gross_before_fees. Use this when aggregating net performance.",
+            hypothesis: false,
           },
           date_closed: {
             description: "Trade exit date (NULL if still open)",

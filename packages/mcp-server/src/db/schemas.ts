@@ -104,6 +104,8 @@ export async function ensureTradeDataTable(conn: DuckDBConnection): Promise<void
       premium DOUBLE,
       num_contracts INTEGER,
       pl DOUBLE NOT NULL,
+      reported_pl DOUBLE,
+      pl_basis VARCHAR DEFAULT 'net_includes_fees',
       date_closed DATE,
       time_closed VARCHAR,
       reason_for_close VARCHAR,
@@ -117,6 +119,18 @@ export async function ensureTradeDataTable(conn: DuckDBConnection): Promise<void
   // Backfill schema upgrades on existing databases.
   if (!(await hasColumn(conn, "trades", "trade_data", "ticker"))) {
     await conn.run(`ALTER TABLE trades.trade_data ADD COLUMN ticker VARCHAR`);
+  }
+  if (!(await hasColumn(conn, "trades", "trade_data", "pl_basis"))) {
+    await conn.run(
+      `ALTER TABLE trades.trade_data ADD COLUMN pl_basis VARCHAR DEFAULT 'net_includes_fees'`,
+    );
+    await conn.run(
+      `UPDATE trades.trade_data SET pl_basis = 'net_includes_fees' WHERE pl_basis IS NULL`,
+    );
+  }
+  if (!(await hasColumn(conn, "trades", "trade_data", "reported_pl"))) {
+    await conn.run(`ALTER TABLE trades.trade_data ADD COLUMN reported_pl DOUBLE`);
+    await conn.run(`UPDATE trades.trade_data SET reported_pl = pl WHERE reported_pl IS NULL`);
   }
   // Migration: add source column for trade provenance tracking.
   // 'csv' = imported from Option Omega CSV; other values may be

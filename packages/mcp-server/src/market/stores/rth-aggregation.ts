@@ -24,6 +24,8 @@ export interface RthWindowOpts {
   fromLit: string;
   /** SQL-literal expression for the `to` date (e.g. `'2025-01-31'`). */
   toLit: string;
+  /** Optional relation containing canonical spot rows. */
+  spotSource?: string;
 }
 
 /**
@@ -33,14 +35,14 @@ export interface RthWindowOpts {
  * SQL statement (no positional params anywhere in the pipeline).
  */
 export function rthDailyAggregateSubquery(opts: RthWindowOpts): string {
-  const { tickerLit, fromLit, toLit } = opts;
+  const { tickerLit, fromLit, toLit, spotSource = "market.spot" } = opts;
   return `(
     SELECT ticker, date,
            first(open  ORDER BY time) AS open,
            max(high)                  AS high,
            min(low)                   AS low,
            last(close  ORDER BY time) AS close
-    FROM market.spot
+    FROM ${spotSource}
     WHERE ticker = ${tickerLit}
       AND date >= ${fromLit} AND date <= ${toLit}
       AND time >= '09:30' AND time <= '16:00'

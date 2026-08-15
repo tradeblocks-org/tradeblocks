@@ -33,6 +33,7 @@ export type McpContent = McpTextContent | McpResourceContent;
 export interface ToolOutput {
   [x: string]: unknown;
   content: McpContent[];
+  structuredContent?: Record<string, unknown>;
 }
 
 // Legacy alias for backward compatibility
@@ -50,6 +51,7 @@ export type DualOutput = ToolOutput;
  */
 export function createToolOutput(summary: string, data: object): ToolOutput {
   return {
+    structuredContent: data as Record<string, unknown>,
     content: [
       { type: "text", text: summary },
       {

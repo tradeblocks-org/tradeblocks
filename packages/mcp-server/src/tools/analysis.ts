@@ -16,6 +16,7 @@ import {
 } from "../utils/output-formatter.ts";
 import {
   WalkForwardAnalyzer,
+  ABSOLUTE_SIZING_PERCENTAGE_ERROR,
   assessResults,
   getRecommendedParameters,
   runMonteCarloSimulation,
@@ -498,7 +499,29 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           .enum(["trades", "daily", "percentage"])
           .default("trades")
           .describe(
-            "What to resample: 'trades' (individual trade P&L), 'daily' (daily aggregated returns), 'percentage' (percentage returns for compounding strategies)",
+            "What to resample: 'trades' (individual trade P&L), 'daily' (daily aggregated returns), 'percentage' (percentage returns for compounding strategies). Under 'percentage', zeroBalancePaths is structurally 0 — per-step returns clamp at -100% of current equity, so capital can never cross zero — and probabilityOfRuin (via ruinThresholdPct) is the meaningful ruin statistic.",
+          ),
+        resampleMode: z
+          .enum(["stationary-block", "iid"])
+          .default("stationary-block")
+          .describe(
+            "How to draw from the resample pool: 'stationary-block' (default) is the stationary bootstrap, which keeps consecutive trades together so the historical clustering of wins and losses survives into drawdown and tail estimates; 'iid' draws every step independently, which breaks that clustering and understates streak risk",
+          ),
+        meanBlockLength: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe(
+            "Mean block length for stationary-block resampling. If not specified, uses the cube root of the resample pool size. Ignored when resampleMode is 'iid'.",
+          ),
+        ruinThresholdPct: z
+          .number()
+          .gt(0)
+          .max(1)
+          .optional()
+          .describe(
+            "Ruin threshold as a decimal decline from initial capital (0.5 = equity at or below half of starting capital). Must be greater than 0 and at most 1; 0 is rejected because it puts the ruin floor at starting capital, which would flag almost every path as ruined. When specified, statistics include probabilityOfRuin: the fraction of paths that ever touched the threshold. At exactly 1 the floor is a zero balance, so the figure matches zeroBalancePaths.",
           ),
         initialCapital: z
           .number()
@@ -534,19 +557,19 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           .max(100)
           .default(5)
           .describe(
-            "Percentage of simulation length that should be max-loss scenarios (0-100, default: 5)",
+            "Worst-case intensity (0-100, default: 5). In probabilistic mode this is the literal per-slot replacement chance (5 = each simulated step has a 5% chance of becoming a max-loss event); in guarantee mode it is the exact share of the simulation length forced into every path.",
           ),
         worstCaseMode: z
-          .enum(["pool", "guarantee"])
-          .default("pool")
+          .enum(["probabilistic", "pool", "guarantee"])
+          .default("probabilistic")
           .describe(
-            "How to inject worst-case: 'pool' adds synthetic losses to resample pool, 'guarantee' ensures worst-case appears in every simulation",
+            "How to inject worst-case losses. Injection is a per-slot replacement layer applied after the sampler draws from real history — synthetic losses never join the resample pool, so block resampling cannot walk through them as a contiguous catastrophe run. 'probabilistic' (default): each simulated step is independently replaced with probability worstCasePercentage / 100, the literal per-slot chance; 'pool' is the legacy alias for the same behavior. 'guarantee' forces exactly the requested count into every simulation at independent random positions.",
           ),
         worstCaseSizing: z
           .enum(["absolute", "relative"])
           .default("relative")
           .describe(
-            "Worst-case sizing: 'absolute' uses historical dollar amounts, 'relative' scales to account capital ratio",
+            "Worst-case sizing: 'absolute' uses historical dollar amounts, 'relative' scales to account capital ratio. 'absolute' requires a dollar sampling method ('trades' or 'daily') — combined with resampleMethod 'percentage' the tool returns an error, because a fixed dollar loss has no stable meaning in a scale-free return stream.",
           ),
         worstCaseBasedOn: z
           .enum(["simulation", "historical"])
@@ -570,6 +593,9 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
       simulationLength: simulationLengthParam,
       resampleWindow,
       resampleMethod,
+      resampleMode,
+      meanBlockLength,
+      ruinThresholdPct,
       initialCapital: initialCapitalParam,
       tradesPerYear: tradesPerYearParam,
       randomSeed,
@@ -582,6 +608,16 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
       historicalInitialCapital,
     }) => {
       try {
+        // Reject the one incoherent combination up front, with the same
+        // message the calculation library uses, so callers see it whether or
+        // not injection would have created any synthetic losses.
+        if (resampleMethod === "percentage" && worstCaseSizing === "absolute") {
+          return {
+            content: [{ type: "text", text: ABSOLUTE_SIZING_PERCENTAGE_ERROR }],
+            isError: true,
+          };
+        }
+
         const block = await loadBlock(baseDir, blockId);
         let trades = block.trades;
 
@@ -628,6 +664,9 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           simulationLength,
           resampleWindow,
           resampleMethod,
+          resampleMode,
+          meanBlockLength,
+          ruinThresholdPct,
           initialCapital,
           historicalInitialCapital,
           tradesPerYear,
@@ -646,7 +685,15 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
         const stats = result.statistics;
 
         // Brief summary for user display
-        const summary = `Monte Carlo: ${blockId}${strategy ? ` (${strategy})` : ""} | ${numSimulations} sims | Mean Return: ${formatPercent(stats.meanTotalReturn * 100)} | P(Profit): ${formatPercent(stats.probabilityOfProfit * 100)} | 95% VaR: ${formatPercent(stats.valueAtRisk.p5 * 100)}`;
+        const ruinNote =
+          stats.probabilityOfRuin !== undefined
+            ? ` | P(Ruin): ${formatPercent(stats.probabilityOfRuin * 100)}`
+            : "";
+        const zeroBalanceNote =
+          resampleMethod === "percentage"
+            ? " | Note: zeroBalancePaths is structurally 0 under percentage returns (per-step losses clamp at -100% of current equity, so capital cannot cross zero) — read probabilityOfRuin for ruin risk."
+            : "";
+        const summary = `Monte Carlo: ${blockId}${strategy ? ` (${strategy})` : ""} | ${numSimulations} sims | Mean Return: ${formatPercent(stats.meanTotalReturn * 100)} | P(Profit): ${formatPercent(stats.probabilityOfProfit * 100)} | 95% VaR: ${formatPercent(stats.valueAtRisk.p5 * 100)}${ruinNote}${zeroBalanceNote}`;
 
         // Build structured data for Claude reasoning
         const structuredData = {
@@ -657,6 +704,11 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             simulationLength: params.simulationLength,
             resampleWindow: params.resampleWindow ?? null,
             resampleMethod: params.resampleMethod,
+            resampleMode: params.resampleMode,
+            // Effective value: the auto default (cube root of the pool) when
+            // meanBlockLength was omitted, null when resampleMode is 'iid'.
+            meanBlockLength: result.effectiveMeanBlockLength,
+            ruinThresholdPct: params.ruinThresholdPct ?? null,
             initialCapital: params.initialCapital,
             historicalInitialCapital: params.historicalInitialCapital ?? null,
             tradesPerYear: params.tradesPerYear,
@@ -664,7 +716,7 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             normalizeTo1Lot: params.normalizeTo1Lot ?? false,
             worstCaseEnabled: includeWorstCase,
             worstCasePercentage: params.worstCasePercentage ?? 0,
-            worstCaseMode: params.worstCaseMode ?? "pool",
+            worstCaseMode: params.worstCaseMode ?? "probabilistic",
             worstCaseBasedOn: params.worstCaseBasedOn ?? "simulation",
             worstCaseSizing: params.worstCaseSizing ?? "relative",
           },
@@ -680,6 +732,14 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             medianMaxDrawdown: stats.medianMaxDrawdown,
             meanSharpeRatio: stats.meanSharpeRatio,
             probabilityOfProfit: stats.probabilityOfProfit,
+            // Fraction of paths whose capital touched zero at any step.
+            // Structurally 0 under resampleMethod "percentage" (per-step
+            // returns clamp at -100% of current equity, so capital can never
+            // cross zero) — probabilityOfRuin is the ruin statistic there.
+            zeroBalancePaths: stats.zeroBalancePaths,
+            // Fraction of paths that ever fell to ruinThresholdPct below
+            // starting capital; null unless a threshold was supplied
+            probabilityOfRuin: stats.probabilityOfRuin ?? null,
           },
           valueAtRisk: {
             p5: stats.valueAtRisk.p5,

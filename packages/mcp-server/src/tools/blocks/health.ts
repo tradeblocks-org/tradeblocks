@@ -942,7 +942,7 @@ export function registerHealthBlockTools(server: McpServer, baseDir: string): vo
             tradesPerYear: calculatedTradesPerYear,
             worstCaseEnabled: true,
             worstCasePercentage: 5,
-            worstCaseMode: "pool",
+            worstCaseMode: "probabilistic",
             worstCaseBasedOn: "simulation",
             worstCaseSizing: "relative",
           };
@@ -1117,6 +1117,17 @@ export function registerHealthBlockTools(server: McpServer, baseDir: string): vo
               type: "pass",
               dimension: "consistency",
               message: `Monte Carlo profit probability (${formatPercent(mcStats.probabilityOfProfit * 100)}) meets ${formatPercent(profitThreshold * 100)} threshold`,
+            });
+          }
+
+          // Any simulated path that ran the account to a zero balance is worth
+          // reporting on its own, independent of the profit-probability
+          // threshold. Silent when no path went bust.
+          if (mcStats.zeroBalancePaths > 0) {
+            flags.push({
+              type: "info",
+              dimension: "consistency",
+              message: `Monte Carlo: ${formatPercent(mcStats.zeroBalancePaths * 100)} of simulated paths ran the account to a zero balance`,
             });
           }
 
@@ -1371,6 +1382,7 @@ export function registerHealthBlockTools(server: McpServer, baseDir: string): vo
             avgCorrelation,
             avgTailDependence,
             mcProbabilityOfProfit: mcStats.probabilityOfProfit,
+            mcZeroBalancePaths: mcStats.zeroBalancePaths,
             mcMedianMdd: mcStats.medianMaxDrawdown,
             mcMddMultiplier,
             mcPctMedianMdd: mcPctStats.medianMaxDrawdown,

@@ -16,6 +16,7 @@ import {
   ParquetChainStore,
   DuckdbQuoteStore,
   DuckdbChainStore,
+  hasQuoteGreeks,
 } from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
@@ -281,6 +282,109 @@ describe("ParquetQuoteStore.readWindow", () => {
     expect(row.ask).toBeCloseTo(1.2, 5);
     // `mid` is no longer projected on WindowQuoteRow — it's derived as
     // (bid + ask) / 2 in `toMinuteQuoteRow`.
+    await conn.close();
+  });
+
+  it("default read (no neededGreeks) carries every greek and no projectedGreeks stamp", async () => {
+    const { store, conn } = await setUpParquetStoreWithFixtures();
+    const rows = await store.readWindow({
+      underlying: "SPX",
+      date: DATE,
+      timeStart: "09:35",
+      timeEnd: "09:35",
+      legEnvelopes: [
+        { contractType: "put", dteMin: 7, dteMax: 11, strikeMin: 4700, strikeMax: 4700 },
+      ],
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    const row = rows[0];
+    // Byte-identity: the exact historic key set, no projectedGreeks key present.
+    expect(Object.keys(row).sort()).toEqual(
+      [
+        "ticker",
+        "time",
+        "contract_type",
+        "strike",
+        "expiration",
+        "dte",
+        "bid",
+        "ask",
+        "delta",
+        "gamma",
+        "theta",
+        "vega",
+        "iv",
+        "greeks_source",
+      ].sort(),
+    );
+    expect("projectedGreeks" in row).toBe(false);
+    for (const g of ["delta", "gamma", "theta", "vega", "iv"] as const) {
+      expect(typeof row[g]).toBe("number");
+    }
+    await conn.close();
+  });
+
+  it("projected read returns only requested greeks, NULLs the rest, and stamps projectedGreeks", async () => {
+    const { store, conn } = await setUpParquetStoreWithFixtures();
+    const rows = await store.readWindow({
+      underlying: "SPX",
+      date: DATE,
+      timeStart: "09:35",
+      timeEnd: "09:35",
+      legEnvelopes: [
+        { contractType: "put", dteMin: 7, dteMax: 11, strikeMin: 4700, strikeMax: 4700 },
+      ],
+      neededGreeks: ["delta", "iv"],
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    const row = rows[0];
+    expect(row.delta).toBeCloseTo(0.5, 5);
+    expect(row.iv).toBeCloseTo(0.2, 5);
+    expect(row.gamma).toBeNull();
+    expect(row.theta).toBeNull();
+    expect(row.vega).toBeNull();
+    // Non-greek metadata is always projected in full.
+    expect(row.bid).toBeCloseTo(1.0, 5);
+    expect(row.ask).toBeCloseTo(1.2, 5);
+    expect(row.projectedGreeks).toEqual(["delta", "iv"]);
+    await conn.close();
+  });
+
+  it("a projected row survives the collapse contract when the projection is honored", async () => {
+    const { store, conn } = await setUpParquetStoreWithFixtures();
+    const rows = await store.readWindow({
+      underlying: "SPX",
+      date: DATE,
+      timeStart: "09:35",
+      timeEnd: "09:35",
+      legEnvelopes: [
+        { contractType: "put", dteMin: 7, dteMax: 11, strikeMin: 4700, strikeMax: 4700 },
+      ],
+      neededGreeks: ["delta", "iv"],
+    });
+    const row = rows[0];
+    // The failure mode the projection prevents: the default full contract sees
+    // NULL gamma/theta/vega and would collapse the row.
+    expect(hasQuoteGreeks(row)).toBe(false);
+    // Honoring the projection carried on the row keeps it valid.
+    expect(hasQuoteGreeks(row, row.projectedGreeks)).toBe(true);
+    await conn.close();
+  });
+
+  it("rejects an unknown greek name with a clear error", async () => {
+    const { store, conn } = await setUpParquetStoreWithFixtures();
+    await expect(
+      store.readWindow({
+        underlying: "SPX",
+        date: DATE,
+        timeStart: "09:35",
+        timeEnd: "09:35",
+        legEnvelopes: [
+          { contractType: "put", dteMin: 7, dteMax: 11, strikeMin: 4700, strikeMax: 4700 },
+        ],
+        neededGreeks: ["rho"] as never,
+      }),
+    ).rejects.toThrow(/Unknown greek "rho"/);
     await conn.close();
   });
 

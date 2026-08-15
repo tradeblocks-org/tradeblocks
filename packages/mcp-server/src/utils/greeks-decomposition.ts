@@ -23,14 +23,7 @@ import { bsPrice, bachelierPrice, BACHELIER_DTE_THRESHOLD } from "./black-schole
 // ---------------------------------------------------------------------------
 
 export type FactorName =
-  | "delta"
-  | "gamma"
-  | "theta"
-  | "vega"
-  | "charm"
-  | "vanna"
-  | "residual"
-  | "time_and_vol";
+  "delta" | "gamma" | "theta" | "vega" | "charm" | "vanna" | "residual" | "time_and_vol";
 
 export interface FactorContribution {
   factor: FactorName;

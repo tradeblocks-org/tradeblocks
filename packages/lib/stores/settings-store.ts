@@ -8,6 +8,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { ReportConfig } from "../models/report-config.ts";
+import { generateId } from "../utils/id.ts";
 
 // ============================================================================
 // Built-in Saved Reports (Flexible Chart Builder)
@@ -468,7 +469,7 @@ export const useSettingsStore = create<SettingsStore>()(
 
       // Saved Reports management
       saveReport: (report) => {
-        const id = crypto.randomUUID();
+        const id = generateId();
         const now = new Date().toISOString();
 
         set((state) => ({

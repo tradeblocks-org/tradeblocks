@@ -12,6 +12,7 @@ import {
 } from "../services/calendar-data.ts";
 import { PortfolioStatsCalculator } from "../calculations/portfolio-stats.ts";
 import { normalizeTradesToOneLot } from "../utils/trade-normalization.ts";
+import { generateId } from "../utils/id.ts";
 
 /**
  * Scaling modes for P&L display
@@ -1195,7 +1196,7 @@ export const useTradingCalendarStore = create<TradingCalendarState>((set, get) =
           const existingMappings = block.strategyAlignment?.mappings ?? [];
           const now = new Date();
           const newMapping = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             reportingStrategies: [backtestStrategy],
             liveStrategies: [actualStrategy],
             createdAt: now,

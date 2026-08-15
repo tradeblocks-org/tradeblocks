@@ -10,6 +10,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { PlBasis } from "@tradeblocks/lib";
 import { importCsv } from "../utils/block-loader.ts";
 import { createToolOutput } from "../utils/output-formatter.ts";
 
@@ -72,6 +73,12 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
             "Type of CSV: 'tradelog' (default) for trade records with P/L, " +
               "'dailylog' for daily portfolio values, 'reportinglog' for actual/reported trades",
           ),
+        plBasis: z
+          .enum(PlBasis)
+          .default(PlBasis.NetIncludesFees)
+          .describe(
+            "Basis of the tradelog P/L column. Use 'net_includes_fees' for Option Omega exports (default), or 'gross_before_fees' when commission/fee columns still need to be deducted.",
+          ),
         searchPaths: z
           .array(z.string())
           .optional()
@@ -81,7 +88,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           ),
       }),
     },
-    async ({ csvPath, blockName, csvType, searchPaths }) => {
+    async ({ csvPath, blockName, csvType, plBasis, searchPaths }) => {
       try {
         let resolvedPath = csvPath;
 
@@ -122,6 +129,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           csvPath: resolvedPath,
           blockName,
           csvType,
+          plBasis,
         });
 
         // Brief summary for user display (use result.csvType which reflects auto-detection)
@@ -132,6 +140,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           blockId: result.blockId,
           name: result.name,
           csvType: result.csvType,
+          plBasis: result.plBasis ?? null,
           sourcePath: resolvedPath,
           recordCount: result.recordCount,
           dateRange: result.dateRange,

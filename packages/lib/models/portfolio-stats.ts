@@ -20,6 +20,7 @@
  */
 export interface PortfolioStats {
   totalTrades: number;
+  /** Sum of source-reported `Trade.pl` values in their declared basis. */
   totalPl: number;
   winningTrades: number;
   losingTrades: number;
@@ -48,6 +49,7 @@ export interface PortfolioStats {
   maxDrawdown: number;
   avgDailyPl: number;
   totalCommissions: number;
+  /** Basis-aware net P/L with commissions and fees deducted exactly once. */
   netPl: number;
   profitFactor: number;
   /** Starting portfolio value before any P/L */
@@ -111,6 +113,59 @@ export interface AnalysisConfig {
   annualizationFactor: number; // 252 for business days, 365 for calendar days
   confidenceLevel: number; // 0.95 for 95% confidence
   drawdownThreshold: number; // Minimum drawdown % to consider significant
+  /**
+   * Optional fixed annual risk-free rate in percentage points.
+   * Example: 2 means 2% annually. When omitted, historical FRED DTB3 rates are used.
+   */
+  riskFreeRateAnnualPct?: number;
+}
+
+export interface PortfolioCalculationMethodology {
+  pnl: {
+    netPlBasis: "net_after_fees";
+    sourceBasis: "net_includes_fees" | "gross_before_fees" | "mixed" | "undeclared_assumed_gross";
+    feeHandling: "already_included" | "deducted_once" | "mixed";
+    basisCounts: {
+      netIncludesFees: number;
+      grossBeforeFees: number;
+      undeclaredAssumedGross: number;
+    };
+  };
+  returns: {
+    source: "daily_log" | "realized_trade_pl";
+    attribution: "daily_log_date" | "date_closed_fallback_date_opened";
+    observations: number;
+    dateRange: { start: string | null; end: string | null };
+    idleDays: "included_as_provided" | "included_business_days" | "included_calendar_days";
+  };
+  sharpe: {
+    annualizationFactor: number;
+    volatilityEstimator: "sample_standard_deviation_n_minus_1";
+    riskFreeRate:
+      | {
+          mode: "fixed";
+          annualRatePct: number;
+        }
+      | {
+          mode: "historical";
+          series: "FRED_DTB3";
+          dataThrough: string;
+          resolutionCounts: {
+            exact: number;
+            prior: number;
+            clampedEarliest: number;
+            staleAfterLatest: number;
+          };
+        };
+  };
+  sortino: {
+    annualizationFactor: number;
+    downsideTarget: "zero_excess_return";
+    observationSet: "all_return_observations_positive_values_contribute_zero";
+    denominator: "total_observations_n";
+    riskFreeRate: "same_daily_rate_as_sharpe";
+  };
+  warnings: string[];
 }
 
 /**

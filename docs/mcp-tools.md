@@ -144,3 +144,34 @@ See [Market Data Guide](market-data.md) for import examples, ticker formats, and
 ---
 
 For usage examples and common workflows, see the [Usage Guide](usage.md).
+
+## Developing MCP Tools
+
+### Keep Decisions with the Caller
+
+The language model is the intelligence layer for discovery and configuration. Prefer typed tool
+inputs such as `{ file_path, dataset_type, select_sql, partition }` over server-side format
+registries, provider matrices, schema sniffing, or growing provider switches. The caller can inspect
+files with `run_sql`, discover target shapes with `describe_database`, and provide a transforming
+query. Storage modules should expose a small mode-aware write primitive, while providers should stop
+at fetching or downloading bytes. A new input format should require no server change when a caller
+can express the conversion in SQL.
+
+When adding a statistic or chart to the web application, consider whether AI analysis also needs it.
+Summary metrics generally belong in `get_statistics`; time-series outputs generally belong in
+`get_performance_charts`.
+
+### Verification
+
+After changing MCP server source:
+
+1. Run `npm run build -w packages/mcp-server`.
+2. Run the relevant unit and integration tests, including every configured provider whose
+   capabilities the change affects. Read-only paths need one provider-independent run.
+3. Start the built server through MCP Inspector and call `tools/list` against a representative data
+   directory. A live start catches connection ordering, stale object types, and real Parquet view
+   registration problems that fixtures can miss.
+
+The server initializes in read-write mode, then returns to read-only operation. Write tools upgrade
+the connection on demand. Market reads use Parquet-backed views when the configured market directory
+exists and equivalent DuckDB tables otherwise; mutable sync metadata remains a table.

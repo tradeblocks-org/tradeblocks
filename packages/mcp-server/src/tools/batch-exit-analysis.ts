@@ -25,6 +25,7 @@ import {
 import { getProfile } from "../db/profile-schemas.ts";
 import type { ExitTriggerConfig, LegGroupConfig } from "../utils/exit-triggers.ts";
 import type { MarketStores } from "../market/stores/index.ts";
+import { addMoney, fromMoney, toMoneyField, type Money } from "../utils/money.ts";
 
 // ---------------------------------------------------------------------------
 // Concurrency limiter — hand-rolled semaphore, no external dependency (D-15)
@@ -304,10 +305,15 @@ export async function handleBatchExitAnalysis(
           injectedConn,
         );
 
-        // Compute entry cost for percentage-based triggers (D-11)
-        const tradeEntryCost = replayResult.legs.reduce((sum: number, leg) => {
-          return sum + leg.entryPrice * leg.quantity * leg.multiplier;
-        }, 0);
+        let tradeEntryCostMoney: Money = 0;
+        for (const leg of replayResult.legs) {
+          tradeEntryCostMoney = addMoney(
+            tradeEntryCostMoney,
+            toMoneyField(leg.entryPrice * leg.quantity * leg.multiplier, "leg entry cost"),
+            "entry cost",
+          );
+        }
+        const tradeEntryCost = fromMoney(tradeEntryCostMoney);
 
         return {
           ok: true,
@@ -404,8 +410,9 @@ export function registerBatchExitAnalysisTools(
       description:
         "Analyze how a candidate exit policy would perform across multiple trades in a block. " +
         "Replays each matching trade, evaluates exit triggers against the minute-level P&L path, " +
-        "and returns aggregate statistics (win rate, Sharpe, profit factor, drawdown) comparable " +
-        "to get_statistics. Includes per-trigger attribution showing which triggers drive outcomes. " +
+        "and returns aggregate statistics (win rate, profit factor, drawdown, and a legacy " +
+        "nonannualized trade-P&L signal-to-noise value in sharpeRatio). That legacy field is not " +
+        "comparable to the daily-return Sharpe from get_statistics. Includes per-trigger attribution. " +
         "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
         "trades with missing data are skipped. Use the data-pipeline tools to backfill cache, " +
         "and strategy profiles to iterate on exit rules.",

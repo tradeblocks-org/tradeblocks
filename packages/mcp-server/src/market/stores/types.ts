@@ -93,6 +93,9 @@ export interface CoverageReport {
 // stores) have a single import path: `./types.js`.
 export type { BarRow } from "../../utils/market-provider.ts";
 export type { ContractRow } from "../../utils/chain-loader.ts";
+export type { GreekColumn } from "../../utils/quote-parquet-projection.ts";
+
+import type { GreekColumn } from "../../utils/quote-parquet-projection.ts";
 
 /**
  * Per-leg envelope for QuoteStore.readWindow. Compiled from the strategy's
@@ -113,6 +116,20 @@ export interface ReadWindowParams {
   timeStart: string;
   timeEnd: string;
   legEnvelopes: LegEnvelope[];
+  /**
+   * Opt-in greek projection. Absent ⇒ the full five-greek projection is read
+   * (delta/gamma/theta/vega/iv), byte-identical to the historic behavior.
+   * Present ⇒ the SQL projects only the listed greeks from the partition and
+   * emits NULL for the rest; every returned row is stamped with
+   * `WindowQuoteRow.projectedGreeks` so a null greek that was never requested
+   * is distinguishable from a null greek whose data is genuinely missing.
+   *
+   * Non-greek columns (bid/ask/chain metadata/greeks_source) are always
+   * projected in full regardless of this setting. An unknown greek name throws.
+   * Selection typically needs only `["delta", "iv"]`; gamma/theta/vega feed
+   * downstream reporting snapshots.
+   */
+  neededGreeks?: ReadonlyArray<GreekColumn>;
 }
 
 /**
@@ -139,4 +156,14 @@ export interface WindowQuoteRow {
   vega: number | null;
   iv: number | null;
   greeks_source: "massive" | "thetadata" | "computed" | null;
+  /**
+   * The greek subset deliberately projected by this read, echoed back from
+   * `ReadWindowParams.neededGreeks`. Absent when the read used the full
+   * projection (every greek is meaningful). Present ⇒ only the listed greeks
+   * carry meaningful values; the others are NULL because they were not
+   * requested, NOT because their data is missing. Pass this straight to
+   * `hasQuoteGreeks(row, projectedGreeks)` so a trimmed read is never mistaken
+   * for a data-missing read and collapsed to zero candidates.
+   */
+  projectedGreeks?: ReadonlyArray<GreekColumn>;
 }

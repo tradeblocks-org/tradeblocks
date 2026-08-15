@@ -5,6 +5,7 @@
  */
 
 export * from "./portfolio-stats.ts";
+export * from "./return-series-stats.ts";
 export * from "./performance.ts";
 export * from "./walk-forward-analyzer.ts";
 export * from "./walk-forward-verdict.ts";
@@ -44,6 +45,8 @@ export * from "./enrich-trades.ts";
 export * from "./statistical-utils.ts";
 export * from "./mfe-mae.ts";
 export * from "./paired-block-bootstrap.ts";
+export * from "./selection-adjusted-lower-bound.ts";
+export * from "./parameter-study-selection.ts";
 
 // Re-export types for convenience
 export * from "../models/portfolio-stats.ts";

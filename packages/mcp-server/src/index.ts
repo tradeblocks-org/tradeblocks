@@ -40,10 +40,16 @@ import { registerMarketFetchTools } from "./tools/market-fetch.ts";
 import { registerTickerTools } from "./tools/tickers.ts";
 import { loadRegistry } from "./market/tickers/loader.ts";
 import { closeConnection, getConnection, getCurrentConnection } from "./db/index.ts";
+import { isProcessAlive, isWindows } from "./db/connection.ts";
 import { setDataRoot } from "./db/data-root.ts";
 import { createMarketStores } from "./market/stores/index.ts";
 import type { StoreContext, MarketStores } from "./market/stores/index.ts";
 import type { TradeBlocksPlugin, TradeBlocksPluginContext } from "./plugins.ts";
+import { shouldShutdownOnParentChange } from "./parent-watchdog.ts";
+
+// How often the stdio parent-death watchdog polls process.ppid. See the
+// watchdog install site in startTradeBlocksMcp() below.
+const PARENT_WATCHDOG_INTERVAL_MS = 2000;
 
 export interface StartTradeBlocksMcpOptions {
   plugins?: TradeBlocksPlugin[];
@@ -341,6 +347,14 @@ export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = 
     return server;
   };
 
+  // Graceful shutdown for DuckDB connection
+  // The connection is lazily initialized, so this only does work if a tool
+  // actually opened the database during this session
+  const shutdown = async () => {
+    await closeConnection();
+    process.exit(0);
+  };
+
   if (http) {
     // Load auth config for HTTP mode
     const { loadAuthConfig } = await import("./auth/config.ts");
@@ -370,15 +384,47 @@ export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = 
       await closeConnection();
       process.exit(0);
     });
+
+    // Proactive parent-death watchdog — defense in depth alongside the
+    // stdin/SIGTERM/SIGINT handlers above.
+    //
+    // Some launchers (e.g. `npx tradeblocks-mcp ...`) sit between the real
+    // client and this process: client -> launcher -> node (this process). If
+    // the launcher is killed without cleanly propagating a signal to us, we
+    // are orphaned (reparented on Unix) and NEITHER handler above fires: no
+    // SIGTERM/SIGINT ever arrives (only the launcher got it, if anything
+    // did), and stdin never EOFs because the client — not the launcher —
+    // holds the pipe's write-end. Left alone we'd linger holding the DuckDB
+    // analytics database's write lock, and the next session's connection
+    // attempt would fail with a stale-lock error.
+    //
+    // See shouldShutdownOnParentChange for the cross-platform decision logic.
+    const startupPpid = process.ppid;
+    const startAlreadyOrphaned = !isWindows && startupPpid === 1;
+    if (!startAlreadyOrphaned) {
+      // Skip installing entirely when we start already orphaned (Unix PPID 1,
+      // e.g. launched under systemd) — there is no launcher to watch, and a
+      // systemd-launched process must never self-terminate on that basis.
+      const watchdog = setInterval(() => {
+        const shutdownNeeded = shouldShutdownOnParentChange({
+          isWindows,
+          startupPpid,
+          currentPpid: process.ppid,
+          // Windows PPID doesn't change when the parent dies, so liveness of
+          // the ORIGINAL parent is the only usable signal there. Skip the
+          // liveness probe on Unix, where it's unused by the decision fn.
+          startupParentAlive: isWindows ? isProcessAlive(startupPpid) : true,
+        });
+        if (shutdownNeeded) {
+          clearInterval(watchdog);
+          void shutdown();
+        }
+      }, PARENT_WATCHDOG_INTERVAL_MS);
+      // Never let the watchdog's own timer keep the process alive.
+      watchdog.unref();
+    }
   }
 
-  // Graceful shutdown for DuckDB connection
-  // The connection is lazily initialized, so this only does work if a tool
-  // actually opened the database during this session
-  const shutdown = async () => {
-    await closeConnection();
-    process.exit(0);
-  };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 }

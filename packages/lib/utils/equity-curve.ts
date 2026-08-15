@@ -16,7 +16,7 @@
  * ```
  */
 
-import type { Trade } from "../models/trade.ts";
+import { PlBasis, type Trade } from "../models/trade.ts";
 
 /**
  * Options for rebuilding equity curves.
@@ -36,8 +36,8 @@ export interface RebuildEquityCurveOptions {
 
   /**
    * Whether to include commissions in P&L calculation.
-   * When true, uses net P&L (pl - commissions).
-   * Default: false (uses gross P&L from trade.pl)
+   * When true, uses basis-aware net P&L and deducts fees at most once.
+   * Default: false (uses the reported value from trade.pl)
    */
   useNetPl?: boolean;
 }
@@ -86,7 +86,10 @@ export function sortTradesByCloseDate<T extends Pick<Trade, "dateClosed" | "time
  * @returns Initial capital, or undefined if cannot be determined
  */
 export function calculateInitialCapital(
-  sortedTrades: Pick<Trade, "fundsAtClose" | "pl">[],
+  sortedTrades: Pick<
+    Trade,
+    "fundsAtClose" | "pl" | "plBasis" | "openingCommissionsFees" | "closingCommissionsFees"
+  >[],
 ): number | undefined {
   if (sortedTrades.length === 0) return undefined;
 
@@ -95,21 +98,43 @@ export function calculateInitialCapital(
     return undefined;
   }
 
-  return firstTrade.fundsAtClose - firstTrade.pl;
+  const metricPl = firstTrade.plBasis === undefined ? firstTrade.pl : getNetPl(firstTrade);
+  return firstTrade.fundsAtClose - metricPl;
 }
 
 /**
- * Get the net P&L for a trade (gross P&L minus commissions).
+ * Get the net P&L for a trade, deducting commissions exactly once.
+ *
+ * Option Omega exports declare `net_includes_fees`, so their reported P/L is
+ * returned unchanged. An omitted basis preserves the historical TradeBlocks
+ * contract and is treated as `gross_before_fees`.
  *
  * @param trade - Trade to calculate net P&L for
  * @returns Net P&L value
  */
 export function getNetPl(
-  trade: Pick<Trade, "pl" | "openingCommissionsFees" | "closingCommissionsFees">,
+  trade: Pick<Trade, "pl" | "plBasis" | "openingCommissionsFees" | "closingCommissionsFees">,
 ): number {
+  if (trade.plBasis === PlBasis.NetIncludesFees) {
+    return trade.pl;
+  }
   const openingComm = trade.openingCommissionsFees ?? 0;
   const closingComm = trade.closingCommissionsFees ?? 0;
   return trade.pl - openingComm - closingComm;
+}
+
+/**
+ * Get gross-before-fee P/L from a basis-aware trade.
+ */
+export function getGrossPl(
+  trade: Pick<Trade, "pl" | "plBasis" | "openingCommissionsFees" | "closingCommissionsFees">,
+): number {
+  if (trade.plBasis !== PlBasis.NetIncludesFees) {
+    return trade.pl;
+  }
+  const openingComm = trade.openingCommissionsFees ?? 0;
+  const closingComm = trade.closingCommissionsFees ?? 0;
+  return trade.pl + openingComm + closingComm;
 }
 
 /**

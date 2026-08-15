@@ -14,6 +14,7 @@ import { fileURLToPath } from "url";
 import {
   syncAllBlocks,
   syncBlock,
+  listBlocks,
   getConnection,
   closeConnection,
   upgradeToReadWrite,
@@ -401,6 +402,88 @@ describe("Sync Layer Integration", () => {
   });
 
   describe("Edge Cases", () => {
+    it("re-syncs unchanged CSVs whose metadata uses the prior parse version", async () => {
+      await createBlockWithTrades(testDir, "old-parser-block", [SAMPLE_TRADE_ROW_1]);
+      await syncAllBlocks(testDir);
+
+      const conn = await getConnection(testDir);
+      await conn.run(
+        `UPDATE trades._sync_metadata
+         SET tradelog_hash = replace(tradelog_hash, ':v4', ':v3')
+         WHERE block_id = 'old-parser-block'`,
+      );
+      await conn.run(`UPDATE trades.trade_data SET pl = -999 WHERE block_id = 'old-parser-block'`);
+
+      const result = await syncAllBlocks(testDir);
+      expect(result.blocksSynced).toBe(1);
+
+      const reader = await conn.runAndReadAll(
+        `SELECT d.pl, m.tradelog_hash
+         FROM trades.trade_data d
+         JOIN trades._sync_metadata m USING (block_id)
+         WHERE d.block_id = 'old-parser-block'`,
+      );
+      expect(Number(reader.getRows()[0][0])).toBe(200);
+      expect(String(reader.getRows()[0][1])).toMatch(/:v4$/);
+    });
+
+    it("persists gross P/L basis and reports basis-aware net P/L", async () => {
+      const blockPath = path.join(testDir, "gross-basis-block");
+      await fs.mkdir(blockPath, { recursive: true });
+      const headers = `${CSV_HEADERS.replace(
+        "Opening Commissions + Fees,Closing Commissions + Fees",
+        "Opening comms & fees,Closing comms & fees",
+      )},P/L Basis`;
+      const formattedRow = SAMPLE_TRADE_ROW_1.replace(",200,Sync", ',"$1,200.00",Sync').replace(
+        ",1.50,1.50,Target",
+        ',"$1.50","$1.50",Target',
+      );
+      await fs.writeFile(
+        path.join(blockPath, "tradelog.csv"),
+        `${headers}\n${formattedRow},gross_before_fees`,
+      );
+
+      await syncAllBlocks(testDir);
+
+      const conn = await getConnection(testDir);
+      const reader = await conn.runAndReadAll(
+        `SELECT pl_basis, pl, reported_pl
+         FROM trades.trade_data
+         WHERE block_id = 'gross-basis-block'`,
+      );
+      expect(reader.getRows()[0][0]).toBe("gross_before_fees");
+      expect(Number(reader.getRows()[0][1])).toBe(1197);
+      expect(Number(reader.getRows()[0][2])).toBe(1200);
+
+      const listed = await listBlocks(testDir);
+      const block = listed.find((entry) => entry.blockId === "gross-basis-block");
+      expect(block?.totalPl).toBe(1200);
+      expect(block?.netPl).toBe(1197);
+    });
+
+    it("rejects gross-basis CSV rows when fee fields are unavailable", async () => {
+      const blockPath = path.join(testDir, "gross-without-fees-block");
+      await fs.mkdir(blockPath, { recursive: true });
+      const headers =
+        "Date Opened,Time Opened,Date Closed,Time Closed,Opening Price,Closing Price,Legs,Premium,No. of Contracts,P/L,Strategy,Reason For Close,Funds at Close,Margin Req.,P/L Basis";
+      const row =
+        "2024-01-02,09:35:00,2024-01-02,15:30:00,2.50,0.50,SPX 4800P/4750P,250,1,200,Sync Test Strategy,Target,10200,5000,gross_before_fees";
+      await fs.writeFile(path.join(blockPath, "tradelog.csv"), `${headers}\n${row}`);
+
+      const result = await syncAllBlocks(testDir);
+
+      expect(result.errors).toEqual([
+        {
+          blockId: "gross-without-fees-block",
+          error: expect.stringContaining(
+            "Gross-before-fees P/L requires both opening and closing commission fields",
+          ),
+        },
+      ]);
+      expect(await getTradeCount(testDir, "gross-without-fees-block")).toBe(0);
+      expect(await hasBlockMetadata(testDir, "gross-without-fees-block")).toBe(false);
+    });
+
     it("handles empty block folder gracefully", async () => {
       // Create empty folder (no tradelog.csv)
       const blockPath = path.join(testDir, "empty-block");

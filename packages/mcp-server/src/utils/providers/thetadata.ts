@@ -35,6 +35,11 @@ import type {
   OpenInterestRow,
   ProviderCapabilities,
 } from "../market-provider.ts";
+import { bulkQuoteRootsForUnderlying } from "./thetadata/bulk-roots.ts";
+export {
+  bulkQuoteRootsForUnderlying,
+  countBulkQuoteGroupsPerDate,
+} from "./thetadata/bulk-roots.ts";
 
 const BULK_YIELD_CHUNK = 50_000;
 const BULK_GREEKS_STRIKE_RANGE = 20;
@@ -144,23 +149,6 @@ function stockOhlcRowToBar(ticker: string, row: ThetaStockOhlcRow): BarRow {
     ...stockEodRowToBar(ticker, row),
     time: msOfDayToEtMinute(row.msOfDay),
   };
-}
-
-/**
- * Wire-level roots that bulk quote ingestion expands an underlying into. SPX has
- * monthly (`SPX`) and weekly/daily (`SPXW`) option roots in ThetaData.
- */
-export function bulkQuoteRootsForUnderlying(underlying: string): string[] {
-  const upper = underlying.toUpperCase();
-  return upper === "SPX" ? ["SPX", "SPXW"] : [upper];
-}
-
-/**
- * Number of final root/right groups per date. Providers may emit additional
- * checkpoint events while processing those groups.
- */
-export function countBulkQuoteGroupsPerDate(underlying: string): number {
-  return bulkQuoteRootsForUnderlying(underlying).length * 2;
 }
 
 function inferExerciseStyle(symbol: string): "american" | "european" {

@@ -5,12 +5,12 @@
  * Drives a small-scale backfill-compute-verify cycle end-to-end against a
  * tmp Parquet fixture with a mocked provider. Asserts that:
  *   - spot/ticker=X/date=Y/data.parquet exists after SpotStore.writeBars
- *   - enriched/ticker=X/data.parquet exists, no OHLCV columns (via
- *     writeEnrichedTickerFile — the canonical write primitive that the
+ *   - enriched/ticker=X/date=Y/data.parquet exists, no OHLCV columns (via
+ *     writeEnrichedTickerPartition — the canonical write primitive that the
  *     stores-based `EnrichedStore.compute` is wired through; some legacy
  *     daily.parquet plumbing remains and is exercised separately)
- *   - enriched/context/data.parquet exists with cross-ticker fields (via
- *     writeEnrichedContext)
+ *   - enriched/context/date=Y/data.parquet exists with cross-ticker fields (via
+ *     writeEnrichedContextPartition)
  *   - compareRow.anyFailure=true when Gap_Pct drift exceeds 1e-9
  *   - In-process round-trip: MockProvider.fetchBars → SpotStore.writeBars
  *     surfaces as coverage and via the canonical view
@@ -26,8 +26,8 @@ import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import {
   createMarketStores,
-  writeEnrichedTickerFile,
-  writeEnrichedContext,
+  writeEnrichedTickerPartition,
+  writeEnrichedContextPartition,
   compareRow,
   DOUBLE_EPSILON,
   ENRICHED_FIELD_TYPES,
@@ -139,7 +139,7 @@ describe("market data round-trip — spot backfill → enriched layout → verif
     expect(cov.latest).toBe("2024-08-05");
   });
 
-  it("enriched layout — enriched/ticker=X/data.parquet exists, no OHLCV columns", async () => {
+  it("enriched layout — ticker/date partition exists with no OHLCV columns", async () => {
     // Stage an enriched row via the canonical write primitive. Eventually
     // `stores.enriched.compute` calls this helper directly; here we exercise
     // it on its own to prove the target layout is buildable independent of
@@ -152,13 +152,17 @@ describe("market data round-trip — spot backfill → enriched layout → verif
                1::INTEGER AS Gap_Filled, 1::INTEGER AS Day_of_Week,
                8::INTEGER AS Month, 0::INTEGER AS Is_Opex`,
     );
-    await writeEnrichedTickerFile(handle.ctx.conn, {
+    await writeEnrichedTickerPartition(handle.ctx.conn, {
       dataDir: handle.ctx.dataDir,
       ticker: "SPX",
+      date: "2024-08-05",
       selectQuery: `SELECT * FROM _enriched_stage`,
     });
 
-    const expected = join(handle.ctx.dataDir, "market/enriched/ticker=SPX/data.parquet");
+    const expected = join(
+      handle.ctx.dataDir,
+      "market/enriched/ticker=SPX/date=2024-08-05/data.parquet",
+    );
     expect(existsSync(expected)).toBe(true);
 
     // Assert the enriched file schema does NOT include OHLCV — enriched
@@ -176,22 +180,26 @@ describe("market data round-trip — spot backfill → enriched layout → verif
     expect(cols).toContain("gap_pct");
   });
 
-  it("context layout — enriched/context/data.parquet exists with cross-ticker fields", async () => {
+  it("context layout — bounded context partition has cross-ticker fields", async () => {
     await handle.ctx.conn.run(
       `CREATE TEMP TABLE _context_stage AS
         SELECT '2024-08-05' AS date,
                6::INTEGER AS Vol_Regime,
                0::INTEGER AS Term_Structure_State,
-               'bear'::VARCHAR AS Trend_Direction,
+               'down'::VARCHAR AS Trend_Direction,
                65.0::DOUBLE AS VIX_Spike_Pct,
                20.0::DOUBLE AS VIX_Gap_Pct`,
     );
-    await writeEnrichedContext(handle.ctx.conn, {
+    await writeEnrichedContextPartition(handle.ctx.conn, {
       dataDir: handle.ctx.dataDir,
+      date: "2024-08-05",
       selectQuery: `SELECT * FROM _context_stage`,
     });
 
-    const expected = join(handle.ctx.dataDir, "market/enriched/context/data.parquet");
+    const expected = join(
+      handle.ctx.dataDir,
+      "market/enriched/context/date=2024-08-05/data.parquet",
+    );
     expect(existsSync(expected)).toBe(true);
 
     const schema = await handle.ctx.conn.runAndReadAll(

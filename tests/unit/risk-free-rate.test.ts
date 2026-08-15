@@ -4,7 +4,13 @@ import {
   getLatestRateDate,
   getRateDataRange,
   formatDateToKey,
+  getRiskFreeRateByKey,
+  getSofrRateByKey,
+  resolveSofrRateByKey,
+  resolveTreasuryRateByKey,
 } from "@tradeblocks/lib";
+import { SOFR_RATES } from "../../packages/lib/data/sofr-rates";
+import { TREASURY_RATES } from "../../packages/lib/data/treasury-rates";
 
 describe("Risk-Free Rate Lookup Utility", () => {
   describe("getRiskFreeRate", () => {
@@ -177,6 +183,88 @@ describe("Risk-Free Rate Lookup Utility", () => {
       const highRate = getRiskFreeRate(highDate);
 
       expect(highRate).toBeGreaterThan(lowRate);
+    });
+  });
+
+  describe("content-addressable rate resolution", () => {
+    it("keeps both bundled series canonical to ISO dates and integer basis points", () => {
+      for (const series of [SOFR_RATES, TREASURY_RATES]) {
+        const dates = Object.keys(series);
+        expect(dates).toEqual([...dates].sort());
+        expect(new Set(dates).size).toBe(dates.length);
+        for (const [date, rate] of Object.entries(series)) {
+          expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+          expect(Number.isFinite(rate)).toBe(true);
+          const basisPoints = Math.round(rate * 100);
+          expect(Number.isSafeInteger(basisPoints)).toBe(true);
+          expect(basisPoints / 100).toBe(rate);
+        }
+      }
+    });
+
+    it("keeps both bundled rate tails refreshed through the declared release horizon", () => {
+      const expectedTail = "2026-07-20";
+      expect(Object.keys(SOFR_RATES).at(-1)).toBe(expectedTail);
+      expect(Object.keys(TREASURY_RATES).at(-1)).toBe(expectedTail);
+      // FRED publishes blank observations on these federal/market holidays;
+      // blank rows are absence, never numeric zero-rate observations.
+      for (const holiday of ["2026-05-25", "2026-06-19", "2026-07-03"]) {
+        expect(SOFR_RATES[holiday]).toBeUndefined();
+        expect(TREASURY_RATES[holiday]).toBeUndefined();
+      }
+    });
+
+    it("returns exact integer-basis-point identities for both distinct series", () => {
+      expect(resolveSofrRateByKey("2026-05-07")).toEqual({
+        requestedDate: "2026-05-07",
+        effectiveDate: "2026-05-07",
+        annualRateBasisPoints: 360,
+        resolution: "exact",
+      });
+      expect(resolveTreasuryRateByKey("2026-05-07")).toEqual({
+        requestedDate: "2026-05-07",
+        effectiveDate: "2026-05-07",
+        annualRateBasisPoints: 361,
+        resolution: "exact",
+      });
+    });
+
+    it("distinguishes prior-day, earliest clamp, and stale-tail resolution", () => {
+      expect(resolveSofrRateByKey("2024-07-13")).toMatchObject({
+        effectiveDate: "2024-07-12",
+        annualRateBasisPoints: 534,
+        resolution: "prior",
+      });
+      expect(resolveTreasuryRateByKey("2010-01-01")).toMatchObject({
+        effectiveDate: "2013-01-02",
+        annualRateBasisPoints: 8,
+        resolution: "clamped-earliest",
+      });
+      expect(resolveSofrRateByKey("2026-05-08")).toMatchObject({
+        effectiveDate: "2026-05-08",
+        resolution: "exact",
+      });
+      expect(resolveTreasuryRateByKey("2026-05-08")).toMatchObject({
+        effectiveDate: "2026-05-08",
+        resolution: "exact",
+      });
+      expect(resolveSofrRateByKey("2026-07-21")).toMatchObject({
+        effectiveDate: "2026-07-20",
+        resolution: "stale-after-latest",
+      });
+      expect(resolveTreasuryRateByKey("2026-07-21")).toMatchObject({
+        effectiveDate: "2026-07-20",
+        resolution: "stale-after-latest",
+      });
+    });
+
+    it("keeps the legacy numeric wrappers byte-for-byte compatible", () => {
+      for (const date of ["2010-01-01", "2024-07-13", "2026-05-07", "2026-05-08"]) {
+        expect(getSofrRateByKey(date)).toBe(resolveSofrRateByKey(date).annualRateBasisPoints / 100);
+        expect(getRiskFreeRateByKey(date)).toBe(
+          resolveTreasuryRateByKey(date).annualRateBasisPoints / 100,
+        );
+      }
     });
   });
 });

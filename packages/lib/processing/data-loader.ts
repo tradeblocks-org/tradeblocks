@@ -6,7 +6,12 @@
  * Supports optional IndexedDB storage
  */
 
-import { type Trade, TRADE_COLUMN_ALIASES, REQUIRED_TRADE_COLUMNS } from "../models/trade.ts";
+import {
+  PlBasis,
+  type Trade,
+  TRADE_COLUMN_ALIASES,
+  REQUIRED_TRADE_COLUMNS,
+} from "../models/trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
 import { assertRequiredHeaders, normalizeHeaders, parseCsvLine } from "../utils/csv-headers.ts";
 // Import ProcessingError from models to avoid duplicate definition
@@ -163,7 +168,16 @@ export class IndexedDBAdapter implements StorageAdapter {
     return storedTrades.map((storedTrade) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { blockId, id, ...trade } = storedTrade;
-      return trade as Trade;
+      // Historical application rows in this IndexedDB store were populated by
+      // the Option Omega CSV loader. Rows written before plBasis was introduced
+      // therefore have the same net-includes-fees provenance as fresh imports.
+      // The legacy row stores no independent gross/net field from which a
+      // contradictory basis could be inferred, so do not guess from fee
+      // arithmetic.
+      return {
+        ...trade,
+        plBasis: trade.plBasis ?? PlBasis.NetIncludesFees,
+      } as Trade;
     });
   }
 
@@ -512,6 +526,7 @@ export class DataLoader {
             : undefined,
           reasonForClose: row["Reason For Close"] || undefined,
           pl: parseFloat(row["P/L"] || "0"),
+          plBasis: PlBasis.NetIncludesFees,
           numContracts: parseInt(row["No. of Contracts"] || "1"),
           fundsAtClose: parseFloat(row["Funds at Close"] || "0"),
           marginReq: parseFloat(row["Margin Req."] || "0"),

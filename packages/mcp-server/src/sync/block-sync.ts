@@ -19,7 +19,7 @@ import {
 import { resolveTickerFromCsvRow } from "../utils/ticker.ts";
 import { convertToReportingTrade } from "../utils/block-loader.ts";
 import { discoverCsvFiles } from "../utils/csv-discovery.ts";
-import type { ReportingTrade } from "@tradeblocks/lib";
+import { PlBasis, type ReportingTrade } from "@tradeblocks/lib";
 
 /**
  * Result of syncing a single block
@@ -89,6 +89,22 @@ function parseCSVLine(line: string): string[] {
 
   result.push(current.trim());
   return result;
+}
+
+/** Parse the numeric formats accepted by the direct CSV loader. */
+function parseCsvNumber(value: string | undefined, fallback = Number.NaN): number {
+  if (!value) return fallback;
+  const parsed = Number.parseFloat(value.replace(/[$,%]/g, "").trim());
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function firstCsvValue(record: Record<string, string>, ...headers: string[]): string | undefined {
+  for (const header of headers) {
+    if (record[header] !== undefined && record[header] !== "") {
+      return record[header];
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -177,8 +193,8 @@ async function insertTradeBatch(
   if (batch.length === 0) return;
 
   // Build VALUES placeholders: ($1, $2, $3, ...), ($15, $16, $17, ...), ...
-  // Each row has 15 columns: block_id + 13 trade fields + ticker
-  const columnsPerRow = 15;
+  // Each row has 17 columns: block_id + trade fields + reported P/L provenance + ticker.
+  const columnsPerRow = 17;
   const placeholders: string[] = [];
   const params: (string | number | null)[] = [];
 
@@ -189,13 +205,36 @@ async function insertTradeBatch(
     placeholders.push(`(${rowPlaceholders.join(", ")})`);
 
     // Parse numeric values safely
-    const premium = parseFloat(record["Premium"]);
-    const numContracts = parseInt(record["No. of Contracts"], 10);
-    const pl = parseFloat(record["P/L"]);
-    const marginReq = parseFloat(record["Margin Req."]);
-    const openingCommissions = parseFloat(record["Opening Commissions + Fees"]);
-    const closingCommissions = parseFloat(record["Closing Commissions + Fees"]);
+    const premium = parseCsvNumber(record["Premium"]);
+    const numContracts = parseCsvNumber(record["No. of Contracts"]);
+    const reportedPl = parseCsvNumber(record["P/L"]);
+    const marginReq = parseCsvNumber(record["Margin Req."]);
+    const openingCommissions = parseCsvNumber(
+      firstCsvValue(record, "Opening Commissions + Fees", "Opening comms & fees"),
+    );
+    const closingCommissions = parseCsvNumber(
+      firstCsvValue(record, "Closing Commissions + Fees", "Closing comms & fees"),
+    );
     const ticker = resolveTickerFromCsvRow(record);
+    const plBasis =
+      record["P/L Basis"] === PlBasis.GrossBeforeFees
+        ? PlBasis.GrossBeforeFees
+        : PlBasis.NetIncludesFees;
+    if (
+      plBasis === PlBasis.GrossBeforeFees &&
+      (!Number.isFinite(openingCommissions) || !Number.isFinite(closingCommissions))
+    ) {
+      throw new Error(
+        `Gross-before-fees P/L requires both opening and closing commission fields (CSV row ${startIdx + rowIdx + 2})`,
+      );
+    }
+    const safeReportedPl = isNaN(reportedPl) ? 0 : reportedPl;
+    const netPl =
+      plBasis === PlBasis.GrossBeforeFees
+        ? safeReportedPl -
+          (isNaN(openingCommissions) ? 0 : openingCommissions) -
+          (isNaN(closingCommissions) ? 0 : closingCommissions)
+        : safeReportedPl;
 
     // Map CSV record to column values
     params.push(
@@ -206,7 +245,9 @@ async function insertTradeBatch(
       record["Legs"] || null, // legs
       isNaN(premium) ? null : premium, // premium
       isNaN(numContracts) ? 1 : numContracts, // num_contracts
-      isNaN(pl) ? 0 : pl, // pl
+      netPl, // canonical net P/L used by analytics queries
+      safeReportedPl, // source-reported P/L
+      plBasis,
       normalizeCsvDate(record["Date Closed"]), // date_closed
       record["Time Closed"] || null, // time_closed
       record["Reason For Close"] || null, // reason_for_close
@@ -220,7 +261,7 @@ async function insertTradeBatch(
   const sql = `
     INSERT INTO trades.trade_data (
       block_id, date_opened, time_opened, strategy, legs, premium,
-      num_contracts, pl, date_closed, time_closed, reason_for_close,
+      num_contracts, pl, reported_pl, pl_basis, date_closed, time_closed, reason_for_close,
       margin_req, opening_commissions, closing_commissions, ticker
     ) VALUES ${placeholders.join(", ")}
   `;
@@ -312,8 +353,10 @@ async function insertReportingBatch(
  * Appended to content hashes so stored hashes will mismatch.
  *
  * v2: Use blockId as strategy fallback for empty Strategy columns
+ * v3: Preserve reported P/L provenance and parse formatted/aliased Option Omega fields
+ * v4: Reject gross-before-fees rows whose fee fields are unavailable
  */
-const PARSE_VERSION = "v2";
+const PARSE_VERSION = "v4";
 
 function versionedHash(hash: string): string {
   return `${hash}:${PARSE_VERSION}`;

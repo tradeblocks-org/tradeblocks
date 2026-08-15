@@ -15,6 +15,16 @@ import { SOFR_RATES } from "../data/sofr-rates.ts";
 let sortedKeys: string[] | null = null;
 let sortedSofrKeys: string[] | null = null;
 
+export type RateResolution = "exact" | "prior" | "clamped-earliest" | "stale-after-latest";
+
+export interface ResolvedRateByKey {
+  requestedDate: string;
+  effectiveDate: string;
+  /** Integer hundredths of one percentage point (for example 3.60% = 360). */
+  annualRateBasisPoints: number;
+  resolution: RateResolution;
+}
+
 /**
  * Get all rate date keys sorted in ascending order
  */
@@ -101,6 +111,56 @@ function getSortedSofrKeys(): string[] {
   return sortedSofrKeys;
 }
 
+function resolveRateByKey(
+  rates: Readonly<Record<string, number>>,
+  keys: readonly string[],
+  requestedDate: string,
+): ResolvedRateByKey {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+    throw new TypeError(`Rate date must be YYYY-MM-DD: ${JSON.stringify(requestedDate)}`);
+  }
+  let effectiveDate: string;
+  let resolution: RateResolution;
+  if (rates[requestedDate] !== undefined) {
+    effectiveDate = requestedDate;
+    resolution = "exact";
+  } else if (requestedDate < keys[0]) {
+    effectiveDate = keys[0];
+    resolution = "clamped-earliest";
+  } else if (requestedDate > keys[keys.length - 1]) {
+    effectiveDate = keys[keys.length - 1];
+    resolution = "stale-after-latest";
+  } else {
+    let left = 0;
+    let right = keys.length - 1;
+    while (left < right) {
+      const mid = Math.floor((left + right + 1) / 2);
+      if (keys[mid] <= requestedDate) left = mid;
+      else right = mid - 1;
+    }
+    effectiveDate = keys[left];
+    resolution = "prior";
+  }
+  const annualRateBasisPoints = Math.round(rates[effectiveDate] * 100);
+  if (
+    !Number.isSafeInteger(annualRateBasisPoints) ||
+    annualRateBasisPoints / 100 !== rates[effectiveDate]
+  ) {
+    throw new Error(`Rate table value is not exact to one basis point: ${effectiveDate}`);
+  }
+  return { requestedDate, effectiveDate, annualRateBasisPoints, resolution };
+}
+
+/** Resolve SOFR with explicit prior-day and stale-tail semantics. */
+export function resolveSofrRateByKey(dateKey: string): ResolvedRateByKey {
+  return resolveRateByKey(SOFR_RATES, getSortedSofrKeys(), dateKey);
+}
+
+/** Resolve the 3-month Treasury rate with explicit prior-day and stale-tail semantics. */
+export function resolveTreasuryRateByKey(dateKey: string): ResolvedRateByKey {
+  return resolveRateByKey(TREASURY_RATES, getSortedKeys(), dateKey);
+}
+
 /**
  * Get the SOFR overnight rate for a date specified as a YYYY-MM-DD string key.
  *
@@ -114,33 +174,7 @@ function getSortedSofrKeys(): string[] {
  * @returns Annual SOFR rate as a percentage (e.g., 3.60 for 3.60%)
  */
 export function getSofrRateByKey(dateKey: string): number {
-  const keys = getSortedSofrKeys();
-
-  if (SOFR_RATES[dateKey] !== undefined) {
-    return SOFR_RATES[dateKey];
-  }
-
-  if (dateKey < keys[0]) {
-    return SOFR_RATES[keys[0]];
-  }
-
-  if (dateKey > keys[keys.length - 1]) {
-    return SOFR_RATES[keys[keys.length - 1]];
-  }
-
-  let left = 0;
-  let right = keys.length - 1;
-
-  while (left < right) {
-    const mid = Math.floor((left + right + 1) / 2);
-    if (keys[mid] <= dateKey) {
-      left = mid;
-    } else {
-      right = mid - 1;
-    }
-  }
-
-  return SOFR_RATES[keys[left]];
+  return resolveSofrRateByKey(dateKey).annualRateBasisPoints / 100;
 }
 
 /**
@@ -193,37 +227,5 @@ export function getRateEntryCount(): number {
  * @returns Annual risk-free rate as a percentage (e.g., 4.32 for 4.32%)
  */
 export function getRiskFreeRateByKey(dateKey: string): number {
-  const keys = getSortedKeys();
-
-  // Direct lookup first (most common case for trading days)
-  if (TREASURY_RATES[dateKey] !== undefined) {
-    return TREASURY_RATES[dateKey];
-  }
-
-  // Date is before our data range - return earliest rate
-  if (dateKey < keys[0]) {
-    return TREASURY_RATES[keys[0]];
-  }
-
-  // Date is after our data range - return latest rate
-  if (dateKey > keys[keys.length - 1]) {
-    return TREASURY_RATES[keys[keys.length - 1]];
-  }
-
-  // Date is within range but not found (weekend/holiday)
-  // Binary search to find the nearest prior trading day
-  let left = 0;
-  let right = keys.length - 1;
-
-  while (left < right) {
-    const mid = Math.floor((left + right + 1) / 2);
-    if (keys[mid] <= dateKey) {
-      left = mid;
-    } else {
-      right = mid - 1;
-    }
-  }
-
-  // Return the rate from the most recent prior trading day
-  return TREASURY_RATES[keys[left]];
+  return resolveTreasuryRateByKey(dateKey).annualRateBasisPoints / 100;
 }

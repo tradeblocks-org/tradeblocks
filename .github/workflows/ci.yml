@@ -29,12 +29,6 @@ jobs:
       - name: "No file: deps gate"
         run: '! grep -q ''"file:'' package.json packages/*/package.json'
 
-      # The tradeblocks-mcp exports map is the package's published surface.
-      # Verify every target file resolves on disk and that no excluded
-      # subpaths have crept in. See the script's header for the policy.
-      - name: Verify mcp-server exports surface
-        run: node packages/mcp-server/scripts/verify-exports-surface.mjs
-
   security:
     name: Dependency audit
     runs-on: ubuntu-latest
@@ -104,6 +98,15 @@ jobs:
 
       - name: Build MCP Server
         run: npm run build -w packages/mcp-server
+
+      # The tradeblocks-mcp exports map is the package's published surface.
+      # Verify every target resolves from the built output and that no
+      # excluded subpaths have crept in.
+      - name: Verify mcp-server exports surface
+        run: node packages/mcp-server/scripts/verify-exports-surface.mjs
+
+      - name: Verify packed provenance runtime
+        run: node packages/mcp-server/scripts/verify-packed-provenance-runtime.mjs
 
       # Heap ceiling is 6144 MB per worker as headroom for `workerIdleMemoryLimit`
       # (set in packages/mcp-server/jest.config.js) to recycle workers cleanly

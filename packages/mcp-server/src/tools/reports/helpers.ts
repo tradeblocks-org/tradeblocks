@@ -5,7 +5,7 @@
  * Inline implementations (can't import enrichTrades due to browser deps).
  */
 
-import type { Trade, FilterOperator } from "@tradeblocks/lib";
+import { getNetPl, type Trade, type FilterOperator } from "@tradeblocks/lib";
 
 /**
  * Simplified enriched trade interface for MCP server
@@ -114,7 +114,7 @@ export function enrichTrades(trades: Trade[]): EnrichedTrade[] {
   return trades.map((trade, index) => {
     const dateOpened = new Date(trade.dateOpened);
     const totalFees = trade.openingCommissionsFees + (trade.closingCommissionsFees ?? 0);
-    const netPl = trade.pl - totalFees;
+    const netPl = getNetPl(trade);
 
     // VIX changes
     const hasVixData = trade.openingVix != null && trade.closingVix != null;

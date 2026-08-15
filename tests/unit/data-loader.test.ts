@@ -96,6 +96,7 @@ describe("Data Loader", () => {
       expect(result.data).toHaveLength(1);
       expect(result.errors).toHaveLength(0);
       expect(result.data[0].pl).toBe(100);
+      expect(result.data[0].plBasis).toBe("net_includes_fees");
       expect(result.data[0].strategy).toBe("Test Strategy");
     });
 

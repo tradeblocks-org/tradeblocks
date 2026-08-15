@@ -156,6 +156,11 @@ export abstract class QuoteStore {
    * dte) so the caller doesn't OCC-parse. Greeks columns project as-is from the
    * quote table.
    *
+   * `params.neededGreeks` is an optional projection: absent ⇒ all five greeks
+   * are read (historic behavior); present ⇒ only the listed greeks are read and
+   * the rest come back NULL, with the projection echoed on each row's
+   * `projectedGreeks` so the collapse contract (`hasQuoteGreeks`) can honor it.
+   *
    * Per P1: this is the single read primitive. Ranking + top-N selection happen
    * in JS at the call site. No SQL ranking CTE.
    */

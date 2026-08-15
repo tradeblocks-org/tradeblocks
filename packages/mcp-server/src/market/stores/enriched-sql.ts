@@ -23,6 +23,12 @@ export interface BuildReadEnrichedArgs {
   to: string;
   includeContext: boolean;
   includeOhlcv: boolean;
+  /** Optional explicit Parquet relation used by the canonical store. */
+  enrichedSource?: string;
+  /** Optional explicit context relation used by the canonical store. */
+  contextSource?: string;
+  /** Optional explicit spot relation used by the canonical store. */
+  spotSource?: string;
 }
 
 function lit(value: string): string {
@@ -35,7 +41,16 @@ function lit(value: string): string {
  * table.
  */
 export function buildReadEnrichedSQL(args: BuildReadEnrichedArgs): BuiltSQL {
-  const { ticker, from, to, includeContext, includeOhlcv } = args;
+  const {
+    ticker,
+    from,
+    to,
+    includeContext,
+    includeOhlcv,
+    enrichedSource = "market.enriched",
+    contextSource = "market.enriched_context",
+    spotSource = "market.spot",
+  } = args;
 
   const tickerLit = lit(ticker);
   const fromLit = lit(from);
@@ -46,11 +61,12 @@ export function buildReadEnrichedSQL(args: BuildReadEnrichedArgs): BuiltSQL {
         tickerLit,
         fromLit,
         toLit,
+        spotSource,
       })} s_daily
          ON s_daily.ticker = e.ticker AND s_daily.date = e.date`
     : "";
 
-  const ctxJoin = includeContext ? `LEFT JOIN market.enriched_context c ON c.date = e.date` : "";
+  const ctxJoin = includeContext ? `LEFT JOIN ${contextSource} c ON c.date = e.date` : "";
 
   const ohlcvCols = includeOhlcv ? ", s_daily.open, s_daily.high, s_daily.low, s_daily.close" : "";
 
@@ -60,7 +76,7 @@ export function buildReadEnrichedSQL(args: BuildReadEnrichedArgs): BuiltSQL {
 
   const sql = `
     SELECT e.*${ohlcvCols}${ctxCols}
-    FROM market.enriched e
+    FROM ${enrichedSource} e
     ${ohlcvJoin}
     ${ctxJoin}
     WHERE e.ticker = ${tickerLit} AND e.date >= ${fromLit} AND e.date <= ${toLit}

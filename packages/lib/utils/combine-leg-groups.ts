@@ -8,9 +8,10 @@
  * This utility groups trades by entry timestamp and combines them into single trade records.
  */
 
-import type { Trade } from "../models/trade.ts";
+import { PlBasis, type Trade } from "../models/trade.ts";
 import type { ReportingTrade } from "../models/reporting-trade.ts";
 import { yieldToMain, checkCancelled } from "./async-helpers.ts";
+import { getNetPl } from "./equity-curve.ts";
 
 /**
  * Key used to group trades that were opened at the same time
@@ -127,7 +128,10 @@ export function combineLegGroup(trades: Trade[]): CombinedTrade {
 
   // Aggregate numeric values
   const totalPremium = trades.reduce((sum, t) => sum + t.premium, 0);
-  const totalPL = trades.reduce((sum, t) => sum + t.pl, 0);
+  const allBasesUndeclared = trades.every((trade) => trade.plBasis === undefined);
+  const totalPL = allBasesUndeclared
+    ? trades.reduce((sum, trade) => sum + trade.pl, 0)
+    : trades.reduce((sum, trade) => sum + getNetPl(trade), 0);
   // Use the contract size of the first leg to represent the "Strategy Unit Size"
   // e.g. A 10-lot Iron Condor has 4 legs of 10 contracts.
   // We want the combined trade to say "10 contracts" (10 ICs), not 40.
@@ -241,6 +245,7 @@ export function combineLegGroup(trades: Trade[]): CombinedTrade {
 
     // Aggregated values
     pl: totalPL,
+    plBasis: allBasesUndeclared ? undefined : PlBasis.NetIncludesFees,
     numContracts: totalContracts,
     fundsAtClose,
     marginReq: maxMargin,

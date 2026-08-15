@@ -14,7 +14,17 @@ import { fileURLToPath } from "url";
 
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
-import { loadBlock, listBlocks, importCsv, closeConnection } from "../src/test-exports.ts";
+import {
+  filterByRealizationDateRange,
+  calculatePeakExposure,
+  buildEquityCurve,
+  buildMonthlyReturns,
+  rebuildSubsetEquity,
+  loadBlock,
+  listBlocks,
+  importCsv,
+  closeConnection,
+} from "../src/test-exports.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -174,15 +184,172 @@ describe("block-loader", () => {
         });
 
         expect(result.blockId).toBe("imported-block");
+        expect(result.plBasis).toBe("net_includes_fees");
         await expect(
           fs.access(path.join(dataRoot, "blocks", "imported-block", "tradelog.csv")),
         ).resolves.toBeUndefined();
+        const imported = await loadBlock(dataRoot, "imported-block");
+        expect(imported.trades.every((trade) => trade.plBasis === "net_includes_fees")).toBe(true);
         await expect(fs.access(path.join(dataRoot, "imported-block"))).rejects.toThrow();
+      });
+    });
+
+    it("persists an explicit gross-before-fees basis for generic trade logs", async () => {
+      await withNestedBlocksFixture(async (dataRoot) => {
+        const sourceCsv = path.join(FIXTURES_DIR, "nonstandard-name", "my-custom-trades.csv");
+        const result = await importCsv(dataRoot, {
+          csvPath: sourceCsv,
+          blockName: "Gross Imported Block",
+          csvType: "tradelog",
+          plBasis: "gross_before_fees",
+        });
+
+        expect(result.plBasis).toBe("gross_before_fees");
+        const imported = await loadBlock(dataRoot, result.blockId);
+        expect(imported.trades.every((trade) => trade.plBasis === "gross_before_fees")).toBe(true);
+      });
+    });
+
+    it("rejects gross-before-fees imports without commission fields", async () => {
+      await withNestedBlocksFixture(async (dataRoot) => {
+        const sourceCsv = path.join(dataRoot, "gross-without-fees.csv");
+        await fs.writeFile(
+          sourceCsv,
+          ["Date Opened,P/L,Strategy", "2024-01-02,200,Gross Strategy"].join("\n"),
+        );
+
+        await expect(
+          importCsv(dataRoot, {
+            csvPath: sourceCsv,
+            blockName: "Gross Without Fees",
+            csvType: "tradelog",
+            plBasis: "gross_before_fees",
+          }),
+        ).rejects.toThrow(
+          "Gross-before-fees P/L requires both opening and closing commission fields",
+        );
+        await expect(
+          fs.access(path.join(dataRoot, "blocks", "gross-without-fees")),
+        ).rejects.toThrow();
       });
     });
   });
 
   describe("trade data validation", () => {
+    it("filters realized P/L by close date without UTC boundary drift", () => {
+      const trades = [
+        {
+          dateOpened: new Date(2025, 11, 31),
+          dateClosed: new Date(2026, 0, 1),
+        },
+      ] as Awaited<ReturnType<typeof loadBlock>>["trades"];
+
+      expect(filterByRealizationDateRange(trades, "2026-01-01", "2026-01-01")).toHaveLength(1);
+      expect(filterByRealizationDateRange(trades, "2025-12-31", "2025-12-31")).toHaveLength(0);
+    });
+
+    it("rebuilds strategy-subset equity without excluded portfolio losses", () => {
+      const base = {
+        openingCommissionsFees: 0,
+        closingCommissionsFees: 0,
+        plBasis: "net_includes_fees" as const,
+      };
+      const allTrades = [
+        {
+          ...base,
+          strategy: "A",
+          dateOpened: new Date(2026, 0, 1),
+          dateClosed: new Date(2026, 0, 1),
+          pl: 100,
+          fundsAtClose: 10100,
+        },
+        {
+          ...base,
+          strategy: "B",
+          dateOpened: new Date(2026, 0, 2),
+          dateClosed: new Date(2026, 0, 2),
+          pl: -5000,
+          fundsAtClose: 5100,
+        },
+        {
+          ...base,
+          strategy: "A",
+          dateOpened: new Date(2026, 0, 3),
+          dateClosed: new Date(2026, 0, 3),
+          pl: 100,
+          fundsAtClose: 5200,
+        },
+      ] as Awaited<ReturnType<typeof loadBlock>>["trades"];
+      const subset = allTrades.filter((trade) => trade.strategy === "A");
+
+      const rebuilt = rebuildSubsetEquity(subset, allTrades);
+
+      expect(rebuilt.map((trade) => trade.fundsAtClose)).toEqual([10100, 10200]);
+    });
+
+    it("uses net P/L for gross-basis peak exposure percentages", () => {
+      const trades = [
+        {
+          strategy: "Gross",
+          dateOpened: new Date(2026, 0, 1),
+          dateClosed: new Date(2026, 0, 1),
+          timeOpened: "09:30:00",
+          timeClosed: "16:00:00",
+          pl: 110,
+          plBasis: "gross_before_fees",
+          openingCommissionsFees: 5,
+          closingCommissionsFees: 5,
+          fundsAtClose: 1100,
+          marginReq: 0,
+        },
+        {
+          strategy: "Gross",
+          dateOpened: new Date(2026, 0, 2),
+          dateClosed: new Date(2026, 0, 2),
+          timeOpened: "09:30:00",
+          timeClosed: "16:00:00",
+          pl: 0,
+          plBasis: "gross_before_fees",
+          openingCommissionsFees: 0,
+          closingCommissionsFees: 0,
+          fundsAtClose: 1100,
+          marginReq: 550,
+        },
+      ] as Awaited<ReturnType<typeof loadBlock>>["trades"];
+
+      const peak = calculatePeakExposure(trades, 1000);
+
+      expect(peak.peakByPercent?.exposurePercent).toBe(50);
+    });
+
+    it("charts gross-basis P/L on its net realization date", () => {
+      const trades = [
+        {
+          strategy: "Gross",
+          dateOpened: new Date(2026, 0, 31),
+          dateClosed: new Date(2026, 1, 1),
+          timeOpened: "09:30:00",
+          timeClosed: "16:00:00",
+          pl: 110,
+          plBasis: "gross_before_fees",
+          openingCommissionsFees: 5,
+          closingCommissionsFees: 5,
+          fundsAtClose: 1100,
+          marginReq: 100,
+        },
+      ] as Awaited<ReturnType<typeof loadBlock>>["trades"];
+
+      const curve = buildEquityCurve(trades);
+      const monthly = buildMonthlyReturns(trades);
+
+      expect(curve).toMatchObject([
+        { date: "2026-02-01", equity: 1000 },
+        { date: "2026-02-01", equity: 1100 },
+      ]);
+      expect(monthly[2026][1]).toBe(0);
+      expect(monthly[2026][2]).toBe(100);
+    });
+
     it("should parse P/L correctly", async () => {
       const block = await loadBlock(FIXTURES_DIR, "mock-block");
 

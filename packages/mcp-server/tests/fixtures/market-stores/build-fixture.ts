@@ -13,6 +13,7 @@
  * Pattern adapted from `tests/unit/parquet-writer-multi.test.ts:15-47` and the
  * Phase 2 Wave 1 `views.test.ts` fixture.
  */
+import { afterAll } from "@jest/globals";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -33,6 +34,22 @@ export interface BuildFixtureOpts {
   parquetMode: boolean;
 }
 
+// Every tmp dir handed out by buildStoreFixture is tracked here so the
+// end-of-file sweep below can remove anything a test left behind: a failed
+// assertion skips the in-test cleanup() call, and a DuckDB checkpoint-on-close
+// can resurrect an already-removed dir when a connection opened inside it is
+// closed after cleanup(). Dirs stay in the set for the sweep even after
+// cleanup() (rmSync with force is a no-op for dirs that stayed gone). The
+// system temp dir is a fixed-budget tmpfs; fixture dirs must never outlive
+// the test run.
+const fixtureTmpDirs = new Set<string>();
+
+afterAll(() => {
+  for (const dir of fixtureTmpDirs) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 /**
  * Create an isolated fixture with:
  *   - Fresh `:memory:` DuckDB instance + connection
@@ -45,6 +62,7 @@ export interface BuildFixtureOpts {
 export async function buildStoreFixture(opts: BuildFixtureOpts): Promise<FixtureHandle> {
   const tmpDir = join(tmpdir(), `mkt-store-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(join(tmpDir, "market"), { recursive: true });
+  fixtureTmpDirs.add(tmpDir);
 
   const db = await DuckDBInstance.create(":memory:");
   const conn: DuckDBConnection = await db.connect();

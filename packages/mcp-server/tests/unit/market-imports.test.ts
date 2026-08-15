@@ -27,7 +27,7 @@
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, afterAll, jest } from "@jest/globals";
 import { registerMarketImportTools } from "../../src/tools/market-imports.ts";
 import { closeConnection } from "../../src/test-exports.ts";
 import type { MarketStores } from "../../src/market/stores/index.ts";
@@ -127,10 +127,16 @@ const COLUMN_MAPPING: Record<string, string> = {
 describe("tools/market-imports — auto-enrich composition", () => {
   let baseDir: string;
   let csvPath: string;
+  // A DuckDB checkpoint-on-close can resurrect an already-removed baseDir
+  // after the per-test rm below, so every dir is swept again in afterAll —
+  // the system temp dir is a fixed-budget tmpfs and per-run fixture dirs
+  // must never outlive the test run.
+  const baseDirs: string[] = [];
 
   beforeEach(async () => {
     await closeConnection();
     baseDir = await fs.mkdtemp(path.join(os.tmpdir(), "tb-import-unit-"));
+    baseDirs.push(baseDir);
     csvPath = path.join(baseDir, "spx.csv");
     await fs.writeFile(csvPath, FIXTURE_CSV);
   });
@@ -138,6 +144,12 @@ describe("tools/market-imports — auto-enrich composition", () => {
   afterEach(async () => {
     await closeConnection();
     await fs.rm(baseDir, { recursive: true, force: true });
+  });
+
+  afterAll(async () => {
+    for (const dir of baseDirs) {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("calls writeBars BEFORE enriched.compute", async () => {

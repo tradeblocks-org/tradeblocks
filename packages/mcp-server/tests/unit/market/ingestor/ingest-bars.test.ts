@@ -116,6 +116,25 @@ describe("MarketIngestor.ingestBars", () => {
     expect(result.rowsWritten).toBe(4);
   });
 
+  it("preserves zero-row forensic ingest results below the refresh boundary", async () => {
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => makeFakeProvider([]),
+    });
+
+    const result = await ingestor.ingestBars({
+      tickers: ["SPX"],
+      from: "2026-07-30",
+      to: "2026-07-30",
+      timespan: "1m",
+      skipEnrichment: true,
+    });
+
+    expect(result).toEqual({ status: "ok", rowsWritten: 0, enrichment: null });
+  });
+
   it("routes intraday timespan to minute bars", async () => {
     const intradayBars: BarRow[] = [
       {

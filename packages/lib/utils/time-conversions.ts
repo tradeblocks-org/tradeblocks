@@ -2,7 +2,14 @@
  * Utilities for converting between time periods and trade counts
  */
 
-export type TimeUnit = "years" | "months" | "days";
+/**
+ * Units a simulation horizon can be expressed in.
+ *
+ * "trades" is an exact count and needs no frequency conversion, which matters
+ * when the horizon is meant to match a specific history length: 83 trades is
+ * 83 trades, whereas 2 years at 20 trades/year rounds to 40.
+ */
+export type TimeUnit = "years" | "months" | "days" | "trades";
 
 /**
  * Convert a time period to number of trades based on trading frequency
@@ -12,6 +19,8 @@ export function timeToTrades(value: number, unit: TimeUnit, tradesPerYear: numbe
   const tradesPerMonth = tradesPerYear / 12;
 
   switch (unit) {
+    case "trades":
+      return Math.round(value);
     case "years":
       return Math.round(value * tradesPerYear);
     case "months":
@@ -21,6 +30,38 @@ export function timeToTrades(value: number, unit: TimeUnit, tradesPerYear: numbe
     default:
       return Math.round(value * tradesPerYear);
   }
+}
+
+/**
+ * Re-express a horizon in a different unit without changing how long it is.
+ *
+ * Switching the unit on its own is not a request for a different horizon, so the
+ * number has to move with it: 83 trades at 20 trades/year is 4.15 years, not
+ * 83 years. Reading the raw number under the new unit would silently turn an
+ * 83-trade run into a 1,660-trade one.
+ *
+ * The trade count is preserved as closely as the target unit allows — exactly
+ * for "trades", and to two decimals otherwise, which keeps the displayed value
+ * readable while staying within a trade of the original.
+ */
+export function convertPeriodUnit(
+  value: number,
+  fromUnit: TimeUnit,
+  toUnit: TimeUnit,
+  tradesPerYear: number,
+): number {
+  if (fromUnit === toUnit) {
+    return value;
+  }
+
+  const trades = timeToTrades(value, fromUnit, tradesPerYear);
+
+  if (toUnit === "trades") {
+    return Math.max(1, trades);
+  }
+
+  const converted = tradesToTime(trades, tradesPerYear, toUnit).value;
+  return Math.max(0.01, Math.round(converted * 100) / 100);
 }
 
 /**
@@ -38,6 +79,12 @@ export function tradesToTime(
   // If target unit is specified, use it
   if (targetUnit) {
     switch (targetUnit) {
+      case "trades":
+        return {
+          value: trades,
+          unit: "trades",
+          displayText: `${trades.toLocaleString()} trade${trades !== 1 ? "s" : ""}`,
+        };
       case "years":
         return {
           value: years,
@@ -105,25 +152,20 @@ export function formatTradesWithTime(trades: number, tradesPerYear: number): str
 }
 
 /**
- * Get sensible default values based on trading frequency
+ * Default simulation horizon: the length of the history being simulated.
+ *
+ * Simulating the block's own length is the comparable default — it is what the
+ * user just looked at, and it is what other simulators project. Expressed in
+ * "trades" so the horizon is the exact trade count rather than a frequency
+ * round-trip that loses trades.
+ *
+ * @param historicalTradeCount - Trades in scope, after any strategy filter
  */
-export function getDefaultSimulationPeriod(tradesPerYear: number): {
+export function getDefaultSimulationPeriodFromHistory(historicalTradeCount: number): {
   value: number;
   unit: TimeUnit;
 } {
-  if (tradesPerYear >= 10000) {
-    return { value: 3, unit: "months" };
-  }
-
-  if (tradesPerYear >= 1000) {
-    return { value: 6, unit: "months" };
-  }
-
-  if (tradesPerYear >= 100) {
-    return { value: 1, unit: "years" };
-  }
-
-  return { value: 2, unit: "years" };
+  return { value: Math.max(1, Math.round(historicalTradeCount)), unit: "trades" };
 }
 
 /**

@@ -95,7 +95,11 @@ export interface SnapshotChartData {
   rollingMetrics: Array<{
     date: string;
     winRate: number;
+    /** Nonannualized mean trade P/L divided by population stddev of trade P/L. */
+    plSignalToNoise: number;
+    /** @deprecated Compatibility alias; this value is not a Sharpe ratio. */
     sharpeRatio: number;
+    metricMethodology: "nonannualized_trade_pl_mean_over_population_stddev";
     profitFactor: number;
     volatility: number;
   }>;
@@ -1093,12 +1097,14 @@ async function calculateRollingMetrics(trades: Trade[], signal?: AbortSignal) {
           ? 999
           : 0;
 
-    const sharpeRatio = volatility > 0 ? avgReturn / volatility : 0;
+    const plSignalToNoise = volatility > 0 ? avgReturn / volatility : 0;
 
     metrics.push({
       date: new Date(trades[i].dateOpened).toISOString(),
       winRate: winRate * 100,
-      sharpeRatio,
+      plSignalToNoise,
+      sharpeRatio: plSignalToNoise,
+      metricMethodology: "nonannualized_trade_pl_mean_over_population_stddev",
       profitFactor,
       volatility,
     });

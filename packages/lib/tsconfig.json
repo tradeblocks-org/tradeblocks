@@ -9,6 +9,7 @@
     "declaration": true,
     "declarationMap": true,
     "composite": true,
+    "erasableSyntaxOnly": true,
     "paths": {}
   },
   "include": ["./**/*.ts"],

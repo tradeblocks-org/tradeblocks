@@ -3,6 +3,7 @@ import type { ContractRow } from "./chain-loader.ts";
 import { computeLegGreeks } from "./black-scholes.ts";
 import { computeFractionalDte } from "./option-time.ts";
 import { getSharedIvSolverPool, type IvSolveColumns, type IvSolverPool } from "./iv-solver-pool.ts";
+import { ALL_GREEKS, type GreekColumn } from "./quote-parquet-projection.ts";
 
 export type QuoteGreeksSource = "massive" | "thetadata" | "computed";
 export type QuoteGreeksMode = "auto" | "provider" | "compute";
@@ -74,14 +75,25 @@ function memoizedSofrRate(dateKey: string): number {
   return rate;
 }
 
-export function hasQuoteGreeks(row: QuoteGreekFields): boolean {
-  return (
-    isFiniteNumber(row.delta ?? null) &&
-    isFiniteNumber(row.gamma ?? null) &&
-    isFiniteNumber(row.theta ?? null) &&
-    isFiniteNumber(row.vega ?? null) &&
-    isFiniteNumber(row.iv ?? null)
-  );
+/**
+ * True when every greek in `needed` is a finite number on `row`.
+ *
+ * `needed` defaults to all five greeks, so `hasQuoteGreeks(row)` is exactly the
+ * historic all-or-nothing collapse contract. When a read was deliberately
+ * projected to a greek subset (`ReadWindowParams.neededGreeks`), pass that same
+ * subset — echoed back on `WindowQuoteRow.projectedGreeks` — so a greek that is
+ * NULL because it was never requested does not fail validation and silently
+ * collapse the whole greeks object to zero candidates. A greek that IS in
+ * `needed` but came back non-finite is genuinely missing data and still fails.
+ */
+export function hasQuoteGreeks(
+  row: QuoteGreekFields,
+  needed: readonly GreekColumn[] = ALL_GREEKS,
+): boolean {
+  for (const greek of needed) {
+    if (!isFiniteNumber(row[greek] ?? null)) return false;
+  }
+  return true;
 }
 
 function hasProviderFirstOrderGreeks(row: QuoteGreekFields): boolean {
