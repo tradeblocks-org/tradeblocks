@@ -268,6 +268,11 @@ function buildVixSelectCols(): string {
 // Published row presence is untouched: only the LAG input set changes.
 // ============================================================================
 
+// Computed once and never invalidated for the life of the process — only a
+// restart rebuilds it. Safe because every input is a deploy-time constant:
+// the supported range (2022-01-01..2030-12-31) and the closure rules ship in
+// xnys-session-calendar.ts (revision xnys-full-day-2022-2030-v1); nothing
+// here reads runtime-mutable state.
 let weekdayClosureCache: string[] | null = null;
 
 /**

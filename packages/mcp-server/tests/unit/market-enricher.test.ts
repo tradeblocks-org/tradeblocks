@@ -1724,6 +1724,15 @@ describe("Tier 1 indicator series contains only genuine XNYS sessions", () => {
     // Non-session dates never enter the indicator series. They can still
     // carry all-null enriched identity rows written by Tier 3 timing fields
     // (which read market.spot directly), so assert on indicator values.
+    // Shape differs between the paths: this legacy fallback keeps row
+    // presence for non-session dates — Tier 3 timing reads market.spot
+    // directly and INSERT OR REPLACEs a row for every date with intraday
+    // bars in range — so 05-28/05-30 exist with NULL Prior_Close and assert
+    // as toBeNull(). The io.spotStore path ("priced holiday and weekend
+    // partitions never enter the indicator series", ~25 lines up) never
+    // mints those rows at all, so it asserts absence with byDate.has(...)
+    // === false instead. Same exclusion contract, different published row
+    // presence.
     expect(byDate.get("2022-05-28")).toBeNull();
     expect(byDate.get("2022-05-30")).toBeNull();
     expect(Number(byDate.get("2022-05-31"))).toBeCloseTo(4158.24, 6);
