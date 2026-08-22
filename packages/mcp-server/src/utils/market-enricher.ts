@@ -626,7 +626,19 @@ function normalizeMarketRowDate(value: unknown): string {
   // DuckDB DATE internal repr: int32 days since 1970-01-01 UTC
   const days = (value as { days?: unknown } | null)?.days;
   if (typeof days === "number" && Number.isInteger(days)) {
-    return new Date(days * 24 * 60 * 60 * 1_000).toISOString().slice(0, 10);
+    const iso = new Date(days * 24 * 60 * 60 * 1_000).toISOString().slice(0, 10);
+    // Plausibility bound, not calendar authority: dates outside the XNYS
+    // supported range are legitimate (legacy history stays usable), so
+    // 1900-2100 deliberately brackets any plausible trade history while
+    // making corrupt vendor day counts refuse loudly instead of producing
+    // valid-looking far-future dates that no downstream stage questions.
+    const year = Number(iso.slice(0, 4));
+    if (year < 1900 || year > 2100) {
+      throw new TypeError(
+        `OHLCV source returned an implausible DuckDB DATE ${iso}: ${days} days since 1970-01-01 UTC falls outside the plausible 1900-2100 window`,
+      );
+    }
+    return iso;
   }
   throw new TypeError(
     `OHLCV source returned a date that is not a real calendar date: ${JSON.stringify(value)}`,

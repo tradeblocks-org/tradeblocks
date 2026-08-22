@@ -1815,4 +1815,50 @@ describe("Tier 1 indicator series contains only genuine XNYS sessions", () => {
     expect(Number(byDate.get("2022-05-31"))).toBeCloseTo(4158.24, 6);
     expect(Number(byDate.get("2022-06-01"))).toBeCloseTo(4132.0, 6);
   });
+
+  test("DuckDBDateValue day counts far outside the plausible window fail loudly", async () => {
+    const poisonedSpot: FakeSpotStore = {
+      readBars: async () => [],
+      readDailyBars: async (t: string) => [
+        {
+          ticker: t,
+          date: "2022-05-27",
+          time: "09:30",
+          open: 4158.24,
+          high: 4168.22,
+          low: 4152.27,
+          close: 4158.24,
+          volume: 0,
+        },
+        {
+          ticker: t,
+          // {days:N} DuckDBDateValue shape; 500905 days since epoch = 3341-06-07.
+          date: { days: 500905 } as unknown as string,
+          time: "09:30",
+          open: 4132.0,
+          high: 4140.0,
+          low: 4120.0,
+          close: 4132.0,
+          volume: 0,
+        },
+      ],
+      getCoverage: async () => ({
+        earliest: "2022-05-27",
+        latest: "2022-05-27",
+        missingDates: [],
+        totalDates: 1,
+      }),
+      writeBars: async () => {},
+    };
+    const io = {
+      spotStore: poisonedSpot,
+      watermarkStore: {
+        get: async () => null,
+        upsert: async () => {},
+      },
+    };
+    await expect(runEnrichment(conn, "SPX", { dataDir: tmpDir }, io)).rejects.toThrow(
+      /implausible/i,
+    );
+  });
 });
