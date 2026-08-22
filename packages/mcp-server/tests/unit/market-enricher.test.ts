@@ -1339,7 +1339,11 @@ describe("io.spotStore is the canonical OHLCV read path", () => {
     expect(fakeSpot.readDailyBarsCalls).toContain("SPX");
     // Tier 1 must complete (NOT skipped)
     expect(result.tier1.status).toBe("complete");
-    expect(result.rowsEnriched).toBe(60);
+    // 60 weekday bars − 3 XNYS full-day closures in the span (2025-01-09
+    // special closure, 2025-01-20 MLK, 2025-02-17 Washington's Birthday).
+    // The generator emits weekdays only; the enricher's session filter now
+    // drops those three non-session partitions before indicator math.
+    expect(result.rowsEnriched).toBe(57);
     expect(result.enrichedThrough).toBe(spxBars[spxBars.length - 1].date);
   });
 
@@ -1582,5 +1586,174 @@ describe("Enricher indicator units regression", () => {
     // due to the upstream zero-bar cascade). Demand it sit in [0.5, 2.0].
     expect(ratio).toBeGreaterThan(0.5);
     expect(ratio).toBeLessThan(2.0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Tier 1 indicator series contains only genuine XNYS sessions
+//
+// The VIX spot feed carries priced full-day holiday partitions. If those
+// partitions enter the rawRows series, "one position back" means "the prior
+// partition": the session after a holiday lags to the holiday's close and
+// every windowed indicator spans the wrong days. The enricher owns this
+// invariant for every OHLCV source — the canonical Parquet spot store
+// filters at the store layer, but the legacy market.spot_daily fallback and
+// table-backed spot stores do not.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Hand-priced SPX daily bars around Memorial Day 2022 (full-day XNYS closure). */
+function memorialDayBars(): Array<{
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}> {
+  const priced = [
+    ["2022-05-26", 4101.9],
+    ["2022-05-27", 4158.24], // last genuine session before the closure
+    ["2022-05-28", 4200.0], // Saturday — never a session
+    ["2022-05-30", 4148.5], // Memorial Day — priced holiday partition
+    ["2022-05-31", 4132.0], // first session after the closure
+    ["2022-06-01", 4102.0],
+  ] as const;
+  return priced.map(([date, close]) => ({
+    date,
+    open: close - 1,
+    high: close + 2,
+    low: close - 2,
+    close,
+  }));
+}
+
+describe("Tier 1 indicator series contains only genuine XNYS sessions", () => {
+  let tmpDir: string;
+  let db: DuckDBInstanceType;
+  let conn: DuckDBConnection;
+
+  beforeEach(async () => {
+    tmpDir = join(
+      tmpdir(),
+      `enricher-sessions-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(join(tmpDir, "market"), { recursive: true });
+    db = await DuckDBInstance.create(":memory:");
+    conn = await db.connect();
+    await conn.run(`ATTACH ':memory:' AS market`);
+    await ensureMutableMarketTables(conn);
+    await ensureMarketDataTables(conn);
+    await conn.run(`
+      CREATE OR REPLACE VIEW market.spot_daily AS
+        SELECT ticker, date,
+               first(open  ORDER BY time) AS open,
+               max(high)                  AS high,
+               min(low)                   AS low,
+               last(close  ORDER BY time) AS close,
+               first(bid   ORDER BY time) AS bid,
+               last(ask    ORDER BY time) AS ask
+        FROM market.spot
+        WHERE time >= '09:30' AND time <= '16:00'
+        GROUP BY ticker, date
+    `);
+  });
+
+  afterEach(() => {
+    try {
+      conn.closeSync();
+    } catch {
+      /* */
+    }
+    try {
+      db.closeSync();
+    } catch {
+      /* */
+    }
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  async function readEnrichedRows(ticker: string) {
+    const reader = await conn.runAndReadAll(
+      `SELECT date, Prior_Close FROM market.enriched
+       WHERE ticker = $1 ORDER BY date`,
+      [ticker],
+    );
+    return reader.getRows().map((row) => ({ date: String(row[0]), priorClose: row[1] }));
+  }
+
+  test("io.spotStore path: priced holiday and weekend partitions never enter the indicator series", async () => {
+    const fakeSpot = buildFakeSpotStoreWithDailyBars({ SPX: memorialDayBars() });
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: {
+        get: async () => null,
+        upsert: async () => {
+          /* */
+        },
+      },
+    };
+    const result = await runEnrichment(conn, "SPX", { dataDir: tmpDir }, io);
+    expect(result.tier1.status).toBe("complete");
+    expect(result.rowsEnriched).toBe(4); // 6 partitions − holiday − weekend
+
+    const rows = await readEnrichedRows("SPX");
+    const byDate = new Map(rows.map((row) => [row.date, row.priorClose]));
+    expect(byDate.has("2022-05-28")).toBe(false);
+    expect(byDate.has("2022-05-30")).toBe(false);
+    // The session after Memorial Day lags to Friday 05-27's close (4158.24),
+    // not to the holiday partition's own close (4148.5).
+    expect(Number(byDate.get("2022-05-31"))).toBeCloseTo(4158.24, 6);
+    // And the chain continues from genuine sessions only.
+    expect(Number(byDate.get("2022-06-01"))).toBeCloseTo(4132.0, 6);
+  });
+
+  test("legacy market.spot_daily fallback path: non-session rows are still excluded", async () => {
+    for (const bar of memorialDayBars()) {
+      await conn.run(
+        `INSERT INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+         VALUES ('SPX', $1, '09:30', $2, $3, $4, $5, NULL, NULL)`,
+        [bar.date, bar.open, bar.high, bar.low, bar.close],
+      );
+    }
+    // No io — runEnrichment reads through the market.spot_daily view, which
+    // has no session filter of its own.
+    const result = await runEnrichment(conn, "SPX", { dataDir: tmpDir });
+    expect(result.tier1.status).toBe("complete");
+    expect(result.rowsEnriched).toBe(4);
+    const rows = await readEnrichedRows("SPX");
+    const byDate = new Map(rows.map((row) => [row.date, row.priorClose]));
+    // Non-session dates never enter the indicator series. They can still
+    // carry all-null enriched identity rows written by Tier 3 timing fields
+    // (which read market.spot directly), so assert on indicator values.
+    expect(byDate.get("2022-05-28")).toBeNull();
+    expect(byDate.get("2022-05-30")).toBeNull();
+    expect(Number(byDate.get("2022-05-31"))).toBeCloseTo(4158.24, 6);
+    expect(Number(byDate.get("2022-06-01"))).toBeCloseTo(4132.0, 6);
+  });
+
+  test("dates outside the calendar revision stay in the series (legacy history preserved)", async () => {
+    const legacyBars = [
+      { date: "2021-12-29", open: 4786.0, high: 4790.0, low: 4770.0, close: 4778.0 },
+      { date: "2021-12-30", open: 4790.0, high: 4800.0, low: 4780.0, close: 4793.54 },
+      { date: "2021-12-31", open: 4795.0, high: 4790.0, low: 4750.0, close: 4766.18 },
+      { date: "2022-01-03", open: 4770.0, high: 4790.0, low: 4750.0, close: 4776.0 },
+    ];
+    const fakeSpot = buildFakeSpotStoreWithDailyBars({ SPX: legacyBars });
+    const io = {
+      spotStore: fakeSpot,
+      watermarkStore: {
+        get: async () => null,
+        upsert: async () => {
+          /* */
+        },
+      },
+    };
+    const result = await runEnrichment(conn, "SPX", { dataDir: tmpDir }, io);
+    expect(result.tier1.status).toBe("complete");
+    expect(result.rowsEnriched).toBe(4); // nothing dropped outside the calendar horizon
+
+    const rows = await readEnrichedRows("SPX");
+    const byDate = new Map(rows.map((row) => [row.date, row.priorClose]));
+    expect(byDate.has("2021-12-31")).toBe(true);
+    expect(Number(byDate.get("2022-01-03"))).toBeCloseTo(4766.18, 6);
   });
 });

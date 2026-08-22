@@ -31,6 +31,7 @@ import type { SpotStore } from "../market/stores/spot-store.ts";
 import { isRealMarketSessionDate } from "../market/provenance/dataset-registry.ts";
 import {
   enumerateXnysSessions,
+  isXnysSessionDate,
   XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
   XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
 } from "../market/provenance/xnys-session-calendar.ts";
@@ -1497,6 +1498,38 @@ export async function runEnrichment(
       );
     }
     rawRows = filteredRawRows;
+
+    // 3c. XNYS session filter. The indicator arrays must contain only genuine
+    // trading sessions so that "one position back" means "the prior session",
+    // never "the prior partition". The VIX spot feed carries priced full-day
+    // holiday partitions; without this filter the session after a holiday
+    // lags to the holiday's close (Prior_Close, Gap_Pct, Prev_Return_Pct,
+    // Prior_Range_vs_ATR) and every windowed indicator (RSI_14, ATR_Pct,
+    // EMA21, SMA50, Realized_Vol_5D/20D, Return_5D/20D) spans the wrong days.
+    // Canonical Parquet spot reads already exclude non-sessions at the store
+    // layer (SpotStore.buildDirectParquetReadBarsSQL); this second line of
+    // defense covers the legacy market.spot_daily fallback and store
+    // backends without partition-level calendar authority (DuckdbSpotStore).
+    // Dates outside the calendar revision's supported range are kept
+    // unfiltered — same doctrine as isCompleteXnysWindow: legacy physical
+    // data stays usable where the calendar authority has no opinion.
+    const sessionFilteredRawRows = rawRows.filter((r) => {
+      const date = r[1] as string;
+      if (
+        date < XNYS_SESSION_CALENDAR_SUPPORTED_FROM ||
+        date > XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH
+      ) {
+        return true;
+      }
+      return isXnysSessionDate(date);
+    });
+    const nonSessionRowsDropped = rawRows.length - sessionFilteredRawRows.length;
+    if (nonSessionRowsDropped > 0) {
+      console.warn(
+        `[market-enricher] ticker=${ticker} dropped ${nonSessionRowsDropped} non-XNYS-session rows before indicator math`,
+      );
+    }
+    rawRows = sessionFilteredRawRows;
 
     // 4. Extract typed arrays from raw rows
     // Columns: ticker(0), date(1), open(2), high(3), low(4), close(5)
