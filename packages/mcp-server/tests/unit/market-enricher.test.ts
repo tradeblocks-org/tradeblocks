@@ -1756,4 +1756,54 @@ describe("Tier 1 indicator series contains only genuine XNYS sessions", () => {
     expect(byDate.has("2021-12-31")).toBe(true);
     expect(Number(byDate.get("2022-01-03"))).toBeCloseTo(4766.18, 6);
   });
+
+  test("legacy SQL fallback over Hive-partitioned Parquet with DATE partition values completes", async () => {
+    // Gate-rework reproduction: when market.spot_daily is a view over a
+    // Hive-partitioned Parquet tree, DuckDB auto-casts the date partition to
+    // DATE and the fallback's rawRows arrive as DuckDBDateValue objects, not
+    // strings. Enrichment must normalize them at the rawRows boundary and
+    // still exclude the non-session partitions instead of aborting.
+    const hiveDir = join(tmpDir, "spot-hive");
+    await conn.run(`CREATE TEMP TABLE _hive_stage AS SELECT * FROM market.spot WHERE false`);
+    for (const bar of memorialDayBars()) {
+      await conn.run(
+        `INSERT INTO _hive_stage (ticker, date, time, open, high, low, close, bid, ask)
+         VALUES ('SPX', $1, '09:30', $2, $3, $4, $5, NULL, NULL)`,
+        [bar.date, bar.open, bar.high, bar.low, bar.close],
+      );
+    }
+    for (const bar of memorialDayBars()) {
+      const partDir = join(hiveDir, "ticker=SPX", `date=${bar.date}`);
+      mkdirSync(partDir, { recursive: true });
+      await conn.run(
+        `COPY (SELECT time, open, high, low, close, bid, ask FROM _hive_stage WHERE date = '${bar.date}')
+         TO '${partDir}/data.parquet' (FORMAT PARQUET)`,
+      );
+    }
+    await conn.run(`
+      CREATE OR REPLACE VIEW market.spot_daily AS
+        SELECT ticker, date,
+               first(open ORDER BY time) AS open,
+               max(high)                 AS high,
+               min(low)                  AS low,
+               last(close ORDER BY time) AS close,
+               first(bid ORDER BY time)  AS bid,
+               last(ask ORDER BY time)   AS ask
+        FROM read_parquet('${join(hiveDir, "ticker=*", "date=*", "*.parquet")}', hive_partitioning = true)
+        GROUP BY ticker, date
+    `);
+    // Pin the defect shape: the view's date column must be DuckDB DATE.
+    const shape = await conn.runAndReadAll(`SELECT typeof(date) FROM market.spot_daily LIMIT 1`);
+    expect(shape.getRows()[0]?.[0]).toBe("DATE");
+
+    const result = await runEnrichment(conn, "SPX", { dataDir: tmpDir });
+    expect(result.tier1.status).toBe("complete");
+    expect(result.rowsEnriched).toBe(4);
+    const rows = await readEnrichedRows("SPX");
+    const byDate = new Map(rows.map((row) => [row.date, row.priorClose]));
+    expect(byDate.has("2022-05-28")).toBe(false);
+    expect(byDate.has("2022-05-30")).toBe(false);
+    expect(Number(byDate.get("2022-05-31"))).toBeCloseTo(4158.24, 6);
+    expect(Number(byDate.get("2022-06-01"))).toBeCloseTo(4132.0, 6);
+  });
 });

@@ -24,7 +24,11 @@ import {
   buildOutcomeQuery,
   buildVixJoinClause,
   SCHEMA_DESCRIPTIONS,
+  ensureMutableMarketTables,
+  ensureMarketDataTables,
 } from "../../src/test-exports.ts";
+import { DuckDBInstance } from "@duckdb/node-api";
+import type { DuckDBConnection, DuckDBInstance as DuckDBInstanceType } from "@duckdb/node-api";
 
 const dailyColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched.columns;
 const dateContextColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched_context.columns;
@@ -428,5 +432,129 @@ describe("buildVixJoinClause", () => {
   test("emits correct UPPER-cased ticker literal", () => {
     const sql = buildVixJoinClause(["vix3m"], "d");
     expect(sql).toContain("vix3m.ticker = 'VIX3M'");
+  });
+});
+
+// =============================================================================
+// Session-bounded LAG source (Worf gate rework, #2871 round 2)
+//
+// market.enriched can contain all-null non-session identity rows (Tier 3
+// timing writes / working-table backfill publish them). LAG() over the
+// unfiltered history made the first genuine session after such a row lag to
+// NULL on enrichment-derived fields and to the holiday's own close on OHLCV
+// fields joined from market.spot_daily. The lookahead-free contract requires
+// LAG to consume only genuine XNYS sessions inside the calendar revision's
+// supported range; out-of-range rows stay consumed (the calendar has no
+// opinion there).
+// =============================================================================
+
+describe("buildLookaheadFreeQuery session-bounded LAG source", () => {
+  let db: DuckDBInstanceType;
+  let conn: DuckDBConnection;
+
+  beforeEach(async () => {
+    db = await DuckDBInstance.create(":memory:");
+    conn = await db.connect();
+    await conn.run(`ATTACH ':memory:' AS market`);
+    await ensureMutableMarketTables(conn);
+    await ensureMarketDataTables(conn);
+    await conn.run(`
+      CREATE OR REPLACE VIEW market.spot_daily AS
+        SELECT ticker, date,
+               first(open ORDER BY time) AS open,
+               max(high)                 AS high,
+               min(low)                  AS low,
+               last(close ORDER BY time) AS close,
+               first(bid ORDER BY time)  AS bid,
+               last(ask ORDER BY time)   AS ask
+        FROM market.spot
+        WHERE time >= '09:30' AND time <= '16:00'
+        GROUP BY ticker, date
+    `);
+    const spotBars: Array<[string, number]> = [
+      ["2022-05-27", 4158.24], // last genuine session before the closure
+      ["2022-05-28", 4200.0], // priced Saturday partition — never a session
+      ["2022-05-30", 4148.5], // priced Memorial Day partition
+      ["2022-05-31", 4132.0], // first session after the closure
+    ];
+    for (const [date, close] of spotBars) {
+      await conn.run(
+        `INSERT INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+         VALUES ('SPX', $1, '09:30', $2 - 1, $2 + 2, $2 - 2, $2, NULL, NULL)`,
+        [date, close],
+      );
+    }
+    // The 2022-05-28 and 2022-05-30 enriched rows are all-null identity rows —
+    // exactly what Tier 3 / backfill mechanics leave behind for non-session
+    // dates (weekend AND full-day closure).
+    await conn.run(`
+      INSERT INTO market.enriched (ticker, date, RSI_14) VALUES
+        ('SPX', '2022-05-27', 55.5),
+        ('SPX', '2022-05-28', NULL),
+        ('SPX', '2022-05-30', NULL),
+        ('SPX', '2022-05-31', 61.25)
+    `);
+  });
+
+  afterEach(() => {
+    try {
+      conn.closeSync();
+    } catch {
+      /* */
+    }
+    try {
+      db.closeSync();
+    } catch {
+      /* */
+    }
+  });
+
+  async function queryRecords(
+    keys: Array<{ ticker: string; date: string }>,
+  ): Promise<Array<Record<string, unknown>>> {
+    const { sql, params } = buildLookaheadFreeQuery(keys);
+    const reader = await conn.runAndReadAll(sql, params);
+    const names = Array.from({ length: reader.columnCount }, (_, i) => reader.columnName(i));
+    return Array.from(reader.getRows(), (row) =>
+      Object.fromEntries(names.map((name, i) => [name, row[i]])),
+    );
+  }
+
+  test("first session after an all-null closure identity row lags to the prior SESSION", async () => {
+    const records = await queryRecords([{ ticker: "SPX", date: "2022-05-31" }]);
+    expect(records).toHaveLength(1);
+    // Enrichment-derived close field: Friday's RSI, NOT the identity row's null.
+    expect(Number(records[0].prev_RSI_14)).toBeCloseTo(55.5, 6);
+    // OHLCV close field joined from spot_daily: Friday's close, NOT the holiday's 4148.5.
+    expect(Number(records[0].prev_close)).toBeCloseTo(4158.24, 6);
+  });
+
+  test("requested non-session identity row keeps its output row, priors null", async () => {
+    // Only the LAG input set changes. A requested closure identity row still
+    // returns its row (presence preserved), but it is excluded from the LAG
+    // source set itself, so its prev_* lookups are NULL — there is no
+    // meaningful prior-session value for a day the market was closed.
+    const records = await queryRecords([{ ticker: "SPX", date: "2022-05-30" }]);
+    expect(records).toHaveLength(1);
+    expect(records[0].prev_RSI_14 ?? null).toBeNull();
+    expect(records[0].prev_close ?? null).toBeNull();
+  });
+
+  test("out-of-range dates stay LAG-consumed (bounded-calendar keep-doctrine)", async () => {
+    // 2021-12-26 is a Sunday outside the calendar revision: the calendar has
+    // no opinion there, so the row must keep feeding the lag chain exactly as
+    // before — documented limitation, guarded against over-exclusion.
+    await conn.run(
+      `INSERT INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+       VALUES ('SPX', '2021-12-26', '09:30', 99, 102, 98, 101, NULL, NULL)`,
+    );
+    await conn.run(`
+      INSERT INTO market.enriched (ticker, date, RSI_14) VALUES
+        ('SPX', '2021-12-26', 40.0),
+        ('SPX', '2022-01-03', 41.0)
+    `);
+    const records = await queryRecords([{ ticker: "SPX", date: "2022-01-03" }]);
+    expect(records).toHaveLength(1);
+    expect(Number(records[0].prev_RSI_14)).toBeCloseTo(40.0, 6);
   });
 });

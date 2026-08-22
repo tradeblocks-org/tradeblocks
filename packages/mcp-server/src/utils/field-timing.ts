@@ -25,6 +25,11 @@
 
 import { DEFAULT_MARKET_TICKER } from "./ticker.ts";
 import { SCHEMA_DESCRIPTIONS } from "./schema-metadata.ts";
+import {
+  XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
+  XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
+  isXnysSessionDate,
+} from "../market/provenance/xnys-session-calendar.ts";
 
 const dailyColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched.columns;
 const derivedColumns = SCHEMA_DESCRIPTIONS.market.tables.enriched_context.columns;
@@ -246,6 +251,68 @@ function buildVixSelectCols(): string {
   return VIX_ALL_MAPPINGS.map((m) => `${m.tableAlias}."${m.sourceCol}" AS "${m.alias}"`).join(", ");
 }
 
+// ============================================================================
+// Session-bounded LAG source
+//
+// The lookahead-free contract is "an index lag of one position means the prior
+// SESSION". market.enriched may legitimately contain all-null non-session
+// identity rows (Tier 3 timing writes, working-table backfill), and LAG() over
+// the unfiltered history makes the first genuine session after such a row lag
+// to NULL (or to a stale valued row). The enricher already filters these rows
+// out of its indicator series; this predicate applies the same bounded-calendar
+// doctrine on the analysis plane: inside the calendar revision's supported
+// range only genuine XNYS sessions feed LAG; dates OUTSIDE the range stay
+// LAG-consumed exactly as today — the calendar has no opinion there and legacy
+// history must keep providing the first in-range prior values.
+//
+// Published row presence is untouched: only the LAG input set changes.
+// ============================================================================
+
+let weekdayClosureCache: string[] | null = null;
+
+/**
+ * Weekday dates inside the supported calendar range that are NOT XNYS
+ * sessions. Derived from the same authority as the enricher filter, so
+ * "weekday AND not in this list" is exactly "is a session" in-range by
+ * construction. Weekend non-sessions are handled by the dow test instead of
+ * enumeration to keep the emitted SQL small.
+ */
+function xnysWeekdayClosures(): string[] {
+  if (weekdayClosureCache) return weekdayClosureCache;
+  const closures: string[] = [];
+  const cursor = new Date(`${XNYS_SESSION_CALENDAR_SUPPORTED_FROM}T00:00:00.000Z`);
+  const through = new Date(`${XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH}T00:00:00.000Z`);
+  while (cursor.getTime() <= through.getTime()) {
+    const iso = cursor.toISOString().slice(0, 10);
+    if (!isXnysSessionDate(iso)) {
+      const weekday = cursor.getUTCDay();
+      if (weekday !== 0 && weekday !== 6) closures.push(iso);
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  weekdayClosureCache = closures;
+  return closures;
+}
+
+/**
+ * SQL predicate over a `date` column: keep out-of-range rows unconditionally,
+ * and in-range keep only genuine XNYS sessions. DuckDB `dow` is PostgreSQL-
+ * compatible (Sunday=0 .. Saturday=6).
+ */
+function xnysSessionLagFilterSql(): string {
+  const closureLiterals = xnysWeekdayClosures()
+    .map((date) => `'${date}'`)
+    .join(", ");
+  return `(
+        date < '${XNYS_SESSION_CALENDAR_SUPPORTED_FROM}'
+        OR date > '${XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH}'
+        OR (
+          EXTRACT(dow FROM CAST(date AS DATE)) NOT IN (0, 6)
+          AND CAST(date AS DATE) NOT IN (${closureLiterals})
+        )
+      )`;
+}
+
 // SELECT columns from enriched_context: cd."Vol_Regime", ...
 function buildDerivedSelectCols(): string {
   return [...DERIVED_OPEN_FIELDS, ...DERIVED_CLOSE_FIELDS].map((f) => `cd."${f}"`).join(", ");
@@ -328,6 +395,46 @@ export function buildLookaheadFreeQuery(tradeDatesOrKeys: string[] | MarketLooku
     .join(", ");
   const derivedOpenPassthrough = [...DERIVED_OPEN_FIELDS].map((f) => `"${f}"`).join(", ");
 
+  // Prior-value columns projected from the session-filtered LAG subquery. The
+  // outer `lagged` CTE keeps every joined row — output row presence is
+  // unchanged — but prev_* values exist only for rows that survived
+  // lag_input's XNYS-session filter, so a LAG never lands on an all-null
+  // non-session identity row. A requested non-session identity row keeps its
+  // output row with null priors: there is no meaningful prior-session lookup
+  // for a day the market was closed.
+  const dailyPrevCols = [...DAILY_CLOSE_FIELDS].map((f) => `l."prev_${f}"`).join(",\n        ");
+  const vixPrevCols = VIX_ALL_MAPPINGS.filter((m) => m.timing === "close")
+    .map((m) => `l."prev_${m.alias}"`)
+    .join(",\n        ");
+  const derivedPrevCols = [...DERIVED_CLOSE_FIELDS].map((f) => `l."prev_${f}"`).join(",\n        ");
+
+  const sessionBoundedLagCtes = `lag_input AS (
+      SELECT * FROM joined
+      WHERE ${xnysSessionLagFilterSql()}
+    ),
+    lagged AS (
+      SELECT
+        joined.ticker,
+        joined.date,
+        ${dailyOpenPassthrough},
+        ${dailyStaticPassthrough},
+        ${vixOpenPassthrough ? vixOpenPassthrough + "," : ""}
+        ${derivedOpenPassthrough ? derivedOpenPassthrough + "," : ""}
+        ${dailyPrevCols},
+        ${vixPrevCols ? vixPrevCols + "," : ""}
+        ${derivedPrevCols}
+      FROM joined
+      LEFT JOIN (
+        SELECT
+          ticker,
+          date,
+          ${dailyLagCols},
+          ${vixLagCols ? vixLagCols + "," : ""}
+          ${derivedLagCols}
+        FROM lag_input
+      ) l ON l.ticker = joined.ticker AND l.date = joined.date
+    )`;
+
   // Legacy path for existing date-only callers (single ticker = DEFAULT_MARKET_TICKER)
   if (typeof tradeDatesOrKeys[0] === "string") {
     const tradeDates = tradeDatesOrKeys as string[];
@@ -348,19 +455,7 @@ export function buildLookaheadFreeQuery(tradeDatesOrKeys: string[] | MarketLooku
       LEFT JOIN market.enriched_context cd ON cd.date = d.date
       WHERE d.ticker = $${tradeDates.length + 1}
     ),
-    lagged AS (
-      SELECT
-        ticker,
-        date,
-        ${dailyOpenPassthrough},
-        ${dailyStaticPassthrough},
-        ${vixOpenPassthrough ? vixOpenPassthrough + "," : ""}
-        ${derivedOpenPassthrough ? derivedOpenPassthrough + "," : ""}
-        ${dailyLagCols},
-        ${vixLagCols ? vixLagCols + "," : ""}
-        ${derivedLagCols}
-      FROM joined
-    )
+    ${sessionBoundedLagCtes}
     SELECT * FROM lagged
     WHERE date IN (${placeholders})`;
 
@@ -397,19 +492,7 @@ export function buildLookaheadFreeQuery(tradeDatesOrKeys: string[] | MarketLooku
       LEFT JOIN market.enriched_context cd ON cd.date = d.date
       WHERE d.ticker IN (SELECT DISTINCT ticker FROM requested)
     ),
-    lagged AS (
-      SELECT
-        ticker,
-        date,
-        ${dailyOpenPassthrough},
-        ${dailyStaticPassthrough},
-        ${vixOpenPassthrough ? vixOpenPassthrough + "," : ""}
-        ${derivedOpenPassthrough ? derivedOpenPassthrough + "," : ""}
-        ${dailyLagCols},
-        ${vixLagCols ? vixLagCols + "," : ""}
-        ${derivedLagCols}
-      FROM joined
-    )
+    ${sessionBoundedLagCtes}
     SELECT lagged.*
     FROM lagged
     JOIN requested

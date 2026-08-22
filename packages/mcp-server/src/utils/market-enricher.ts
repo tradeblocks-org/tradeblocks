@@ -602,6 +602,36 @@ function parseDateStr(dateStr: string): Date | null {
   return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
 }
 
+const ISO_CALENDAR_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Normalize an OHLCV row's date value to a validated YYYY-MM-DD string at the
+ * rawRows boundary. The legacy SQL fallback reads `market.spot_daily`, which
+ * may be a view over Hive-partitioned Parquet whose `date` partition value
+ * DuckDB auto-casts to DATE; the node-api reader then yields a DuckDBDateValue
+ * object (JSON-shape `{"days":N}`), not a string. Every downstream consumer
+ * (zero-OHLC guard, session filter, watermark comparisons, writeRows) assumes
+ * real strings, so conversion happens once here — never at call sites.
+ */
+function normalizeMarketRowDate(value: unknown): string {
+  if (typeof value === "string" && ISO_CALENDAR_DATE_RE.test(value)) {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value) {
+      return value;
+    }
+  }
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const days = (value as { days?: unknown } | null)?.days;
+  if (typeof days === "number" && Number.isInteger(days)) {
+    return new Date(days * 24 * 60 * 60 * 1_000).toISOString().slice(0, 10);
+  }
+  throw new TypeError(
+    `OHLCV source returned a date that is not a real calendar date: ${JSON.stringify(value)}`,
+  );
+}
+
 // =============================================================================
 // Parquet Enrichment Helpers
 // =============================================================================
@@ -1463,6 +1493,14 @@ export async function runEnrichment(
       );
       rawRows = rawReader.getRows();
     }
+
+    // 3a. Boundary normalization: the SQL fallback may read `market.spot_daily`
+    // over a Hive-partitioned Parquet view whose DATE-typed partition values
+    // arrive as DuckDBDateValue objects. Convert every row's date to a
+    // validated YYYY-MM-DD string once here so all downstream steps (zero-OHLC
+    // guard, session filter, watermark comparisons, array construction) see
+    // real strings regardless of which OHLCV source produced the rows.
+    rawRows = rawRows.map((r) => [r[0], normalizeMarketRowDate(r[1]), r[2], r[3], r[4], r[5]]);
 
     if (rawRows.length === 0) {
       return {
