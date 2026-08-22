@@ -273,6 +273,10 @@ function buildVixSelectCols(): string {
 // the supported range (2022-01-01..2030-12-31) and the closure rules ship in
 // xnys-session-calendar.ts (revision xnys-full-day-2022-2030-v1); nothing
 // here reads runtime-mutable state.
+// Test hazard: nothing clears this between tests either — a test that stubs
+// isXnysSessionDate or expects a different calendar can silently read
+// closures computed from the real calendar by an earlier test in the same
+// process.
 let weekdayClosureCache: string[] | null = null;
 
 /**

@@ -623,6 +623,7 @@ function normalizeMarketRowDate(value: unknown): string {
   if (value instanceof Date && Number.isFinite(value.getTime())) {
     return value.toISOString().slice(0, 10);
   }
+  // DuckDB DATE internal repr: int32 days since 1970-01-01 UTC
   const days = (value as { days?: unknown } | null)?.days;
   if (typeof days === "number" && Number.isInteger(days)) {
     return new Date(days * 24 * 60 * 60 * 1_000).toISOString().slice(0, 10);
