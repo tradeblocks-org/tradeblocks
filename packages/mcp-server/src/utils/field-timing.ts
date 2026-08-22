@@ -341,9 +341,13 @@ function buildDerivedSelectCols(): string {
  * Pitfall 1: market.enriched carries NO OHLCV columns; OHLCV projections MUST use the
  * spot_daily alias (`s` for the target ticker, `vix/vix9d/vix3m` for VIX-family).
  *
- * LAG operates on the FULL ticker history (all trading days for the ticker),
- * NOT just the requested dates. This ensures LAG sees the correct prior trading day
- * across weekends, holidays, and sparse trading strategies.
+ * LAG consumes each ticker's full row history, NOT just the requested dates. Its
+ * source set (`lag_input`) is session-filtered by xnysSessionLagFilterSql(): inside
+ * the supported XNYS calendar range (2022-01-01..2030-12-31) only genuine XNYS
+ * sessions feed LAG, so weekend/holiday gaps and all-null non-session identity
+ * rows never become the prior day; rows dated outside that window remain
+ * LAG-consumed exactly as before (the calendar has no opinion there). This keeps
+ * the lookahead-free contract: an index lag of one position is the prior SESSION.
  *
  * @param tradeDatesOrKeys - Array of dates (legacy string[] overload) or ticker+date keys
  * @returns Object with `sql` (the query string) and `params` (the parameter values)
