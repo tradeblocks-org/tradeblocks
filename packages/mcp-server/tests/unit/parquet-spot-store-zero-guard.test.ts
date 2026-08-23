@@ -125,8 +125,8 @@ describe("ParquetSpotStore writeBars zero/weekend guard", () => {
         store.writeFromSelect(
           { ticker: "SPX", date: "2025-01-07" },
           `SELECT 'SPX' AS ticker, '2025-01-07' AS date, '09:30' AS time,
-                  100.0 AS open, 101.0 AS high, 99.0 AS low, 100.5 AS close,
-                  NULL::DOUBLE AS bid, NULL::DOUBLE AS ask`,
+                  100.0::DOUBLE AS open, 101.0::DOUBLE AS high, 99.0::DOUBLE AS low,
+                  100.5::DOUBLE AS close, NULL::DOUBLE AS bid, NULL::DOUBLE AS ask`,
         ),
     );
 

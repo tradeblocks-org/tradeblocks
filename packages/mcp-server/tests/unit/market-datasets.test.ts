@@ -46,6 +46,39 @@ let tmpDir: string; // serves as dataDir
 let db: DuckDBInstance;
 let conn: DuckDBConnection;
 
+// Exact revision-1 canonical enriched projection. Attempt-scoped writes are
+// schema-gated, so prepared fixtures must publish this shape.
+const CANONICAL_ENRICHED_SELECT = `SELECT 'SPX'::VARCHAR AS ticker,
+  '2025-01-06'::VARCHAR AS date,
+  NULL::DOUBLE AS Prior_Close,
+  NULL::DOUBLE AS Gap_Pct,
+  NULL::DOUBLE AS ATR_Pct,
+  NULL::DOUBLE AS RSI_14,
+  NULL::DOUBLE AS Price_vs_EMA21_Pct,
+  NULL::DOUBLE AS Price_vs_SMA50_Pct,
+  NULL::DOUBLE AS Realized_Vol_5D,
+  NULL::DOUBLE AS Realized_Vol_20D,
+  NULL::DOUBLE AS Return_5D,
+  NULL::DOUBLE AS Return_20D,
+  NULL::DOUBLE AS Intraday_Range_Pct,
+  NULL::DOUBLE AS Intraday_Return_Pct,
+  NULL::DOUBLE AS Close_Position_In_Range,
+  NULL::INTEGER AS Gap_Filled,
+  NULL::INTEGER AS Consecutive_Days,
+  NULL::DOUBLE AS Prev_Return_Pct,
+  NULL::DOUBLE AS Prior_Range_vs_ATR,
+  NULL::DOUBLE AS High_Time,
+  NULL::DOUBLE AS Low_Time,
+  NULL::INTEGER AS High_Before_Low,
+  NULL::INTEGER AS Reversal_Type,
+  NULL::DOUBLE AS Opening_Drive_Strength,
+  NULL::DOUBLE AS Intraday_Realized_Vol,
+  NULL::INTEGER AS Day_of_Week,
+  NULL::INTEGER AS Month,
+  NULL::INTEGER AS Is_Opex,
+  NULL::DOUBLE AS ivr,
+  NULL::DOUBLE AS ivp
+FROM src`;
 beforeEach(async () => {
   tmpDir = join(
     tmpdir(),
@@ -251,7 +284,16 @@ describe("writeSpotPartition — path resolution", () => {
           dataDir: tmpDir,
           ticker: "SPX",
           date: "2025-01-06",
-          selectQuery: "SELECT *, '2025-01-06' AS date FROM src",
+          selectQuery: `SELECT 'SPX'::VARCHAR AS ticker,
+                 '2025-01-06'::VARCHAR AS date,
+                 '09:30'::VARCHAR AS time,
+                 225.0::DOUBLE AS open,
+                 226.0::DOUBLE AS high,
+                 224.0::DOUBLE AS low,
+                 225.5::DOUBLE AS close,
+                 NULL::DOUBLE AS bid,
+                 NULL::DOUBLE AS ask
+               FROM src`,
           quality: { inputRows: 3, droppedRows: 0 },
         }),
     );
@@ -439,7 +481,7 @@ describe("writeEnrichedTickerPartition — bounded partitioning", () => {
           dataDir: tmpDir,
           ticker: "SPX",
           date: "2025-01-06",
-          selectQuery: "SELECT 'SPX' ticker, '2025-01-06' date, id, label FROM src",
+          selectQuery: CANONICAL_ENRICHED_SELECT,
           quality: { kind: "writer-input-complete" },
         }),
     );
