@@ -400,9 +400,9 @@ describe("market-data provenance foundation", () => {
         );
 
         const before = lstatSync(targetPath);
-        await expect(
-          store[INTERNAL_HISTORICAL_PARTITION_ADOPTION](conn, identity),
-        ).rejects.toThrow(/schema does not match revision 1/);
+        await expect(store[INTERNAL_HISTORICAL_PARTITION_ADOPTION](conn, identity)).rejects.toThrow(
+          /schema does not match revision 1/,
+        );
         expect(lstatSync(targetPath).ino).toBe(before.ino);
       } finally {
         conn.closeSync();

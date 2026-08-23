@@ -6,7 +6,15 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, rmSync, existsSync, writeFileSync, readdirSync } from "fs";
+import {
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  existsSync,
+  writeFileSync,
+  readdirSync,
+} from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
