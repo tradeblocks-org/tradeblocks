@@ -958,7 +958,7 @@ async function flushEnrichedToParquet(
         ticker,
         date,
         selectQuery:
-          `SELECT ticker, date, ${enrichedColList} FROM "${tables.dailyTable}" ` +
+          `SELECT ticker, CAST(date AS VARCHAR) AS date, ${enrichedColList} FROM "${tables.dailyTable}" ` +
           `WHERE ticker = '${ticker}' AND date = '${date}'`,
         quality: { kind: "writer-input-complete" },
       });
@@ -984,7 +984,7 @@ async function flushEnrichedToParquet(
         dataDir,
         date,
         selectQuery:
-          `SELECT date, Vol_Regime, Term_Structure_State, Trend_Direction, ` +
+          `SELECT CAST(date AS VARCHAR) AS date, Vol_Regime, Term_Structure_State, Trend_Direction, ` +
           `VIX_Spike_Pct, VIX_Gap_Pct FROM "${tables.dateContextTable}" WHERE date = '${date}'`,
         quality: { kind: "writer-input-complete" },
       });

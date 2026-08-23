@@ -470,6 +470,7 @@ export type {
 } from "./market/provenance/index.ts";
 export { finalizeCanonicalMarketDataCutoff } from "./market/provenance/canonical-market-resolver.ts";
 export { publishRefreshCompletionAuthority } from "./market/provenance/partition-commit-store.ts";
+export { assertCanonicalParquetSchema } from "./market/provenance/partition-commit-store.ts";
 
 // Export json-store utility for unit testing
 export {

@@ -27,6 +27,7 @@ import {
   adoptCanonicalHistoricalInputClosure,
   addressBytes,
   addressCanonicalJson,
+  assertCanonicalParquetSchema,
   canonicalJson,
   parseCanonicalJsonAddress,
   publishCanonicalMarketResolverRegistry,
@@ -350,6 +351,59 @@ describe("market-data provenance foundation", () => {
         expect(adopted.receipts).toHaveLength(1);
         await expect(store.inspectPartition(identity)).resolves.toMatchObject({ status: "match" });
         expect(existsSync(join(rootDir, ".provenance", "refresh-completions"))).toBe(false);
+      } finally {
+        conn.closeSync();
+        instance.closeSync();
+      }
+    });
+
+    it("adoption accepts VARCHAR dates and refuses DATE through the shared schema assertion", async () => {
+      const store = new FilePartitionCommitStore(rootDir);
+      const instance = await DuckDBInstance.create(":memory:");
+      const conn = await instance.connect();
+      try {
+        const varcharPath = join(externalDir, "varchar-date.parquet");
+        await conn.run(`
+          COPY (
+            SELECT 'IWM'::VARCHAR AS ticker,
+                   '2026-07-20'::VARCHAR AS date,
+                   '09:30'::VARCHAR AS time,
+                   225.0::DOUBLE AS open,
+                   226.0::DOUBLE AS high,
+                   224.0::DOUBLE AS low,
+                   225.5::DOUBLE AS close,
+                   NULL::DOUBLE AS bid,
+                   NULL::DOUBLE AS ask
+          ) TO '${varcharPath}' (FORMAT PARQUET)
+        `);
+        await expect(
+          assertCanonicalParquetSchema(conn, varcharPath, "spot"),
+        ).resolves.toBeUndefined();
+
+        const targetPath = targetFor(identity.partition);
+        mkdirSync(dirname(targetPath), { recursive: true });
+        await conn.run(`
+          COPY (
+            SELECT 'IWM'::VARCHAR AS ticker,
+                   DATE '2026-07-20' AS date,
+                   '09:30'::VARCHAR AS time,
+                   225.0::DOUBLE AS open,
+                   226.0::DOUBLE AS high,
+                   224.0::DOUBLE AS low,
+                   225.5::DOUBLE AS close,
+                   NULL::DOUBLE AS bid,
+                   NULL::DOUBLE AS ask
+          ) TO '${targetPath.replaceAll("'", "''")}' (FORMAT PARQUET)
+        `);
+        await expect(assertCanonicalParquetSchema(conn, targetPath, "spot")).rejects.toThrow(
+          /Canonical Parquet schema does not match revision 1.*"dataset":"spot".*"DATE"/,
+        );
+
+        const before = lstatSync(targetPath);
+        await expect(
+          store[INTERNAL_HISTORICAL_PARTITION_ADOPTION](conn, identity),
+        ).rejects.toThrow(/schema does not match revision 1/);
+        expect(lstatSync(targetPath).ino).toBe(before.ino);
       } finally {
         conn.closeSync();
         instance.closeSync();

@@ -38,7 +38,7 @@ import {
 } from "../../src/test-exports.ts";
 import type { DuckDBConnection, DuckDBInstance as DuckDBInstanceType } from "@duckdb/node-api";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -1860,5 +1860,152 @@ describe("Tier 1 indicator series contains only genuine XNYS sessions", () => {
     await expect(runEnrichment(conn, "SPX", { dataDir: tmpDir }, io)).rejects.toThrow(
       /implausible/i,
     );
+  });
+});
+// =============================================================================
+// Canonical Parquet flush schemas
+//
+// A re-flush seeds its working tables by reading published enriched/ slices
+// back with hive_partitioning=true; DuckDB types that synthesized date column
+// as DATE. Both publication projections must CAST it back to VARCHAR so every
+// published file keeps the revision-1 canonical schema.
+// =============================================================================
+
+const ENRICHED_TICKER_SCHEMA: Array<[string, string]> = [
+  ["ticker", "VARCHAR"],
+  ["date", "VARCHAR"],
+  ["Prior_Close", "DOUBLE"],
+  ["Gap_Pct", "DOUBLE"],
+  ["ATR_Pct", "DOUBLE"],
+  ["RSI_14", "DOUBLE"],
+  ["Price_vs_EMA21_Pct", "DOUBLE"],
+  ["Price_vs_SMA50_Pct", "DOUBLE"],
+  ["Realized_Vol_5D", "DOUBLE"],
+  ["Realized_Vol_20D", "DOUBLE"],
+  ["Return_5D", "DOUBLE"],
+  ["Return_20D", "DOUBLE"],
+  ["Intraday_Range_Pct", "DOUBLE"],
+  ["Intraday_Return_Pct", "DOUBLE"],
+  ["Close_Position_In_Range", "DOUBLE"],
+  ["Gap_Filled", "INTEGER"],
+  ["Consecutive_Days", "INTEGER"],
+  ["Prev_Return_Pct", "DOUBLE"],
+  ["Prior_Range_vs_ATR", "DOUBLE"],
+  ["High_Time", "DOUBLE"],
+  ["Low_Time", "DOUBLE"],
+  ["High_Before_Low", "INTEGER"],
+  ["Reversal_Type", "INTEGER"],
+  ["Opening_Drive_Strength", "DOUBLE"],
+  ["Intraday_Realized_Vol", "DOUBLE"],
+  ["Day_of_Week", "INTEGER"],
+  ["Month", "INTEGER"],
+  ["Is_Opex", "INTEGER"],
+  ["ivr", "DOUBLE"],
+  ["ivp", "DOUBLE"],
+];
+
+const ENRICHED_CONTEXT_SCHEMA: Array<[string, string]> = [
+  ["date", "VARCHAR"],
+  ["Vol_Regime", "INTEGER"],
+  ["Term_Structure_State", "INTEGER"],
+  ["Trend_Direction", "VARCHAR"],
+  ["VIX_Spike_Pct", "DOUBLE"],
+  ["VIX_Gap_Pct", "DOUBLE"],
+];
+
+describe("parquet flush publishes canonical VARCHAR date schemas", () => {
+  let tmpDir: string;
+  let db: DuckDBInstanceType;
+  let conn: DuckDBConnection;
+
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `enricher-schema-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(join(tmpDir, "market"), { recursive: true });
+    db = await DuckDBInstance.create(":memory:");
+    conn = await db.connect();
+    await conn.run(`ATTACH ':memory:' AS market`);
+    await ensureMutableMarketTables(conn);
+    await ensureMarketDataTables(conn);
+    await conn.run(`
+      CREATE OR REPLACE VIEW market.spot_daily AS
+        SELECT ticker, date,
+               first(open  ORDER BY time) AS open,
+               max(high)                  AS high,
+               min(low)                   AS low,
+               last(close ORDER BY time)  AS close,
+               first(bid   ORDER BY time) AS bid,
+               last(ask    ORDER BY time) AS ask
+        FROM market.spot
+        WHERE time >= '09:30' AND time <= '16:00'
+        GROUP BY ticker, date
+    `);
+  });
+
+  afterEach(() => {
+    try {
+      conn.closeSync();
+    } catch {
+      /* */
+    }
+    try {
+      db.closeSync();
+    } catch {
+      /* */
+    }
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const describeFile = async (filePath: string): Promise<Array<[string, string]>> => {
+    const reader = await conn.runAndReadAll(
+      `DESCRIBE SELECT * FROM read_parquet('${filePath.replaceAll("'", "''")}', hive_partitioning=false)`,
+    );
+    return reader.getRows().map((row) => [String(row[0]), String(row[1])]);
+  };
+
+  test("bounded hive-seeded ticker and context flushes publish exact revision-1 VARCHAR date schemas", async () => {
+    const dates = ["2025-01-06", "2025-01-07", "2025-01-08"];
+    await seedDailyFixture(conn, "SPX", dates);
+    await runEnrichment(conn, "SPX", { dataDir: tmpDir, parquetMode: true });
+
+    // Seed one canonical context partition so the bounded second pass
+    // hive-seeds its context working table from it (synthesizing DATE from
+    // the path key). The real flush projection must cast date back to VARCHAR.
+    const contextDir = join(tmpDir, "market", "enriched", "context", "date=2025-01-07");
+    mkdirSync(contextDir, { recursive: true });
+    await conn.run(`
+      COPY (
+        SELECT '2025-01-07'::VARCHAR AS date,
+               3::INTEGER AS Vol_Regime,
+               1::INTEGER AS Term_Structure_State,
+               'flat'::VARCHAR AS Trend_Direction,
+               5.0::DOUBLE AS VIX_Spike_Pct,
+               2.0::DOUBLE AS VIX_Gap_Pct
+      ) TO '${join(contextDir, "data.parquet")}' (FORMAT PARQUET)
+    `);
+
+    // The second bounded pass seeds its working tables by reading the just-
+    // published slices back with hive_partitioning=true, so `date` arrives as
+    // DuckDB DATE. Without the projection cast, republication would emit DATE.
+
+    const enrichedDir = join(tmpDir, "market", "enriched");
+    const tickerDates = readdirSync(join(enrichedDir, "ticker=SPX")).filter((entry) =>
+      entry.startsWith("date="),
+    );
+    expect(tickerDates.length).toBeGreaterThan(0);
+    for (const entry of tickerDates) {
+      expect(await describeFile(join(enrichedDir, "ticker=SPX", entry, "data.parquet"))).toEqual(
+        ENRICHED_TICKER_SCHEMA,
+      );
+    }
+
+    const contextDates = readdirSync(join(enrichedDir, "context")).filter((entry) =>
+      entry.startsWith("date="),
+    );
+    expect(contextDates.length).toBeGreaterThan(0);
+    for (const entry of contextDates) {
+      expect(await describeFile(join(enrichedDir, "context", entry, "data.parquet"))).toEqual(
+        ENRICHED_CONTEXT_SCHEMA,
+      );
+    }
   });
 });

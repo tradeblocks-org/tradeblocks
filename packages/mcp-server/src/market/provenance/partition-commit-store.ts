@@ -414,13 +414,18 @@ function canonicalDuckDbType(value: unknown): string {
   return normalized === "REAL" ? "FLOAT" : normalized;
 }
 
-async function inspectCanonicalParquet(
+/**
+ * @internal Single canonical Parquet schema declaration check. Every consumer
+ * (adoption inspection, prepared-file gate inside a commit attempt) verifies
+ * through this assertion so the expected schema exists in exactly one place.
+ */
+export async function assertCanonicalParquetSchema(
   conn: DuckDBConnection,
   filePath: string,
-  identity: PartitionIdentity,
-): Promise<{ rows: number; coverage: LogicalCoverage }> {
-  const expectedSchema = CANONICAL_PARQUET_SCHEMAS[identity.dataset];
-  if (!expectedSchema) throw new TypeError(`No canonical Parquet schema for ${identity.dataset}`);
+  dataset: string,
+): Promise<void> {
+  const expectedSchema = CANONICAL_PARQUET_SCHEMAS[dataset];
+  if (!expectedSchema) throw new TypeError(`No canonical Parquet schema for ${dataset}`);
   const source = `read_parquet('${escapeSqlLiteral(filePath)}', hive_partitioning=false)`;
   const described = await conn.runAndReadAll(`DESCRIBE SELECT * FROM ${source}`);
   const schema = described
@@ -428,9 +433,18 @@ async function inspectCanonicalParquet(
     .map((row) => [String(row[0]), canonicalDuckDbType(row[1])] as const);
   if (canonicalJsonBytes(schema).compare(canonicalJsonBytes(expectedSchema)) !== 0) {
     throw new Error(
-      `Existing partition Parquet schema does not match revision 1: ${JSON.stringify({ observed: schema, expected: expectedSchema })}`,
+      `Canonical Parquet schema does not match revision 1: ${JSON.stringify({ dataset, observed: schema, expected: expectedSchema })}`,
     );
   }
+}
+
+async function inspectCanonicalParquet(
+  conn: DuckDBConnection,
+  filePath: string,
+  identity: PartitionIdentity,
+): Promise<{ rows: number; coverage: LogicalCoverage }> {
+  await assertCanonicalParquetSchema(conn, filePath, identity.dataset);
+  const source = `read_parquet('${escapeSqlLiteral(filePath)}', hive_partitioning=false)`;
   const definition = canonicalPartitionDataset(identity.dataset) as NonNullable<
     ReturnType<typeof canonicalPartitionDataset>
   >;

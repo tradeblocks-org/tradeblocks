@@ -6,9 +6,9 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, rmSync, existsSync } from "fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, existsSync, writeFileSync, readdirSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
 import {
   isParquetMode,
@@ -95,6 +95,21 @@ describe("parquet-writer", () => {
       }
       rmSync(tmpDir, { recursive: true, force: true });
     });
+
+    // Exact revision-1 canonical spot projection. Attempt-scoped writes are
+    // schema-gated, so every prepared fixture must publish this shape.
+    const canonicalSpotSelect = (dateExpression: string, from = "") => {
+      const source = from ? `\n             FROM ${from}` : "";
+      return `SELECT 'IWM'::VARCHAR AS ticker,
+             ${dateExpression} AS date,
+             '09:30'::VARCHAR AS time,
+             225.0::DOUBLE AS open,
+             226.0::DOUBLE AS high,
+             224.0::DOUBLE AS low,
+             225.5::DOUBLE AS close,
+             NULL::DOUBLE AS bid,
+             NULL::DOUBLE AS ask${source}`;
+    };
 
     it("writes a Parquet file with ZSTD compression and returns rowCount", async () => {
       // Create test data in DuckDB
@@ -189,7 +204,7 @@ describe("parquet-writer", () => {
 
     it("records the exact committed hash, bytes, and rows through an attempt scope", async () => {
       await conn.run(
-        `CREATE TEMP TABLE exact_data AS SELECT id, '2026-07-20' AS date FROM range(0, 7) t(id)`,
+        `CREATE TEMP TABLE exact_data AS ${canonicalSpotSelect("'2026-07-20'::VARCHAR", "range(0, 7) t(id)")}`,
       );
       const targetPath = join(
         tmpDir,
@@ -239,7 +254,7 @@ describe("parquet-writer", () => {
 
     it("snapshots mutable provenance before the first asynchronous write step", async () => {
       await conn.run(
-        `CREATE TEMP TABLE mutable_provenance AS SELECT 1 AS id, '2026-07-27' AS date`,
+        `CREATE TEMP TABLE mutable_provenance AS ${canonicalSpotSelect("'2026-07-27'::VARCHAR")}`,
       );
       const targetPath = join(
         tmpDir,
@@ -290,7 +305,9 @@ describe("parquet-writer", () => {
     });
 
     it("leaves a detectable orphan when receipt recording fails after publish", async () => {
-      await conn.run(`CREATE TEMP TABLE orphan_data AS SELECT 1 AS id, '2026-07-21' AS date`);
+      await conn.run(
+        `CREATE TEMP TABLE orphan_data AS ${canonicalSpotSelect("'2026-07-21'::VARCHAR")}`,
+      );
       const targetPath = join(
         tmpDir,
         "market",
@@ -341,7 +358,9 @@ describe("parquet-writer", () => {
     });
 
     it("refuses to publish provenance without explicit quality counts", async () => {
-      await conn.run(`CREATE TEMP TABLE no_quality AS SELECT 1 AS id, '2026-07-22' AS date`);
+      await conn.run(
+        `CREATE TEMP TABLE no_quality AS ${canonicalSpotSelect("'2026-07-22'::VARCHAR")}`,
+      );
       const targetPath = join(
         tmpDir,
         "market",
@@ -374,7 +393,7 @@ describe("parquet-writer", () => {
       const store = new FilePartitionCommitStore(join(tmpDir, "market"));
       const writeBad = async (dateExpression: string, partitionDate: string) => {
         await conn.run(
-          `CREATE OR REPLACE TEMP TABLE bad_coverage AS SELECT 1 AS id, ${dateExpression} AS date`,
+          `CREATE OR REPLACE TEMP TABLE bad_coverage AS ${canonicalSpotSelect(dateExpression)}`,
         );
         const targetPath = join(
           tmpDir,
@@ -412,6 +431,103 @@ describe("parquet-writer", () => {
       expect(existsSync(wrongDate.targetPath)).toBe(false);
     });
 
+    // Full canonical `enriched` schema with a caller-controlled date
+    // expression, so the same projection can be published as VARCHAR
+    // (canonical) or DATE (defect shape).
+    const enrichedSelect = (dateExpression: string) => `
+      SELECT 'IWM'::VARCHAR AS ticker,
+             ${dateExpression} AS date,
+             NULL::DOUBLE AS Prior_Close,
+             NULL::DOUBLE AS Gap_Pct,
+             NULL::DOUBLE AS ATR_Pct,
+             NULL::DOUBLE AS RSI_14,
+             NULL::DOUBLE AS Price_vs_EMA21_Pct,
+             NULL::DOUBLE AS Price_vs_SMA50_Pct,
+             NULL::DOUBLE AS Realized_Vol_5D,
+             NULL::DOUBLE AS Realized_Vol_20D,
+             NULL::DOUBLE AS Return_5D,
+             NULL::DOUBLE AS Return_20D,
+             NULL::DOUBLE AS Intraday_Range_Pct,
+             NULL::DOUBLE AS Intraday_Return_Pct,
+             NULL::DOUBLE AS Close_Position_In_Range,
+             NULL::INTEGER AS Gap_Filled,
+             NULL::INTEGER AS Consecutive_Days,
+             NULL::DOUBLE AS Prev_Return_Pct,
+             NULL::DOUBLE AS Prior_Range_vs_ATR,
+             NULL::DOUBLE AS High_Time,
+             NULL::DOUBLE AS Low_Time,
+             NULL::INTEGER AS High_Before_Low,
+             NULL::INTEGER AS Reversal_Type,
+             NULL::DOUBLE AS Opening_Drive_Strength,
+             NULL::DOUBLE AS Intraday_Realized_Vol,
+             NULL::INTEGER AS Day_of_Week,
+             NULL::INTEGER AS Month,
+             NULL::INTEGER AS Is_Opex,
+             NULL::DOUBLE AS ivr,
+             NULL::DOUBLE AS ivp
+    `;
+    const enrichedProvenance = {
+      dataset: "enriched",
+      partition: { ticker: "IWM", date: "2026-07-20" },
+      schemaRevision: 1,
+      relativePath: "enriched/ticker=IWM/date=2026-07-20/data.parquet",
+      coverage: { kind: "prepared-date-range" as const, column: "date" },
+      quality: { inputRows: 1, droppedRows: 0 },
+    };
+
+    it("accepts a canonical VARCHAR-date prepared enriched partition through an attempt", async () => {
+      const store = new FilePartitionCommitStore(join(tmpDir, "market"));
+      const targetPath = join(
+        tmpDir,
+        "market",
+        "enriched",
+        "ticker=IWM",
+        "date=2026-07-20",
+        "data.parquet",
+      );
+
+      const attempt = await runPartitionCommitAttempt(
+        { attemptId: "varchar-enriched", recorder: store },
+        () =>
+          writeParquetAtomic(conn, {
+            targetPath,
+            selectQuery: enrichedSelect("'2026-07-20'::VARCHAR"),
+            provenance: enrichedProvenance,
+          }),
+      );
+
+      expect(attempt.receipts).toHaveLength(1);
+      expect(existsSync(targetPath)).toBe(true);
+    });
+
+    it("refuses a DATE-typed prepared enriched partition before install, receipt, or event", async () => {
+      const store = new FilePartitionCommitStore(join(tmpDir, "market"));
+      const targetPath = join(
+        tmpDir,
+        "market",
+        "enriched",
+        "ticker=IWM",
+        "date=2026-07-20",
+        "data.parquet",
+      );
+      mkdirSync(dirname(targetPath), { recursive: true });
+      const baseline = Buffer.from("existing-canonical-target");
+      writeFileSync(targetPath, baseline);
+
+      await expect(
+        runPartitionCommitAttempt({ attemptId: "date-typed-enriched", recorder: store }, () =>
+          writeParquetAtomic(conn, {
+            targetPath,
+            selectQuery: enrichedSelect("DATE '2026-07-20'"),
+            provenance: enrichedProvenance,
+          }),
+        ),
+      ).rejects.toThrow(/Canonical Parquet schema does not match revision 1/);
+
+      expect(readFileSync(targetPath)).toEqual(baseline);
+      expect(readdirSync(dirname(targetPath)).filter((name) => name.includes(".tmp-"))).toEqual([]);
+    });
+
     it("returns verified frozen receipts in deterministic tuple order with retries deduplicated", async () => {
       const store = new FilePartitionCommitStore(join(tmpDir, "market"));
       const writeDate = async (date: string) => {
@@ -425,7 +541,7 @@ describe("parquet-writer", () => {
         );
         return writeParquetAtomic(conn, {
           targetPath,
-          selectQuery: `SELECT 1 AS id, '${date}' AS date`,
+          selectQuery: canonicalSpotSelect(`'${date}'::VARCHAR`),
           provenance: {
             dataset: "spot",
             partition: { ticker: "IWM", date },

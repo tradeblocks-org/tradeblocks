@@ -27,7 +27,10 @@ import type {
   PartitionQualityCounts,
   StoredPartitionCommit,
 } from "../market/provenance/partition-commit-store.ts";
-import { PartitionFilePublicationError } from "../market/provenance/partition-commit-store.ts";
+import {
+  PartitionFilePublicationError,
+  assertCanonicalParquetSchema,
+} from "../market/provenance/partition-commit-store.ts";
 import {
   activePartitionCommitAttempt,
   capturePartitionCommitReceipt,
@@ -281,6 +284,13 @@ export async function writeParquetAtomic(
     await conn.run(
       `COPY "${stagingName}" TO '${tempPath}' (FORMAT PARQUET, COMPRESSION ${compression})`,
     );
+
+    // Inside a partition commit attempt the completed temp sibling must
+    // already match the canonical dataset schema before any fingerprint,
+    // receipt, event, or install step can observe it.
+    if (provenanceAttempt && provenance) {
+      await assertCanonicalParquetSchema(conn, tempPath, provenance.dataset);
+    }
 
     // Re-open the exact completed bytes. Counts and coverage must describe the
     // file being installed, not mutable staging state that merely preceded it.
