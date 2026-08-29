@@ -11,6 +11,11 @@ packages/mcp-server/data/
 .worktrees/
 .claude/worktrees/
 
+# Receiver-owned transient pointer mailbox, armed by `fleet-mail arm` inside a seat or
+# launched-session worktree (enterprise#3245). Measured: an untracked non-ignored file makes
+# `git worktree remove` fail with exit 128, so an unignored mailbox blocks worktree teardown.
+.fleet-inbox/
+
 # General ignores
 .DS_Store
 *.pem
