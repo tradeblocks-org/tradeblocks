@@ -201,33 +201,36 @@ async function main() {
   console.log();
 
   // ── Step 3: Verify results ──
+  // This test covers ONE case: a holder that is genuinely abandoned (PPID=1).
+  // Terminating that holder is correct. Terminating a LIVE holder is not, and is
+  // never a pass here — the old grading accepted "force-recovery" as success,
+  // which is why the sibling-killing disconnect loop (#444) shipped. Coexistence
+  // with a live holder is covered automatically in
+  // tests/integration/duckdb-lock-coexistence.test.ts.
   const orphanRecovered = stderr.includes("Recovered DuckDB lock") && stderr.includes("orphaned");
   const forceRecovered =
     stderr.includes("Recovered DuckDB lock") && stderr.includes("force-recovery");
-  const readOnlyFallback = stderr.includes("READ_ONLY fallback");
   const lockHolderDead = !isAlive(lockHolderPid);
+
+  if (forceRecovered) {
+    console.log("FAIL: Recovered via force mode, not orphan detection.");
+    console.log(`  The holder's PPID was ${ppid}. Orphan detection expects 1.`);
+    console.log("  Force mode must stay opt-in (DUCKDB_LOCK_RECOVERY=true) — a live");
+    console.log("  holder is another working session, and killing it loops (#444).");
+    cleanup(lockHolderPid);
+    process.exit(1);
+  }
 
   if (orphanRecovered) {
     console.log("PASS: Detected orphaned process and recovered the DuckDB lock.");
-  } else if (forceRecovered) {
-    console.log("PASS (force): Lock recovered via force-recovery mode.");
-  } else if (lockHolderDead && !readOnlyFallback) {
-    console.log("PASS: Lock holder was terminated (recovery succeeded).");
-  } else if (readOnlyFallback) {
-    console.log("FAIL: Fell back to read-only instead of recovering the orphan.");
-    console.log(`  Lock holder PPID was: ${ppid}`);
-    cleanup(lockHolderPid);
-    process.exit(1);
+  } else if (lockHolderDead) {
+    console.log("PASS: Lock holder is dead (likely recovered before log message).");
   } else {
     console.log(`INFO: Exit code=${exitCode}, lock holder alive=${!lockHolderDead}`);
     console.log("  stdout:", stdout.slice(0, 200));
-    if (!lockHolderDead) {
-      console.log("FAIL: Lock holder is still alive and no recovery message found.");
-      cleanup(lockHolderPid);
-      process.exit(1);
-    } else {
-      console.log("PASS: Lock holder is dead (likely recovered before log message).");
-    }
+    console.log("FAIL: Orphaned lock holder is still alive and was not recovered.");
+    cleanup(lockHolderPid);
+    process.exit(1);
   }
 
   cleanup(lockHolderPid);
