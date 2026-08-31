@@ -763,7 +763,18 @@ function scheduleIdleRelease(): void {
     // Re-check under the timer: a lease taken between scheduling and firing must
     // win, or we would close the file out from under live work.
     if (leaseCount > 0) return;
-    void closeConnection();
+    // Nothing awaits this — it runs on a timer with no caller to return an error
+    // to. An unhandled rejection here would take the whole server down over a
+    // failed close, so swallow it loudly instead. The next getConnection reopens
+    // regardless, and a stuck handle degrades to the pre-#445 behaviour rather
+    // than to a crash.
+    closeConnection().catch((error: unknown) => {
+      console.error(
+        `Failed to release the idle DuckDB handle: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
   }, delay);
   // Never let the release timer hold the process open.
   idleTimer.unref?.();
