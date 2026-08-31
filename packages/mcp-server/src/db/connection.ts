@@ -17,16 +17,37 @@
  * On close: CHECKPOINT → DETACH market → closeSync() to flush WAL reliably.
  * On RO open: ATTACH market.duckdb READ_ONLY (no table creation).
  *
- * DuckDB is single-process: only one process can open a database file at a time
- * (even read-only fails when another process holds a write lock with an active WAL).
- * Lock recovery handles stale processes from crashed Claude Code sessions by detecting
- * orphaned MCP processes (PPID=1) and terminating them before retrying.
+ * DuckDB's cross-process locking, as measured against @duckdb/node-api:
+ *
+ *   holder      new open     result
+ *   read-write  read-only    fails
+ *   read-write  read-write   fails
+ *   read-only   read-write   fails
+ *   read-only   read-only    SUCCEEDS
+ *
+ * So any number of servers coexist as long as they are all read-only, and a single
+ * read-write holder excludes everyone — including readers. Because this server takes
+ * the write lock only to build schemas at startup and then downgrades, a second
+ * server booting concurrently must WAIT OUT that window and then open read-only.
+ * It must never terminate the holder: a live holder is another working session
+ * (clients such as Claude Desktop run more than one copy of this server), and
+ * killing it produces a mutual-destruction loop where each restart kills the
+ * survivor. See getConnection's lock handling.
+ *
+ * Genuinely abandoned holders are handled two ways: the parent-death watchdog in
+ * index.ts makes an orphaned server shut itself down within seconds, and lock
+ * recovery terminates a holder that is already reparented to PID 1. Killing a LIVE
+ * holder requires the explicit DUCKDB_LOCK_RECOVERY=true opt-in.
  *
  * Configuration via environment variables:
  *   DUCKDB_MEMORY_LIMIT    - Memory limit (default: 75% of system RAM, floor 1GB)
  *   DUCKDB_THREADS         - Number of threads (default: 2 — higher counts cause driver flakiness)
- *   DUCKDB_LOCK_RECOVERY   - Force-kill ANY lock-holding tradeblocks-mcp (default: false)
+ *   DUCKDB_LOCK_RECOVERY   - Opt in to force-killing a LIVE lock-holding tradeblocks-mcp
+ *                            (default: false — orphaned holders are still terminated).
+ *                            Set to "true" only to clear a genuinely wedged holder.
  *   DUCKDB_LOCK_RECOVERY_TIMEOUT_MS - Wait time for SIGTERM (default: 1500)
+ *   DUCKDB_OPEN_WAIT_MS    - Total budget for waiting out a concurrent server's startup
+ *                            before giving up on opening at all (default: 15000)
  *   MARKET_DB_PATH         - Path to market.duckdb (overrides default, overridden by --market-db)
  *   TRADEBLOCKS_DUCKDB_MEMORY_LIMIT - Resource cap for the parquet market connection
  *                            (openMarketParquetConnection); unset = DuckDB native default
@@ -466,9 +487,13 @@ function resetConnectionState(): void {
  *
  * Subsequent calls return the existing connection.
  *
+ * When another server already holds the file, this waits that server out and then
+ * opens READ_ONLY rather than terminating it — see openWithLockContention.
+ *
  * @param dataDir - Directory where analytics.duckdb will be stored
  * @returns Promise<DuckDBConnection> - The DuckDB connection
- * @throws Error if database is corrupted or cannot be opened
+ * @throws Error if database is corrupted, or if no open of any mode succeeds
+ *   within DUCKDB_OPEN_WAIT_MS
  */
 export async function getConnection(dataDir: string): Promise<DuckDBConnection> {
   // Return existing connection if available (singleton pattern)
@@ -488,50 +513,17 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
   storedThreads = threads;
   storedMemoryLimit = memoryLimit;
   storedMarketDbPath = resolveMarketDbPath(dataDir);
-  // Lock recovery: kill other tradeblocks-mcp processes that hold the write lock.
-  // Enabled by default — safe because market data is re-importable and lock holders
-  // are just other Claude sessions that can lazily restart their MCP server.
-  // Set DUCKDB_LOCK_RECOVERY=false to disable (only kill orphaned processes).
-  const forceRecovery = (process.env.DUCKDB_LOCK_RECOVERY ?? "true") !== "false";
+  // Terminating a LIVE lock holder is opt-in only. A live holder is almost always
+  // another working server for the same data directory — clients such as Claude
+  // Desktop run more than one copy — and killing it makes each restart kill the
+  // survivor in turn. Orphaned holders (PPID=1) are still terminated without the
+  // opt-in. See tryRecoverLockByTerminatingStaleProcess.
+  const forceRecovery = (process.env.DUCKDB_LOCK_RECOVERY ?? "false") === "true";
 
   try {
-    await openReadWriteConnection(dbPath, threads, memoryLimit);
-    // Release write lock after initialization — idle state is read-only.
-    // Write tools call upgradeToReadWrite() when they need writes.
-    await downgradeToReadOnly(dataDir);
-    return connection!; // downgradeToReadOnly reopened as RO
+    return await openWithLockContention(dbPath, dataDir, threads, memoryLimit, forceRecovery);
   } catch (error) {
-    // Provide clear error message for common issues
     const errorMessage = error instanceof Error ? error.message : String(error);
-
-    // Lock recovery: auto-kill orphaned tradeblocks-mcp processes (PPID=1) that hold the lock.
-    // With DUCKDB_LOCK_RECOVERY=true, also kills non-orphaned holders (force mode).
-    if (isLockError(errorMessage)) {
-      const recovered = await tryRecoverLockByTerminatingStaleProcess(
-        errorMessage,
-        dbPath,
-        forceRecovery,
-      );
-      if (recovered) {
-        // DuckDB file locks may linger briefly after process death — retry with backoff
-        for (let attempt = 0; attempt < 3; attempt++) {
-          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-          try {
-            await openReadWriteConnection(dbPath, threads, memoryLimit);
-            // Release write lock after initialization
-            await downgradeToReadOnly(dataDir);
-            return connection!;
-          } catch (retryError) {
-            const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
-            if (attempt < 2 && isLockError(retryMsg)) continue;
-            resetConnectionState();
-            throw new Error(
-              `Failed to initialize DuckDB at ${dbPath} after lock recovery: ${retryMsg}`,
-            );
-          }
-        }
-      }
-    }
 
     // Reset state on failure
     resetConnectionState();
@@ -550,6 +542,131 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
     }
 
     throw new Error(`Failed to initialize DuckDB at ${dbPath}: ${errorMessage}`);
+  }
+}
+
+/**
+ * Open the analytics database at startup, coexisting with any other server that
+ * holds the file.
+ *
+ * Startup wants the write lock so it can build schemas, but that lock excludes
+ * every other server — readers included. A second server booting a moment later
+ * must therefore not treat the conflict as a fault to be cleared by force. The
+ * loop below encodes the measured lock matrix (see the file header):
+ *
+ *   1. Try read-write. Winning means we own the init; downgrade to read-only so
+ *      other servers can open, and return.
+ *   2. If read-write is locked, try READ-ONLY. Succeeding means the holder is
+ *      itself read-only and has already run the identical, idempotent init —
+ *      there is nothing for us to build, so we join as a reader. This is the
+ *      normal outcome for the second of two concurrently booting servers.
+ *   3. If read-only is locked too, someone is mid-init. Terminate the holder only
+ *      if it is an orphan (or force mode is opted in), then sleep and retry.
+ *
+ * Init is never lost by taking the read-only path: the first write operation calls
+ * upgradeToReadWrite, which runs the full schema-ensure path before writing.
+ *
+ * Throws only when the whole budget elapses without any successful open.
+ */
+/** Cap on immediate post-termination retries. See the fast path in the loop below. */
+const MAX_TERMINATIONS = 4;
+
+async function openWithLockContention(
+  dbPath: string,
+  dataDir: string,
+  threads: string,
+  memoryLimit: string,
+  forceRecovery: boolean,
+): Promise<DuckDBConnection> {
+  const budgetMs = Number.parseInt(process.env.DUCKDB_OPEN_WAIT_MS || "15000", 10);
+  const deadline = Date.now() + (Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : 15000);
+  let announcedWait = false;
+  let lastLockError = "";
+  let attempt = 0;
+  let terminations = 0;
+
+  for (;;) {
+    // ── Step 1: read-write, so we can build schemas ──
+    try {
+      await openReadWriteConnection(dbPath, threads, memoryLimit);
+      // Release write lock after initialization — idle state is read-only, which
+      // is what lets other servers open the same file at all.
+      await downgradeToReadOnly(dataDir);
+      return connection!; // downgradeToReadOnly reopened as RO
+    } catch (rwError) {
+      const rwMessage = rwError instanceof Error ? rwError.message : String(rwError);
+      if (!isLockError(rwMessage)) throw rwError;
+      lastLockError = rwMessage;
+      resetConnectionState();
+    }
+
+    // ── Step 2: read-only, joining a holder that has already run the init ──
+    try {
+      await openReadOnlyConnection(dbPath, threads, memoryLimit);
+      console.error(
+        `Another tradeblocks-mcp server holds ${dbPath}; opened READ_ONLY and skipped ` +
+          `schema init (the holder runs the same init). Writes will acquire the lock on demand.`,
+      );
+      return connection!;
+    } catch (roError) {
+      const roMessage = roError instanceof Error ? roError.message : String(roError);
+      if (!isLockError(roMessage)) throw roError;
+      resetConnectionState();
+    }
+
+    // ── Step 3: a read-write holder is mid-init. Clear it only if abandoned. ──
+    // Re-read the holder from the CURRENT error every pass: with more than one
+    // contending process, the PID named in the first error is not the PID that
+    // holds the lock after that one exits.
+    //
+    // We deliberately pass the READ-WRITE failure's message, not the read-only
+    // one. Both name the same process — a read-write holder is what blocks both
+    // modes — so the PID is identical, and the read-write message is the one whose
+    // holder we have re-read this pass. Do not "fix" this by passing the read-only
+    // message: on the pass after a kill, the read-only attempt can fail against a
+    // DIFFERENT contender, and terminating that one out of turn is how the old
+    // single-shot recovery failed to converge.
+    const terminated = await tryRecoverLockByTerminatingStaleProcess(
+      lastLockError,
+      dbPath,
+      forceRecovery,
+    );
+
+    // A confirmed kill means the path may be clear right now, so retry immediately
+    // rather than spending the remaining budget on a sleep, and do not fail on a
+    // deadline we crossed while doing the killing.
+    //
+    // Bounded on purpose. An unbounded "kill, retry, kill" fast path is the exact
+    // shape of the loop this whole change exists to remove: a client that restarts
+    // the server we just terminated would keep handing us a fresh holder, and we
+    // would keep killing it, forever, never reaching the deadline. After
+    // MAX_TERMINATIONS the deadline governs again. Four covers the observed
+    // multi-contender case (three processes) with headroom.
+    if (terminated) {
+      terminations += 1;
+      if (terminations <= MAX_TERMINATIONS) {
+        attempt = 0;
+        continue;
+      }
+    }
+
+    if (Date.now() >= deadline) {
+      throw new Error(lastLockError);
+    }
+
+    if (!announcedWait) {
+      announcedWait = true;
+      console.error(
+        `Waiting for another tradeblocks-mcp server to finish opening ${dbPath} ` +
+          `(up to ${Math.round((deadline - Date.now()) / 1000)}s). Set DUCKDB_LOCK_RECOVERY=true ` +
+          `to terminate a wedged holder instead.`,
+      );
+    }
+
+    // Backoff, capped, and never past the deadline.
+    const delayMs = Math.min(250 * 2 ** attempt, 2000);
+    attempt += 1;
+    await new Promise((r) => setTimeout(r, Math.min(delayMs, Math.max(0, deadline - Date.now()))));
   }
 }
 
@@ -656,8 +773,10 @@ export async function upgradeToReadWrite(
   throw (
     lastError ||
     new Error(
-      "Cannot acquire DuckDB write lock. Another process holds it. " +
-        "Kill other tradeblocks-mcp processes or restart Claude Code.",
+      "Cannot acquire DuckDB write lock. Another tradeblocks-mcp server holds the " +
+        "database — writes need exclusive access even when the holder is only reading, " +
+        "and a reader keeps its handle for the life of the process. Going idle does not " +
+        "release it: the other server has to exit.",
     )
   );
 }

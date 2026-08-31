@@ -103,6 +103,42 @@ Open [http://localhost:3000](http://localhost:3000) to access the dashboard.
 
 ---
 
+## Running More Than One Copy of the Server
+
+Some clients start more than one copy of the MCP server against the same data
+directory. Claude Desktop does this: one copy serves the desktop app, and a second
+serves Cowork and Code sessions.
+
+That is supported. The analytics database allows any number of readers at once, so
+the copies coexist. Two details are worth knowing:
+
+- **Startup is briefly exclusive.** Each copy takes the database's write lock for a
+  moment to create its tables, and during that moment no other copy can open the
+  file. A copy that starts while another is doing this waits for it to finish and
+  then opens read-only. You may see a line like `Another tradeblocks-mcp server
+holds …; opened READ_ONLY`. Nothing is wrong.
+- **Writes need the whole database.** A tool that writes — a data import, a market
+  refresh, a sync — needs exclusive access, which it cannot get while another copy
+  is reading. It retries for a few seconds and then reports that another server
+  holds the database. **Leaving the other session idle does not help** — a copy
+  keeps the database open for as long as it runs, so the other server has to exit.
+  Quit it, then run the tool again.
+
+If a copy has genuinely wedged and is holding the lock forever, set
+`DUCKDB_LOCK_RECOVERY` to `true` in the server's `env` block for one run. That
+permits the starting server to terminate the holder. Leave it unset otherwise: the
+holder is normally somebody's working session, and terminating it makes each restart
+shut down the previous one.
+
+### Environment Variables
+
+| Variable               | Required | Description                                                                                                    |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `DUCKDB_OPEN_WAIT_MS`  | No       | How long to wait for another copy to finish starting before giving up (default: `15000`)                       |
+| `DUCKDB_LOCK_RECOVERY` | No       | Set to `true` to let a starting server terminate a live lock holder (default: off; orphans are always cleared) |
+
+---
+
 ## Next Steps
 
 - [Market Data Guide](market-data.md) — importing and enriching market data
