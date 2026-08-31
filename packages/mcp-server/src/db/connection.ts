@@ -39,6 +39,24 @@
  * recovery terminates a holder that is already reparented to PID 1. Killing a LIVE
  * holder requires the explicit DUCKDB_LOCK_RECOVERY=true opt-in.
  *
+ * The read-only row above has a second consequence, and it is why the handle is
+ * LEASED rather than parked (#445). A reader blocks a writer. A server that opens
+ * read-only at startup and keeps that handle for its whole lifetime therefore blocks
+ * every write in every other server on the same data directory, including while it
+ * sits doing nothing. So:
+ *
+ *   - acquireConnectionLease / releaseConnectionLease bracket a unit of work. The
+ *     handle stays open while any lease is held, so a caller may hold a connection
+ *     reference across awaits safely.
+ *   - When the last lease drops, the handle closes after DUCKDB_IDLE_RELEASE_MS,
+ *     freeing the file. The next getConnection reopens it (~10ms).
+ *   - Leases are taken in exactly ONE place: the tool-registration wrapper in
+ *     index.ts, which brackets every registered tool handler. Individual tools do
+ *     not acquire leases, and must not need to.
+ *   - Concurrent callers that find the handle closed share a single open. Two
+ *     independent opens in one process would collide on the file lock and report
+ *     contention against ourselves.
+ *
  * Configuration via environment variables:
  *   DUCKDB_MEMORY_LIMIT    - Memory limit (default: 75% of system RAM, floor 1GB)
  *   DUCKDB_THREADS         - Number of threads (default: 2 — higher counts cause driver flakiness)
@@ -48,6 +66,13 @@
  *   DUCKDB_LOCK_RECOVERY_TIMEOUT_MS - Wait time for SIGTERM (default: 1500)
  *   DUCKDB_OPEN_WAIT_MS    - Total budget for waiting out a concurrent server's startup
  *                            before giving up on opening at all (default: 15000)
+ *   DUCKDB_IDLE_RELEASE_MS - Grace after the last lease drops before the handle is
+ *                            closed and the file freed (default: 3000). 0 releases
+ *                            immediately; a large value re-creates the cross-server
+ *                            write block this exists to remove.
+ *   DUCKDB_WRITE_LOCK_RETRIES - One-second attempts to acquire the write lock before
+ *                            giving up (default: 10). Must outlast another server's
+ *                            DUCKDB_IDLE_RELEASE_MS.
  *   MARKET_DB_PATH         - Path to market.duckdb (overrides default, overridden by --market-db)
  *   TRADEBLOCKS_DUCKDB_MEMORY_LIMIT - Resource cap for the parquet market connection
  *                            (openMarketParquetConnection); unset = DuckDB native default
@@ -79,6 +104,24 @@ import { migrateMetadataToJson } from "./json-migration.ts";
 import { getDataRoot } from "./data-root.ts";
 
 // Module-level singleton state
+//
+// Lease + idle-release state (#445). The analytics file is exclusive to one
+// read-write holder and shared by any number of readers, but a READER also blocks
+// a writer (see the lock matrix in the header). So a server that parks a read-only
+// connection for its whole lifetime blocks every write in every other server on the
+// same data directory — including when it is doing nothing at all. The handle is
+// therefore leased: held while work is in flight, released shortly after the last
+// lease drops.
+let leaseCount = 0;
+let idleTimer: NodeJS.Timeout | null = null;
+// Concurrent acquirers must share ONE open. Without this, two tool handlers that
+// both find the connection closed would each open it, and the second would fail
+// against the first's lock — manufacturing the very contention this fixes.
+let openInFlight: Promise<DuckDBConnection> | null = null;
+// A close yields (CHECKPOINT, DETACH) while `connection` is still non-null, so a
+// caller arriving mid-teardown would otherwise be handed a handle that is about to
+// be torn down under it. Callers wait for this instead and then open fresh.
+let closeInFlight: Promise<void> | null = null;
 let instance: DuckDBInstance | null = null;
 let connection: DuckDBConnection | null = null;
 let connectionMode: "read_write" | "read_only" | null = null;
@@ -455,6 +498,7 @@ async function openReadOnlyConnection(
 }
 
 function resetConnectionState(): void {
+  cancelIdleRelease();
   if (connection) {
     try {
       connection.closeSync();
@@ -496,11 +540,39 @@ function resetConnectionState(): void {
  *   within DUCKDB_OPEN_WAIT_MS
  */
 export async function getConnection(dataDir: string): Promise<DuckDBConnection> {
+  // Never hand out a handle that is being torn down. A close yields part-way
+  // through while `connection` is still set, and a tool call arriving in that
+  // window would take the handle and then have it closed underneath it.
+  if (closeInFlight) {
+    await closeInFlight;
+  }
+
   // Return existing connection if available (singleton pattern)
   if (connection) {
     return connection;
   }
 
+  // Share a single open across concurrent callers. Two callers that both find the
+  // connection released would otherwise race, and the loser would report a lock
+  // conflict against its own process's other open.
+  if (openInFlight) {
+    return openInFlight;
+  }
+
+  openInFlight = openConnectionUnshared(dataDir)
+    .then((conn) => {
+      // Covers the startup open, which belongs to no tool call and would otherwise
+      // sit on the file forever — the whole point of #445.
+      if (leaseCount === 0) scheduleIdleRelease();
+      return conn;
+    })
+    .finally(() => {
+      openInFlight = null;
+    });
+  return openInFlight;
+}
+
+async function openConnectionUnshared(dataDir: string): Promise<DuckDBConnection> {
   const dbPath = path.join(dataDir, "analytics.duckdb");
 
   // Configuration from environment with sensible defaults — thread count and
@@ -626,25 +698,26 @@ async function openWithLockContention(
     // message: on the pass after a kill, the read-only attempt can fail against a
     // DIFFERENT contender, and terminating that one out of turn is how the old
     // single-shot recovery failed to converge.
-    const terminated = await tryRecoverLockByTerminatingStaleProcess(
-      lastLockError,
-      dbPath,
-      forceRecovery,
-    );
+    // Bounded on purpose, and the bound is on TERMINATIONS, not on retries. An
+    // unbounded "kill, retry, kill" is the exact shape of the loop this change
+    // exists to remove: a client that restarts the server we just terminated keeps
+    // handing us a fresh holder, and we keep killing it. Capping only the immediate
+    // retry does not fix that — the slow path would go on killing, once per sleep,
+    // until the deadline. So once the cap is reached we stop terminating entirely
+    // and wait out the remaining budget like any other contended open. Four covers
+    // the observed multi-contender case (three processes) with headroom.
+    if (terminations < MAX_TERMINATIONS) {
+      const terminated = await tryRecoverLockByTerminatingStaleProcess(
+        lastLockError,
+        dbPath,
+        forceRecovery,
+      );
 
-    // A confirmed kill means the path may be clear right now, so retry immediately
-    // rather than spending the remaining budget on a sleep, and do not fail on a
-    // deadline we crossed while doing the killing.
-    //
-    // Bounded on purpose. An unbounded "kill, retry, kill" fast path is the exact
-    // shape of the loop this whole change exists to remove: a client that restarts
-    // the server we just terminated would keep handing us a fresh holder, and we
-    // would keep killing it, forever, never reaching the deadline. After
-    // MAX_TERMINATIONS the deadline governs again. Four covers the observed
-    // multi-contender case (three processes) with headroom.
-    if (terminated) {
-      terminations += 1;
-      if (terminations <= MAX_TERMINATIONS) {
+      // A confirmed kill means the path may be clear right now, so retry
+      // immediately rather than spending the remaining budget on a sleep, and do
+      // not fail on a deadline we crossed while doing the killing.
+      if (terminated) {
+        terminations += 1;
         attempt = 0;
         continue;
       }
@@ -671,18 +744,139 @@ async function openWithLockContention(
 }
 
 /**
+ * Default idle grace before a released handle is closed.
+ *
+ * Short on purpose. A writer in another server can only proceed once every reader
+ * has let go, so a long grace re-creates the block this exists to remove. Reopening
+ * costs about 10ms (measured: instance create plus market ATTACH against a 6MB
+ * analytics file), which is noise next to any real tool call, so there is little to
+ * buy by holding on longer.
+ */
+const DEFAULT_IDLE_RELEASE_MS = 3000;
+
+function idleReleaseMs(): number {
+  const raw = Number.parseInt(process.env.DUCKDB_IDLE_RELEASE_MS || "", 10);
+  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_IDLE_RELEASE_MS;
+}
+
+function cancelIdleRelease(): void {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+}
+
+function scheduleIdleRelease(): void {
+  cancelIdleRelease();
+  if (leaseCount > 0) return;
+  const delay = idleReleaseMs();
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    // Re-check under the timer: a lease taken between scheduling and firing must
+    // win, or we would close the file out from under live work.
+    if (leaseCount > 0) return;
+    // Nothing awaits this — it runs on a timer with no caller to return an error
+    // to. An unhandled rejection here would take the whole server down over a
+    // failed close, so swallow it loudly instead. The next getConnection reopens
+    // regardless, and a stuck handle degrades to the pre-#445 behaviour rather
+    // than to a crash.
+    closeConnection({ abortIfLeased: true }).catch((error: unknown) => {
+      console.error(
+        `Failed to release the idle DuckDB handle: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+  }, delay);
+  // Never let the release timer hold the process open.
+  idleTimer.unref?.();
+}
+
+/**
+ * Take a lease on the analytics handle for the duration of a unit of work.
+ *
+ * While any lease is held the handle stays open, so a caller can hold a connection
+ * reference across awaits without it being closed underneath. Every acquire MUST be
+ * paired with a release in a `finally` — the tool-registration wrapper in index.ts
+ * does this once for every tool, which is why individual tool handlers do not.
+ */
+export function acquireConnectionLease(): void {
+  leaseCount += 1;
+  cancelIdleRelease();
+}
+
+/**
+ * Release a lease. When the last one drops, the handle is closed after the idle
+ * grace, freeing the file for a writer in any other server.
+ */
+export function releaseConnectionLease(): void {
+  if (leaseCount === 0) return;
+  leaseCount -= 1;
+  if (leaseCount === 0) {
+    scheduleIdleRelease();
+  }
+}
+
+/** Live lease count. Diagnostics and tests. */
+export function getConnectionLeaseCount(): number {
+  return leaseCount;
+}
+
+/**
+ * Run `work` holding a lease, releasing it even if `work` throws.
+ *
+ * Prefer this over the bare acquire/release pair anywhere a lease is taken by hand.
+ */
+export async function withConnectionLease<T>(work: () => Promise<T>): Promise<T> {
+  acquireConnectionLease();
+  try {
+    return await work();
+  } finally {
+    releaseConnectionLease();
+  }
+}
+
+/**
  * Close the DuckDB connection and release resources.
  *
  * DETACHes market.duckdb before closing to ensure WAL is checkpointed cleanly.
  * Should be called during graceful shutdown (SIGINT, SIGTERM).
  * Safe to call multiple times or when no connection exists.
  */
-export async function closeConnection(): Promise<void> {
+export async function closeConnection(options?: { abortIfLeased?: boolean }): Promise<void> {
+  if (closeInFlight) {
+    return closeInFlight;
+  }
+  closeInFlight = closeConnectionUnshared(options).finally(() => {
+    closeInFlight = null;
+  });
+  return closeInFlight;
+}
+
+/**
+ * @param options.abortIfLeased - Give up the close if a lease is taken while we are
+ *   checkpointing. ONLY the idle release passes this. A deliberate close must never
+ *   abort on a lease: upgradeToReadWrite closes and reopens from inside a leased
+ *   tool handler, so an unconditional abort would break every write path.
+ */
+async function closeConnectionUnshared(options?: { abortIfLeased?: boolean }): Promise<void> {
+  const abortIfLeased = options?.abortIfLeased === true;
+  // Whether this is the idle release firing or a shutdown, no timer should outlive
+  // the handle it was going to close.
+  cancelIdleRelease();
   if (connection) {
     try {
       await connection.run("CHECKPOINT");
     } catch {
       /* non-fatal */
+    }
+    // CHECKPOINT is the one yield here that leaves the handle fully usable, so it is
+    // the only point at which backing out is free. A lease taken during it means a
+    // tool call has just been handed this handle; leave it open and let the next
+    // release try again. Past this point the teardown is committed, and a caller
+    // arriving late waits on closeInFlight rather than seeing a half-detached handle.
+    if (abortIfLeased && leaseCount > 0) {
+      return;
     }
     try {
       await detachMarketDb(connection);
@@ -743,7 +937,14 @@ export async function upgradeToReadWrite(
   // Try RW with retries — another session may briefly hold the lock during its own sync.
   // After /mcp reconnect, the old process may not have released the DuckDB file lock yet,
   // so we retry with increasing delays to allow the lock to fully release.
-  const maxRetries = 4;
+  //
+  // The budget must comfortably outlast another server's idle release (#445): a reader
+  // there lets go of the file DEFAULT_IDLE_RELEASE_MS after its last activity, and a
+  // writer that gives up sooner than that fails on a lock which was about to clear.
+  // Overridable for a data directory shared by unusually busy servers.
+  const configuredRetries = Number.parseInt(process.env.DUCKDB_WRITE_LOCK_RETRIES || "", 10);
+  const maxRetries =
+    Number.isFinite(configuredRetries) && configuredRetries >= 0 ? configuredRetries : 10;
   const retryDelayMs = 1000;
   let lastError: Error | null = null;
 
@@ -1218,7 +1419,10 @@ export function isConnected(): boolean {
 export function getCurrentConnection(): DuckDBConnection {
   if (!connection) {
     throw new Error(
-      "No active DuckDB connection. Call getConnection(dataDir) during server init before accessing store contexts.",
+      "No active DuckDB connection. The handle is released when idle (#445), so a " +
+        "store context must only be used inside a leased unit of work — the tool " +
+        "wrapper in index.ts takes that lease for every registered tool. Code " +
+        "reaching here runs outside any lease: wrap it in withConnectionLease().",
     );
   }
   return connection;

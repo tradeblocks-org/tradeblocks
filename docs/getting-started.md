@@ -117,12 +117,12 @@ the copies coexist. Two details are worth knowing:
   file. A copy that starts while another is doing this waits for it to finish and
   then opens read-only. You may see a line like `Another tradeblocks-mcp server
 holds …; opened READ_ONLY`. Nothing is wrong.
-- **Writes need the whole database.** A tool that writes — a data import, a market
-  refresh, a sync — needs exclusive access, which it cannot get while another copy
-  is reading. It retries for a few seconds and then reports that another server
-  holds the database. **Leaving the other session idle does not help** — a copy
-  keeps the database open for as long as it runs, so the other server has to exit.
-  Quit it, then run the tool again.
+- **Writes need the whole database, briefly.** A tool that writes — a data import, a
+  market refresh, a sync — needs exclusive access, which it cannot have while another
+  copy is reading. Copies let go of the database a few seconds after they stop being
+  used, so an idle copy is not in the way and a write simply waits its turn. You only
+  see a failure if another copy stays busy longer than the write is willing to wait;
+  run the tool again once that copy has finished.
 
 If a copy has genuinely wedged and is holding the lock forever, set
 `DUCKDB_LOCK_RECOVERY` to `true` in the server's `env` block for one run. That
@@ -132,10 +132,12 @@ shut down the previous one.
 
 ### Environment Variables
 
-| Variable               | Required | Description                                                                                                    |
-| ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
-| `DUCKDB_OPEN_WAIT_MS`  | No       | How long to wait for another copy to finish starting before giving up (default: `15000`)                       |
-| `DUCKDB_LOCK_RECOVERY` | No       | Set to `true` to let a starting server terminate a live lock holder (default: off; orphans are always cleared) |
+| Variable                    | Required | Description                                                                                                                              |
+| --------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `DUCKDB_OPEN_WAIT_MS`       | No       | How long to wait for another copy to finish starting before giving up (default: `15000`)                                                 |
+| `DUCKDB_IDLE_RELEASE_MS`    | No       | How long a copy keeps the database open after it stops being used (default: `3000`). Raising it makes writes in other copies wait longer |
+| `DUCKDB_WRITE_LOCK_RETRIES` | No       | One-second attempts a write makes before giving up (default: `10`). Keep it above another copy's release time                            |
+| `DUCKDB_LOCK_RECOVERY`      | No       | Set to `true` to let a starting server terminate a live lock holder (default: off; orphans are always cleared)                           |
 
 ---
 

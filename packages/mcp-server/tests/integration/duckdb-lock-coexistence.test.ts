@@ -251,18 +251,40 @@ describe("DuckDB lock coexistence with a second server", () => {
     expect(isAlive(orphanPid)).toBe(false);
   }, 60000);
 
-  it("gives up instead of looping when a killed holder keeps coming back", async () => {
+  it("stops killing after the cap when a killed holder keeps coming back", async () => {
     // The post-termination fast path retries immediately on a confirmed kill. Left
     // unbounded, a client that restarts the server we just killed would hand us a
-    // fresh holder every pass and we would kill it forever — which is the same
+    // fresh holder every pass and we would kill it forever — the same
     // mutual-destruction loop this whole change removes, relocated into one process.
-    // The cap must make this terminate. A hang here is the failure being guarded.
+    //
+    // The assertion is on HOW MANY generations we killed, not on whether the open
+    // failed. Either outcome is legitimate: after a kill the replacement needs about
+    // a hundred milliseconds to start and take the lock, so an immediate retry can
+    // fairly win that race and open. Asserting rejection made this test a coin flip
+    // on machine timing — it passed locally and failed on CI. What must hold either
+    // way is that the killing stops.
     process.env.DUCKDB_LOCK_RECOVERY = "true";
     process.env.DUCKDB_OPEN_WAIT_MS = "3000";
-    // 20 generations is far above the cap of 4, so the cap is what must stop this.
+    // 20 available generations is far above the cap, so the cap is the only thing
+    // that can stop this; exhausting the chain would prove nothing.
     holder = await startHolder(dbPath, "rw-respawn", 20);
 
-    await expect(getConnection(testDir)).rejects.toThrow(/lock/i);
+    const startedAt = Date.now();
+    // Settling either way is the point. A hang is the failure being guarded, and
+    // the test timeout catches it.
+    await getConnection(testDir).catch(() => undefined);
+    const elapsedMs = Date.now() - startedAt;
+
+    // Each generation records itself on startup, so the file is a census of how many
+    // holders we went through. The cap is 4 kills, leaving at most five generations
+    // plus one replacement spawned by the final kill; the ceiling here is loose
+    // enough to absorb timing and still nowhere near the 20 an uncapped loop eats.
+    const spawned = (await fs.readFile(`${dbPath}.holder-pids`, "utf-8"))
+      .split("\n")
+      .filter((line) => line.trim().length > 0).length;
+
+    expect(spawned).toBeLessThanOrEqual(7);
+    expect(elapsedMs).toBeLessThan(30000);
   }, 60000);
 
   it("terminates a live holder when force recovery is explicitly opted in", async () => {

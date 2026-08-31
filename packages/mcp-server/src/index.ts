@@ -46,6 +46,7 @@ import { createMarketStores } from "./market/stores/index.ts";
 import type { StoreContext, MarketStores } from "./market/stores/index.ts";
 import type { TradeBlocksPlugin, TradeBlocksPluginContext } from "./plugins.ts";
 import { shouldShutdownOnParentChange } from "./parent-watchdog.ts";
+import { leaseToolHandlers } from "./tools/middleware/connection-lease.ts";
 
 // How often the stdio parent-death watchdog polls process.ppid. See the
 // watchdog install site in startTradeBlocksMcp() below.
@@ -340,9 +341,13 @@ export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = 
           "Call list_blocks first to discover available block IDs. All other block tools require a blockId returned by list_blocks. For SQL queries, call describe_database first to discover block_ids and column names, then filter trades with WHERE block_id = '...'.",
       },
     );
-    registerTradeBlocksCoreTools(server, pluginContext);
+    // Bracket every tool call in a connection lease (#445), before anything
+    // registers, so core tools and plugin tools are both covered without a
+    // per-tool opt-in. See tools/middleware/connection-lease.ts.
+    const leasedServer = leaseToolHandlers(server);
+    registerTradeBlocksCoreTools(leasedServer, pluginContext);
     for (const plugin of plugins) {
-      plugin.registerTools?.(server, pluginContext);
+      plugin.registerTools?.(leasedServer, pluginContext);
     }
     return server;
   };
