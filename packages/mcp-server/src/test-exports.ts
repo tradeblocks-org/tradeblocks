@@ -56,6 +56,10 @@ export {
   upgradeToReadWrite,
   downgradeToReadOnly,
   getCurrentConnection,
+  acquireConnectionLease,
+  releaseConnectionLease,
+  getConnectionLeaseCount,
+  withConnectionLease,
   openMarketOnlyConnection,
   openMarketParquetConnection,
   openMarketReadOnlyConnection,
@@ -868,3 +872,4 @@ export {
 export type { FieldType, FieldDiff, RowDiff } from "./utils/enrichment-verification.ts";
 export { calibrateProviderFetch } from "./utils/calibration-probe.ts";
 // ============================================================================
+export { leaseToolHandlers } from "./tools/middleware/connection-lease.ts";
