@@ -41,6 +41,18 @@ interface Holder {
   waitForLine: (prefix: string, timeoutMs?: number) => Promise<void>;
 }
 
+async function parentPidOf(pid: number): Promise<number | null> {
+  const { promisify } = await import("util");
+  const { execFile } = await import("child_process");
+  try {
+    const { stdout } = await promisify(execFile)("ps", ["-p", String(pid), "-o", "ppid="]);
+    const ppid = Number.parseInt(stdout.trim(), 10);
+    return Number.isFinite(ppid) ? ppid : null;
+  } catch {
+    return null;
+  }
+}
+
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -82,6 +94,39 @@ async function startHolder(dbPath: string, mode: HolderMode, rwHoldMs?: number):
   return { child, pid: child.pid!, waitForLine };
 }
 
+/**
+ * Spawn a holder that is genuinely orphaned (PPID 1) via double-fork: a middle
+ * process spawns the holder detached and exits immediately, so the holder is
+ * reparented to init.
+ *
+ * The holder's stdio is ignored (a detached process's pipes die with the middle
+ * process), so readiness comes from the marker file the fixture writes.
+ */
+async function startOrphanedHolder(dbPath: string): Promise<number> {
+  const readyFile = `${dbPath}.holder-ready`;
+  const middleScript = [
+    'const { spawn } = require("child_process");',
+    `const child = spawn(process.execPath, [${JSON.stringify(HOLDER_SCRIPT)}, ${JSON.stringify(dbPath)}, "rw"], { detached: true, stdio: "ignore" });`,
+    "child.unref();",
+    "process.exit(0);",
+  ].join("\n");
+
+  const middle = spawn("node", ["-e", middleScript], { stdio: "ignore" });
+  await new Promise((resolve) => middle.on("exit", resolve));
+
+  const deadline = Date.now() + 20000;
+  for (;;) {
+    try {
+      const pid = Number.parseInt(await fs.readFile(readyFile, "utf-8"), 10);
+      if (Number.isFinite(pid)) return pid;
+    } catch {
+      /* not written yet */
+    }
+    if (Date.now() > deadline) throw new Error("orphaned holder never became ready");
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
 async function stopHolder(holder: Holder | null): Promise<void> {
   if (!holder) return;
   if (isAlive(holder.pid)) {
@@ -94,6 +139,8 @@ describe("DuckDB lock coexistence with a second server", () => {
   let testDir: string;
   let dbPath: string;
   let holder: Holder | null = null;
+  // An orphaned holder has no parent to reap it, so the test must clean it up by PID.
+  let orphanPidToClean: number | null = null;
   const savedEnv: Record<string, string | undefined> = {};
 
   beforeEach(async () => {
@@ -113,6 +160,14 @@ describe("DuckDB lock coexistence with a second server", () => {
   afterEach(async () => {
     await stopHolder(holder);
     holder = null;
+    if (orphanPidToClean !== null && isAlive(orphanPidToClean)) {
+      try {
+        process.kill(orphanPidToClean, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
+    orphanPidToClean = null;
     await closeConnection();
     for (const [key, value] of Object.entries(savedEnv)) {
       if (value === undefined) delete process.env[key];
@@ -156,6 +211,28 @@ describe("DuckDB lock coexistence with a second server", () => {
     await expect(getConnection(testDir)).rejects.toThrow(/lock/i);
 
     expect(isAlive(holder.pid)).toBe(true);
+  }, 60000);
+
+  it("terminates an ORPHANED holder with no opt-in, and takes the lock", async () => {
+    // The one kill that stays automatic. An orphaned server has no launcher left,
+    // cannot be anybody's working session, and would otherwise hold the lock until
+    // the machine reboots. Nothing is opted in here: DUCKDB_LOCK_RECOVERY is unset.
+    //
+    // This case had NO working coverage before #444. The old tests/manual version
+    // invoked a `--call` flag the server no longer has, so it failed in argument
+    // parsing without ever opening a database — verified against pre-fix code,
+    // which failed identically. It was deleted in favour of this test.
+    const orphanPid = await startOrphanedHolder(dbPath);
+    orphanPidToClean = orphanPid;
+
+    // If the platform does not reparent to init, this test cannot test what it
+    // claims, so say so rather than passing vacuously.
+    const ppid = await parentPidOf(orphanPid);
+    expect(ppid).toBe(1);
+
+    await getConnection(testDir);
+
+    expect(isAlive(orphanPid)).toBe(false);
   }, 60000);
 
   it("terminates a live holder when force recovery is explicitly opted in", async () => {

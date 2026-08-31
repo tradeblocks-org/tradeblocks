@@ -22,8 +22,13 @@
  * a known state instead of sleeping and hoping:
  *   READY <mode> <pid>
  *   DOWNGRADED <pid>
+ *
+ * It also writes its PID to `<db-path>.holder-ready` once the database is open.
+ * The orphan case needs that file: a double-forked holder is spawned detached with
+ * stdio ignored, so its stdout is not readable by the test.
  */
 import { createRequire } from "module";
+import fs from "fs";
 const require = createRequire(import.meta.url);
 const { DuckDBInstance } = require("@duckdb/node-api");
 
@@ -70,6 +75,7 @@ try {
     await held.connection.run("CREATE TABLE IF NOT EXISTS lock_holder_marker(n INTEGER)");
   }
   process.stdout.write(`READY ${mode} ${process.pid}\n`);
+  fs.writeFileSync(`${dbPath}.holder-ready`, String(process.pid));
 
   if (mode === "rw-then-ro") {
     setTimeout(
