@@ -687,25 +687,26 @@ async function openWithLockContention(
     // message: on the pass after a kill, the read-only attempt can fail against a
     // DIFFERENT contender, and terminating that one out of turn is how the old
     // single-shot recovery failed to converge.
-    const terminated = await tryRecoverLockByTerminatingStaleProcess(
-      lastLockError,
-      dbPath,
-      forceRecovery,
-    );
+    // Bounded on purpose, and the bound is on TERMINATIONS, not on retries. An
+    // unbounded "kill, retry, kill" is the exact shape of the loop this change
+    // exists to remove: a client that restarts the server we just terminated keeps
+    // handing us a fresh holder, and we keep killing it. Capping only the immediate
+    // retry does not fix that — the slow path would go on killing, once per sleep,
+    // until the deadline. So once the cap is reached we stop terminating entirely
+    // and wait out the remaining budget like any other contended open. Four covers
+    // the observed multi-contender case (three processes) with headroom.
+    if (terminations < MAX_TERMINATIONS) {
+      const terminated = await tryRecoverLockByTerminatingStaleProcess(
+        lastLockError,
+        dbPath,
+        forceRecovery,
+      );
 
-    // A confirmed kill means the path may be clear right now, so retry immediately
-    // rather than spending the remaining budget on a sleep, and do not fail on a
-    // deadline we crossed while doing the killing.
-    //
-    // Bounded on purpose. An unbounded "kill, retry, kill" fast path is the exact
-    // shape of the loop this whole change exists to remove: a client that restarts
-    // the server we just terminated would keep handing us a fresh holder, and we
-    // would keep killing it, forever, never reaching the deadline. After
-    // MAX_TERMINATIONS the deadline governs again. Four covers the observed
-    // multi-contender case (three processes) with headroom.
-    if (terminated) {
-      terminations += 1;
-      if (terminations <= MAX_TERMINATIONS) {
+      // A confirmed kill means the path may be clear right now, so retry
+      // immediately rather than spending the remaining budget on a sleep, and do
+      // not fail on a deadline we crossed while doing the killing.
+      if (terminated) {
+        terminations += 1;
         attempt = 0;
         continue;
       }
