@@ -28,6 +28,7 @@ import {
   releaseConnectionLease,
   getConnectionLeaseCount,
   withConnectionLease,
+  getCurrentConnection,
 } from "../../src/test-exports.ts";
 
 const WRITE_PROBE = path.join(
@@ -161,6 +162,45 @@ describe("Releasing the analytics handle when idle", () => {
     }
     const rows = await connections[0].runAndReadAll("SELECT 1");
     expect(Number(rows.getRows()[0][0])).toBe(1);
+  }, 60000);
+
+  it("never hands out a handle that is being torn down", async () => {
+    // The teardown yields at CHECKPOINT while `connection` is still set. A caller
+    // arriving in that window used to be handed the very handle about to be closed.
+    // Starting a close and then immediately asking for a connection reproduces the
+    // window: the close has run up to its first await, so the handle still looks
+    // available.
+    //
+    // The assertion is on state after BOTH settle, not on a query. Querying is a
+    // race in its own right — whether the doomed handle is still usable depends on
+    // which promise resolves first, so a query-based check passes with the guard
+    // removed and proves nothing (verified: it did).
+    await getConnection(testDir);
+
+    const closing = closeConnection();
+    const connection = await getConnection(testDir);
+    await closing;
+
+    // Once the teardown has fully finished, the handle we were handed must be the
+    // one that is actually live. Without the guard we are given the pre-close
+    // handle, the close then disposes of it, and there is no live connection at all.
+    expect(isConnected()).toBe(true);
+    expect(connection).toBe(getCurrentConnection());
+    const rows = await connection.runAndReadAll("SELECT 11 AS n");
+    expect(Number(rows.getRows()[0][0])).toBe(11);
+  }, 60000);
+
+  it("abandons an idle release when a lease arrives while it is checkpointing", async () => {
+    // The cheap half of the same guard: the idle release backs out if work shows up
+    // before it has done anything destructive, so a tool call does not have to pay
+    // for a close-and-reopen it just missed.
+    await getConnection(testDir);
+    acquireConnectionLease();
+
+    await closeConnection({ abortIfLeased: true });
+
+    expect(isConnected()).toBe(true);
+    releaseConnectionLease();
   }, 60000);
 
   it("reopens on demand after a release", async () => {

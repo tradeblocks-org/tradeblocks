@@ -118,6 +118,10 @@ let idleTimer: NodeJS.Timeout | null = null;
 // both find the connection closed would each open it, and the second would fail
 // against the first's lock — manufacturing the very contention this fixes.
 let openInFlight: Promise<DuckDBConnection> | null = null;
+// A close yields (CHECKPOINT, DETACH) while `connection` is still non-null, so a
+// caller arriving mid-teardown would otherwise be handed a handle that is about to
+// be torn down under it. Callers wait for this instead and then open fresh.
+let closeInFlight: Promise<void> | null = null;
 let instance: DuckDBInstance | null = null;
 let connection: DuckDBConnection | null = null;
 let connectionMode: "read_write" | "read_only" | null = null;
@@ -536,6 +540,13 @@ function resetConnectionState(): void {
  *   within DUCKDB_OPEN_WAIT_MS
  */
 export async function getConnection(dataDir: string): Promise<DuckDBConnection> {
+  // Never hand out a handle that is being torn down. A close yields part-way
+  // through while `connection` is still set, and a tool call arriving in that
+  // window would take the handle and then have it closed underneath it.
+  if (closeInFlight) {
+    await closeInFlight;
+  }
+
   // Return existing connection if available (singleton pattern)
   if (connection) {
     return connection;
@@ -769,7 +780,7 @@ function scheduleIdleRelease(): void {
     // failed close, so swallow it loudly instead. The next getConnection reopens
     // regardless, and a stuck handle degrades to the pre-#445 behaviour rather
     // than to a crash.
-    closeConnection().catch((error: unknown) => {
+    closeConnection({ abortIfLeased: true }).catch((error: unknown) => {
       console.error(
         `Failed to release the idle DuckDB handle: ${
           error instanceof Error ? error.message : String(error)
@@ -832,7 +843,24 @@ export async function withConnectionLease<T>(work: () => Promise<T>): Promise<T>
  * Should be called during graceful shutdown (SIGINT, SIGTERM).
  * Safe to call multiple times or when no connection exists.
  */
-export async function closeConnection(): Promise<void> {
+export async function closeConnection(options?: { abortIfLeased?: boolean }): Promise<void> {
+  if (closeInFlight) {
+    return closeInFlight;
+  }
+  closeInFlight = closeConnectionUnshared(options).finally(() => {
+    closeInFlight = null;
+  });
+  return closeInFlight;
+}
+
+/**
+ * @param options.abortIfLeased - Give up the close if a lease is taken while we are
+ *   checkpointing. ONLY the idle release passes this. A deliberate close must never
+ *   abort on a lease: upgradeToReadWrite closes and reopens from inside a leased
+ *   tool handler, so an unconditional abort would break every write path.
+ */
+async function closeConnectionUnshared(options?: { abortIfLeased?: boolean }): Promise<void> {
+  const abortIfLeased = options?.abortIfLeased === true;
   // Whether this is the idle release firing or a shutdown, no timer should outlive
   // the handle it was going to close.
   cancelIdleRelease();
@@ -841,6 +869,14 @@ export async function closeConnection(): Promise<void> {
       await connection.run("CHECKPOINT");
     } catch {
       /* non-fatal */
+    }
+    // CHECKPOINT is the one yield here that leaves the handle fully usable, so it is
+    // the only point at which backing out is free. A lease taken during it means a
+    // tool call has just been handed this handle; leave it open and let the next
+    // release try again. Past this point the teardown is committed, and a caller
+    // arriving late waits on closeInFlight rather than seeing a half-detached handle.
+    if (abortIfLeased && leaseCount > 0) {
+      return;
     }
     try {
       await detachMarketDb(connection);

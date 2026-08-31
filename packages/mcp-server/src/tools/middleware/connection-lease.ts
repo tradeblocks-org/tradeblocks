@@ -51,6 +51,18 @@ export function leaseToolHandlers(server: McpServer): McpServer {
           const original = handler as ToolHandler;
           args[handlerIndex] = (...handlerArgs: unknown[]) =>
             withConnectionLease(async () => await original(...handlerArgs));
+        } else {
+          // Say so. If the SDK ever grows a trailing options argument, every tool
+          // silently loses its lease and the only symptom is a handle released
+          // mid-call under load — a failure that would never be traced back here.
+          // Registration still proceeds; a broken server is worse than an unleased
+          // one, and the operator gets a line naming the cause.
+          console.error(
+            `[connection-lease] Tool "${String(args[0])}" registered WITHOUT a connection ` +
+              `lease: the last argument to registerTool is ${typeof handler}, not a handler. ` +
+              `The SDK signature has changed and tools/middleware/connection-lease.ts ` +
+              `needs updating.`,
+          );
         }
         // Reflect.apply keeps `this` bound to the real server; calling
         // target.registerTool(...) directly would lose it.
