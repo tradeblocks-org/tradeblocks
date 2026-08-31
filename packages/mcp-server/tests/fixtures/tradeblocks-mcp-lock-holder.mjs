@@ -17,6 +17,13 @@
  *                        read-only and hold until killed. This is what a real
  *                        server does at startup: take the write lock to build
  *                        schemas, then release it.
+ *   mode = rw-respawn    open read-write and, on SIGTERM, spawn a REPLACEMENT
+ *                        holder before exiting. Stands in for a client that
+ *                        restarts the server we just killed — the pathological
+ *                        case the post-termination fast path must not loop on.
+ *                        rwHoldMs is reused as the respawn budget: each
+ *                        generation decrements it, and generation 0 stops
+ *                        respawning, so the test can never leak forever.
  *
  * Prints exactly one line to stdout on each state change, so the test can await
  * a known state instead of sleeping and hoping:
@@ -76,6 +83,24 @@ try {
   }
   process.stdout.write(`READY ${mode} ${process.pid}\n`);
   fs.writeFileSync(`${dbPath}.holder-ready`, String(process.pid));
+
+  if (mode === "rw-respawn") {
+    // Record every generation's PID so the test can reap the whole chain.
+    fs.appendFileSync(`${dbPath}.holder-pids`, `${process.pid}\n`);
+    const generationsLeft = Number.isFinite(rwHoldMs) ? rwHoldMs : 0;
+    process.on("SIGTERM", () => {
+      if (generationsLeft > 0) {
+        const { spawn } = require("child_process");
+        const child = spawn(
+          process.execPath,
+          [process.argv[1], dbPath, "rw-respawn", String(generationsLeft - 1)],
+          { detached: true, stdio: "ignore" },
+        );
+        child.unref();
+      }
+      process.exit(0);
+    });
+  }
 
   if (mode === "rw-then-ro") {
     setTimeout(

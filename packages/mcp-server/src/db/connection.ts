@@ -568,6 +568,9 @@ export async function getConnection(dataDir: string): Promise<DuckDBConnection> 
  *
  * Throws only when the whole budget elapses without any successful open.
  */
+/** Cap on immediate post-termination retries. See the fast path in the loop below. */
+const MAX_TERMINATIONS = 4;
+
 async function openWithLockContention(
   dbPath: string,
   dataDir: string,
@@ -580,6 +583,7 @@ async function openWithLockContention(
   let announcedWait = false;
   let lastLockError = "";
   let attempt = 0;
+  let terminations = 0;
 
   for (;;) {
     // ── Step 1: read-write, so we can build schemas ──
@@ -614,7 +618,37 @@ async function openWithLockContention(
     // Re-read the holder from the CURRENT error every pass: with more than one
     // contending process, the PID named in the first error is not the PID that
     // holds the lock after that one exits.
-    await tryRecoverLockByTerminatingStaleProcess(lastLockError, dbPath, forceRecovery);
+    //
+    // We deliberately pass the READ-WRITE failure's message, not the read-only
+    // one. Both name the same process — a read-write holder is what blocks both
+    // modes — so the PID is identical, and the read-write message is the one whose
+    // holder we have re-read this pass. Do not "fix" this by passing the read-only
+    // message: on the pass after a kill, the read-only attempt can fail against a
+    // DIFFERENT contender, and terminating that one out of turn is how the old
+    // single-shot recovery failed to converge.
+    const terminated = await tryRecoverLockByTerminatingStaleProcess(
+      lastLockError,
+      dbPath,
+      forceRecovery,
+    );
+
+    // A confirmed kill means the path may be clear right now, so retry immediately
+    // rather than spending the remaining budget on a sleep, and do not fail on a
+    // deadline we crossed while doing the killing.
+    //
+    // Bounded on purpose. An unbounded "kill, retry, kill" fast path is the exact
+    // shape of the loop this whole change exists to remove: a client that restarts
+    // the server we just terminated would keep handing us a fresh holder, and we
+    // would keep killing it, forever, never reaching the deadline. After
+    // MAX_TERMINATIONS the deadline governs again. Four covers the observed
+    // multi-contender case (three processes) with headroom.
+    if (terminated) {
+      terminations += 1;
+      if (terminations <= MAX_TERMINATIONS) {
+        attempt = 0;
+        continue;
+      }
+    }
 
     if (Date.now() >= deadline) {
       throw new Error(lastLockError);
@@ -740,8 +774,9 @@ export async function upgradeToReadWrite(
     lastError ||
     new Error(
       "Cannot acquire DuckDB write lock. Another tradeblocks-mcp server holds the " +
-        "database — writes need exclusive access even when the holder is only reading. " +
-        "Retry once the other session is idle, or close it.",
+        "database — writes need exclusive access even when the holder is only reading, " +
+        "and a reader keeps its handle for the life of the process. Going idle does not " +
+        "release it: the other server has to exit.",
     )
   );
 }

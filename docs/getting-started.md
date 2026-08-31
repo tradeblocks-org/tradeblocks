@@ -120,7 +120,9 @@ holds …; opened READ_ONLY`. Nothing is wrong.
 - **Writes need the whole database.** A tool that writes — a data import, a market
   refresh, a sync — needs exclusive access, which it cannot get while another copy
   is reading. It retries for a few seconds and then reports that another server
-  holds the database. Close or idle the other session and run the tool again.
+  holds the database. **Leaving the other session idle does not help** — a copy
+  keeps the database open for as long as it runs, so the other server has to exit.
+  Quit it, then run the tool again.
 
 If a copy has genuinely wedged and is holding the lock forever, set
 `DUCKDB_LOCK_RECOVERY` to `true` in the server's `env` block for one run. That

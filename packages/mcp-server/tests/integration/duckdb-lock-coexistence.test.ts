@@ -32,7 +32,7 @@ const HOLDER_SCRIPT = path.join(
   "tradeblocks-mcp-lock-holder.mjs",
 );
 
-type HolderMode = "rw" | "ro" | "rw-then-ro";
+type HolderMode = "rw" | "ro" | "rw-then-ro" | "rw-respawn";
 
 interface Holder {
   child: ChildProcess;
@@ -168,6 +168,22 @@ describe("DuckDB lock coexistence with a second server", () => {
       }
     }
     orphanPidToClean = null;
+    // Reap every generation of a respawning holder chain.
+    try {
+      const pids = await fs.readFile(`${dbPath}.holder-pids`, "utf-8");
+      for (const line of pids.split("\n")) {
+        const pid = Number.parseInt(line.trim(), 10);
+        if (Number.isFinite(pid) && isAlive(pid)) {
+          try {
+            process.kill(pid, "SIGKILL");
+          } catch {
+            /* already gone */
+          }
+        }
+      }
+    } catch {
+      /* no respawn chain in this test */
+    }
     await closeConnection();
     for (const [key, value] of Object.entries(savedEnv)) {
       if (value === undefined) delete process.env[key];
@@ -233,6 +249,20 @@ describe("DuckDB lock coexistence with a second server", () => {
     await getConnection(testDir);
 
     expect(isAlive(orphanPid)).toBe(false);
+  }, 60000);
+
+  it("gives up instead of looping when a killed holder keeps coming back", async () => {
+    // The post-termination fast path retries immediately on a confirmed kill. Left
+    // unbounded, a client that restarts the server we just killed would hand us a
+    // fresh holder every pass and we would kill it forever — which is the same
+    // mutual-destruction loop this whole change removes, relocated into one process.
+    // The cap must make this terminate. A hang here is the failure being guarded.
+    process.env.DUCKDB_LOCK_RECOVERY = "true";
+    process.env.DUCKDB_OPEN_WAIT_MS = "3000";
+    // 20 generations is far above the cap of 4, so the cap is what must stop this.
+    holder = await startHolder(dbPath, "rw-respawn", 20);
+
+    await expect(getConnection(testDir)).rejects.toThrow(/lock/i);
   }, 60000);
 
   it("terminates a live holder when force recovery is explicitly opted in", async () => {
