@@ -103,7 +103,7 @@
     "fake-indexeddb": "^6.2.2",
     "husky": "^9.1.7",
     "jest": "^30.4.2",
-    "jest-environment-jsdom": "^30.4.1",
+    "jest-environment-jsdom": "^30.5.1",
     "lint-staged": "17.0.8",
     "prettier": "3.9.6",
     "repomix": "^1.18.0",
