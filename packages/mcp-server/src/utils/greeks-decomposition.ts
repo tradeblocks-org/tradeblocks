@@ -10,7 +10,11 @@
  * pricing model (BS or Bachelier) can accurately price the options.
  *
  * Falls back to numerical decomposition (realized delta from price changes)
- * when full revaluation still produces >80% residual (model pricing failure).
+ * when the full-revaluation residual exceeds 80% of the gross attribution flow
+ * (model pricing failure). Gross attribution flow is the sum of the absolute
+ * factor totals, residual included — the same denominator the attribution
+ * tool reports as `pct_of_gross`. It is computed locally here rather than
+ * imported from the tool layer so this utility keeps no dependency on tools.
  *
  * Pure logic module — no I/O, no DuckDB, no fetch.
  */
@@ -133,7 +137,7 @@ export function computeTimeDeltaDays(ts1: string, ts2: string): number {
 
 /**
  * Numerical decomposition: compute realized delta from price changes when
- * model-based attribution has > 80% residual.
+ * the model-based residual exceeds 80% of the gross attribution flow.
  *
  * Splits P&L into: delta (from realized delta), gamma (from delta changes),
  * and time_and_vol (everything else — theta + vega + unexplained).
@@ -227,7 +231,7 @@ function numericalDecomposition(
     stepCount,
     summary,
     warning:
-      "Model-based attribution had >80% residual. Switched to numerical method (realized delta from price changes).",
+      "Model-based residual exceeded 80% of gross attribution flow. Switched to numerical method (realized delta from price changes).",
     method: "numerical",
   };
 }
@@ -281,8 +285,9 @@ function priceOption(
  * (spot only, time only, vol only) to isolate each factor's contribution.
  * This captures all higher-order effects (charm, vanna, volga) naturally.
  *
- * Falls back to numerical decomposition when full reval produces >80% residual
- * (pricing model failure for that strategy/DTE combination).
+ * Falls back to numerical decomposition when the full-reval residual exceeds
+ * 80% of the gross attribution flow (pricing model failure for that
+ * strategy/DTE combination).
  */
 export function decomposeGreeks(config: GreeksDecompositionConfig): GreeksDecompositionResult {
   const {
@@ -503,10 +508,16 @@ export function decomposeGreeks(config: GreeksDecompositionConfig): GreeksDecomp
     sumSteps(charmSteps) +
     sumSteps(vannaSteps);
 
-  const residualPct =
-    Math.abs(totalPnlChange) > 0.01 ? Math.abs(totalResidual) / Math.abs(totalPnlChange) : 0;
+  // Residual share is measured against the gross attribution flow (sum of
+  // |factor totals|, residual included — `totalAbsSum` above), not against the
+  // net P&L change. On a hedged position the net can be a small difference of
+  // large offsetting factor totals, so a residual from one legitimate
+  // multi-day step (a weekend gap, say) can exceed the net while being a
+  // small share of what the model actually attributed. Measured against net
+  // that step tripped the fallback on real trades; against gross it does not.
+  const residualPct = totalAbsSum > 0.01 ? Math.abs(totalResidual) / totalAbsSum : 0;
 
-  // Numerical fallback when full reval still produces >80% residual
+  // Numerical fallback when the residual exceeds 80% of gross attribution flow
   // (model pricing failure — BS/Bachelier can't accurately price these options)
   if (residualPct > 0.8 && pnlPath.length > 2) {
     return numericalDecomposition(config, totalPnlChange, stepCount);
@@ -560,7 +571,7 @@ export function decomposeGreeks(config: GreeksDecompositionConfig): GreeksDecomp
 
   const warning =
     residualPct > 0.5
-      ? `Residual ${(residualPct * 100).toFixed(0)}% — attribution limited for some legs.`
+      ? `Residual ${(residualPct * 100).toFixed(0)}% of gross attribution flow — attribution limited for some legs.`
       : null;
 
   return {
