@@ -279,6 +279,8 @@ export {
   computeReplayMfeMae,
   findNearestTimestamp,
   markPrice,
+  isUsableQuote,
+  SESSION_OPEN_CUTOFF,
   type ReplayLeg,
   type ReplayResult,
   type PnlPoint,

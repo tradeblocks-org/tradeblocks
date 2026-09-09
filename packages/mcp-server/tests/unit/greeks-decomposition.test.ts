@@ -1,6 +1,7 @@
 import {
   decomposeGreeks,
   computeTimeDeltaDays,
+  bsPrice,
   type GreeksDecompositionConfig,
 } from "../../src/test-exports.ts";
 
@@ -441,6 +442,134 @@ describe("numerical greeks fallback", () => {
 
     const result = decomposeGreeks(config);
     expect(result.warning).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fallback denominator: residual is measured against gross attribution flow
+// (sum of |factor totals|, residual included), not against net P&L.
+// ---------------------------------------------------------------------------
+
+describe("numerical fallback denominator is gross attribution flow", () => {
+  const R = 0.045;
+  const Q = 0.015;
+  const STRIKE = 6800;
+  const EXPIRY = "2025-02-14";
+  const MULT = 100;
+
+  // Same convention as the module: days to 16:00 local on the expiry date.
+  function dteDays(timestamp: string): number {
+    const [dateStr, timePart] = timestamp.split(" ");
+    const [eyy, emm, edd] = EXPIRY.split("-").map(Number);
+    const [byy, bmm, bdd] = dateStr.split("-").map(Number);
+    const [hh, min] = timePart.split(":").map(Number);
+    const expiryMs = new Date(eyy, emm - 1, edd).getTime() + 16 * 60 * 60 * 1000;
+    const barMs = new Date(byy, bmm - 1, bdd).getTime() + (hh * 60 + min) * 60 * 1000;
+    return (expiryMs - barMs) / (1000 * 60 * 60 * 24);
+  }
+
+  function modelPut(timestamp: string, spot: number, iv: number): number {
+    return bsPrice("put", spot, STRIKE, dteDays(timestamp) / 365, R, Q, iv);
+  }
+
+  // Find the IV at `spot` that reprices the put back to `target` (bisection).
+  function solveIv(timestamp: string, spot: number, target: number): number {
+    let lo = 0.01;
+    let hi = 1.0;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (modelPut(timestamp, spot, mid) > target) hi = mid;
+      else lo = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  function greeksAt(iv: number) {
+    return [{ delta: null, gamma: null, theta: null, vega: null, iv }];
+  }
+
+  test("one step's residual exceeds net P&L but is a small share of gross flow: stays full_reval", () => {
+    // Long put. Step 1: spot drops 100 (large positive delta). Step 2: IV
+    // collapses to reprice the put back to its starting value (large negative
+    // vega that offsets delta). Step 3: nothing in the model moves, but the
+    // quote prints $2 higher — pure residual. Net P&L is ~$200; the residual
+    // is ~$200 (> 80% of net) while delta and vega each run to thousands.
+    const t0 = "2025-01-10 10:00";
+    const t1 = "2025-01-10 10:01";
+    const t2 = "2025-01-10 10:02";
+    const t3 = "2025-01-10 10:03";
+    const iv0 = 0.2;
+    const p0 = modelPut(t0, 6800, iv0);
+    const p1 = modelPut(t1, 6700, iv0);
+    const iv2 = solveIv(t2, 6700, p0);
+    const p2 = modelPut(t2, 6700, iv2);
+    const p3 = p2 + 2.0; // off-model print
+    const prices = [p0, p1, p2, p3];
+    const spots = [6800, 6700, 6700, 6700];
+    const ivs = [iv0, iv0, iv2, iv2];
+    const stamps = [t0, t1, t2, t3];
+
+    const config: GreeksDecompositionConfig = {
+      pnlPath: stamps.map((ts, i) =>
+        point(ts, (prices[i] - p0) * MULT, {
+          legPrices: [prices[i]],
+          legGreeks: greeksAt(ivs[i]),
+        }),
+      ),
+      legs: [leg(1, MULT)],
+      underlyingPrices: new Map(stamps.map((ts, i) => [ts, spots[i]])),
+      legPricingInputs: [{ strike: STRIKE, type: "P", expiryDate: EXPIRY }],
+      riskFreeRate: R,
+      dividendYield: Q,
+    };
+
+    const result = decomposeGreeks(config);
+
+    // Premise guards: the old net-P&L rule would have fired on this path.
+    const net = Math.abs(result.totalPnlChange);
+    const residual = Math.abs(result.totalResidual);
+    expect(residual).toBeGreaterThan(0.8 * net);
+
+    const gross = result.factors.reduce((s, f) => s + Math.abs(f.totalPnl), 0);
+    expect(residual / gross).toBeLessThan(0.1);
+    const delta = result.factors.find((f) => f.factor === "delta")!;
+    const vega = result.factors.find((f) => f.factor === "vega")!;
+    expect(Math.abs(delta.totalPnl)).toBeGreaterThan(10 * residual);
+    expect(Math.abs(vega.totalPnl)).toBeGreaterThan(10 * residual);
+
+    expect(result.method).toBe("full_reval");
+    expect(result.warning).toBeNull();
+    expect(result.factors.map((f) => f.factor)).not.toContain("time_and_vol");
+  });
+
+  test("residual that dominates gross flow still falls back to numerical", () => {
+    // Full reval is possible (pricing inputs, IV, spot all present) but the
+    // quotes move with nothing in the model changing: residual is the whole flow.
+    const t0 = "2025-01-10 10:00";
+    const t1 = "2025-01-10 10:01";
+    const t2 = "2025-01-10 10:02";
+    const iv = 0.2;
+    const prices = [50, 70, 60];
+    const stamps = [t0, t1, t2];
+
+    const config: GreeksDecompositionConfig = {
+      pnlPath: stamps.map((ts, i) =>
+        point(ts, (prices[i] - prices[0]) * MULT, {
+          legPrices: [prices[i]],
+          legGreeks: greeksAt(iv),
+        }),
+      ),
+      legs: [leg(1, MULT)],
+      underlyingPrices: new Map(stamps.map((ts) => [ts, 6800])),
+      legPricingInputs: [{ strike: STRIKE, type: "P", expiryDate: EXPIRY }],
+      riskFreeRate: R,
+      dividendYield: Q,
+    };
+
+    const result = decomposeGreeks(config);
+    expect(result.method).toBe("numerical");
+    expect(result.warning).toMatch(/gross attribution flow/);
+    expect(result.factors.map((f) => f.factor)).toContain("time_and_vol");
   });
 });
 

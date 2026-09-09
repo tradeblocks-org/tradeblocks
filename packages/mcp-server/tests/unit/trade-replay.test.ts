@@ -5,6 +5,8 @@ import {
   computeReplayMfeMae,
   resolveOODateRange,
   markPrice,
+  isUsableQuote,
+  SESSION_OPEN_CUTOFF,
   type ReplayLeg,
   type PnlPoint,
   type BarRow,
@@ -44,6 +46,66 @@ describe("markPrice", () => {
   it("keeps midpoint for normal wide-but-not-blown spreads", () => {
     // ask/bid = 5x; guard does not fire (needs > 10x).
     expect(markPrice({ high: 3, low: 1, bid: 1, ask: 5 })).toBe(3);
+  });
+});
+
+describe("isUsableQuote", () => {
+  const q = (
+    timestamp: string,
+    bid: number | null | undefined,
+    ask: number | null | undefined,
+  ) => ({
+    timestamp,
+    bid,
+    ask,
+  });
+
+  test("session-open cutoff is 09:32", () => {
+    expect(SESSION_OPEN_CUTOFF).toBe("09:32");
+  });
+
+  test("drops quotes before 09:32 even when priced", () => {
+    expect(isUsableQuote(q("2025-04-04 09:30", 1.0, 1.2))).toBe(false);
+    expect(isUsableQuote(q("2025-04-04 09:31", 1.0, 1.2))).toBe(false);
+  });
+
+  test("keeps the first bar at 09:32 and everything after it", () => {
+    expect(isUsableQuote(q("2025-04-04 09:32", 1.0, 1.2))).toBe(true);
+    expect(isUsableQuote(q("2025-04-04 15:59", 1.0, 1.2))).toBe(true);
+  });
+
+  test("drops a zero quote (bid=ask=0) — an absence, not a price", () => {
+    expect(isUsableQuote(q("2025-04-07 11:16", 0, 0))).toBe(false);
+  });
+
+  test("drops null / negative / non-finite two-sided quotes", () => {
+    expect(isUsableQuote(q("2025-04-07 11:16", null, null))).toBe(false);
+    expect(isUsableQuote(q("2025-04-07 11:16", -1, -1))).toBe(false);
+    expect(isUsableQuote(q("2025-04-07 11:16", NaN, NaN))).toBe(false);
+  });
+
+  test("drops a one-sided zero quote — a zero side is a missing quote, not a price", () => {
+    expect(isUsableQuote(q("2025-04-07 11:16", 0, 180.1))).toBe(false);
+    expect(isUsableQuote(q("2025-04-07 11:16", 180.1, 0))).toBe(false);
+    expect(isUsableQuote(q("2025-04-07 11:16", null, 1.5))).toBe(false);
+    expect(isUsableQuote(q("2025-04-07 11:16", 1.5, undefined))).toBe(false);
+  });
+
+  test("keeps a quote only when both bid and ask are positive", () => {
+    expect(isUsableQuote(q("2025-04-07 11:16", 139.6, 146.75))).toBe(true);
+    expect(isUsableQuote(q("2025-04-07 11:16", 0.05, 0.1))).toBe(true);
+  });
+
+  test("accepts bare HH:MM and HH:MM:SS timestamps", () => {
+    expect(isUsableQuote(q("09:31", 1.0, 1.2))).toBe(false);
+    expect(isUsableQuote(q("09:32:00", 1.0, 1.2))).toBe(true);
+    expect(isUsableQuote(q("2025-04-04 09:31:59", 1.0, 1.2))).toBe(false);
+  });
+
+  test("filters an empty list to an empty list and a single record by the same rule", () => {
+    expect([].filter(isUsableQuote)).toEqual([]);
+    expect([q("2025-04-04 09:30", 0, 0)].filter(isUsableQuote)).toEqual([]);
+    expect([q("2025-04-04 09:32", 0.9, 1.1)].filter(isUsableQuote)).toHaveLength(1);
   });
 });
 

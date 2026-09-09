@@ -23,6 +23,7 @@ import {
   computeStrategyPnlPath,
   computeReplayMfeMae,
   markPrice,
+  isUsableQuote,
   type ReplayLeg,
   type ReplayResult,
   type GreeksConfig,
@@ -68,6 +69,14 @@ export const replayTradeSchema = z.object({
     .optional()
     .describe(
       "Trade close date YYYY-MM-DD (required for hypothetical, auto-resolved for tradelog)",
+    ),
+  open_time: z
+    .string()
+    .optional()
+    .describe(
+      "Trade entry time HH:MM ET. The P&L path starts at the first bar at or after this time " +
+        "on open_date. Optional for hypothetical mode (defaults to the first available bar); " +
+        "auto-resolved from the tradelog's time_opened in tradelog mode.",
     ),
   multiplier: z
     .number()
@@ -161,6 +170,7 @@ export async function handleReplayTrade(
 ): Promise<ReplayResult> {
   const { legs: inputLegs, block_id, trade_index, multiplier, close_at, skip_quotes } = params;
   let { open_date, close_date } = params;
+  let tradeOpenTimestamp: string | undefined; // "YYYY-MM-DD HH:MM" when the trade was entered
   let tradeCloseTimestamp: string | undefined; // "YYYY-MM-DD HH:MM" when trade actually closed
 
   let replayLegs: ReplayLeg[];
@@ -177,12 +187,16 @@ export async function handleReplayTrade(
       entryPrice: leg.entry_price,
       multiplier,
     }));
+
+    if (params.open_time) {
+      tradeOpenTimestamp = `${open_date} ${params.open_time.slice(0, 5)}`;
+    }
   } else if (block_id !== undefined && trade_index !== undefined) {
     // ----- Mode B: Tradelog replay -----
     const conn = injectedConn ?? (await getConnection(baseDir));
 
     const result = await conn.runAndReadAll(
-      `SELECT legs, premium, date_opened, date_closed, ticker, num_contracts, time_closed
+      `SELECT legs, premium, date_opened, date_closed, ticker, num_contracts, time_closed, time_opened
        FROM trades.trade_data
        WHERE block_id = '${block_id.replace(/'/g, "''")}'
        ORDER BY date_opened, rowid
@@ -202,12 +216,15 @@ export async function handleReplayTrade(
     const ticker = String(row[4] ?? "");
     const numContracts = Number(row[5] ?? 1);
     const timeClosed = String(row[6] ?? "");
+    const timeOpened = String(row[7] ?? "");
 
-    // Build actual trade close timestamp for path truncation
+    // Build actual trade open/close timestamps for path truncation.
+    // time_opened / time_closed are "HH:MM:SS" or "HH:MM" — normalize to "HH:MM".
+    if (dateOpened && timeOpened) {
+      tradeOpenTimestamp = `${dateOpened} ${timeOpened.slice(0, 5)}`;
+    }
     if (dateClosed && timeClosed) {
-      // time_closed is "HH:MM:SS" or "HH:MM" — normalize to "HH:MM"
-      const normalizedTime = timeClosed.slice(0, 5);
-      tradeCloseTimestamp = `${dateClosed} ${normalizedTime}`;
+      tradeCloseTimestamp = `${dateClosed} ${timeClosed.slice(0, 5)}`;
     }
 
     // Use trade dates if not provided
@@ -302,8 +319,11 @@ export async function handleReplayTrade(
     }
   }
 
+  // Quote sanity: drop opening-rotation rows (before 09:32 ET) and rows where
+  // either bid or ask is not positive. A zero side is a missing quote, not a
+  // price — computeStrategyPnlPath forward-fills the previous mark across the gap.
   const barsByLeg: BarRow[][] = replayLegs.map((leg) => {
-    const quotes = quotesByOcc.get(leg.occTicker) ?? [];
+    const quotes = (quotesByOcc.get(leg.occTicker) ?? []).filter(isUsableQuote);
     return quotes.map((q) => {
       const [date, time] = q.timestamp.split(" ");
       const mid = (q.bid + q.ask) / 2;
@@ -442,6 +462,16 @@ export async function handleReplayTrade(
 
   // ----- Compute P&L path + MFE/MAE -----
   let fullPath = computeStrategyPnlPath(replayLegs, barsByLeg, greeksConfig);
+
+  // The path starts at entry: bars before the trade was opened are priced
+  // against fills that did not exist yet, so pre-entry drift would be
+  // attributed to the trade. Forward-fill inside computeStrategyPnlPath has
+  // already run over the full range, so the first retained bar carries the
+  // latest mark for every leg.
+  if (tradeOpenTimestamp && fullPath.length > 0) {
+    fullPath = fullPath.filter((p) => p.timestamp >= tradeOpenTimestamp!);
+  }
+
   let { mfe, mae, mfeTimestamp, maeTimestamp } = computeReplayMfeMae(fullPath);
   let totalPnl = fullPath.length > 0 ? fullPath[fullPath.length - 1].strategyPnl : 0;
 

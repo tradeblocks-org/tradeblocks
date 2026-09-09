@@ -106,6 +106,50 @@ export function markPrice(bar: Pick<BarRow, "high" | "low" | "bid" | "ask">): nu
 }
 
 // ---------------------------------------------------------------------------
+// isUsableQuote
+// ---------------------------------------------------------------------------
+
+/**
+ * First minute of the regular session that counts as analysis input ("HH:MM" ET).
+ *
+ * The 09:30 and 09:31 option quotes are the opening rotation: bids and asks
+ * are still being established and are frequently reported as 0/0 or as
+ * placeholder widths. They are never used as replay input.
+ */
+export const SESSION_OPEN_CUTOFF = "09:32";
+
+/**
+ * Decide whether a minute quote row may enter a replay path.
+ *
+ * Drops rows timestamped before {@link SESSION_OPEN_CUTOFF} and rows where
+ * either side is missing or non-positive. A quote is usable only when
+ * bid > 0 AND ask > 0. A zero side is a missing quote, not a price: a 0/0
+ * row marks the leg at $0, and a one-sided row (bid 0 / ask > 0 or the
+ * reverse) marks it at half the surviving side, which is just as fabricated —
+ * a bid 0 / ask 180 print on a leg trading near 145 mid-marks at 90 and
+ * fabricates a swing of the whole position value in one minute. In stored SPX
+ * quote partitions one-sided zero rows are several times more common than
+ * 0/0 rows, so the one-sided case is the dominant source of phantom swings.
+ * Callers rely on the forward-fill in `computeStrategyPnlPath` to carry the
+ * previous usable mark across the dropped minute.
+ *
+ * `timestamp` is "YYYY-MM-DD HH:MM" ET (or bare "HH:MM"); the comparison is
+ * lexical on the "HH:MM" part, so any HH:MM[:SS] suffix normalises correctly.
+ */
+export function isUsableQuote(q: {
+  timestamp: string;
+  bid: number | null | undefined;
+  ask: number | null | undefined;
+}): boolean {
+  const parts = q.timestamp.trim().split(" ");
+  const time = (parts.length > 1 ? parts[1] : parts[0]).slice(0, 5);
+  if (time < SESSION_OPEN_CUTOFF) return false;
+  const bidOk = typeof q.bid === "number" && Number.isFinite(q.bid) && q.bid > 0;
+  const askOk = typeof q.ask === "number" && Number.isFinite(q.ask) && q.ask > 0;
+  return bidOk && askOk;
+}
+
+// ---------------------------------------------------------------------------
 // findNearestTimestamp
 // ---------------------------------------------------------------------------
 

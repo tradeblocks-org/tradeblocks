@@ -481,7 +481,11 @@ export async function handleDecomposeGreeks(
     dividendYield: divYield,
   });
 
-  // 7. Strip steps if format="summary"
+  // 7. Label each step with the timestamp of the bar it ends at (step i is
+  //    pnlPath[i] → pnlPath[i+1]) so per-step consumers can place it in time.
+  result.stepTimestamps = pnlPath.slice(1).map((p) => p.timestamp);
+
+  // 8. Strip steps if format="summary"
   if (format === "summary") {
     for (const factor of result.factors) {
       factor.steps = [];
@@ -491,6 +495,7 @@ export async function handleDecomposeGreeks(
         group.steps = [];
       }
     }
+    delete result.stepTimestamps;
   }
 
   return result;
