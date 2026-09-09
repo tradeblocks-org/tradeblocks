@@ -122,12 +122,16 @@ export const SESSION_OPEN_CUTOFF = "09:32";
  * Decide whether a minute quote row may enter a replay path.
  *
  * Drops rows timestamped before {@link SESSION_OPEN_CUTOFF} and rows where
- * both bid and ask are missing or non-positive. A 0/0 quote is an absence of
- * a price, not a price of zero — marking a leg at $0 fabricates a P&L swing
- * equal to the whole position value. Callers rely on the forward-fill in
- * `computeStrategyPnlPath` to carry the previous mark across the dropped
- * minute. A one-sided quote (only bid or only ask positive) is kept so that
- * `markPrice` can still produce a mark from it.
+ * either side is missing or non-positive. A quote is usable only when
+ * bid > 0 AND ask > 0. A zero side is a missing quote, not a price: a 0/0
+ * row marks the leg at $0, and a one-sided row (bid 0 / ask > 0 or the
+ * reverse) marks it at half the surviving side, which is just as fabricated —
+ * a bid 0 / ask 180 print on a leg trading near 145 mid-marks at 90 and
+ * fabricates a swing of the whole position value in one minute. In stored SPX
+ * quote partitions one-sided zero rows are several times more common than
+ * 0/0 rows, so the one-sided case is the dominant source of phantom swings.
+ * Callers rely on the forward-fill in `computeStrategyPnlPath` to carry the
+ * previous usable mark across the dropped minute.
  *
  * `timestamp` is "YYYY-MM-DD HH:MM" ET (or bare "HH:MM"); the comparison is
  * lexical on the "HH:MM" part, so any HH:MM[:SS] suffix normalises correctly.
@@ -142,7 +146,7 @@ export function isUsableQuote(q: {
   if (time < SESSION_OPEN_CUTOFF) return false;
   const bidOk = typeof q.bid === "number" && Number.isFinite(q.bid) && q.bid > 0;
   const askOk = typeof q.ask === "number" && Number.isFinite(q.ask) && q.ask > 0;
-  return bidOk || askOk;
+  return bidOk && askOk;
 }
 
 // ---------------------------------------------------------------------------

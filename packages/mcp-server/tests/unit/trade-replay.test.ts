@@ -50,7 +50,11 @@ describe("markPrice", () => {
 });
 
 describe("isUsableQuote", () => {
-  const q = (timestamp: string, bid: number | null, ask: number | null) => ({
+  const q = (
+    timestamp: string,
+    bid: number | null | undefined,
+    ask: number | null | undefined,
+  ) => ({
     timestamp,
     bid,
     ask,
@@ -80,10 +84,16 @@ describe("isUsableQuote", () => {
     expect(isUsableQuote(q("2025-04-07 11:16", NaN, NaN))).toBe(false);
   });
 
-  test("keeps a one-sided zero quote", () => {
-    expect(isUsableQuote(q("2025-04-07 11:16", 0, 1.5))).toBe(true);
-    expect(isUsableQuote(q("2025-04-07 11:16", 1.5, 0))).toBe(true);
-    expect(isUsableQuote(q("2025-04-07 11:16", null, 1.5))).toBe(true);
+  test("drops a one-sided zero quote — a zero side is a missing quote, not a price", () => {
+    expect(isUsableQuote(q("2025-04-07 11:16", 0, 180.1))).toBe(false);
+    expect(isUsableQuote(q("2025-04-07 11:16", 180.1, 0))).toBe(false);
+    expect(isUsableQuote(q("2025-04-07 11:16", null, 1.5))).toBe(false);
+    expect(isUsableQuote(q("2025-04-07 11:16", 1.5, undefined))).toBe(false);
+  });
+
+  test("keeps a quote only when both bid and ask are positive", () => {
+    expect(isUsableQuote(q("2025-04-07 11:16", 139.6, 146.75))).toBe(true);
+    expect(isUsableQuote(q("2025-04-07 11:16", 0.05, 0.1))).toBe(true);
   });
 
   test("accepts bare HH:MM and HH:MM:SS timestamps", () => {

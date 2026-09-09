@@ -319,9 +319,9 @@ export async function handleReplayTrade(
     }
   }
 
-  // Quote sanity: drop opening-rotation rows (before 09:32 ET) and rows with
-  // no positive bid or ask. A 0/0 quote is an absence, not a $0 price —
-  // computeStrategyPnlPath forward-fills the previous mark across the gap.
+  // Quote sanity: drop opening-rotation rows (before 09:32 ET) and rows where
+  // either bid or ask is not positive. A zero side is a missing quote, not a
+  // price — computeStrategyPnlPath forward-fills the previous mark across the gap.
   const barsByLeg: BarRow[][] = replayLegs.map((leg) => {
     const quotes = (quotesByOcc.get(leg.occTicker) ?? []).filter(isUsableQuote);
     return quotes.map((q) => {
