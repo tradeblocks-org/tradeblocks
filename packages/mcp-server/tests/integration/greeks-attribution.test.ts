@@ -5,32 +5,35 @@ import {
   handleDecomposeGreeks,
   handleGetGreeksAttribution,
 } from "../../src/test-exports.ts";
-import type { AttributionSummaryResult } from "../../src/test-exports.ts";
+import type {
+  AttributionInstanceResult,
+  AttributionSummaryResult,
+} from "../../src/test-exports.ts";
 import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
 import type { MarketStores } from "../../src/market/stores/index.ts";
 
 const SPY_470C_BARS = [
-  { t: 1737124200000, o: 5.0, h: 5.2, l: 4.9, c: 5.1 },
-  { t: 1737124260000, o: 5.1, h: 5.5, l: 5.0, c: 5.3 },
-  { t: 1737124320000, o: 5.3, h: 5.4, l: 4.7, c: 4.8 },
+  { t: 1737124320000, o: 5.0, h: 5.2, l: 4.9, c: 5.1 },
+  { t: 1737124380000, o: 5.1, h: 5.5, l: 5.0, c: 5.3 },
+  { t: 1737124440000, o: 5.3, h: 5.4, l: 4.7, c: 4.8 },
 ];
 
 const SPY_475C_BARS = [
-  { t: 1737210600000, o: 3.0, h: 3.1, l: 2.9, c: 3.05 },
-  { t: 1737210660000, o: 3.05, h: 3.3, l: 3.0, c: 3.2 },
-  { t: 1737210720000, o: 3.2, h: 3.3, l: 2.6, c: 2.7 },
+  { t: 1737210720000, o: 3.0, h: 3.1, l: 2.9, c: 3.05 },
+  { t: 1737210780000, o: 3.05, h: 3.3, l: 3.0, c: 3.2 },
+  { t: 1737210840000, o: 3.2, h: 3.3, l: 2.6, c: 2.7 },
 ];
 
 const SPY_UNDERLYING_DAY1_BARS = [
-  { t: 1737124200000, o: 470.0, h: 470.5, l: 469.8, c: 470.2 },
-  { t: 1737124260000, o: 470.2, h: 471.0, l: 470.1, c: 470.8 },
-  { t: 1737124320000, o: 470.8, h: 471.4, l: 470.6, c: 471.1 },
+  { t: 1737124320000, o: 470.0, h: 470.5, l: 469.8, c: 470.2 },
+  { t: 1737124380000, o: 470.2, h: 471.0, l: 470.1, c: 470.8 },
+  { t: 1737124440000, o: 470.8, h: 471.4, l: 470.6, c: 471.1 },
 ];
 
 const SPY_UNDERLYING_DAY2_BARS = [
-  { t: 1737210600000, o: 468.0, h: 468.3, l: 467.6, c: 467.9 },
-  { t: 1737210660000, o: 467.9, h: 468.1, l: 467.1, c: 467.4 },
-  { t: 1737210720000, o: 467.4, h: 467.8, l: 466.8, c: 467.0 },
+  { t: 1737210720000, o: 468.0, h: 468.3, l: 467.6, c: 467.9 },
+  { t: 1737210780000, o: 467.9, h: 468.1, l: 467.1, c: 467.4 },
+  { t: 1737210840000, o: 467.4, h: 467.8, l: 466.8, c: 467.0 },
 ];
 
 describe("get_greeks_attribution integration", () => {
@@ -123,7 +126,7 @@ describe("get_greeks_attribution integration", () => {
   // Seed SPY underlying bars directly into market.spot since handleReplayTrade
   // reads underlying via stores.spot (not fetch). ET wallclock: 2025-01-17 is
   // in EST (UTC-5). SPY_UNDERLYING_DAY1_BARS use UTC ms aligned to
-  // 14:30 UTC = 09:30 ET.
+  // 14:32 UTC = 09:32 ET (the first minute the replay accepts).
   const seedSpyUnderlying = async (
     bars: Array<{ t: number; o: number; h: number; l: number; c: number }>,
   ) => {
@@ -218,6 +221,41 @@ describe("get_greeks_attribution integration", () => {
     );
     expect(summary.gross_attribution_flow).toBeGreaterThan(0);
     expect(summary.attribution.some((entry) => entry.pct_of_gross !== undefined)).toBe(true);
+  });
+
+  test("instance mode labels each step with its replay bar timestamp", async () => {
+    await conn.run(`
+      INSERT INTO trades.trade_data
+        (block_id, date_opened, date_closed, strategy, legs, premium, num_contracts, pl, ticker)
+      VALUES
+        ('test-block', '2025-01-17', '2025-01-17', 'calendar', 'SPY 470C', 500.0, 1, 250.0, 'SPY')
+    `);
+
+    await seedSpyUnderlying(SPY_UNDERLYING_DAY1_BARS);
+    await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+
+    const instance = (await handleGetGreeksAttribution(
+      {
+        block_id: "test-block",
+        mode: "instance",
+        trade_index: 0,
+        skip_quotes: true,
+        detailed: true,
+      },
+      "/tmp/test-greeks-attribution",
+      stores,
+      conn,
+    )) as AttributionInstanceResult;
+
+    // Three bars (09:32, 09:33, 09:34) → two steps, each labelled with the
+    // timestamp of the bar it ends at. Nothing is labelled by trading day.
+    const labels = instance.steps.map((s) => s.date);
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.length).toBeLessThanOrEqual(2);
+    for (const label of labels) {
+      expect(["2025-01-17 09:33", "2025-01-17 09:34"]).toContain(label);
+      expect(label.startsWith("day-")).toBe(false);
+    }
   });
 
   test("strategy filter maps to the correct trade indices", async () => {

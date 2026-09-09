@@ -106,6 +106,46 @@ export function markPrice(bar: Pick<BarRow, "high" | "low" | "bid" | "ask">): nu
 }
 
 // ---------------------------------------------------------------------------
+// isUsableQuote
+// ---------------------------------------------------------------------------
+
+/**
+ * First minute of the regular session that counts as analysis input ("HH:MM" ET).
+ *
+ * The 09:30 and 09:31 option quotes are the opening rotation: bids and asks
+ * are still being established and are frequently reported as 0/0 or as
+ * placeholder widths. They are never used as replay input.
+ */
+export const SESSION_OPEN_CUTOFF = "09:32";
+
+/**
+ * Decide whether a minute quote row may enter a replay path.
+ *
+ * Drops rows timestamped before {@link SESSION_OPEN_CUTOFF} and rows where
+ * both bid and ask are missing or non-positive. A 0/0 quote is an absence of
+ * a price, not a price of zero — marking a leg at $0 fabricates a P&L swing
+ * equal to the whole position value. Callers rely on the forward-fill in
+ * `computeStrategyPnlPath` to carry the previous mark across the dropped
+ * minute. A one-sided quote (only bid or only ask positive) is kept so that
+ * `markPrice` can still produce a mark from it.
+ *
+ * `timestamp` is "YYYY-MM-DD HH:MM" ET (or bare "HH:MM"); the comparison is
+ * lexical on the "HH:MM" part, so any HH:MM[:SS] suffix normalises correctly.
+ */
+export function isUsableQuote(q: {
+  timestamp: string;
+  bid: number | null | undefined;
+  ask: number | null | undefined;
+}): boolean {
+  const parts = q.timestamp.trim().split(" ");
+  const time = (parts.length > 1 ? parts[1] : parts[0]).slice(0, 5);
+  if (time < SESSION_OPEN_CUTOFF) return false;
+  const bidOk = typeof q.bid === "number" && Number.isFinite(q.bid) && q.bid > 0;
+  const askOk = typeof q.ask === "number" && Number.isFinite(q.ask) && q.ask > 0;
+  return bidOk || askOk;
+}
+
+// ---------------------------------------------------------------------------
 // findNearestTimestamp
 // ---------------------------------------------------------------------------
 

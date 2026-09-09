@@ -14,7 +14,6 @@ import { handleDecomposeGreeks } from "./exit-analysis.ts";
 import type { FactorContribution } from "../utils/greeks-decomposition.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createToolOutput } from "../utils/output-formatter.ts";
-import { tradingDays } from "../utils/flatfile-importer.ts";
 import type { MarketStores } from "../market/stores/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +42,7 @@ export interface AttributionSummaryResult {
 }
 
 export interface AttributionStepEntry {
+  /** Timestamp ("YYYY-MM-DD HH:MM" ET) of the replay bar this step ends at. */
   date: string;
   delta: number;
   gamma: number;
@@ -380,7 +380,7 @@ async function handleInstanceMode(
 
   // Get trade date for the response
   const tradeResult = await conn.runAndReadAll(
-    `SELECT date_opened, date_closed, pl FROM trades.trade_data
+    `SELECT date_opened, pl FROM trades.trade_data
      WHERE block_id = $1
      ORDER BY date_opened, rowid
      LIMIT 1 OFFSET $2`,
@@ -391,8 +391,7 @@ async function handleInstanceMode(
     throw new Error(`Trade index ${trade_index} not found in block "${block_id}"`);
   }
   const tradeDate = String(tradeRows[0][0] ?? "");
-  const closeDate = String(tradeRows[0][1] ?? tradeDate);
-  const actualPnl = Number(tradeRows[0][2] ?? 0);
+  const actualPnl = Number(tradeRows[0][1] ?? 0);
 
   // Run decomposition with full step data
   const result = await handleDecomposeGreeks(
@@ -411,14 +410,12 @@ async function handleInstanceMode(
   // Build per-step entries from factor step arrays
   const stepCount = result.stepCount;
 
-  // Map step indices → dates via a pure Mon-Fri trading-day iterator.
-  // Replays operate over date ranges with dense intraday coverage, so the
-  // weekday iteration matches the set of dates the decomposition produced
-  // (one step per trading day). `conn` is still used above for the trade
-  // row fetch — only the date probe is store-free.
-  const tradingDates = tradingDays(tradeDate, closeDate);
-  const getStepDate = (i: number): string =>
-    i < tradingDates.length ? tradingDates[i] : `day-${i}`;
+  // Steps are per replay bar (one per minute), not per trading day. Label
+  // step i with the timestamp of the bar it ends at, as reported by the
+  // decomposition; fall back to a positional label if the timestamps are
+  // unavailable.
+  const stepTimestamps = result.stepTimestamps ?? [];
+  const getStepDate = (i: number): string => stepTimestamps[i] ?? `step-${i}`;
 
   // Build factor lookup for quick access to step arrays
   const factorSteps = new Map<string, number[]>();
@@ -428,7 +425,7 @@ async function handleInstanceMode(
 
   // Pivot: for each step, collect contributions from all factors
   const steps: AttributionStepEntry[] = [];
-  for (let i = 0; i <= stepCount; i++) {
+  for (let i = 0; i < stepCount; i++) {
     const entry: AttributionStepEntry = {
       date: getStepDate(i),
       delta: getStepValue(
@@ -521,7 +518,7 @@ export function registerGreeksAttributionTools(
       description:
         "Decompose a block's P&L into Greek components (delta, gamma, theta, vega). " +
         "Summary mode: attribution percentages across all trades — reveals what drives the strategy. " +
-        "Instance mode: per-day Greek P&L time-series for a single trade. " +
+        "Instance mode: per-bar (minute) Greek P&L time-series for a single trade, each step labelled with its bar timestamp. " +
         "Use skip_quotes=true (default) for fast analysis, false for NBBO-precision.",
       inputSchema: getGreeksAttributionSchema,
     },

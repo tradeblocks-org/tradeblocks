@@ -24,9 +24,9 @@ TradeBlocks MCP server tools organized by category.
 
 ## Trade Replay
 
-| Tool           | Description                                                                                                                                                                                                           |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `replay_trade` | Replay trades with minute-level P&L path, MFE/MAE, and per-leg greeks. Uses cached bars from `market.intraday`; fetches from Massive.com on cache miss. Three output formats: `full`, `sampled` (default), `summary`. |
+| Tool           | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `replay_trade` | Replay trades with minute-level P&L path, MFE/MAE, and per-leg greeks. Uses cached bars from `market.intraday`; fetches from Massive.com on cache miss. Quote sanity: opening-rotation quotes (before 09:32 ET) and empty quotes (no positive bid or ask) are dropped and the previous mark is carried forward; the path starts at the trade's entry time (`time_opened`, or `open_time` in hypothetical mode). Three output formats: `full`, `sampled` (default), `summary`. |
 
 ## Exit Trigger Analysis
 

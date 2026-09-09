@@ -15,25 +15,26 @@ import { handleDecomposeGreeks } from "../../src/tools/exit-analysis.ts";
 import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
 import type { MarketStores } from "../../src/market/stores/index.ts";
 
-// Minute bars for SPY 470C — 3 minutes starting at 09:30 ET on 2025-01-17
-// 2025-01-17 is in EST (UTC-5): 09:30 ET = 14:30 UTC = 1737124200000 ms
+// Minute bars for SPY 470C — 3 minutes starting at 09:32 ET on 2025-01-17 (the first
+// minute the replay accepts; 09:30/09:31 are the opening rotation and are dropped)
+// 2025-01-17 is in EST (UTC-5): 09:32 ET = 14:32 UTC = 1737124320000 ms
 const SPY_470C_BARS = [
-  { t: 1737124200000, o: 5.0, h: 5.2, l: 4.9, c: 5.1 }, // 09:30
-  { t: 1737124260000, o: 5.1, h: 5.5, l: 5.0, c: 5.3 }, // 09:31
-  { t: 1737124320000, o: 5.3, h: 5.4, l: 4.7, c: 4.8 }, // 09:32
+  { t: 1737124320000, o: 5.0, h: 5.2, l: 4.9, c: 5.1 }, // 09:32
+  { t: 1737124380000, o: 5.1, h: 5.5, l: 5.0, c: 5.3 }, // 09:33
+  { t: 1737124440000, o: 5.3, h: 5.4, l: 4.7, c: 4.8 }, // 09:34
 ];
 
 // Minute bars for SPY 475C (short leg of spread)
 const SPY_475C_BARS = [
-  { t: 1737124200000, o: 3.0, h: 3.1, l: 2.9, c: 3.05 }, // 09:30
-  { t: 1737124260000, o: 3.05, h: 3.3, l: 3.0, c: 3.2 }, // 09:31
-  { t: 1737124320000, o: 3.2, h: 3.3, l: 2.6, c: 2.7 }, // 09:32
+  { t: 1737124320000, o: 3.0, h: 3.1, l: 2.9, c: 3.05 }, // 09:32
+  { t: 1737124380000, o: 3.05, h: 3.3, l: 3.0, c: 3.2 }, // 09:33
+  { t: 1737124440000, o: 3.2, h: 3.3, l: 2.6, c: 2.7 }, // 09:34
 ];
 
 const SPY_UNDERLYING_BARS = [
-  { t: 1737124200000, o: 470.0, h: 470.5, l: 469.8, c: 470.2 },
-  { t: 1737124260000, o: 470.2, h: 471.0, l: 470.1, c: 470.8 },
-  { t: 1737124320000, o: 470.8, h: 471.4, l: 470.6, c: 471.1 },
+  { t: 1737124320000, o: 470.0, h: 470.5, l: 469.8, c: 470.2 },
+  { t: 1737124380000, o: 470.2, h: 471.0, l: 470.1, c: 470.8 },
+  { t: 1737124440000, o: 470.8, h: 471.4, l: 470.6, c: 471.1 },
 ];
 
 // =============================================================================
@@ -264,6 +265,37 @@ describe("replay_trade integration", () => {
       expect(result.pnlPath[0].strategyPnl).toBeCloseTo(5, 0);
     });
 
+    test("open_time starts the hypothetical path at entry", async () => {
+      await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+
+      const result = await handleReplayTrade(
+        {
+          legs: [
+            {
+              ticker: "SPY",
+              strike: 470,
+              type: "C",
+              expiry: "2025-01-17",
+              quantity: 1,
+              entry_price: 5.0,
+            },
+          ],
+          open_date: "2025-01-17",
+          close_date: "2025-01-17",
+          open_time: "09:33",
+          multiplier: 100,
+        },
+        "/tmp/test-replay",
+        stores,
+      );
+
+      expect(result.pnlPath.map((p) => p.timestamp)).toEqual([
+        "2025-01-17 09:33",
+        "2025-01-17 09:34",
+      ]);
+      expect(result.totalBars).toBe(2);
+    });
+
     test("returns error when open_date missing in hypothetical mode", async () => {
       await expect(
         handleReplayTrade(
@@ -379,6 +411,138 @@ describe("replay_trade integration", () => {
       expect(typeof result.mfe).toBe("number");
       expect(typeof result.mae).toBe("number");
       expect(typeof result.totalPnl).toBe("number");
+    });
+
+    test("path starts at time_opened and ends at time_closed", async () => {
+      await conn.run(`
+        INSERT INTO trades.trade_data
+          (block_id, date_opened, time_opened, date_closed, time_closed, legs, premium, num_contracts, pl, ticker)
+        VALUES
+          ('test-block', '2025-01-17', '09:33:00', '2025-01-17', '09:33:00', 'SPY 470C', 5.0, 1, 50.0, 'SPY')
+      `);
+
+      await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+
+      const result = await handleReplayTrade(
+        { block_id: "test-block", trade_index: 0, multiplier: 100, close_at: "trade" },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+      // 09:32 is before entry; 09:34 is after the close.
+      expect(result.pnlPath.map((p) => p.timestamp)).toEqual(["2025-01-17 09:33"]);
+      // Entry 5.0 (premium / 1 contract); mark at 09:33 = bar close 5.3 → (5.3 - 5.0) * 100 = 30
+      expect(result.totalPnl).toBeCloseTo(30, 2);
+      expect(result.mfe).toBeCloseTo(30, 2);
+      expect(result.mae).toBeCloseTo(30, 2);
+    });
+
+    test("close_at=expiry still starts the path at time_opened", async () => {
+      await conn.run(`
+        INSERT INTO trades.trade_data
+          (block_id, date_opened, time_opened, date_closed, time_closed, legs, premium, num_contracts, pl, ticker)
+        VALUES
+          ('test-block', '2025-01-17', '09:33', '2025-01-17', '09:33', 'SPY 470C', 500.0, 1, 50.0, 'SPY')
+      `);
+
+      await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+
+      const result = await handleReplayTrade(
+        { block_id: "test-block", trade_index: 0, multiplier: 100, close_at: "expiry" },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+      expect(result.pnlPath.map((p) => p.timestamp)).toEqual([
+        "2025-01-17 09:33",
+        "2025-01-17 09:34",
+      ]);
+    });
+
+    test("drops opening-rotation quotes before 09:32", async () => {
+      await conn.run(`
+        INSERT INTO trades.trade_data
+          (block_id, date_opened, date_closed, legs, premium, num_contracts, pl, ticker)
+        VALUES
+          ('test-block', '2025-01-17', '2025-01-17', 'SPY 470C', 500.0, 1, 50.0, 'SPY')
+      `);
+
+      // Two priced rows in the opening rotation, then the regular fixture.
+      for (const time of ["09:30", "09:31"]) {
+        await conn.run(
+          `INSERT INTO market.option_quote_minutes
+             (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source)
+           VALUES ('SPY', '2025-01-17', 'SPY250117C00470000', $1, 0.95, 1.05, 1.0, NULL, 'fixture')`,
+          [time],
+        );
+      }
+      await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+
+      const result = await handleReplayTrade(
+        { block_id: "test-block", trade_index: 0, multiplier: 100 },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+      expect(result.pnlPath[0].timestamp).toBe("2025-01-17 09:32");
+      expect(result.pnlPath.length).toBe(3);
+      // The $1.00 opening-rotation mark must not appear anywhere on the path.
+      expect(result.pnlPath.every((p) => p.legPrices[0] > 4)).toBe(true);
+    });
+
+    test("drops a zero quote and forward-fills the previous mark", async () => {
+      await conn.run(`
+        INSERT INTO trades.trade_data
+          (block_id, date_opened, date_closed, legs, premium, num_contracts, pl, ticker)
+        VALUES
+          ('test-block', '2025-01-17', '2025-01-17', 'SPY 470C', 5.0, 1, 50.0, 'SPY')
+      `);
+
+      // 09:32 and 09:34 priced; 09:33 reported as bid=ask=0.
+      await seedOptionQuotes("SPY250117C00470000", "SPY", [SPY_470C_BARS[0], SPY_470C_BARS[2]]);
+      await conn.run(
+        `INSERT INTO market.option_quote_minutes
+           (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source)
+         VALUES ('SPY', '2025-01-17', 'SPY250117C00470000', '09:33', 0, 0, 0, NULL, 'fixture')`,
+      );
+
+      const result = await handleReplayTrade(
+        { block_id: "test-block", trade_index: 0, multiplier: 100 },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+      // The zero row contributes no timestamp of its own and never marks the leg at $0.
+      expect(result.pnlPath.map((p) => p.timestamp)).toEqual([
+        "2025-01-17 09:32",
+        "2025-01-17 09:34",
+      ]);
+      expect(result.pnlPath.every((p) => p.legPrices[0] > 0)).toBe(true);
+      expect(result.mae).toBeGreaterThan(-100);
+    });
+
+    test("a single usable quote yields a single-point path", async () => {
+      await conn.run(`
+        INSERT INTO trades.trade_data
+          (block_id, date_opened, date_closed, legs, premium, num_contracts, pl, ticker)
+        VALUES
+          ('test-block', '2025-01-17', '2025-01-17', 'SPY 470C', 5.0, 1, 50.0, 'SPY')
+      `);
+      await seedOptionQuotes("SPY250117C00470000", "SPY", [SPY_470C_BARS[0]]);
+
+      const result = await handleReplayTrade(
+        { block_id: "test-block", trade_index: 0, multiplier: 100 },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+      expect(result.pnlPath.length).toBe(1);
+      expect(result.totalPnl).toBeCloseTo(10, 2);
     });
 
     test("returns error for unparseable tradelog legs", async () => {

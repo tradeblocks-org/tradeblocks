@@ -50,6 +50,8 @@ export interface GreeksDecompositionResult {
   summary: string; // Human-readable summary
   warning?: string | null; // D-13: high residual warning
   method: "full_reval" | "model" | "numerical"; // which method produced the attribution
+  /** Timestamp of the bar each step ends at: stepTimestamps[i] labels the step pnlPath[i] → pnlPath[i+1]. */
+  stepTimestamps?: string[];
 }
 
 export interface LegGroupDef {
