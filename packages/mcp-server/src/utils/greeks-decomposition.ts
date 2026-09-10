@@ -4,10 +4,12 @@
  * Decomposes a replay P&L path into ranked greek factor contributions
  * (delta, gamma, theta, vega, residual) using full revaluation P&L attribution.
  *
- * Full revaluation reprices each leg with one input changed at a time
- * (spot, time, vol) to capture all higher-order effects (charm, vanna, volga)
- * naturally. This produces near-zero residual for any strategy where the
- * pricing model (BS or Bachelier) can accurately price the options.
+ * Full revaluation reprices each leg along an ordered path — time passes
+ * first, then vol updates, then spot moves — so every cross-effect (charm,
+ * vanna, volga, and the vega-decay term that dominates short-dated gap steps)
+ * lands in a named factor. Because each bar's IV is solved from that bar's own
+ * mark, the sum of the factors equals the mark change and the residual is
+ * pure model error (a leg whose IV could not be solved, or a bar past expiry).
  *
  * Falls back to numerical decomposition (realized delta from price changes)
  * when the full-revaluation residual exceeds 80% of the gross attribution flow
@@ -255,8 +257,17 @@ function computeDte(timestamp: string, expiryDate: string): number {
   return (expiryMs - barMs) / (1000 * 60 * 60 * 24);
 }
 
+type PricingModel = "bs" | "bachelier";
+
 /**
- * Price an option using the appropriate model (BS or Bachelier) based on DTE.
+ * Price an option with the model an IV was solved under.
+ *
+ * A Black-Scholes IV is a lognormal vol (0.2 = 20%); a Bachelier IV is a normal
+ * vol in price units (hundreds, for an index). The two are not interchangeable,
+ * so the model must follow the vol, not the time to expiry being priced: when a
+ * leg crosses the Bachelier threshold between two bars, the old lognormal vol
+ * is still priced with Black-Scholes at the new (shorter) time. Falls back to
+ * the DTE-based choice when the vol's model is unknown.
  * Returns null if pricing fails (DTE <= 0 or IV missing).
  */
 function priceOption(
@@ -267,11 +278,13 @@ function priceOption(
   r: number,
   q: number,
   iv: number,
+  model?: PricingModel,
 ): number | null {
   if (dte <= 0 || iv <= 0) return null;
   const T = dte / 365;
   const bsType = type === "C" ? ("call" as const) : ("put" as const);
-  if (dte < BACHELIER_DTE_THRESHOLD) {
+  const chosen = model ?? (dte < BACHELIER_DTE_THRESHOLD ? "bachelier" : "bs");
+  if (chosen === "bachelier") {
     return bachelierPrice(bsType, S, K, T, r, q, iv);
   }
   return bsPrice(bsType, S, K, T, r, q, iv);
@@ -280,10 +293,24 @@ function priceOption(
 /**
  * Decompose a replay P&L path into ranked greek factor contributions.
  *
- * Uses full revaluation when legPricingInputs are provided:
- * For each step, reprices each leg with one input changed at a time
- * (spot only, time only, vol only) to isolate each factor's contribution.
- * This captures all higher-order effects (charm, vanna, volga) naturally.
+ * Uses full revaluation when legPricingInputs are provided. For each step and
+ * leg, with P(S, T, σ) the model price:
+ *   delta    = P(S2, T1, σ1) − P(S1, T1, σ1)   spot only (includes gamma)
+ *   theta    = P(S1, T2, σ1) − P(S1, T1, σ1)   time only
+ *   charm    = P(S2, T2, σ1) − P(S1, T2, σ1) − delta   spot×time cross
+ *   vega     = P(S1, T2, σ2) − P(S1, T2, σ1)   vol move, priced at the new time
+ *   vanna    = P(S2, T2, σ2) − P(S2, T2, σ1) − vega    spot×vol cross at the new time
+ *   residual = actual mark change − (P(S2, T2, σ2) − P(S1, T1, σ1))
+ *
+ * The vol move is priced at the new time on purpose. The IV observed at the
+ * next bar is the IV of an option with T2 remaining; applying it at T1 asks
+ * what the option would have been worth with yesterday's time value at today's
+ * vol. On a 14-day option the two differ by a few percent. On a 1-to-5-day
+ * option crossing a night or a weekend, vega itself falls by tens of percent
+ * while the IV rises as the remaining variance concentrates, so pricing the
+ * vol move at the old time produced a large vega total that a residual of the
+ * same size cancelled. Pricing it at the new time makes the factors sum to the
+ * model repricing exactly and leaves only model error in the residual.
  *
  * Falls back to numerical decomposition when the full-reval residual exceeds
  * 80% of the gross attribution flow (pricing model failure for that
@@ -398,41 +425,38 @@ export function decomposeGreeks(config: GreeksDecompositionConfig): GreeksDecomp
         const dte2 = computeDte(next.timestamp, lpi.expiryDate);
 
         if (dte1 > 0 && dte2 > 0) {
-          // Baseline: price at (S1, T1, IV1)
-          const priceBase = priceOption(lpi.type, S1, lpi.strike, dte1, r, q, curIv);
+          // Each IV is priced with the model it was solved under; the model
+          // may differ between the two bars when the leg crosses the
+          // Bachelier threshold during the step.
+          const curModel = cur.legGreeks?.[j]?.model;
+          const nextModel = next.legGreeks?.[j]?.model;
 
-          // Delta: price at (S2, T1, IV1) — only spot changed
-          const priceDelta = priceOption(lpi.type, S2, lpi.strike, dte1, r, q, curIv);
-
-          // Theta: price at (S1, T2, IV1) — only time changed
-          const priceTheta = priceOption(lpi.type, S1, lpi.strike, dte2, r, q, curIv);
-
-          // Vega: price at (S1, T1, IV2) — only vol changed
-          const priceVega = priceOption(lpi.type, S1, lpi.strike, dte1, r, q, nextIv);
-
-          // Cross-term repricing: two inputs changed at once
-          // Charm (spot×time): P(S2, T2, σ1) - base - delta - theta
-          const priceCharm = priceOption(lpi.type, S2, lpi.strike, dte2, r, q, curIv);
-          // Vanna (spot×vol): P(S2, T1, σ2) - base - delta - vega
-          const priceVanna = priceOption(lpi.type, S2, lpi.strike, dte1, r, q, nextIv);
+          // Baseline: P(S1, T1, σ1)
+          const priceBase = priceOption(lpi.type, S1, lpi.strike, dte1, r, q, curIv, curModel);
+          // Spot only: P(S2, T1, σ1)
+          const priceSpot = priceOption(lpi.type, S2, lpi.strike, dte1, r, q, curIv, curModel);
+          // Time only: P(S1, T2, σ1)
+          const priceTime = priceOption(lpi.type, S1, lpi.strike, dte2, r, q, curIv, curModel);
+          // Spot and time: P(S2, T2, σ1)
+          const priceSpotTime = priceOption(lpi.type, S2, lpi.strike, dte2, r, q, curIv, curModel);
+          // Time and vol: P(S1, T2, σ2)
+          const priceTimeVol = priceOption(lpi.type, S1, lpi.strike, dte2, r, q, nextIv, nextModel);
+          // Everything: P(S2, T2, σ2)
+          const priceAll = priceOption(lpi.type, S2, lpi.strike, dte2, r, q, nextIv, nextModel);
 
           if (
             priceBase !== null &&
-            priceDelta !== null &&
-            priceTheta !== null &&
-            priceVega !== null &&
-            priceCharm !== null &&
-            priceVanna !== null
+            priceSpot !== null &&
+            priceTime !== null &&
+            priceSpotTime !== null &&
+            priceTimeVol !== null &&
+            priceAll !== null
           ) {
-            const legDeltaPnl = (priceDelta - priceBase) * positionSize;
-            const legThetaPnl = (priceTheta - priceBase) * positionSize;
-            const legVegaPnl = (priceVega - priceBase) * positionSize;
-            const legCharmPnl =
-              (priceCharm - priceBase - (priceDelta - priceBase) - (priceTheta - priceBase)) *
-              positionSize;
-            const legVannaPnl =
-              (priceVanna - priceBase - (priceDelta - priceBase) - (priceVega - priceBase)) *
-              positionSize;
+            const legDeltaPnl = (priceSpot - priceBase) * positionSize;
+            const legThetaPnl = (priceTime - priceBase) * positionSize;
+            const legCharmPnl = (priceSpotTime - priceTime) * positionSize - legDeltaPnl;
+            const legVegaPnl = (priceTimeVol - priceTime) * positionSize;
+            const legVannaPnl = (priceAll - priceSpotTime) * positionSize - legVegaPnl;
             const legResidual =
               legActualChange - legDeltaPnl - legThetaPnl - legVegaPnl - legCharmPnl - legVannaPnl;
 
@@ -479,10 +503,10 @@ export function decomposeGreeks(config: GreeksDecompositionConfig): GreeksDecomp
   // Full reval factors:
   // - delta: spot-only P&L (includes gamma — all spot-driven effects)
   // - theta: time-only P&L
-  // - vega: vol-only P&L
+  // - vega: vol move priced at the new time (includes vega decay over the step)
   // - charm: spot×time cross-effect (delta changing with time)
-  // - vanna: spot×vol cross-effect (delta changing with vol)
-  // - residual: triple cross (spot+time+vol simultaneously) + model error
+  // - vanna: spot×vol cross-effect at the new time (includes the triple cross)
+  // - residual: model error only (legs that could not be priced on the step)
   const rawFactors: Array<{ factor: FactorName; totalPnl: number; steps: number[] }> = [
     { factor: "delta", totalPnl: sumSteps(deltaSteps), steps: deltaSteps },
     { factor: "theta", totalPnl: sumSteps(thetaSteps), steps: thetaSteps },

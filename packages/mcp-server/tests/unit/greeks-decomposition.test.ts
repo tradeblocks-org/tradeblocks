@@ -2,6 +2,7 @@ import {
   decomposeGreeks,
   computeTimeDeltaDays,
   bsPrice,
+  bachelierPrice,
   type GreeksDecompositionConfig,
 } from "../../src/test-exports.ts";
 
@@ -22,6 +23,7 @@ function point(
       theta: number | null;
       vega: number | null;
       iv: number | null;
+      model?: "bs" | "bachelier";
     }>;
     netDelta?: number | null;
     netGamma?: number | null;
@@ -663,5 +665,224 @@ describe("edge cases", () => {
     for (const f of result.factors) {
       expect(f.steps).toHaveLength(2);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Short-tenor gap steps: vol move priced at the new time, model follows the vol
+// ---------------------------------------------------------------------------
+
+describe("short-tenor decomposition across gap steps", () => {
+  const R = 0.045;
+  const Q = 0.015;
+
+  /** Same convention as the decomposition: bar timestamp to 16:00 ET on the expiry date. */
+  function dteDays(timestamp: string, expiryDate: string): number {
+    const [dateStr, timePart] = timestamp.split(" ");
+    const [ey, em, ed] = expiryDate.split("-").map(Number);
+    const [by, bm, bd] = dateStr.split("-").map(Number);
+    const [hh, mm] = timePart.split(":").map(Number);
+    const expiryMs = new Date(ey, em - 1, ed).getTime() + 16 * 60 * 60 * 1000;
+    const barMs = new Date(by, bm - 1, bd).getTime() + (hh * 60 + mm) * 60 * 1000;
+    return (expiryMs - barMs) / (1000 * 60 * 60 * 24);
+  }
+
+  function bs(type: "C" | "P", S: number, K: number, dte: number, iv: number): number {
+    return bsPrice(type === "C" ? "call" : "put", S, K, dte / 365, R, Q, iv);
+  }
+
+  // A 2/7-day put calendar: short the 2-DTE put, long the 7-DTE put, same strike.
+  const strike = 5000;
+  const frontExpiry = "2025-01-15";
+  const backExpiry = "2025-01-20";
+  const legPricingInputs = [
+    { strike, type: "P" as const, expiryDate: frontExpiry },
+    { strike, type: "P" as const, expiryDate: backExpiry },
+  ];
+  const legs = [leg(-10), leg(10)];
+
+  /** Build a consistent bar: marks are the model prices at the bar's own IVs. */
+  function bar(timestamp: string, S: number, ivs: [number, number]): PnlPoint {
+    const dtes = [dteDays(timestamp, frontExpiry), dteDays(timestamp, backExpiry)];
+    const legPrices = ivs.map((iv, j) => bs("P", S, strike, dtes[j], iv));
+    const strategyPnl = legPrices.reduce(
+      (sum, price, j) => sum + (price - legs[j].entryPrice) * legs[j].quantity * legs[j].multiplier,
+      0,
+    );
+    return point(timestamp, strategyPnl, {
+      legPrices,
+      legGreeks: ivs.map((iv) => ({
+        delta: null,
+        gamma: null,
+        theta: null,
+        vega: null,
+        iv,
+        model: "bs",
+      })),
+    });
+  }
+
+  function config(pnlPath: PnlPoint[]): GreeksDecompositionConfig {
+    return {
+      pnlPath,
+      legs,
+      underlyingPrices: new Map(pnlPath.map((p) => [p.timestamp, p.underlyingPrice!])),
+      legPricingInputs,
+      riskFreeRate: R,
+      dividendYield: Q,
+    };
+  }
+
+  function withSpot(p: PnlPoint, S: number): PnlPoint {
+    return { ...p, underlyingPrice: S };
+  }
+
+  test("overnight gap on a 2-DTE leg: known time step and IV move attribute to theta and vega, residual is zero", () => {
+    // Close on day 1 (2.0 DTE on the front leg) to the first usable bar of day 2
+    // (1.27 DTE). Spot unchanged, so delta/charm/vanna are zero and the whole
+    // mark change is time plus vol. The front IV rises from 18% to 26% as the
+    // remaining variance concentrates — the move that inflated vega when priced
+    // at the old time.
+    const t1 = "2025-01-13 16:00";
+    const t2 = "2025-01-14 09:32";
+    const S = 5000;
+    const iv1: [number, number] = [0.18, 0.16];
+    const iv2: [number, number] = [0.26, 0.165];
+    const path = [withSpot(bar(t1, S, iv1), S), withSpot(bar(t2, S, iv2), S)];
+
+    const result = decomposeGreeks(config(path));
+    expect(result.method).toBe("full_reval");
+    expect(result.stepCount).toBe(1);
+
+    const get = (name: string) => result.factors.find((f) => f.factor === name)!.totalPnl;
+
+    let expectedTheta = 0;
+    let expectedVega = 0;
+    for (let j = 0; j < 2; j++) {
+      const pos = legs[j].quantity * legs[j].multiplier;
+      const exp = legPricingInputs[j].expiryDate;
+      const d1 = dteDays(t1, exp);
+      const d2 = dteDays(t2, exp);
+      // theta: time passes at the old vol
+      expectedTheta += (bs("P", S, strike, d2, iv1[j]) - bs("P", S, strike, d1, iv1[j])) * pos;
+      // vega: the vol move priced at the NEW time
+      expectedVega += (bs("P", S, strike, d2, iv2[j]) - bs("P", S, strike, d2, iv1[j])) * pos;
+    }
+
+    expect(get("theta")).toBeCloseTo(expectedTheta, 6);
+    expect(get("vega")).toBeCloseTo(expectedVega, 6);
+    expect(get("delta")).toBeCloseTo(0, 6);
+    expect(get("charm")).toBeCloseTo(0, 6);
+    expect(get("vanna")).toBeCloseTo(0, 6);
+    expect(get("residual")).toBeCloseTo(0, 6);
+    expect(result.totalPnlChange).toBeCloseTo(expectedTheta + expectedVega, 6);
+    expect(result.warning).toBeNull();
+  });
+
+  test("gap step with spot, time and vol all moving: factors sum to the mark change on every step", () => {
+    const path = [
+      withSpot(bar("2025-01-13 15:59", 5000, [0.18, 0.16]), 5000),
+      withSpot(bar("2025-01-13 16:00", 5002, [0.181, 0.16]), 5002),
+      withSpot(bar("2025-01-14 09:32", 4960, [0.29, 0.175]), 4960),
+      withSpot(bar("2025-01-14 09:33", 4963, [0.285, 0.174]), 4963),
+    ];
+    const result = decomposeGreeks(config(path));
+    expect(result.method).toBe("full_reval");
+    expect(result.stepCount).toBe(3);
+
+    const residual = result.factors.find((f) => f.factor === "residual")!;
+    for (let i = 0; i < 3; i++) {
+      const stepChange = path[i + 1].strategyPnl - path[i].strategyPnl;
+      const attributed = result.factors.reduce((sum, f) => sum + f.steps[i], 0);
+      expect(attributed).toBeCloseTo(stepChange, 6);
+      expect(residual.steps[i]).toBeCloseTo(0, 6);
+    }
+    // The gap step carries a real spot move, so the cross terms are non-zero
+    // and named rather than left in the residual.
+    const vanna = result.factors.find((f) => f.factor === "vanna")!;
+    const charm = result.factors.find((f) => f.factor === "charm")!;
+    expect(Math.abs(vanna.steps[1])).toBeGreaterThan(0);
+    expect(Math.abs(charm.steps[1])).toBeGreaterThan(0);
+  });
+
+  test("leg crossing the Bachelier threshold mid-step: each vol is priced with its own model", () => {
+    // 2h25m before expiry the IV is a Black-Scholes lognormal vol; two minutes
+    // later the leg is under the threshold and its IV is a Bachelier normal vol
+    // in price units. Pricing the normal vol with Black-Scholes at the old time
+    // produced a vega total in the tens of millions on a ten-lot, cancelled by
+    // the residual. With the model following the vol the step is ordinary.
+    const t1 = "2025-01-15 13:35"; // dte 0.1007 days -> bs
+    const t2 = "2025-01-15 13:37"; // dte 0.0993 days -> bachelier
+    const S = 5000;
+    const K = 5000;
+    const expiry = "2025-01-15";
+    const d1 = dteDays(t1, expiry);
+    const d2 = dteDays(t2, expiry);
+    const ivBs = 0.25;
+    const ivNormal = 65; // price-unit normal vol
+    const mark1 = bsPrice("put", S, K, d1 / 365, R, Q, ivBs);
+    const mark2 = bachelierPrice("put", S, K, d2 / 365, R, Q, ivNormal);
+    const qty = -10;
+    const pos = qty * 100;
+
+    const path: PnlPoint[] = [
+      {
+        ...point(t1, 0, {
+          legPrices: [mark1],
+          legGreeks: [{ delta: null, gamma: null, theta: null, vega: null, iv: ivBs, model: "bs" }],
+        }),
+        underlyingPrice: S,
+      },
+      {
+        ...point(t2, (mark2 - mark1) * pos, {
+          legPrices: [mark2],
+          legGreeks: [
+            { delta: null, gamma: null, theta: null, vega: null, iv: ivNormal, model: "bachelier" },
+          ],
+        }),
+        underlyingPrice: S,
+      },
+    ];
+
+    const result = decomposeGreeks({
+      pnlPath: path,
+      legs: [leg(qty)],
+      underlyingPrices: new Map([
+        [t1, S],
+        [t2, S],
+      ]),
+      legPricingInputs: [{ strike: K, type: "P", expiryDate: expiry }],
+      riskFreeRate: R,
+      dividendYield: Q,
+    });
+
+    expect(result.method).toBe("full_reval");
+    const get = (name: string) => result.factors.find((f) => f.factor === name)!.totalPnl;
+    expect(get("residual")).toBeCloseTo(0, 6);
+    // theta: Black-Scholes at the old vol, two minutes later
+    const expectedTheta = (bsPrice("put", S, K, d2 / 365, R, Q, ivBs) - mark1) * pos;
+    expect(get("theta")).toBeCloseTo(expectedTheta, 6);
+    // vega: from the Black-Scholes price at the new time to the Bachelier mark
+    const expectedVega = (mark2 - bsPrice("put", S, K, d2 / 365, R, Q, ivBs)) * pos;
+    expect(get("vega")).toBeCloseTo(expectedVega, 6);
+    // No factor may exceed the position's whole value — the failure mode was
+    // a vega total orders of magnitude above the marks.
+    const gross = result.factors.reduce((sum, f) => sum + Math.abs(f.totalPnl), 0);
+    expect(gross).toBeLessThan(Math.abs(mark1 * pos) * 2);
+  });
+
+  test("greeks without a model tag still price by time to expiry", () => {
+    // Older producers omit `model`; the DTE-based choice is kept for them.
+    const t1 = "2025-01-13 10:00";
+    const t2 = "2025-01-13 10:01";
+    const S = 5000;
+    const p1 = withSpot(bar(t1, S, [0.18, 0.16]), S);
+    const p2 = withSpot(bar(t2, S, [0.19, 0.16]), S);
+    for (const p of [p1, p2]) for (const g of p.legGreeks!) delete g.model;
+
+    const result = decomposeGreeks(config([p1, p2]));
+    expect(result.method).toBe("full_reval");
+    expect(result.factors.find((f) => f.factor === "residual")!.totalPnl).toBeCloseTo(0, 6);
+    expect(result.factors.find((f) => f.factor === "vega")!.totalPnl).toBeLessThan(0); // short front vol up
   });
 });
