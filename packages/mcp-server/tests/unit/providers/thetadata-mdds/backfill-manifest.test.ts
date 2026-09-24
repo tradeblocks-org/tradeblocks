@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   appendBackfillManifestLineDurable,
-  backfillRewriteSelectSql,
   estimateBackfillBandRequestCount,
   backfillManifestPath,
   backfillPartitionPath,
@@ -20,6 +19,8 @@ import {
   parseBackfillOccTicker,
   projectBackfillWallTimeHours,
 } from "../../../../src/utils/providers/thetadata/backfill.ts";
+
+import { backfillRewriteSelectSql } from "../../../../src/test-exports.ts";
 
 describe("ThetaData MDDS backfill manifest helpers", () => {
   it("builds the manifest path under the ThetaData MDDS backfill manifest directory", () => {
@@ -344,22 +345,6 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
     expect(makeBackfillRunId(new Date("2026-05-05T10:01:02.003Z"))).toBe("20260505T100102003Z");
   });
 
-  it("casts canonical string columns in rewrite SQL to preserve parquet physical schema", () => {
-    const sql = backfillRewriteSelectSql({
-      existingTable: "existing_quote_minutes",
-      providerGreeksTable: "provider_greeks_dedup",
-    });
-
-    expect(sql).toContain("CAST(e.underlying AS VARCHAR) AS underlying");
-    expect(sql).toContain("CAST(e.date AS VARCHAR) AS date");
-    expect(sql).toContain("CAST(e.ticker AS VARCHAR) AS ticker");
-    expect(sql).toContain("CAST(e.time AS VARCHAR) AS time");
-    expect(sql).toContain("CAST(CASE WHEN g.greeks_source = 'thetadata'");
-    expect(sql).toContain("AS VARCHAR) AS greeks_source");
-    expect(sql).toContain("AS VARCHAR) AS rate_type");
-    expect(sql).toContain("AS VARCHAR) AS gamma_source");
-  });
-
   it("durably appends manifest lines in order", async () => {
     const dir = await mkdtemp(join(tmpdir(), "tb-backfill-manifest-"));
     const manifestPath = join(dir, "manifest.ndjson");
@@ -375,42 +360,69 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
     }
   });
 
-  it("round-trips rewritten temp parquet with date preserved as VARCHAR", async () => {
+  it("preserves source Parquet types and narrows only provider updates", async () => {
     const dir = await mkdtemp(join(tmpdir(), "tb-backfill-parquet-"));
+    const sourcePath = join(dir, "source.parquet");
     const parquetPath = join(dir, "rewrite.parquet");
     const db = await DuckDBInstance.create(":memory:");
     const conn = await db.connect();
+    const provider = {
+      delta: 0.512345678901234,
+      gamma: 0.456789123,
+      theta: -0.123456789123,
+      vega: 1.234567891234,
+      iv: 0.234567891234,
+      rate_value: 0.0523456789,
+    };
+
     try {
       await conn.run(`
-        CREATE TABLE existing_quote_minutes (
+        CREATE TABLE source_quote_minutes (
           underlying VARCHAR, date DATE, ticker VARCHAR, time VARCHAR,
-          bid DOUBLE, ask DOUBLE, mid DOUBLE, last_updated_ns BIGINT, source VARCHAR,
-          delta REAL, gamma REAL, theta REAL, vega REAL, iv REAL,
-          greeks_source VARCHAR, greeks_revision INTEGER,
-          rate_type VARCHAR, rate_value DOUBLE, gamma_source VARCHAR
+          bid REAL, ask DOUBLE, mid REAL, last_updated_ns BIGINT, source VARCHAR,
+          delta DOUBLE, gamma REAL, theta DOUBLE, vega FLOAT, iv DOUBLE,
+          greeks_source VARCHAR, greeks_revision SMALLINT,
+          rate_type VARCHAR, rate_value REAL, gamma_source VARCHAR,
+          residual_metric DECIMAL(9, 4)
         )
+      `);
+      await conn.run(`
+        INSERT INTO source_quote_minutes VALUES
+        (
+          'SPX', DATE '2024-07-15', 'SPXW240715C05000000', '09:30',
+          1.0, 1.2, 1.1, 101, 'nbbo',
+          0.123456789123, NULL, -0.123456789123, NULL, NULL,
+          NULL, NULL, NULL, NULL, NULL, 123.4567
+        ),
+        (
+          'SPX', DATE '2024-07-15', 'SPXW240715C05000000', '10:14',
+          1.3, 1.5, 1.4, 202, 'nbbo',
+          0.987654321987, -0.456789, NULL, 0.000000076543, NULL,
+          'computed', 3, 'sofr', 0.04567, 'local', 765.4321
+        )
+      `);
+      await conn.run(`
+        COPY source_quote_minutes
+        TO '${sourcePath.replace(/'/g, "''")}' (FORMAT PARQUET)
+      `);
+      await conn.run(`
+        CREATE TABLE existing_quote_minutes AS
+        SELECT * FROM read_parquet('${sourcePath.replace(/'/g, "''")}')
       `);
       await conn.run(`
         CREATE TABLE provider_greeks_dedup (
           ticker VARCHAR, time VARCHAR,
-          delta REAL, gamma REAL, theta REAL, vega REAL, iv REAL,
+          delta DOUBLE, gamma DOUBLE, theta DOUBLE, vega DOUBLE, iv DOUBLE,
           greeks_source VARCHAR, greeks_revision INTEGER,
           rate_type VARCHAR, rate_value DOUBLE, gamma_source VARCHAR
         )
       `);
       await conn.run(`
-        INSERT INTO existing_quote_minutes VALUES (
-          'SPX', DATE '2024-07-15', 'SPX240715C05000000', '09:30',
-          1.0, 1.2, 1.1, NULL, 'nbbo',
-          NULL, NULL, NULL, NULL, NULL,
-          NULL, NULL, NULL, NULL, NULL
-        )
-      `);
-      await conn.run(`
         INSERT INTO provider_greeks_dedup VALUES (
-          'SPX240715C05000000', '09:30',
-          0.5, 0.01, -0.1, 1.1, 0.2,
-          'thetadata', 2, 'sofr', 0.052, 'computed_sofr_q0'
+          'SPXW240715C05000000', '09:30',
+          ${provider.delta}, ${provider.gamma}, ${provider.theta},
+          ${provider.vega}, ${provider.iv},
+          'thetadata', 2, 'sofr', ${provider.rate_value}, 'provider'
         )
       `);
       await conn.run(`
@@ -422,17 +434,52 @@ describe("ThetaData MDDS backfill manifest helpers", () => {
         ) TO '${parquetPath.replace(/'/g, "''")}' (FORMAT PARQUET)
       `);
 
-      const reader = await conn.runAndReadAll(
+      const sourceSchema = await conn.runAndReadAll(
+        `DESCRIBE SELECT * FROM read_parquet('${sourcePath.replace(/'/g, "''")}')`,
+      );
+      const rewrittenSchema = await conn.runAndReadAll(
         `DESCRIBE SELECT * FROM read_parquet('${parquetPath.replace(/'/g, "''")}')`,
       );
-      const columnTypes = new Map(reader.getRows().map((row) => [String(row[0]), String(row[1])]));
-      expect(columnTypes.get("underlying")).toBe("VARCHAR");
-      expect(columnTypes.get("date")).toBe("VARCHAR");
-      expect(columnTypes.get("ticker")).toBe("VARCHAR");
-      expect(columnTypes.get("time")).toBe("VARCHAR");
-      expect(columnTypes.get("greeks_source")).toBe("VARCHAR");
-      expect(columnTypes.get("rate_type")).toBe("VARCHAR");
-      expect(columnTypes.get("gamma_source")).toBe("VARCHAR");
+      const sourceTypes = sourceSchema.getRows().map((row) => [String(row[0]), String(row[1])]);
+      const rewrittenTypes = rewrittenSchema
+        .getRows()
+        .map((row) => [String(row[0]), String(row[1])]);
+      expect(rewrittenTypes).toEqual(sourceTypes);
+      expect(Object.fromEntries(rewrittenTypes)).toMatchObject({
+        date: "DATE",
+        bid: "FLOAT",
+        delta: "DOUBLE",
+        gamma: "FLOAT",
+        theta: "DOUBLE",
+        vega: "FLOAT",
+        iv: "DOUBLE",
+        greeks_revision: "SMALLINT",
+        rate_value: "FLOAT",
+        residual_metric: "DECIMAL(9,4)",
+      });
+
+      const sourceRows = await conn.runAndReadAll(
+        `SELECT * FROM read_parquet('${sourcePath.replace(/'/g, "''")}') ORDER BY time`,
+      );
+      const rewrittenRows = await conn.runAndReadAll(
+        `SELECT * FROM read_parquet('${parquetPath.replace(/'/g, "''")}') ORDER BY time`,
+      );
+      const before = sourceRows.getRowObjects();
+      const after = rewrittenRows.getRowObjects();
+      expect(after).toHaveLength(before.length);
+      expect(after[1]).toEqual(before[1]);
+      expect(after[0]).toMatchObject({
+        delta: provider.delta,
+        gamma: Math.fround(provider.gamma),
+        theta: provider.theta,
+        vega: Math.fround(provider.vega),
+        iv: provider.iv,
+        greeks_source: "thetadata",
+        greeks_revision: 2,
+        rate_type: "sofr",
+        rate_value: Math.fround(provider.rate_value),
+        gamma_source: "provider",
+      });
     } finally {
       conn.closeSync();
       db.closeSync();

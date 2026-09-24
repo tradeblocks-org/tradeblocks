@@ -282,26 +282,18 @@ export function backfillRewriteSelectSql(input: BackfillRewriteSelectInput): str
   const existingTable = validateSqlIdentifier(input.existingTable);
   const providerGreeksTable = validateSqlIdentifier(input.providerGreeksTable);
   return `
-    SELECT
-      CAST(e.underlying AS VARCHAR) AS underlying,
-      CAST(e.date AS VARCHAR) AS date,
-      CAST(e.ticker AS VARCHAR) AS ticker,
-      CAST(e.time AS VARCHAR) AS time,
-      CAST(e.bid AS DOUBLE) AS bid,
-      CAST(e.ask AS DOUBLE) AS ask,
-      CAST(e.mid AS DOUBLE) AS mid,
-      CAST(e.last_updated_ns AS BIGINT) AS last_updated_ns,
-      CAST(e.source AS VARCHAR) AS source,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.delta ELSE e.delta END AS REAL) AS delta,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.gamma ELSE e.gamma END AS REAL) AS gamma,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.theta ELSE e.theta END AS REAL) AS theta,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.vega ELSE e.vega END AS REAL) AS vega,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.iv ELSE e.iv END AS REAL) AS iv,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.greeks_source ELSE e.greeks_source END AS VARCHAR) AS greeks_source,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.greeks_revision ELSE e.greeks_revision END AS INTEGER) AS greeks_revision,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.rate_type ELSE e.rate_type END AS VARCHAR) AS rate_type,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.rate_value ELSE e.rate_value END AS DOUBLE) AS rate_value,
-      CAST(CASE WHEN g.greeks_source = 'thetadata' THEN g.gamma_source ELSE e.gamma_source END AS VARCHAR) AS gamma_source
+    SELECT e.* REPLACE (
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.delta ELSE e.delta END, e.delta) AS delta,
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.gamma ELSE e.gamma END, e.gamma) AS gamma,
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.theta ELSE e.theta END, e.theta) AS theta,
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.vega ELSE e.vega END, e.vega) AS vega,
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.iv ELSE e.iv END, e.iv) AS iv,
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.greeks_source ELSE e.greeks_source END, e.greeks_source) AS greeks_source,
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.greeks_revision ELSE e.greeks_revision END, e.greeks_revision) AS greeks_revision,
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.rate_type ELSE e.rate_type END, e.rate_type) AS rate_type,
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.rate_value ELSE e.rate_value END, e.rate_value) AS rate_value,
+      cast_to_type(CASE WHEN g.greeks_source = 'thetadata' THEN g.gamma_source ELSE e.gamma_source END, e.gamma_source) AS gamma_source
+    )
     FROM ${existingTable} e
     LEFT JOIN ${providerGreeksTable} g
       ON e.ticker = g.ticker
