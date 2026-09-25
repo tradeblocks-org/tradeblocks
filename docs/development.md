@@ -61,6 +61,31 @@ This document explains how TradeBlocks is structured and how to work effectively
 - `packages/lib/processing/trade-processor.ts` & `daily-log-processor.ts` – Convert raw CSV strings into typed models, handling alias headers and data validation (`packages/lib/models/validators.ts`).
 - `packages/lib/utils/date.ts`, `packages/lib/utils/number.ts` – Reusable formatting helpers.
 
+#### Realized trade calculations
+
+`@tradeblocks/lib` exports the realized-trade calculations in
+`packages/lib/calculations/realized-performance.ts`. The public names ending in
+`ByCloseDate` group by `dateClosed` (falling back to `dateOpened` for unclosed
+rows), unlike the opening-date cohorts of `segmentByPeriod`. The MCP performance
+charts and period-returns tool use these same functions. The monthly dollar
+matrix fills all months in represented years with zero; the monthly percentage
+matrix compounds closed P/L against reconstructed starting capital (and uses
+$100,000 if that capital cannot be derived). Neither is a marked account return.
+`buildRealizedPeriodReturnsByCloseDate(trades, period)` returns sorted daily,
+weekly or monthly buckets and totals, with reported, gross, commissions and
+basis-aware net P/L kept separate. The weekly key retains the calendar year
+of the close date and its ISO week number. The drawdown-attribution export uses
+reported trade P/L, whereas the realized equity curve uses fee-aware net P/L;
+these existing views should not be conflated with marked-account drawdown.
+
+The same public entrypoint exports `STRESS_SCENARIOS` and
+`buildRealizedStressScenarios`, which scores the supplied historical or custom
+intervals from trades closed within each interval (with opening-date fallback).
+`buildRealizedStrategySimilarity` combines the existing correlation and tail
+calculations with **entry-day** overlap; its pairs are trade-based, not
+simultaneous marked-account losses. Neither result models intratrade exposure
+or market prices.
+
 ### UI Components
 
 - `components/ui/` – shadcn/ui primitives configured with Tailwind CSS.

@@ -98,7 +98,10 @@ export {
   type ScaledTrade,
 } from "./tools/blocks/similarity.ts";
 export { calculatePeakExposure, rebuildSubsetEquity } from "./tools/blocks/core.ts";
-export { buildEquityCurve, buildMonthlyReturns } from "./tools/performance.ts";
+export {
+  buildRealizedEquityCurveByCloseDate as buildEquityCurve,
+  buildRealizedMonthlyReturnsByCloseDate as buildMonthlyReturns,
+} from "@tradeblocks/lib";
 
 // Export field timing utilities for testing
 export {

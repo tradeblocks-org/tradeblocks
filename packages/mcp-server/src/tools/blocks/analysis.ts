@@ -13,14 +13,15 @@ import {
   formatPercent,
   formatRatio,
 } from "../../utils/output-formatter.ts";
-import { PortfolioStatsCalculator, rebuildEquityCurve } from "@tradeblocks/lib";
-import type { Trade } from "@tradeblocks/lib";
 import {
-  filterByStrategy,
-  filterByRealizationDateRange,
-  realizationDateBounds,
-} from "../shared/filters.ts";
-import { STRESS_SCENARIOS } from "./stress-scenarios.ts";
+  PortfolioStatsCalculator,
+  rebuildEquityCurve,
+  buildRealizedDrawdownAttributionByCloseDate,
+  STRESS_SCENARIOS,
+  buildRealizedStressScenarios,
+} from "@tradeblocks/lib";
+import type { Trade } from "@tradeblocks/lib";
+import { filterByStrategy, realizationDateBounds } from "../shared/filters.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 
 /**
@@ -145,107 +146,20 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           }
         }
 
-        // Calculate stats for each scenario
-        type ScenarioStats = {
-          netPl: number;
-          winRate: number;
-          maxDrawdown: number;
-          profitFactor: number | null;
-          avgWin: number | null;
-          avgLoss: number | null;
-        };
-        const scenarioResults: Array<{
-          name: string;
-          description: string;
-          dateRange: { start: string; end: string };
-          tradeCount: number;
-          stats: ScenarioStats | null;
-          isCustom: boolean;
-          noCoverage?: boolean;
-        }> = [];
-
-        let worstScenario: { name: string; netPl: number } | null = null;
-        let bestScenario: { name: string; netPl: number } | null = null;
-        let scenariosWithTrades = 0;
-        let scenariosSkipped = 0;
-        const skippedScenarioNames: string[] = [];
-
-        for (const scenario of scenariosToRun) {
-          // Filter trades to scenario date range
-          const scenarioTrades = filterByRealizationDateRange(
-            trades,
-            scenario.startDate,
-            scenario.endDate,
-          );
-
-          if (scenarioTrades.length === 0) {
-            // Genuine coverage gap (had date overlap but zero trades)
-            scenariosSkipped++;
-            skippedScenarioNames.push(scenario.name);
-            if (includeEmpty) {
-              scenarioResults.push({
-                name: scenario.name,
-                description: scenario.description,
-                dateRange: { start: scenario.startDate, end: scenario.endDate },
-                tradeCount: 0,
-                stats: null,
-                isCustom: scenario.isCustom,
-                noCoverage: true,
-              });
-            }
-          } else {
-            // Calculate trade-based stats (no daily logs per constraining decision)
-            const stats = calculator.calculatePortfolioStats(
-              scenarioTrades,
-              undefined, // No daily logs
-              true, // Force trade-based calculations
-            );
-
-            scenarioResults.push({
-              name: scenario.name,
-              description: scenario.description,
-              dateRange: { start: scenario.startDate, end: scenario.endDate },
-              tradeCount: scenarioTrades.length,
-              stats: {
-                netPl: stats.netPl,
-                winRate: stats.winRate,
-                maxDrawdown: stats.maxDrawdown,
-                profitFactor: stats.profitFactor,
-                avgWin: stats.avgWin,
-                avgLoss: stats.avgLoss,
-              },
-              isCustom: scenario.isCustom,
-            });
-
-            scenariosWithTrades++;
-
-            // Track best/worst scenarios
-            if (worstScenario === null || stats.netPl < worstScenario.netPl) {
-              worstScenario = { name: scenario.name, netPl: stats.netPl };
-            }
-            if (bestScenario === null || stats.netPl > bestScenario.netPl) {
-              bestScenario = { name: scenario.name, netPl: stats.netPl };
-            }
-          }
-        }
-
-        // Build summary
-        const summaryData = {
-          totalScenariosTested: scenariosToRun.length,
+        const {
+          scenarioResults,
+          summaryData,
+          worstScenario,
+          bestScenario,
           scenariosWithTrades,
           scenariosSkipped,
-          ...(skippedScenarioNames.length > 0 ? { skippedScenarios: skippedScenarioNames } : {}),
-          ...(preFilteredScenarioNames.length > 0
-            ? { preFilteredScenarios: preFilteredScenarioNames }
-            : {}),
-          worstScenario: worstScenario?.name ?? null,
-          bestScenario: bestScenario?.name ?? null,
-          portfolioDateRange: {
-            start: portfolioStartDate,
-            end: portfolioEndDate,
-          },
-        };
-
+        } = buildRealizedStressScenarios(
+          trades,
+          scenariosToRun,
+          includeEmpty,
+          preFilteredScenarioNames,
+          { start: portfolioStartDate, end: portfolioEndDate },
+        );
         // Brief summary for user display
         const skippedNote =
           scenariosSkipped > 0 ? ` (${scenariosSkipped} skipped - no data coverage)` : "";
@@ -318,74 +232,8 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           };
         }
 
-        // Sort trades by close date/time for equity curve
-        const sortedTrades = [...trades].sort((a, b) => {
-          const dateA = new Date(a.dateClosed ?? a.dateOpened);
-          const dateB = new Date(b.dateClosed ?? b.dateOpened);
-          if (dateA.getTime() !== dateB.getTime()) {
-            return dateA.getTime() - dateB.getTime();
-          }
-          // Secondary sort by close time if dates equal
-          const timeA = a.timeClosed ?? a.timeOpened ?? "";
-          const timeB = b.timeClosed ?? b.timeOpened ?? "";
-          return timeA.localeCompare(timeB);
-        });
-
-        // Build equity curve from trades
-        // Initial capital = first trade's fundsAtClose - pl
-        const firstTrade = sortedTrades[0];
-        const initialCapital = (firstTrade.fundsAtClose ?? 10000) - firstTrade.pl;
-
-        // Track peak equity and drawdown
-        let equity = initialCapital;
-        let peakEquity = initialCapital;
-        let peakDate: Date = new Date(firstTrade.dateClosed ?? firstTrade.dateOpened);
-        let maxDrawdown = 0;
-        let maxDrawdownPct = 0;
-        let troughDate: Date | null = null;
-        let drawdownPeakDate: Date | null = null;
-
-        // Track equity at each trade close
-        interface EquityPoint {
-          date: Date;
-          equity: number;
-          drawdownPct: number;
-          trade: Trade;
-        }
-        const equityPoints: EquityPoint[] = [];
-
-        for (const trade of sortedTrades) {
-          equity += trade.pl;
-          const closeDate = new Date(trade.dateClosed ?? trade.dateOpened);
-
-          // Update peak if new high
-          if (equity > peakEquity) {
-            peakEquity = equity;
-            peakDate = closeDate;
-          }
-
-          // Calculate current drawdown from peak
-          const drawdown = peakEquity - equity;
-          const drawdownPct = peakEquity > 0 ? (drawdown / peakEquity) * 100 : 0;
-
-          equityPoints.push({
-            date: closeDate,
-            equity,
-            drawdownPct,
-            trade,
-          });
-
-          // Track max drawdown
-          if (drawdown > maxDrawdown) {
-            maxDrawdown = drawdown;
-            maxDrawdownPct = drawdownPct;
-            troughDate = closeDate;
-            drawdownPeakDate = peakDate;
-          }
-        }
-
-        // Handle edge case: no drawdown (always at peak or single trade)
-        if (maxDrawdown <= 0 || !troughDate || !drawdownPeakDate) {
+        const result = buildRealizedDrawdownAttributionByCloseDate(trades, topN);
+        if (!result) {
           const summary = `Drawdown Attribution: ${blockId}${strategy ? ` (${strategy})` : ""} | No drawdown detected (equity never declined from peak)`;
 
           const structuredData = {
@@ -399,62 +247,7 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           return createToolOutput(summary, structuredData);
         }
 
-        // Filter trades to the drawdown period (closed between peak and trough)
-        const drawdownTrades = sortedTrades.filter((trade) => {
-          const closeDate = new Date(trade.dateClosed ?? trade.dateOpened);
-          return closeDate >= drawdownPeakDate! && closeDate <= troughDate!;
-        });
-
-        // Group trades by strategy and calculate attribution
-        const strategyPl = new Map<
-          string,
-          { pl: number; trades: number; wins: number; losses: number }
-        >();
-
-        let totalLossDuringDrawdown = 0;
-
-        for (const trade of drawdownTrades) {
-          const existing = strategyPl.get(trade.strategy) ?? {
-            pl: 0,
-            trades: 0,
-            wins: 0,
-            losses: 0,
-          };
-          existing.pl += trade.pl;
-          existing.trades += 1;
-          if (trade.pl > 0) existing.wins += 1;
-          else if (trade.pl < 0) existing.losses += 1;
-          strategyPl.set(trade.strategy, existing);
-
-          // Track total P/L during drawdown period
-          totalLossDuringDrawdown += trade.pl;
-        }
-
-        // Calculate contribution percentages and sort by P/L (most negative first)
-        // Contribution %: strategy's P/L as % of total loss (most negative = highest contribution)
-        const attribution = Array.from(strategyPl.entries())
-          .map(([strategyName, data]) => ({
-            strategy: strategyName,
-            pl: data.pl,
-            trades: data.trades,
-            wins: data.wins,
-            losses: data.losses,
-            contributionPct:
-              totalLossDuringDrawdown !== 0
-                ? Math.abs((data.pl / totalLossDuringDrawdown) * 100)
-                : 0,
-          }))
-          .sort((a, b) => a.pl - b.pl)
-          .slice(0, topN);
-
-        // Calculate duration in days
-        const durationMs = troughDate.getTime() - drawdownPeakDate.getTime();
-        const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
-
-        // Format dates
-        const formatDate = (d: Date) => d.toISOString().split("T")[0];
-        const peakDateStr = formatDate(drawdownPeakDate);
-        const troughDateStr = formatDate(troughDate);
+        const { maxDrawdownPct, peakDateStr, troughDateStr, attribution } = result;
 
         // Build summary
         const topContributor = attribution[0];
@@ -464,19 +257,8 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
         const structuredData = {
           blockId,
           filters: { strategy: strategy ?? null, topN },
-          drawdownPeriod: {
-            peakDate: peakDateStr,
-            troughDate: troughDateStr,
-            peakEquity: peakEquity,
-            troughEquity: peakEquity - maxDrawdown,
-            maxDrawdown: maxDrawdown,
-            maxDrawdownPct: maxDrawdownPct,
-            durationDays: durationDays,
-          },
-          periodStats: {
-            totalTrades: drawdownTrades.length,
-            totalPl: totalLossDuringDrawdown,
-          },
+          drawdownPeriod: result.drawdownPeriod,
+          periodStats: result.periodStats,
           attribution,
         };
 

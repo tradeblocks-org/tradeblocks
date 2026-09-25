@@ -10,8 +10,7 @@ import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput, formatPercent, formatRatio } from "../../utils/output-formatter.ts";
 import {
   PortfolioStatsCalculator,
-  calculateCorrelationMatrix,
-  performTailRiskAnalysis,
+  buildRealizedStrategySimilarity,
   getNetPl,
   rebuildEquityCurve,
 } from "@tradeblocks/lib";
@@ -197,160 +196,19 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
             };
           }
 
-          // Calculate correlation matrix using existing utility
-          const correlationMatrix = calculateCorrelationMatrix(trades, {
-            method: corrMethod,
-            normalization: "raw",
-            dateBasis: "opened",
-            alignment: "shared",
-          });
-
-          // Calculate tail risk using existing utility
-          const tailRisk = performTailRiskAnalysis(trades, {
-            normalization: "raw",
-            dateBasis: "opened",
-            minTradingDays: minDays,
-          });
-
-          // Calculate overlap scores: count shared trading days / total unique days
-          // Group trades by strategy and date
-          const strategyDates: Record<string, Set<string>> = {};
-          for (const trade of trades) {
-            if (!trade.strategy || !trade.dateOpened) continue;
-            if (!strategyDates[trade.strategy]) {
-              strategyDates[trade.strategy] = new Set();
-            }
-            // Extract date key from dateOpened
-            const dateKey = trade.dateOpened.toISOString().split("T")[0];
-            strategyDates[trade.strategy].add(dateKey);
-          }
-
-          // Build similarity pairs
-          interface SimilarPair {
-            strategyA: string;
-            strategyB: string;
-            correlation: number | null;
-            tailDependence: number | null;
-            overlapScore: number;
-            compositeSimilarity: number | null;
-            sharedTradingDays: number;
-            flags: {
-              isHighCorrelation: boolean;
-              isHighTailDependence: boolean;
-              isRedundant: boolean;
-            };
-          }
-
-          const pairs: SimilarPair[] = [];
-          let redundantPairs = 0;
-          let highCorrelationPairs = 0;
-          let highTailDependencePairs = 0;
-
-          // Iterate over unique strategy pairs (i < j)
-          for (let i = 0; i < strategies.length; i++) {
-            for (let j = i + 1; j < strategies.length; j++) {
-              const strategyA = strategies[i];
-              const strategyB = strategies[j];
-
-              // Get correlation from matrix
-              const idxA = correlationMatrix.strategies.indexOf(strategyA);
-              const idxB = correlationMatrix.strategies.indexOf(strategyB);
-              const correlation =
-                idxA >= 0 && idxB >= 0 && correlationMatrix.correlationData[idxA]
-                  ? correlationMatrix.correlationData[idxA][idxB]
-                  : null;
-              const sharedDaysFromCorr =
-                idxA >= 0 && idxB >= 0 && correlationMatrix.sampleSizes[idxA]
-                  ? correlationMatrix.sampleSizes[idxA][idxB]
-                  : 0;
-
-              // Get tail dependence from jointTailRiskMatrix
-              const tailIdxA = tailRisk.strategies.indexOf(strategyA);
-              const tailIdxB = tailRisk.strategies.indexOf(strategyB);
-              let tailDependence: number | null = null;
-              if (
-                tailIdxA >= 0 &&
-                tailIdxB >= 0 &&
-                tailRisk.jointTailRiskMatrix[tailIdxA] &&
-                tailRisk.jointTailRiskMatrix[tailIdxB]
-              ) {
-                // Average both directions since matrix can be asymmetric
-                const valAB = tailRisk.jointTailRiskMatrix[tailIdxA][tailIdxB];
-                const valBA = tailRisk.jointTailRiskMatrix[tailIdxB][tailIdxA];
-                if (!Number.isNaN(valAB) && !Number.isNaN(valBA)) {
-                  tailDependence = (valAB + valBA) / 2;
-                }
-              }
-
-              // Calculate overlap score
-              const datesA = strategyDates[strategyA] || new Set();
-              const datesB = strategyDates[strategyB] || new Set();
-              const allDates = new Set([...datesA, ...datesB]);
-              const sharedDates = [...datesA].filter((d) => datesB.has(d)).length;
-              const overlapScore = allDates.size > 0 ? sharedDates / allDates.size : 0;
-
-              // Use sharedDaysFromCorr or calculate from overlap
-              const sharedTradingDays = sharedDaysFromCorr > 0 ? sharedDaysFromCorr : sharedDates;
-
-              // Calculate composite similarity score (weighted average)
-              // 50% correlation (absolute value), 30% tail dependence, 20% overlap score
-              let compositeSimilarity: number | null = null;
-              if (correlation !== null && !Number.isNaN(correlation)) {
-                const corrComponent = Math.abs(correlation) * 0.5;
-                const tailComponent = (tailDependence !== null ? tailDependence : 0) * 0.3;
-                const overlapComponent = overlapScore * 0.2;
-                compositeSimilarity = corrComponent + tailComponent + overlapComponent;
-              }
-
-              // Determine flags
-              const isHighCorrelation =
-                correlation !== null &&
-                !Number.isNaN(correlation) &&
-                Math.abs(correlation) >= corrThreshold;
-              const isHighTailDependence =
-                tailDependence !== null && tailDependence >= tailThreshold;
-              const isRedundant = isHighCorrelation && isHighTailDependence;
-
-              // Only include pairs that meet minDays requirement
-              if (sharedTradingDays >= minDays) {
-                // Update counters (only for included pairs)
-                if (isHighCorrelation) highCorrelationPairs++;
-                if (isHighTailDependence) highTailDependencePairs++;
-                if (isRedundant) redundantPairs++;
-
-                pairs.push({
-                  strategyA,
-                  strategyB,
-                  correlation:
-                    correlation !== null && !Number.isNaN(correlation) ? correlation : null,
-                  tailDependence,
-                  overlapScore,
-                  compositeSimilarity,
-                  sharedTradingDays,
-                  flags: {
-                    isHighCorrelation,
-                    isHighTailDependence,
-                    isRedundant,
-                  },
-                });
-              }
-            }
-          }
-
-          // Sort by composite similarity (highest first), handling nulls
-          pairs.sort((a, b) => {
-            if (a.compositeSimilarity === null && b.compositeSimilarity === null) return 0;
-            if (a.compositeSimilarity === null) return 1;
-            if (b.compositeSimilarity === null) return -1;
-            return b.compositeSimilarity - a.compositeSimilarity;
-          });
-
-          // Apply limit
-          const topPairs = pairs.slice(0, limit);
-
+          const { strategySummary, similarPairs: topPairs } = buildRealizedStrategySimilarity(
+            trades,
+            {
+              correlationThreshold: corrThreshold,
+              tailDependenceThreshold: tailThreshold,
+              method: corrMethod,
+              minSharedDays: minDays,
+              topN: limit,
+            },
+          );
           // Build summary line
           const mostSimilar = topPairs[0];
-          const summary = `Strategy Similarity: ${blockId} | ${strategies.length} strategies | ${redundantPairs} redundant pairs | Most similar: ${mostSimilar ? `${mostSimilar.strategyA}-${mostSimilar.strategyB} (${mostSimilar.compositeSimilarity?.toFixed(2) ?? "N/A"})` : "N/A"}`;
+          const summary = `Strategy Similarity: ${blockId} | ${strategies.length} strategies | ${strategySummary.redundantPairs} redundant pairs | Most similar: ${mostSimilar ? `${mostSimilar.strategyA}-${mostSimilar.strategyB} (${mostSimilar.compositeSimilarity?.toFixed(2) ?? "N/A"})` : "N/A"}`;
 
           // Build structured data
           const structuredData = {
@@ -362,13 +220,7 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
               minSharedDays: minDays,
               topN: limit,
             },
-            strategySummary: {
-              totalStrategies: strategies.length,
-              totalPairs: (strategies.length * (strategies.length - 1)) / 2,
-              redundantPairs,
-              highCorrelationPairs,
-              highTailDependencePairs,
-            },
+            strategySummary,
             similarPairs: topPairs,
           };
 
