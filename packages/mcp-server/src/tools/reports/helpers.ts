@@ -5,7 +5,12 @@
  * Inline implementations (can't import enrichTrades due to browser deps).
  */
 
-import { getNetPl, type Trade, type FilterOperator } from "@tradeblocks/lib";
+import {
+  getNetPl,
+  getNumericTradeFieldValue,
+  type Trade,
+  type FilterOperator,
+} from "@tradeblocks/lib";
 
 /**
  * Simplified enriched trade interface for MCP server
@@ -192,39 +197,7 @@ export function enrichTrades(trades: Trade[]): EnrichedTrade[] {
  * Returns null if the field doesn't exist or has no value
  */
 export function getTradeFieldValue(trade: EnrichedTrade, field: string): number | null {
-  // Guard against undefined or non-string field
-  if (typeof field !== "string") {
-    return null;
-  }
-
-  let value: unknown;
-
-  // Handle custom trade fields (custom.fieldName)
-  if (field.startsWith("custom.")) {
-    const customFieldName = field.slice(7);
-    value = trade.customFields?.[customFieldName];
-  }
-  // Handle daily custom fields (daily.fieldName)
-  else if (field.startsWith("daily.")) {
-    const dailyFieldName = field.slice(6);
-    value = trade.dailyCustomFields?.[dailyFieldName];
-  }
-  // Handle static dataset fields (datasetName.column)
-  else if (field.includes(".")) {
-    const dotIndex = field.indexOf(".");
-    const datasetName = field.substring(0, dotIndex);
-    const columnName = field.substring(dotIndex + 1);
-    value = trade.staticDatasetFields?.[datasetName]?.[columnName];
-  }
-  // Handle standard fields
-  else {
-    value = (trade as unknown as Record<string, unknown>)[field];
-  }
-
-  if (typeof value === "number" && isFinite(value)) {
-    return value;
-  }
-  return null;
+  return getNumericTradeFieldValue(trade, field);
 }
 
 /**

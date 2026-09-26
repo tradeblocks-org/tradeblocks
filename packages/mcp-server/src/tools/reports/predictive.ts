@@ -8,9 +8,9 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
-import { REPORT_FIELDS, pearsonCorrelation } from "@tradeblocks/lib";
+import { rankPredictiveTradeFields } from "@tradeblocks/lib";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
-import { enrichTrades, getTradeFieldValue, percentile, type EnrichedTrade } from "./helpers.ts";
+import { enrichTrades, getTradeFieldValue, percentile } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
@@ -95,127 +95,17 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           // Enrich trades
           const enrichedTrades = enrichTrades(trades);
 
-          // Build list of fields to analyze
-          const fieldsToAnalyze: Array<{ field: string; label: string }> = [];
-
-          // Add static fields from REPORT_FIELDS (excluding target field)
-          for (const fieldInfo of REPORT_FIELDS) {
-            // Skip if field info is invalid or matches target
-            if (!fieldInfo || !fieldInfo.field) {
-              continue;
-            }
-            if (fieldInfo.field !== targetField) {
-              fieldsToAnalyze.push({
-                field: fieldInfo.field,
-                label: fieldInfo.label,
-              });
-            }
-          }
-
-          // Add custom fields if requested
-          if (includeCustomFields) {
-            const customFieldNames = new Set<string>();
-            for (const trade of enrichedTrades) {
-              if (trade.customFields) {
-                for (const key of Object.keys(trade.customFields)) {
-                  customFieldNames.add(key);
-                }
-              }
-            }
-
-            for (const fieldName of customFieldNames) {
-              const fullFieldName = `custom.${fieldName}`;
-              if (fullFieldName !== targetField) {
-                fieldsToAnalyze.push({
-                  field: fullFieldName,
-                  label: `Custom: ${fieldName}`,
-                });
-              }
-            }
-          }
-
-          // Calculate correlations
-          interface FieldCorrelationResult {
-            field: string;
-            label: string;
-            correlation: number;
-            absCorrelation: number;
-            sampleSize: number;
-            direction: "positive" | "negative";
-          }
-
-          interface SkippedField {
-            field: string;
-            label: string;
-            reason: "insufficient_samples" | "no_variance";
-            sampleSize: number;
-          }
-
-          const rankedFields: FieldCorrelationResult[] = [];
-          const skippedFields: SkippedField[] = [];
-
-          for (const { field, label } of fieldsToAnalyze) {
-            // Extract (fieldValue, targetValue) pairs where both are valid
-            const pairs: Array<{ x: number; y: number }> = [];
-
-            for (const trade of enrichedTrades) {
-              const fieldValue = getTradeFieldValue(trade, field);
-              const targetValue = getTradeFieldValue(trade, targetField);
-
-              if (fieldValue !== null && targetValue !== null) {
-                pairs.push({ x: fieldValue, y: targetValue });
-              }
-            }
-
-            // Check minimum sample size
-            if (pairs.length < minSamples) {
-              skippedFields.push({
-                field,
-                label,
-                reason: "insufficient_samples",
-                sampleSize: pairs.length,
-              });
-              continue;
-            }
-
-            // Extract arrays for correlation
-            const xValues = pairs.map((p) => p.x);
-            const yValues = pairs.map((p) => p.y);
-
-            // Check for variance (pearsonCorrelation returns 0 if no variance)
-            const xMin = Math.min(...xValues);
-            const xMax = Math.max(...xValues);
-            if (xMin === xMax) {
-              skippedFields.push({
-                field,
-                label,
-                reason: "no_variance",
-                sampleSize: pairs.length,
-              });
-              continue;
-            }
-
-            // Calculate Pearson correlation
-            const correlation = pearsonCorrelation(xValues, yValues);
-            const absCorrelation = Math.abs(correlation);
-
-            rankedFields.push({
-              field,
-              label,
-              correlation: Math.round(correlation * 10000) / 10000, // Round to 4 decimal places
-              absCorrelation: Math.round(absCorrelation * 10000) / 10000,
-              sampleSize: pairs.length,
-              direction: correlation >= 0 ? "positive" : "negative",
-            });
-          }
-
-          // Sort by absolute correlation (descending)
-          rankedFields.sort((a, b) => b.absCorrelation - a.absCorrelation);
-
-          // Build summary
-          const fieldsWithData = rankedFields.length;
-          const totalAnalyzed = fieldsToAnalyze.length;
-
+          const {
+            totalFieldsAnalyzed: totalAnalyzed,
+            fieldsWithSufficientData: fieldsWithData,
+            rankedFields,
+            fieldsSkipped: skippedFields,
+          } = rankPredictiveTradeFields(
+            enrichedTrades,
+            targetField,
+            minSamples,
+            includeCustomFields,
+          );
           const summary = `Found ${fieldsWithData} predictive fields out of ${totalAnalyzed} analyzed`;
 
           const structuredData: Record<string, unknown> = {

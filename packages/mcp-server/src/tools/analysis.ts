@@ -15,10 +15,8 @@ import {
   formatCurrency,
 } from "../utils/output-formatter.ts";
 import {
-  WalkForwardAnalyzer,
+  singleTapeWalkForwardByTrades,
   ABSOLUTE_SIZING_PERCENTAGE_ERROR,
-  assessResults,
-  getRecommendedParameters,
   runMonteCarloSimulation,
   calculateCorrelationMatrix,
   calculateCorrelationAnalytics,
@@ -36,6 +34,12 @@ import { resolveTradeTicker } from "../utils/ticker.ts";
 function filterByStrategy(trades: Trade[], strategy?: string): Trade[] {
   if (!strategy) return trades;
   return trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
+}
+
+// Preserve the MCP's timestamp-shaped strings without serializing a
+// local-midnight calendar value as an instant (which shifts east-of-UTC days).
+function legacyWindowTimestamp(calendarKey: string): string {
+  return `${calendarKey}T00:00:00.000Z`;
 }
 
 /**
@@ -288,35 +292,7 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           };
         }
 
-        // Calculate date range and window sizes
-        const sortedTrades = [...trades].sort(
-          (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
-        );
-        const firstDate = new Date(sortedTrades[0].dateOpened);
-        const lastDate = new Date(sortedTrades[sortedTrades.length - 1].dateOpened);
-        const totalDays = Math.ceil(
-          (lastDate.getTime() - firstDate.getTime()) / (24 * 60 * 60 * 1000),
-        );
-
-        // Determine window sizes: explicit days override window count calculations
-        let inSampleDays: number;
-        let outOfSampleDays: number;
-        let stepSizeDays: number;
-
-        if (explicitInSampleDays !== undefined && explicitOutOfSampleDays !== undefined) {
-          // Use explicit day values
-          inSampleDays = explicitInSampleDays;
-          outOfSampleDays = explicitOutOfSampleDays;
-          stepSizeDays = explicitStepSizeDays ?? outOfSampleDays;
-        } else {
-          // Calculate from window counts (original behavior)
-          const totalWindows = isWindowCount + oosWindowCount;
-          const daysPerWindow = Math.floor(totalDays / totalWindows);
-          inSampleDays = daysPerWindow * isWindowCount;
-          outOfSampleDays = daysPerWindow * oosWindowCount;
-          stepSizeDays = explicitStepSizeDays ?? daysPerWindow;
-        }
-
+        // Window sizing and the single-tape sweep live in the public calculation module.
         // Build performance floor config if any constraints are set
         const hasPerformanceFloor =
           minSharpeRatio !== undefined || minProfitFactor !== undefined || requirePositiveNetPl;
@@ -346,14 +322,13 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             }
           : undefined;
 
-        // Run walk-forward analysis
-        const analyzer = new WalkForwardAnalyzer();
-        const computation = await analyzer.analyze({
-          trades,
-          config: {
-            inSampleDays,
-            outOfSampleDays,
-            stepSizeDays,
+        const { computation, config, verdict, recommended, periods } =
+          await singleTapeWalkForwardByTrades(trades, {
+            isWindowCount,
+            oosWindowCount,
+            inSampleDays: explicitInSampleDays,
+            outOfSampleDays: explicitOutOfSampleDays,
+            stepSizeDays: explicitStepSizeDays,
             optimizationTarget,
             parameterRanges: (parameterRanges ?? {}) as Record<string, [number, number, number]>,
             minInSampleTrades,
@@ -362,12 +337,9 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             selectedStrategies,
             performanceFloor,
             diversificationConfig,
-          },
-        });
-
+          });
+        const { inSampleDays, outOfSampleDays, stepSizeDays } = config;
         const { results } = computation;
-        const verdict = assessResults(results);
-        const recommended = getRecommendedParameters(results.periods);
 
         // Brief summary for user display
         const summary = `Walk-Forward: ${blockId} | ${results.stats.evaluatedPeriods} periods | WFE: ${formatPercent(results.summary.degradationFactor * 100)} | Verdict: ${verdict.overall}`;
@@ -440,14 +412,12 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             title: verdict.title,
           },
           recommendedParameters: recommended.params,
-          periods: results.periods.map((p) => ({
-            inSampleStart: p.inSampleStart.toISOString(),
-            inSampleEnd: p.inSampleEnd.toISOString(),
-            outOfSampleStart: p.outOfSampleStart.toISOString(),
-            outOfSampleEnd: p.outOfSampleEnd.toISOString(),
-            targetMetricInSample: p.targetMetricInSample,
-            targetMetricOutOfSample: p.targetMetricOutOfSample,
-            diversificationMetrics: p.diversificationMetrics ?? null,
+          periods: periods.map((period) => ({
+            ...period,
+            inSampleStart: legacyWindowTimestamp(period.inSampleStart),
+            inSampleEnd: legacyWindowTimestamp(period.inSampleEnd),
+            outOfSampleStart: legacyWindowTimestamp(period.outOfSampleStart),
+            outOfSampleEnd: legacyWindowTimestamp(period.outOfSampleEnd),
           })),
         };
 

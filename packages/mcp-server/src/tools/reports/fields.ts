@@ -7,17 +7,12 @@
  */
 
 import { z } from "zod";
+import { fieldStatisticsFromValues, getNumericTradeFieldValue } from "@tradeblocks/lib";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
-import {
-  enrichTrades,
-  getTradeFieldValue,
-  percentile,
-  stdDev,
-  generateHistogram,
-} from "./helpers.ts";
+import { enrichTrades } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 
 /**
@@ -74,7 +69,7 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
           // Extract field values
           const values: number[] = [];
           for (const trade of enrichedTrades) {
-            const value = getTradeFieldValue(trade, field);
+            const value = getNumericTradeFieldValue(trade, field);
             if (value !== null) {
               values.push(value);
             }
@@ -91,28 +86,9 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
             };
           }
 
-          // Calculate statistics
-          const sorted = [...values].sort((a, b) => a - b);
-          const min = sorted[0];
-          const max = sorted[sorted.length - 1];
-          const sum = values.reduce((a, b) => a + b, 0);
-          const avg = sum / values.length;
-          const median = percentile(sorted, 50);
-          const standardDev = stdDev(values, avg);
-
-          // Calculate percentiles
-          const percentiles = {
-            p5: percentile(sorted, 5),
-            p10: percentile(sorted, 10),
-            p25: percentile(sorted, 25),
-            p50: median,
-            p75: percentile(sorted, 75),
-            p90: percentile(sorted, 90),
-            p95: percentile(sorted, 95),
-          };
-
-          // Generate histogram
-          const histogram = generateHistogram(values, histogramBuckets);
+          const analysis = fieldStatisticsFromValues(values, histogramBuckets)!;
+          const { statistics, percentiles, histogram } = analysis;
+          const { min, max, avg, median } = statistics;
 
           // Brief summary
           const summary = `Field "${field}": ${values.length} values | Range: ${min.toFixed(2)} to ${max.toFixed(2)} | Avg: ${avg.toFixed(2)} | Median: ${median.toFixed(2)}`;
@@ -125,15 +101,7 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
               startDate: startDate ?? null,
               endDate: endDate ?? null,
             },
-            statistics: {
-              count: values.length,
-              min,
-              max,
-              sum,
-              avg,
-              median,
-              stdDev: standardDev,
-            },
+            statistics,
             percentiles,
             histogram,
           };
