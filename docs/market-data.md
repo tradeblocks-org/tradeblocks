@@ -298,6 +298,22 @@ Composite daily-refresh tool. Calls `fetch_bars` for all specified tickers, then
 
 Use this for routine end-of-day data updates instead of calling `fetch_bars` + `compute_vix_context` separately.
 
+### Local market-data tools
+
+Build the MCP package before running the market-data tools:
+
+```bash
+npm run build:mcp
+```
+
+`node tools/refresh-market-data.mjs --dry-run` prints the planned dates without
+writing data. `node tools/market-data-coverage.mjs --json --lookback 30`
+reports the last 30 trading sessions (exit 0 complete, 1 incomplete, 2 unknown).
+Both tools use `TRADEBLOCKS_DATA_ROOT`, `TRADEBLOCKS_SPOT_TICKERS`, and
+`TRADEBLOCKS_OPTION_UNDERLYINGS`. Coverage reports can be checked with
+`node tools/market-data-coverage.mjs --validate <report.json>`. Missing or stale
+MCP dist fails with a build instruction; the tools never build it themselves.
+
 ### import_flat_file
 
 Import a local Parquet or CSV flat file for a specific ticker and timespan. Useful for bulk loading pre-downloaded data.
