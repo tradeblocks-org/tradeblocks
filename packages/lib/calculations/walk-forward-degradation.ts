@@ -49,6 +49,13 @@ export interface WFDWindow {
   inSampleTradeCount: number;
   outOfSampleTradeCount: number;
 }
+export interface WFDSkippedWindow extends Omit<
+  WFDWindow,
+  "inSampleTradeCount" | "outOfSampleTradeCount"
+> {
+  reason: "truncated_oos_window";
+  detail: string;
+}
 
 export interface WFDMetricSet {
   sharpe: number | null;
@@ -73,6 +80,7 @@ export interface WFDPeriodResult {
 
 export interface WFDResult {
   periods: WFDPeriodResult[];
+  skippedWindows: WFDSkippedWindow[];
   efficiencyTrends: {
     sharpe: TrendResult | null;
     winRate: TrendResult | null;
@@ -161,10 +169,12 @@ function buildDegradationWindows(
   firstTradeDate: Date,
   lastTradeDate: Date,
   config: WFDConfig,
+  skippedWindows: WFDSkippedWindow[],
 ): WFDWindow[] {
   const windows: WFDWindow[] = [];
   const firstMs = floorToLocalDate(firstTradeDate).getTime();
   const lastMs = floorToLocalDate(lastTradeDate).getTime();
+  const lastKey = formatLocalDate(lastTradeDate);
   let cursor = firstMs;
   let periodIndex = 0;
 
@@ -174,8 +184,20 @@ function buildDegradationWindows(
     const oosStart = new Date(isEnd.getTime() + DAY_MS);
     const oosEnd = new Date(oosStart.getTime() + (config.outOfSampleDays - 1) * DAY_MS);
 
-    // Stop if OOS starts beyond last trade date
-    if (oosStart.getTime() > lastMs) break;
+    if (formatLocalDate(oosEnd) > lastKey) {
+      if (formatLocalDate(oosStart) <= lastKey) {
+        skippedWindows.push({
+          periodIndex,
+          inSampleStart: formatLocalDate(isStart),
+          inSampleEnd: formatLocalDate(isEnd),
+          outOfSampleStart: formatLocalDate(oosStart),
+          outOfSampleEnd: formatLocalDate(oosEnd),
+          reason: "truncated_oos_window",
+          detail: `OOS end exceeds last trade date (${lastKey})`,
+        });
+      }
+      break;
+    }
 
     windows.push({
       periodIndex,
@@ -339,6 +361,7 @@ export function analyzeWalkForwardDegradation(
   // 3. Validate minimum trades
   const emptyResult = (): WFDResult => ({
     periods: [],
+    skippedWindows: [],
     efficiencyTrends: { sharpe: null, winRate: null, profitFactor: null },
     recentVsHistorical: {
       recentPeriodCount: config.recentPeriodCount,
@@ -370,10 +393,13 @@ export function analyzeWalkForwardDegradation(
   // 4. Build windows
   const firstDate = new Date(sorted[0].dateOpened);
   const lastDate = new Date(sorted[sorted.length - 1].dateOpened);
-  const windows = buildDegradationWindows(firstDate, lastDate, config);
+  const skippedWindows: WFDSkippedWindow[] = [];
+  const windows = buildDegradationWindows(firstDate, lastDate, config, skippedWindows);
 
   if (windows.length === 0) {
     const result = emptyResult();
+    result.skippedWindows = skippedWindows;
+    result.dataQuality.skippedPeriods = skippedWindows.length;
     result.dataQuality.warnings.push(
       "Insufficient trade history for any IS+OOS window with current configuration",
     );
@@ -566,7 +592,7 @@ export function analyzeWalkForwardDegradation(
   };
 
   // 9. Build data quality
-  const skippedPeriods = periods.length - sufficientCount;
+  const skippedPeriods = periods.length - sufficientCount + skippedWindows.length;
   const sufficientForTrends = qualifyingCount >= 4;
   const topWarnings: string[] = [];
 
@@ -584,6 +610,7 @@ export function analyzeWalkForwardDegradation(
 
   return {
     periods,
+    skippedWindows,
     efficiencyTrends,
     recentVsHistorical: {
       recentPeriodCount: recentCount,

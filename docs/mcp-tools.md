@@ -115,6 +115,18 @@ See [Market Data Guide](market-data.md) for import examples, ticker formats, and
 | `analyze_regime_comparison`        | Compare performance across market regime transitions |
 | `analyze_walk_forward_degradation` | Walk-forward degradation analysis                    |
 
+Walk-forward windows are inclusive US Eastern calendar-day ranges. Both
+`run_walk_forward` and `analyze_walk_forward_degradation` evaluate only complete
+IS+OOS windows ending on or before the last trade date. A trailing window whose
+OOS end exceeds that date is not evaluated; when this occurs, the tools return
+`skippedWindows` alongside `periods` with the planned `inSampleStart`, `inSampleEnd`,
+`outOfSampleStart`, `outOfSampleEnd`, `reason: "truncated_oos_window"`, and
+`detail` naming the last trade date. Degradation entries also include
+`periodIndex`. The run tool's skipped dates retain its legacy
+`YYYY-MM-DDT00:00:00.000Z` format; degradation dates are `YYYY-MM-DD`.
+The existing `stats.skippedPeriods` or `dataQuality.skippedPeriods` includes
+these truncated windows as well as any windows skipped for insufficient trades.
+
 ## Portfolio Health
 
 | Tool                      | Description                                                     |

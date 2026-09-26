@@ -96,7 +96,8 @@ export class WalkForwardAnalyzer {
       };
     }
 
-    const windows = this.buildWindows(sortedTrades, options.config);
+    const skippedWindows: SkippedWindow[] = [];
+    const windows = this.buildWindows(sortedTrades, options.config, skippedWindows);
     options.onProgress?.({
       phase: "segmenting",
       currentPeriod: 0,
@@ -105,7 +106,6 @@ export class WalkForwardAnalyzer {
     });
 
     const periods: WalkForwardPeriodResult[] = [];
-    const skippedWindows: SkippedWindow[] = [];
     let totalParameterTests = 0;
 
     for (let index = 0; index < windows.length; index++) {
@@ -306,7 +306,7 @@ export class WalkForwardAnalyzer {
     const results = this.buildResults(
       periods,
       options.config,
-      windows.length,
+      windows.length + (skippedWindows[0]?.reason === "truncated_oos_window" ? 1 : 0),
       totalParameterTests,
       sortedTrades.length,
       startedAt,
@@ -359,7 +359,11 @@ export class WalkForwardAnalyzer {
     });
   }
 
-  private buildWindows(trades: Trade[], config: WalkForwardConfig): WalkForwardWindow[] {
+  private buildWindows(
+    trades: Trade[],
+    config: WalkForwardConfig,
+    skippedWindows: SkippedWindow[],
+  ): WalkForwardWindow[] {
     if (trades.length === 0) return [];
 
     const firstDate = this.floorToUTCDate(new Date(trades[0].dateOpened));
@@ -376,7 +380,17 @@ export class WalkForwardAnalyzer {
         outOfSampleStart.getTime() + (config.outOfSampleDays - 1) * DAY_MS,
       );
 
-      if (outOfSampleStart > lastDate) {
+      if (outOfSampleEnd > lastDate) {
+        if (outOfSampleStart <= lastDate) {
+          skippedWindows.push({
+            inSampleStart,
+            inSampleEnd,
+            outOfSampleStart,
+            outOfSampleEnd,
+            reason: "truncated_oos_window",
+            detail: `OOS end exceeds last trade date (${formatDateKey(new Date(trades[trades.length - 1].dateOpened))})`,
+          });
+        }
         break;
       }
 

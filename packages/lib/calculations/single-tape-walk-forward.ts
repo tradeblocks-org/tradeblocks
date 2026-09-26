@@ -64,5 +64,13 @@ export async function singleTapeWalkForwardByTrades(
       targetMetricOutOfSample: period.targetMetricOutOfSample,
       diversificationMetrics: period.diversificationMetrics ?? null,
     })),
+    skippedWindows: computation.results.skippedWindows.map((window) => ({
+      inSampleStart: windowDateKey(window.inSampleStart),
+      inSampleEnd: windowDateKey(window.inSampleEnd),
+      outOfSampleStart: windowDateKey(window.outOfSampleStart),
+      outOfSampleEnd: windowDateKey(window.outOfSampleEnd),
+      reason: window.reason,
+      detail: window.detail,
+    })),
   };
 }
