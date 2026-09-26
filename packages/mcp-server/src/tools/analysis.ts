@@ -36,6 +36,12 @@ function filterByStrategy(trades: Trade[], strategy?: string): Trade[] {
   return trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
 }
 
+// Preserve the MCP's timestamp-shaped strings without serializing a
+// local-midnight calendar value as an instant (which shifts east-of-UTC days).
+function legacyWindowTimestamp(calendarKey: string): string {
+  return `${calendarKey}T00:00:00.000Z`;
+}
+
 /**
  * Register all analysis MCP tools
  */
@@ -406,7 +412,13 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             title: verdict.title,
           },
           recommendedParameters: recommended.params,
-          periods,
+          periods: periods.map((period) => ({
+            ...period,
+            inSampleStart: legacyWindowTimestamp(period.inSampleStart),
+            inSampleEnd: legacyWindowTimestamp(period.inSampleEnd),
+            outOfSampleStart: legacyWindowTimestamp(period.outOfSampleStart),
+            outOfSampleEnd: legacyWindowTimestamp(period.outOfSampleEnd),
+          })),
         };
 
         return createToolOutput(summary, structuredData);
