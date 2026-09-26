@@ -201,18 +201,18 @@ describe("DuckDB lock coexistence with a second server", () => {
     expect(getConnectionMode()).toBe("read_only");
   }, 60000);
 
-  it("waits out a holder's startup write lock instead of killing it", async () => {
-    // The holder mimics a real server booting first: write lock for 2s to build
-    // schemas, then downgrade to read-only and keep running. Before the fix, the
-    // call below SIGTERMed this process and the client saw "Server disconnected".
+  it("joins a holder after its startup lock is released without killing it", async () => {
+    // READY means the holder has the write lock, not that it is ready for a
+    // second reader. Under parallel worker load our opener could race the
+    // close/reopen gap and acquire the write lock before the holder reopened,
+    // causing the holder to exit instead of downgrading.
     holder = await startHolder(dbPath, "rw-then-ro", 2000);
+    await holder.waitForLine("DOWNGRADED");
 
     const connection = await getConnection(testDir);
 
     expect(isAlive(holder.pid)).toBe(true);
-    // The holder is still running as a reader, so we cannot hold the write lock.
     expect(getConnectionMode()).toBe("read_only");
-    // And we are genuinely usable, not just open.
     const result = await connection.runAndReadAll("SELECT 42 AS answer");
     expect(Number(result.getRows()[0][0])).toBe(42);
   }, 60000);

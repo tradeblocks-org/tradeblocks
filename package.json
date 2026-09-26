@@ -1,6 +1,6 @@
 {
   "name": "tradeblocks",
-  "version": "3.10.2",
+  "version": "3.11.0",
   "author": "David Romeo <davidmromeo@gmail.com>",
   "private": true,
   "workspaces": [
@@ -119,7 +119,8 @@
     "lodash": ">=4.18.1",
     "rollup": ">=4.59.0",
     "hono": ">=4.13.7",
-    "sharp": "0.35.3",
+    "sharp": "0.35.4",
+    "maplibre-gl": "6.4.1",
     "@babel/core": "^7.29.1",
     "postcss": "^8.5.18",
     "minimatch": "^10.2.6"

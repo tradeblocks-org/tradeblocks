@@ -39,6 +39,12 @@ jobs:
       - name: Verify packed provenance runtime
         run: node packages/mcp-server/scripts/verify-packed-provenance-runtime.mjs
 
+      - name: Run library and frontend tests
+        run: npm test -- --ci
+
+      - name: Run MCP Server tests
+        run: NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=6144' npx jest --config packages/mcp-server/jest.config.js --ci
+
       - name: Get version
         id: version
         run: echo "version=$(node -p "require('./packages/mcp-server/package.json').version")" >> $GITHUB_OUTPUT
@@ -125,7 +131,8 @@ jobs:
 
   publish-docker:
     name: Publish Docker Image
-    needs: build
+    needs: [build, publish-npm]
+    if: needs.publish-npm.outputs.published == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
