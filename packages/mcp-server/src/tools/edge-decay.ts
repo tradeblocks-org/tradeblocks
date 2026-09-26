@@ -440,6 +440,7 @@ export function registerEdgeDecayTools(server: McpServer, baseDir: string): void
             blockId,
             strategy: strategy ?? null,
             periods: result.periods,
+            ...(result.skippedWindows.length > 0 ? { skippedWindows: result.skippedWindows } : {}),
             efficiencyTrends: result.efficiencyTrends,
             recentVsHistorical: result.recentVsHistorical,
             config: result.config,

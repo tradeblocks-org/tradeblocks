@@ -148,7 +148,10 @@ export interface WalkForwardWindow {
 }
 
 export type WindowSkipReason =
-  "insufficient_is_trades" | "insufficient_oos_trades" | "no_viable_params";
+  | "insufficient_is_trades"
+  | "insufficient_oos_trades"
+  | "no_viable_params"
+  | "truncated_oos_window";
 
 export interface SkippedWindow extends WalkForwardWindow {
   reason: WindowSkipReason;

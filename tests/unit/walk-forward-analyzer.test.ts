@@ -111,6 +111,42 @@ describe("WalkForwardAnalyzer", () => {
     expect(firstPeriod.optimalParameters.kellyMultiplier).toBeGreaterThan(0);
   });
 
+  it("keeps the window ending on the last trade and names a trailing partial window", async () => {
+    const trades = createTestTrades(
+      Array.from({ length: 21 }, (_, i) => (i % 2 ? -40 : 100)),
+      "2026-09-01T12:00:00",
+      1,
+    );
+    const config: WalkForwardConfig = {
+      inSampleDays: 10,
+      outOfSampleDays: 10,
+      stepSizeDays: 1,
+      optimizationTarget: "netPl",
+      parameterRanges: {},
+      minInSampleTrades: 1,
+      minOutOfSampleTrades: 1,
+    };
+    const results = (await new WalkForwardAnalyzer().analyze({ trades, config })).results;
+
+    expect(
+      results.skippedWindows.filter((window) => window.reason !== "truncated_oos_window"),
+    ).toEqual([]);
+    expect(results.periods.map((period) => period.outOfSampleEnd)).toContainEqual(
+      new Date(Date.UTC(2026, 8, 21)),
+    );
+    expect(
+      results.periods.every((period) => period.outOfSampleEnd <= new Date(Date.UTC(2026, 8, 21))),
+    ).toBe(true);
+    expect(results.skippedWindows).toEqual([
+      expect.objectContaining({
+        inSampleStart: new Date(Date.UTC(2026, 8, 3)),
+        outOfSampleEnd: new Date(Date.UTC(2026, 8, 22)),
+        reason: "truncated_oos_window",
+        detail: "OOS end exceeds last trade date (2026-09-21)",
+      }),
+    ]);
+  });
+
   it("respects drawdown limits when selecting optimal parameters", async () => {
     const trades = createTestTrades(
       [800, -2600, 900, -1800, 700, -2200, 600, -1900, 500, -2100],
@@ -1644,7 +1680,7 @@ describe("WalkForwardAnalyzer edge cases and stress tests", () => {
 
   describe("skipped window tracking", () => {
     it("captures skipped windows due to insufficient IS trades", async () => {
-      const trades = createTestTrades([100, 200], "2024-01-01", 30, 50_000);
+      const trades = createTestTrades([100, 200, 300], "2024-01-01", 22, 50_000);
 
       const config: WalkForwardConfig = {
         inSampleDays: 30,
@@ -1740,7 +1776,7 @@ describe("WalkForwardAnalyzer edge cases and stress tests", () => {
       const config: WalkForwardConfig = {
         inSampleDays: 18,
         outOfSampleDays: 9,
-        stepSizeDays: 9,
+        stepSizeDays: 30,
         optimizationTarget: "netPl",
         parameterRanges: { kellyMultiplier: [1, 1, 1] },
         minInSampleTrades: 2,

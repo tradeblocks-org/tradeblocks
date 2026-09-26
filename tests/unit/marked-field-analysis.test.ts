@@ -162,6 +162,7 @@ describe("public field analysis", () => {
       oosWindowCount: 1,
       inSampleDays: 10,
       outOfSampleDays: 5,
+      stepSizeDays: 1,
       optimizationTarget: "netPl",
       parameterRanges: { fixedContracts: [1, 3, 1] },
       minInSampleTrades: 2,
@@ -173,6 +174,14 @@ describe("public field analysis", () => {
       outOfSampleStart: "2026-01-12",
       outOfSampleEnd: "2026-01-16",
     });
+    expect(result.periods.at(-1)?.outOfSampleEnd).toBe("2026-01-21");
+    expect(result.skippedWindows).toEqual([
+      expect.objectContaining({
+        inSampleStart: "2026-01-08",
+        outOfSampleEnd: "2026-01-22",
+        reason: "truncated_oos_window",
+      }),
+    ]);
     expect(result.computation.results.stats.totalParameterTests).toBeGreaterThan(0);
   });
 });

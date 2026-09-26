@@ -93,18 +93,15 @@ describe("analyzeWalkForwardDegradation", () => {
   });
 
   test("3. produces correct number of windows for 2-year history", () => {
-    // 730 days of trades. IS=365, OOS=90, step=90
-    // cursor starts at day 0
-    // window 0: IS=[0,364], OOS=[365,454] -- OOS start=365 <= 729, valid
-    // window 1: IS=[90,454], OOS=[455,544] -- OOS start=455 <= 729, valid
-    // window 2: IS=[180,544], OOS=[545,634] -- OOS start=545 <= 729, valid
-    // window 3: IS=[270,634], OOS=[635,724] -- OOS start=635 <= 729, valid
-    // window 4: IS=[360,724], OOS=[725,814] -- OOS start=725 <= 729, valid
-    // window 5: IS=[450,814], OOS=[815,904] -- OOS start=815 > 729, STOP
+    // 730 days of trades: four full 365+90-day windows fit.
+    // The fifth starts OOS on day 725 but ends on day 814, beyond the last trade on day 729.
     const trades = generateTradeSet(730, { startDate: new Date(2022, 0, 1) });
     const result = analyzeWalkForwardDegradation(trades);
 
-    expect(result.periods.length).toBe(5);
+    expect(result.periods.length).toBe(4);
+    expect(result.skippedWindows).toEqual([
+      expect.objectContaining({ periodIndex: 4, reason: "truncated_oos_window" }),
+    ]);
 
     // Verify periodIndex values
     for (let i = 0; i < result.periods.length; i++) {
@@ -114,6 +111,45 @@ describe("analyzeWalkForwardDegradation", () => {
     // Verify first window dates
     expect(result.periods[0].window.inSampleStart).toBe("2022-01-01");
     expect(result.periods[0].window.outOfSampleStart).toBeTruthy();
+  });
+
+  test("keeps a complete OOS window and names the following truncated window", () => {
+    const trades = generateTradeSet(21, { startDate: new Date(2026, 8, 1) });
+    const result = analyzeWalkForwardDegradation(trades, {
+      inSampleDays: 10,
+      outOfSampleDays: 10,
+      stepSizeDays: 1,
+      minTradesPerPeriod: 1,
+    });
+
+    expect(result.periods.map((period) => period.window.outOfSampleEnd)).toContain("2026-09-21");
+    expect(result.periods.every((period) => period.window.outOfSampleEnd <= "2026-09-21")).toBe(
+      true,
+    );
+    expect(result.skippedWindows).toEqual([
+      expect.objectContaining({
+        periodIndex: 2,
+        inSampleStart: "2026-09-03",
+        outOfSampleEnd: "2026-09-22",
+        reason: "truncated_oos_window",
+      }),
+    ]);
+  });
+
+  test("uses calendar days across Eastern daylight saving time", () => {
+    const trades = generateTradeSet(21, { startDate: new Date(2026, 2, 1) });
+    const result = analyzeWalkForwardDegradation(trades, {
+      inSampleDays: 10,
+      outOfSampleDays: 10,
+      stepSizeDays: 1,
+      minTradesPerPeriod: 1,
+    });
+
+    expect(result.periods.map((period) => period.window.outOfSampleEnd)).toEqual([
+      "2026-03-20",
+      "2026-03-21",
+    ]);
+    expect(result.skippedWindows.map((window) => window.outOfSampleEnd)).toEqual(["2026-03-22"]);
   });
 
   test("4. respects custom config (IS=180, OOS=60, step=60)", () => {

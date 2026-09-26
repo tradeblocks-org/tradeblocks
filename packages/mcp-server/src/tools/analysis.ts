@@ -322,7 +322,7 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             }
           : undefined;
 
-        const { computation, config, verdict, recommended, periods } =
+        const { computation, config, verdict, recommended, periods, skippedWindows } =
           await singleTapeWalkForwardByTrades(trades, {
             isWindowCount,
             oosWindowCount,
@@ -419,6 +419,17 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             outOfSampleStart: legacyWindowTimestamp(period.outOfSampleStart),
             outOfSampleEnd: legacyWindowTimestamp(period.outOfSampleEnd),
           })),
+          ...(skippedWindows.length > 0
+            ? {
+                skippedWindows: skippedWindows.map((window) => ({
+                  ...window,
+                  inSampleStart: legacyWindowTimestamp(window.inSampleStart),
+                  inSampleEnd: legacyWindowTimestamp(window.inSampleEnd),
+                  outOfSampleStart: legacyWindowTimestamp(window.outOfSampleStart),
+                  outOfSampleEnd: legacyWindowTimestamp(window.outOfSampleEnd),
+                })),
+              }
+            : {}),
         };
 
         return createToolOutput(summary, structuredData);
