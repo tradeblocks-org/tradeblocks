@@ -72,4 +72,3 @@ Only flag consequential P0/P1 regressions; leave mechanical checks to CI.
 - Flag same-day joins to close-derived market fields: those values were unavailable at trade entry and create lookahead bias. Apply prior-day `LAG()` to close-derived fields; open-known and static fields may remain same-day.
 - Flag trade-date conversions that treat a local-midnight calendar value as a UTC instant, or apply ET conversion to it: trades can shift to the wrong market day. Compare calendar trade dates as `YYYY-MM-DD`/local calendar parts; convert actual market-feed timestamps to `America/New_York`.
 - Flag net P&L that deducts fees a second time from imports already reported net, or attributes whole-portfolio daily logs to one strategy: either changes analytical results. Keep the P&L basis explicit, deduct commissions only from gross trades, and filter strategies using trades.
-
