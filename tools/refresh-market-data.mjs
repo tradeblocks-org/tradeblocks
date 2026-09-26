@@ -80,8 +80,8 @@ const DIST_SOURCE_PATHS = [
 ];
 
 // ── CONFIG ─────────────────────────────────────────────
-// Per ADR 0018, ticker lists are sourced from env vars so operators (homelab
-// deploys, CI runners, etc.) can vary them without editing the script.
+// Ticker lists come from env vars so operators can vary them without editing
+// the script.
 //
 //   TRADEBLOCKS_SPOT_TICKERS       e.g. "SPX,QQQ,VIX,VIX3M,VIX9D"
 //   TRADEBLOCKS_OPTION_UNDERLYINGS e.g. "SPX,QQQ"  (feeds both chain + quote)
@@ -89,8 +89,8 @@ const DIST_SOURCE_PATHS = [
 // Both are REQUIRED for the env path — no defaults. Missing/empty input
 // throws and the script exits with a clear message naming the variable.
 //
-// CLI overrides (enterprise#204) — additive layer on top of the env path,
-// used for targeted backfills without touching the env vars or daemon state:
+// CLI overrides add targeted backfills without changing the env vars or a
+// running scheduler:
 //
 //   --spot-tickers <csv>         overrides TRADEBLOCKS_SPOT_TICKERS
 //   --option-underlyings <csv>   overrides TRADEBLOCKS_OPTION_UNDERLYINGS
@@ -312,19 +312,17 @@ export async function assertFreshDist({
 
 // Turn a coverage report into the list of dates to refresh, or refuse.
 //
-// The refusal is the point (enterprise#2497). A report we could not fully
-// compute has an empty session list for the same reason a clean corpus does,
-// and the nightly cannot tell those apart from the list alone. Reading
-// `unknown` as "nothing to do" would rebuild the exact defect this mode exists
-// to close: absence rendered as success.
+// A report we could not fully compute has an empty session list for the same
+// reason a clean corpus does, and the nightly cannot tell those apart from
+// the list alone. Reading `unknown` as "nothing to do" turns absence into success.
 export function selectMissingDates(report) {
   if (report?.status === "complete") return [];
   // Derived from the detailed sessions, never read from a second serialized
   // list. The report used to carry `missingSessions` alongside
   // `incompleteSessions`, and the contract validated them as unrelated arrays —
   // so a report naming two incomplete sessions and one missing session
-  // validated clean and this driver silently skipped the real hole (Worf gate,
-  // holodeck#278 R2-H1). One list cannot disagree with itself.
+  // validated clean and this driver silently skipped the real hole.
+  // One list cannot disagree with itself.
   if (report?.status === "incomplete") {
     return (report.incompleteSessions ?? []).map((entry) => entry.date);
   }
@@ -796,17 +794,12 @@ async function main() {
   await assertFreshDist();
 
   const mod = await import(pathToFileURL(DIST_ENTRYPOINT).href);
-  // Holodeck#89/#91/#93: refresh writes ALL data to parquet (COPY ... TO files,
-  // staged in :memory:) and watermarks to JSON — nothing goes to market.duckdb
-  // tables in parquet mode. The legacy bootstrap (getConnection +
-  // upgradeToReadWrite) would open analytics.duckdb RW for the entire ~26-min
-  // ingest; #89 moved off that to openMarketOnlyConnection (market.duckdb
-  // ATTACHed RW). #93: that RW attach was itself pure liability in parquet mode
-  // — its only write was throwaway `CREATE OR REPLACE VIEW market.*` defs that
-  // are re-created on every open. openMarketParquetConnection opens a :memory:
-  // host with the market.* views registered in-memory and NO attach, so the
-  // full ingest takes no lock on market.duckdb. Non-parquet deployments still
-  // INSERT into physical market.* tables, so they keep the RW attach.
+  // Refresh writes data to parquet (staged in :memory:) and watermarks to JSON
+  // in parquet mode; nothing goes to market.duckdb tables. Opening an analytics
+  // connection read-write for the whole ingest would hold an unnecessary lock.
+  // openMarketParquetConnection registers market.* views in memory without an
+  // attach. Non-parquet deployments still write physical market.* tables, so
+  // they keep the read-write market connection.
   const {
     setDataRoot,
     getDataRoot,

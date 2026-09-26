@@ -2,8 +2,7 @@
  * Unit tests for refresh-market-data.mjs CLI/env list resolution.
  *
  * Covers the `resolveLists(args, env) → { spot, options, sources }` helper
- * added for enterprise#204 (per-underlying CLI flag overrides) and the
- * process-level guards that exit before the dist import:
+ * for per-list CLI overrides and process-level guards that exit before the dist import:
  *   - --skip-spot + --spot-tickers mutex
  *   - --skip-options + --option-underlyings mutex
  *   - --skip-spot --skip-options no-op (must exit 2 before dist import)
@@ -245,7 +244,7 @@ describe("refresh-market-data canonical provenance wiring", () => {
 describe("refresh-market-data CLI guards (subprocess)", () => {
   function run(argv, env = {}) {
     // Strip any inherited TRADEBLOCKS_* env vars so tests are deterministic
-    // regardless of the operator's shell (CI, homelab, local dev). The env
+    // regardless of the operator's shell (CI or local dev). The env
     // param then becomes the full authoritative env for the script.
     const baseEnv = {};
     for (const [k, v] of Object.entries(process.env)) {

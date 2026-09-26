@@ -4,14 +4,9 @@
 // Answers "which trading sessions is the market corpus missing?" — a STATE
 // check over the partition tree, not an event check over a run.
 //
-// Why this exists (enterprise#2497). The nightly pipeline reported its 2026-07-22
-// and 2026-07-31 failures correctly: RESULT: DEGRADED, exit 1, refresh=errors in
-// the status record. It then forgot them. The status record is overwritten every
-// run, so the next clean night erased the evidence; systemd's StartLimitBurst
-// gave up after two attempts minutes apart; and the next night's refresh only
-// ever asks for its own yesterday. Two trading sessions — 2026-07-21 and
-// 2026-07-30 — were left permanently empty while every "newest partition" read
-// answered with a much later date.
+// A nightly refresh can report a failure, then overwrite that run's status on
+// the next clean night even while older sessions remain empty. A "newest
+// partition" read can still return a later date and hide those gaps.
 //
 // A run-outcome record cannot close that: it answers how last night went. This
 // answers what is missing now, so a hole stays visible until it is filled and
@@ -62,13 +57,12 @@ const PARQUET_MIN_BYTES = PARQUET_MAGIC.length * 2 + 4;
 // with the partition key each uses and which configured ticker list defines its
 // membership. This set is deliberately exactly what `--missing` can repair.
 //
-// `option_oi_daily` is NOT here, and its absence is a decision (Worf gate,
-// enterprise#2497). It is written by tradeblocks' `tools/oi-backfill.mjs` from
+// `option_oi_daily` is NOT here. It is written by `tools/oi-backfill.mjs` from
 // its own root list (`MARKET_OI_ROOTS`), which canonicalizes roots into
 // underlyings — SPXW and SPX both land under `underlying=SPX`. Nothing in this
 // process can derive that membership without reimplementing the OI driver's
 // canonicalization, and an expectation we cannot derive correctly is a false
-// verdict waiting for the first box whose OI roots differ from its option
+// verdict waiting for the first installation whose OI roots differ from its option
 // underlyings. Reporting a class this probe cannot judge is worse than not
 // reporting it: repair an OI hole with that driver.
 // The canonical ticker-token grammar, shared with the refresh driver's parseList.
@@ -76,10 +70,8 @@ const TICKER_TOKEN_RE = /^[A-Z0-9]+$/;
 const SESSION_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Shape is not a date. `2026-07-32` and `2026-02-30` match the regex and name no
-// day that exists; a UTC roundtrip is the cheap total check (Worf gate,
-// holodeck#278 round 4). This matters most on `incompleteSessions`, which is now
-// the sole source of the refresh work list — an impossible date there becomes a
-// refresh target.
+// day that exists; a UTC roundtrip checks this. An impossible date in
+// `incompleteSessions` would become a refresh target.
 export function isSessionDate(value) {
   if (typeof value !== "string" || !SESSION_DATE_RE.test(value)) return false;
   const parsed = new Date(`${value}T12:00:00Z`);
@@ -111,8 +103,7 @@ export const COVERAGE_CLASSES = [
 // override exists because the refresh driver honours CLI member overrides the
 // environment does not carry — reading the env in `--missing` had coverage
 // judging a DIFFERENT ticker set than the driver was about to write, so a
-// requested repair could read complete and be silently skipped (Worf gate,
-// enterprise#2497).
+// requested repair could read complete and be silently skipped.
 export function resolveCoverageMembers(expectedOverride, env) {
   if (expectedOverride) return expectedOverride;
   return resolveExpectedMembers(env);
@@ -141,11 +132,8 @@ export function sessionsInWindow(from, to, isSession) {
 
 // The last `count` sessions on or before `endDate`, oldest first.
 //
-// FAILS CLOSED when the walk cannot satisfy the count (Worf gate,
-// enterprise#2497). The previous form stopped at a fixed 400-calendar-day bound
-// and returned whatever it had: `--lookback 401` silently reported on 286
-// sessions, so a hole before the truncated start read as clean. A silent cap on
-// a completeness check is the defect the check exists to find.
+// FAILS CLOSED when the walk cannot satisfy the count. A fixed calendar-day
+// bound silently shortens a large lookback, so an older hole can read as clean.
 export class CoverageWindowError extends Error {}
 
 export function lookbackSessions(count, endDate, isSession, maxCalendarDays = null) {
@@ -167,19 +155,15 @@ export function lookbackSessions(count, endDate, isSession, maxCalendarDays = nu
 
 // The horizon: how far coverage actually reaches, WITH the holes behind it.
 //
-// ADR 0090 decision 2 asks the refresh rail for "a min-across-classes horizon
-// and the gaps behind it", and is explicit that such a statement is more honest
-// than either the frozen 2026-07-20 attestation or a naive newest-partition read
-// (2026-08-07, holes hidden). The difference between this and the naive read is
-// entirely `gapsBehind`: the same headline date, but it can no longer be quoted
-// without the holes it steps over.
+// A min-across-classes horizon includes the gaps behind it. A newest-partition
+// read hides holes; `gapsBehind` prevents the headline date from being quoted
+// without the sessions it steps over.
 //
 // `completeThrough` is the MIN across classes of each class's newest complete
 // session — one class lagging pulls the whole horizon back, which is the point
 // of min-across-classes. It is null when any class never completed in the window.
 // `contiguousFrom` is where the unbroken all-classes run ending at the horizon
-// begins; on this corpus in 2026-08 that was six sessions while the headline date
-// was three weeks wider, which is exactly the gap enterprise#2497 was filed on.
+// begins; when sessions are missing it can be much narrower than the headline.
 export function deriveHorizon(sessions, incompleteSessions, classes = COVERAGE_CLASSES) {
   if (!Array.isArray(sessions) || sessions.length === 0) return null;
   const holesByDate = new Map(incompleteSessions.map((entry) => [entry.date, entry.classes]));
@@ -301,9 +285,8 @@ export function coverageExitCode(report) {
 // A partition counts as present only when it holds a READABLE, non-empty
 // `data.parquet` — the exact artifact the reader consumes.
 //
-// "any non-empty file in the directory" was wrong three ways at once (Worf gate,
-// enterprise#2497). The writer stages every partition as a sidecar named
-// `data.parquet.tmp-<pid>-<ts>-<rand>` and atomically renames it into place
+// "any non-empty file in the directory" is insufficient. The writer stages
+// every partition as a sidecar named `data.parquet.tmp-<pid>-<ts>-<rand>`
 // (tradeblocks `packages/mcp-server/src/db/parquet-writer.ts`), and every reader
 // globs `**/data.parquet` precisely so those sidecars never match
 // (`db/market-views.ts`). So a stranded sidecar from a killed write — the exact
@@ -350,11 +333,9 @@ export function makeFilesystemProbe(marketRoot, classes = COVERAGE_CLASSES) {
 // question. A completeness probe that silently degraded into a slow integrity
 // scan would stop running, which is worse than a bounded honest check.
 //
-// The framing checks are here because each one caught a REACHABLE wrong-green
-// (Worf gate, enterprise#2497): size alone accepted any non-empty file, so a
-// stranded writer sidecar counted; leading magic alone accepted a truncated
-// write; both magics alone accepted a file DuckDB rejects with
-// "Footer length error".
+// The framing checks prevent false-complete verdicts: size alone accepts
+// arbitrary content; leading magic alone accepts a truncated write; and
+// both magics alone accept a footer length DuckDB rejects.
 function hasParquetFraming(artifact, size) {
   const fd = openSync(artifact, "r");
   try {
@@ -518,12 +499,9 @@ export function mergeSpotSessionLengths(report, lengthAssessment, classes = COVE
 
 // The one place an `unknown` report is built.
 //
-// `collectCoverage` used to hand-assemble its two unknown branches, and both
-// forgot `horizon` when the field was added — so `selfCheck` threw and the CLI
-// exited 2 without ever emitting the reason it could not answer (Worf gate,
-// holodeck#278 H1). Both routes are fail-closed paths, which is exactly where
-// losing the explanation costs the most. One constructor means a field added to
-// the contract cannot be added to some unknowns and not others.
+// Both unknown branches must include `horizon` so `selfCheck` can return
+// the reason coverage is unknown rather than throwing. One constructor keeps
+// the report shape consistent across both branches.
 export function unknownReport({
   reason,
   marketRoot,
@@ -566,14 +544,9 @@ export function readRootFailure(marketRoot) {
 // The producer's own conformance check for a v1 report, exported so the consumer
 // can call it INSTEAD OF keeping a hand-written copy of this contract.
 //
-// Why this exists (Worf gate round 5, enterprise#2497). The nightly wrapper
-// validated reports with a hand-maintained field checklist in an embedded Python
-// heredoc, and that predicate was wrong in four consecutive gate rounds — each
-// fix correct, each leaving the neighbouring hole: a status-only payload, then a
-// self-contradictory one, then `sessions: true`, then `schemaVersion: true`, then
-// member tokens the producer would never emit. Every one of those was the
-// consumer re-deriving a contract it does not own. A fifth field patch would buy
-// the fifth hole; the contract needs ONE implementation, and this is it.
+// A consumer's hand-maintained field checklist can accept a status-only payload,
+// a contradictory report, or invalid types. The producer owns this contract:
+// one conformance check keeps consumers from re-deriving it incompletely.
 //
 // `--validate <path>` runs this over a file, so the wrapper asks the producer
 // whether a report is conformant rather than guessing.
@@ -695,11 +668,9 @@ export function validateCoverageReport(report, options = {}) {
   if (report.status !== "unknown" && report.sessions === 0) {
     return fail("a verdict over zero sessions is not a verdict");
   }
-  // `unknown` is the ONLY status that may carry unreadable evidence, because
-  // assessCoverage returns exactly that whenever anything was unreadable. A
-  // `complete` report listing a partition it could not read contradicts the
-  // producer's own rule, and shipping it hands an operator a clean verdict over
-  // evidence of a hole (Worf gate round 6).
+  // `unknown` is the ONLY status that may carry unreadable evidence. A
+  // `complete` report listing a partition it could not read contradicts
+  // the producer's own rule and makes the wrong verdict look trustworthy.
   if (report.status !== "unknown" && report.unreadable.length > 0) {
     return fail(
       `${report.status} report carries ${report.unreadable.length} unreadable partition(s)`,
@@ -724,21 +695,16 @@ export function validateCoverageReport(report, options = {}) {
     Array.isArray(report.window) ||
     !isSessionDate(report.window.from) ||
     !isSessionDate(report.window.to) ||
-    // The window's own bounds are sessions the producer enumerated, so when the
-    // caller can settle it they must be real ones. Without this a `complete`
-    // verdict over a Saturday window validated clean (Worf gate, holodeck#278
-    // round 5) — a false clean over a day the calendar says never traded.
+    // The window's bounds must be actual sessions when the caller can check;
+    // otherwise a `complete` verdict over a Saturday could validate clean.
     (isSession !== null && (!isSession(report.window.from) || !isSession(report.window.to))) ||
     report.window.from > report.window.to
   ) {
     return fail(`window is not a bounded date range: ${JSON.stringify(report.window)}`);
   }
 
-  // The session COUNT is evidence too, and it was the last date-bearing field
-  // the calendar did not bind (Worf gate, holodeck#278 round 6). Every endpoint
-  // and horizon date can be a real session while the count says the report
-  // checked one session across a window holding two — a clean verdict over
-  // sessions it never looked at, with no bad date anywhere to catch.
+  // The session count also needs calendar validation: real endpoints and
+  // horizon dates cannot prove that all sessions between them were checked.
   if (isSession && report.window !== null) {
     const actual = sessionsInWindow(report.window.from, report.window.to, isSession).length;
     if (report.sessions !== actual) {
@@ -749,8 +715,8 @@ export function validateCoverageReport(report, options = {}) {
   }
 
   // The horizon is part of the statement, not a decoration: a verdict that
-  // reaches a date without disclosing the holes behind it is the naive
-  // newest-partition read ADR 0090 decision 2 rejects by name.
+  // reaches a date without disclosing the holes behind it is a misleading
+  // newest-partition read.
   if (report.status === "unknown") {
     if (report.horizon !== null) return fail("an unknown verdict cannot claim a horizon");
   } else {
@@ -758,11 +724,9 @@ export function validateCoverageReport(report, options = {}) {
     if (horizon === null || typeof horizon !== "object" || Array.isArray(horizon)) {
       return fail(`${report.status} report has no horizon`);
     }
-    // A horizon may only claim dates INSIDE the window that was actually
-    // checked. Without this, a report whose window ran to July could headline
-    // "complete through December" — and every hole after July is undisclosed by
-    // construction, because the probe never looked there (Worf gate,
-    // holodeck#278 R2-H2). The claim must not outrun the evidence.
+    // A horizon may only claim dates INSIDE the window actually checked.
+    // Otherwise a July report could headline "complete through December"
+    // without looking for any of the holes after July.
     const inWindow = (date) =>
       report.window !== null && date >= report.window.from && date <= report.window.to;
     for (const key of ["completeThrough", "contiguousFrom"]) {
@@ -792,11 +756,8 @@ export function validateCoverageReport(report, options = {}) {
     ) {
       return fail("horizon.perClass is not an object");
     }
-    // `perClass` is the evidence `completeThrough` is derived FROM, so the two
-    // must agree — otherwise a report can publish a complete verdict while its
-    // own class reach says no such reach exists (Worf gate, holodeck#278 B1).
-    // `{"spot": null}`, `{}`, and a bogus class name all passed a shape-only
-    // check.
+    // `perClass` is the evidence `completeThrough` is derived from. The two
+    // must agree; a missing or bogus class reach cannot support a clean verdict.
     const classNames = classes.map((klass) => klass.name).sort();
     const reachNames = Object.keys(horizon.perClass).sort();
     if (reachNames.length !== classNames.length || reachNames.some((n, i) => n !== classNames[i])) {
@@ -848,10 +809,8 @@ export function validateCoverageReport(report, options = {}) {
     const owed = report.incompleteSessions
       .map((entry) => entry.date)
       .filter((date) => horizon.completeThrough === null || date <= horizon.completeThrough);
-    // Compare the SET, not the count. Counting let a report swap a real gap for
-    // a fabricated one, or list the same gap twice, and still pass — the hidden
-    // hole with its cardinality preserved (Worf gate, holodeck#278 H2). That is
-    // the naive read this field exists to prevent, one substitution deeper.
+    // Compare the SET, not the count. Counting lets a report swap a real gap
+    // for a fabricated one, or list the same gap twice and still pass.
     const owedSet = new Set(owed);
     const claimed = new Set(horizon.gapsBehind);
     if (claimed.size !== horizon.gapsBehind.length) {
@@ -946,7 +905,7 @@ export async function collectCoverage({
   // `--skip-options`, …) that the environment does not carry: reading the env
   // here made coverage judge a DIFFERENT ticker set than the one the driver was
   // about to write, so a requested repair could be reported complete and
-  // silently skipped (Worf gate, enterprise#2497).
+  // silently skipped.
   expected: expectedOverride = null,
 } = {}) {
   await assertFreshDist();
@@ -1151,12 +1110,8 @@ async function main() {
     // Load the same calendar the producer used, so `--validate` is exactly as
     // strict as `selfCheck` rather than a weaker outside opinion.
     //
-    // FAIL CLOSED when it cannot be loaded. The first version caught every load
-    // error and validated structurally instead, which silently swapped the
-    // contract for a weaker one — and a weekend date accepted that way still
-    // reaches the refresh work list (Worf gate, holodeck#278 round 5). A tool
-    // whose whole job is refusing bad reports must not quietly become a tool
-    // that refuses fewer of them.
+    // FAIL CLOSED when the calendar cannot be loaded. Structural validation
+    // alone would accept weekend dates into the refresh work list.
     let isSession = null;
     try {
       await assertFreshDist();

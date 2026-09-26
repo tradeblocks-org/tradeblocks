@@ -2,8 +2,8 @@
  * Unit tests for refresh-market-data.mjs env-var config parsing.
  *
  * Covers the `parseList` helper that resolves TRADEBLOCKS_SPOT_TICKERS and
- * TRADEBLOCKS_OPTION_UNDERLYINGS per ADR 0018 (#197). The helper fails loud
- * on missing/empty input and shape-validates each token.
+ * TRADEBLOCKS_OPTION_UNDERLYINGS. The helper fails loud on missing/empty
+ * input and shape-validates each token.
  */
 import { describe, expect, it, beforeAll } from "@jest/globals";
 import { dirname, resolve } from "node:path";

@@ -98,6 +98,8 @@ jobs:
 
       - name: Build MCP Server
         run: npm run build -w packages/mcp-server
+      - name: Run market-data tool tests
+        run: npm run test:market-tools
 
       # The tradeblocks-mcp exports map is the package's published surface.
       # Verify every target resolves from the built output and that no

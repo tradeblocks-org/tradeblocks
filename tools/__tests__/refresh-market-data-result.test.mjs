@@ -200,7 +200,7 @@ describe("refresh-market-data result assessment", () => {
   });
 });
 
-describe("--missing date selection (enterprise#2497)", () => {
+describe("--missing date selection", () => {
   let selectMissingDates;
 
   beforeAll(async () => {

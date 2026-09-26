@@ -507,9 +507,8 @@ describe("filesystem probe", () => {
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
   it("names an unusable corpus root once, as one fact", () => {
-    // Verified against the real corpus during enterprise#2497: relying on the
-    // per-partition throw alone turned a mistyped TRADEBLOCKS_DATA_ROOT into
-    // 130 identical `unreadable` entries. The verdict was right and unreadable.
+    // A mistyped corpus root must produce one diagnostic, rather than
+    // reporting every partition as unreadable.
     expect(readRootFailure(resolve(root, "not-a-real-corpus"))).toMatch(/ENOENT/);
     // A path that exists but is not a directory must fail too — every partition
     // under it would read ENOTDIR, which the probe classifies as *absent*.
@@ -543,7 +542,7 @@ describe("filesystem probe", () => {
 
     // Both magics, but a footer length that does not fit inside the file. This
     // is the shape DuckDB rejects with "Footer length error"; magic-alone
-    // accepted it (Worf gate round 3).
+    // accepted it.
     writeFileSync(artifact, framedButBrokenFooter(0));
     expect(makeFilesystemProbe(root)("spot", "VIX9D", "2026-07-20")).toBe(false);
     writeFileSync(artifact, framedButBrokenFooter(9_999_999));
@@ -616,7 +615,7 @@ describe("expected-member resolution", () => {
   });
 });
 
-describe("window resolution fails closed (Worf gate, enterprise#2497)", () => {
+describe("window resolution fails closed", () => {
   it("refuses a lookback it cannot satisfy instead of silently shortening it", () => {
     // The previous form stopped at a fixed 400-calendar-day walk and returned
     // whatever it had: --lookback 401 reported on 286 sessions, so a hole before
@@ -634,12 +633,10 @@ describe("window resolution fails closed (Worf gate, enterprise#2497)", () => {
   });
 });
 
-describe("the producer owns its report contract (Worf gate round 5, enterprise#2497)", () => {
-  // The nightly wrapper used to validate reports with a hand-maintained field
-  // checklist. That predicate was wrong in four consecutive gate rounds — each
-  // fix correct, each leaving the neighbouring hole — because the consumer was
-  // re-deriving a contract it does not own. These are those exact shapes,
-  // asserted against the one implementation that does own it.
+describe("the producer owns its report contract", () => {
+  // A consumer's hand-maintained field checklist can accept a contradictory
+  // report or invalid field types. These cases exercise the producer's
+  // conformance check instead of re-deriving its contract in the consumer.
   const conformant = {
     schemaVersion: 1,
     status: "complete",
@@ -757,14 +754,13 @@ describe("the producer owns its report contract (Worf gate round 5, enterprise#2
   });
 });
 
-describe("the horizon carries its own holes (ADR 0090 decision 2)", () => {
+describe("the horizon carries its own holes", () => {
   const SESSIONS = ["2026-07-20", "2026-07-21", "2026-07-22", "2026-07-30", "2026-07-31"];
 
   it("reports the reach AND the gaps behind it, which is the whole difference from a naive read", () => {
-    // The exact enterprise#2497 shape. A naive newest-partition read answers
-    // 2026-07-31 and hides both holes; ADR 0090 rejects that by name. The
-    // headline date here is the SAME — what changes is that it can no longer be
-    // quoted without the two sessions it steps over.
+    // A naive newest-partition read answers 2026-07-31 and hides both holes.
+    // The headline date is the same, but cannot be quoted without the two
+    // sessions it steps over.
     const horizon = deriveHorizon(
       SESSIONS,
       [
@@ -846,7 +842,7 @@ describe("the contract requires the horizon to be honest", () => {
   it("hostile regression: refuses a horizon that hides a gap behind itself", () => {
     // This is the naive newest-partition read wearing the new field's name: the
     // report knows about 2026-07-21, the horizon reaches past it, and the gap
-    // list is empty. Exactly what ADR 0090 decision 2 exists to prevent.
+    // list is empty. Coverage must never hide a known gap behind the horizon.
     expect(
       validateCoverageReport({ ...base, horizon: { ...base.horizon, gapsBehind: [] } }).ok,
     ).toBe(false);
@@ -875,7 +871,7 @@ describe("the contract requires the horizon to be honest", () => {
   });
 });
 
-describe("the gap list is a SET, and unknowns never claim a horizon (holodeck#278 gate)", () => {
+describe("the gap list is a SET, and unknowns never claim a horizon", () => {
   const base = {
     schemaVersion: 1,
     status: "incomplete",
@@ -914,8 +910,7 @@ describe("the gap list is a SET, and unknowns never claim a horizon (holodeck#27
   ])("hostile regression: refuses %s", (_label, gapsBehind) => {
     // Counting alone passed all four of these: the hidden hole with its
     // cardinality preserved. A consumer would render an apparently exhaustive
-    // gap list that omits a real missing session — the ADR 0090 failure one
-    // substitution deeper than the empty-list case.
+    // gap list that omits a real missing session, even with the right count.
     expect(validateCoverageReport({ ...base, horizon: { ...base.horizon, gapsBehind } }).ok).toBe(
       false,
     );
@@ -976,7 +971,7 @@ describe("the gap list is a SET, and unknowns never claim a horizon (holodeck#27
   });
 });
 
-describe("one repair list, and a horizon inside its window (holodeck#278 round 2)", () => {
+describe("one repair list, and a horizon inside its window", () => {
   const base = {
     schemaVersion: 1,
     status: "incomplete",
@@ -1043,7 +1038,7 @@ describe("one repair list, and a horizon inside its window (holodeck#278 round 2
   });
 });
 
-describe("perClass is the evidence, not a decoration (holodeck#278 round 3)", () => {
+describe("perClass is the evidence, not a decoration", () => {
   const base = {
     schemaVersion: 1,
     status: "complete",
@@ -1112,7 +1107,7 @@ describe("perClass is the evidence, not a decoration (holodeck#278 round 3)", ()
   });
 });
 
-describe("a date must be a date, and a session must be a session (holodeck#278 round 4)", () => {
+describe("a date must be a date, and a session must be a session", () => {
   const base = {
     schemaVersion: 1,
     status: "incomplete",
@@ -1218,7 +1213,7 @@ describe("a date must be a date, and a session must be a session (holodeck#278 r
   });
 });
 
-describe("the calendar binds every claimed session (holodeck#278 round 5)", () => {
+describe("the calendar binds every claimed session", () => {
   const saturday = "2026-07-25";
   // Weekend-aware, because the validator now cross-checks the session COUNT
   // against the calendar: a stub that called Sunday a session would make the
@@ -1283,7 +1278,7 @@ describe("the calendar binds every claimed session (holodeck#278 round 5)", () =
   });
 });
 
-describe("each calendar guard is proven on its own (holodeck#278 round 5)", () => {
+describe("each calendar guard is proven on its own", () => {
   // 2026-07-25 is a Saturday; 07-24 Fri, 07-27 Mon.
   const SAT = "2026-07-25";
   const isSession = (date) => {
@@ -1373,7 +1368,7 @@ describe("each calendar guard is proven on its own (holodeck#278 round 5)", () =
   });
 });
 
-describe("the session count is evidence too (holodeck#278 round 6)", () => {
+describe("the session count is evidence too", () => {
   const isSession = (date) => {
     const day = new Date(`${date}T12:00:00Z`).getUTCDay();
     return day !== 0 && day !== 6;
