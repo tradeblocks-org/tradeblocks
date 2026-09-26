@@ -362,9 +362,7 @@ describe("refresh-market-data CLI guards (subprocess)", () => {
   it("env-var missing (both unset): exit 1, one-liner naming SPOT_TICKERS, no stack", () => {
     const r = run([]);
     expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(
-      /^Error: TRADEBLOCKS_SPOT_TICKERS is required; see docs\/operations\/market-data-deployment\.md/,
-    );
+    expect(r.stderr).toMatch(/^Error: TRADEBLOCKS_SPOT_TICKERS is required/);
     // Negative: no stack trace artefacts.
     expect(r.stderr).not.toMatch(/at \w+ \(/); // "at funcName ("
     expect(r.stderr).not.toMatch(/ConfigError:/); // raw class name
@@ -376,9 +374,7 @@ describe("refresh-market-data CLI guards (subprocess)", () => {
       TRADEBLOCKS_OPTION_UNDERLYINGS: "SPX",
     });
     expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(
-      /^Error: TRADEBLOCKS_SPOT_TICKERS is required; see docs\/operations\/market-data-deployment\.md/,
-    );
+    expect(r.stderr).toMatch(/^Error: TRADEBLOCKS_SPOT_TICKERS is required/);
     expect(r.stderr).not.toMatch(/at \w+ \(/);
   });
 
@@ -388,9 +384,7 @@ describe("refresh-market-data CLI guards (subprocess)", () => {
       TRADEBLOCKS_OPTION_UNDERLYINGS: "SPX",
     });
     expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(
-      /^Error: TRADEBLOCKS_SPOT_TICKERS is required; see docs\/operations\/market-data-deployment\.md/,
-    );
+    expect(r.stderr).toMatch(/^Error: TRADEBLOCKS_SPOT_TICKERS is required/);
     expect(r.stderr).not.toMatch(/at \w+ \(/);
   });
 

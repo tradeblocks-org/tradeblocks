@@ -116,7 +116,7 @@ export class ConfigError extends Error {
 
 export function parseList(envValue, varName) {
   if (envValue === undefined || envValue === null || envValue.trim() === "") {
-    throw new ConfigError(`${varName} is required; see docs/operations/market-data-deployment.md`);
+    throw new ConfigError(`${varName} is required; see docs/market-data.md`);
   }
   const seen = new Set();
   const out = [];
@@ -125,7 +125,7 @@ export function parseList(envValue, varName) {
     if (token === "") continue;
     if (!/^[A-Z0-9]+$/.test(token)) {
       throw new ConfigError(
-        `${varName} contains invalid token "${token}"; expected /^[A-Z0-9]+$/ (see docs/operations/market-data-deployment.md)`,
+        `${varName} contains invalid token "${token}"; expected /^[A-Z0-9]+$/ (see docs/market-data.md)`,
       );
     }
     if (seen.has(token)) continue;
@@ -133,7 +133,7 @@ export function parseList(envValue, varName) {
     out.push(token);
   }
   if (out.length === 0) {
-    throw new ConfigError(`${varName} is required; see docs/operations/market-data-deployment.md`);
+    throw new ConfigError(`${varName} is required; see docs/market-data.md`);
   }
   return out;
 }
