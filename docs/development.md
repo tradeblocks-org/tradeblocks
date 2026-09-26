@@ -153,6 +153,9 @@ Public CI runs both suites, with the root suite in the required `Frontend
 tags are pushed only after the version's npm package is published, not on
 every source push.
 
+An explicit `Release` workflow dispatch on `master` may recover Docker publication
+after npm published but Docker failed; ordinary pushes cannot republish an existing tag.
+
 ## Development Tips
 
 - Use the `.planning/` directory for task breakdowns if you want structured TODOs (optional).
