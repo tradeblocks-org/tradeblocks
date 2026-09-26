@@ -690,8 +690,8 @@ export function buildRealizedDrawdownAttributionByCloseDate(trades: Trade[], top
     .slice(0, topN);
   const durationMs = troughDate.getTime() - drawdownPeakDate.getTime();
   const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
-  const peakDateStr = drawdownPeakDate.toISOString().split("T")[0];
-  const troughDateStr = troughDate.toISOString().split("T")[0];
+  const peakDateStr = formatDateKey(drawdownPeakDate);
+  const troughDateStr = formatDateKey(troughDate);
   return {
     maxDrawdownPct,
     peakDateStr,

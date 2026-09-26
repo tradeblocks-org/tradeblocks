@@ -1,6 +1,7 @@
 import type { Trade } from "../models/trade.ts";
 import { calculateCorrelationMatrix } from "./correlation.ts";
 import { performTailRiskAnalysis } from "./tail-risk-analysis.ts";
+import { formatDateKey } from "./trade-matching.ts";
 
 /** Compose entry-day trade correlation, joint tails and overlap into similarity pairs. */
 export function buildRealizedStrategySimilarity(
@@ -44,8 +45,8 @@ export function buildRealizedStrategySimilarity(
     if (!strategyDates[trade.strategy]) {
       strategyDates[trade.strategy] = new Set();
     }
-    // Extract date key from dateOpened
-    const dateKey = trade.dateOpened.toISOString().split("T")[0];
+    // Calendar date key from dateOpened (local calendar date, never UTC)
+    const dateKey = formatDateKey(trade.dateOpened);
     strategyDates[trade.strategy].add(dateKey);
   }
 
