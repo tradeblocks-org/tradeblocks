@@ -25,6 +25,7 @@ import {
 import { performTailRiskAnalysis } from "./tail-risk-analysis.ts";
 import type { TailRiskAnalysisOptions } from "../models/tail-risk.ts";
 import { getNetPl } from "../utils/equity-curve.ts";
+import { formatDateKey } from "./trade-matching.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MIN_IN_SAMPLE_TRADES = 10;
@@ -351,10 +352,9 @@ export class WalkForwardAnalyzer {
 
   private filterTrades(trades: Trade[], start: Date, end: Date): Trade[] {
     const startMs = start.getTime();
-    // Add full day to end date to include all trades on that day regardless of time
-    const endMs = end.getTime() + DAY_MS - 1;
+    const endMs = end.getTime();
     return trades.filter((trade) => {
-      const tradeDate = this.getTradeTimestamp(trade);
+      const tradeDate = this.floorToUTCDate(new Date(trade.dateOpened)).getTime();
       return tradeDate >= startMs && tradeDate <= endMs;
     });
   }
@@ -394,10 +394,7 @@ export class WalkForwardAnalyzer {
   }
 
   private floorToUTCDate(date: Date): Date {
-    const floored = new Date(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-    );
-    return floored;
+    return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   }
 
   private buildCombinationIterator(
@@ -753,8 +750,7 @@ export class WalkForwardAnalyzer {
   }
 
   private normalizeDateKey(date: Date | string): string {
-    const parsed = new Date(date);
-    return parsed.toISOString().split("T")[0];
+    return formatDateKey(new Date(date));
   }
 
   private getTargetMetricValue(

@@ -86,6 +86,30 @@ calculations with **entry-day** overlap; its pairs are trade-based, not
 simultaneous marked-account losses. Neither result models intratrade exposure
 or market prices.
 
+#### Dated account-equity and field calculations
+
+`@tradeblocks/lib` exports `drawdownEpisodesFromEquity`,
+`drawdownDurationFromEquity`, and `calendarReturnsFromEquity` for an ordered
+daily `{ date: "YYYY-MM-DD", equity: number }[]` account series. Dates are
+Eastern calendar keys, not UTC instants; inputs require positive finite equity.
+Drawdown durations count underwater observations (not elapsed calendar days),
+and the recovery observation is excluded. Calendar returns use the prior
+period's closing equity as the next period's starting balance; the first
+partial period starts at its first observation. These marked-account measures
+must not be confused with realized-trade performance.
+
+`fieldStatisticsFromValues` and `rankPredictiveTradeFields` provide the
+numeric field-distribution and single-trade-tape correlation calculations used
+by the MCP field tools. The latter accepts enriched trades (including optional
+custom fields); missing/non-numeric values are excluded pairwise.
+`singleTapeWalkForwardByTrades` runs sizing and strategy-weight parameter
+sweeps using `WalkForwardAnalyzer` over one realized trade tape. It is not a
+marked-account or multi-tape portfolio simulation.
+
+Walk-forward period endpoints in the MCP response are calendar-day keys,
+not UTC timestamps; runtime timestamps elsewhere in the computation remain
+instants.
+
 ### UI Components
 
 - `components/ui/` – shadcn/ui primitives configured with Tailwind CSS.
