@@ -68,6 +68,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Root Jest exercises @tradeblocks/lib; this job is a required PR check.
+      - name: Run library and frontend tests
+        run: npm test -- --ci
+
       - name: Lint
         run: npm run lint
 

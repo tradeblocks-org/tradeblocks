@@ -16,6 +16,7 @@
  *   read-write holder blocks read-only opens AND read-write opens
  *   read-only  holder blocks read-write opens but NOT other read-only opens
  */
+import { jest } from "@jest/globals";
 import { spawn, type ChildProcess } from "child_process";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -32,7 +33,7 @@ const HOLDER_SCRIPT = path.join(
   "tradeblocks-mcp-lock-holder.mjs",
 );
 
-type HolderMode = "rw" | "ro" | "rw-then-ro" | "rw-respawn";
+type HolderMode = "rw" | "ro" | "rw-on-signal" | "rw-respawn";
 
 interface Holder {
   child: ChildProcess;
@@ -201,20 +202,46 @@ describe("DuckDB lock coexistence with a second server", () => {
     expect(getConnectionMode()).toBe("read_only");
   }, 60000);
 
-  it("waits out a holder's startup write lock instead of killing it", async () => {
-    // The holder mimics a real server booting first: write lock for 2s to build
-    // schemas, then downgrade to read-only and keep running. Before the fix, the
-    // call below SIGTERMed this process and the client saw "Server disconnected".
-    holder = await startHolder(dbPath, "rw-then-ro", 2000);
+  it("waits for a holder's startup write lock before joining it as a reader", async () => {
+    holder = await startHolder(dbPath, "rw-on-signal");
 
-    const connection = await getConnection(testDir);
+    let observedWait!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      observedWait = resolve;
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation((message) => {
+      if (String(message).startsWith("Waiting for another tradeblocks-mcp server")) {
+        observedWait();
+      }
+    });
 
-    expect(isAlive(holder.pid)).toBe(true);
-    // The holder is still running as a reader, so we cannot hold the write lock.
-    expect(getConnectionMode()).toBe("read_only");
-    // And we are genuinely usable, not just open.
-    const result = await connection.runAndReadAll("SELECT 42 AS answer");
-    expect(Number(result.getRows()[0][0])).toBe(42);
+    try {
+      const opening = getConnection(testDir);
+      // A successful open or rejection before the contention notice is a
+      // failure. The holder only releases its lock after we observe the wait.
+      await Promise.race([
+        waiting,
+        opening.then(
+          () => {
+            throw new Error("opened while the holder still had the write lock");
+          },
+          (error: unknown) => {
+            throw error;
+          },
+        ),
+      ]);
+      expect(isAlive(holder.pid)).toBe(true);
+      holder.child.kill("SIGUSR2");
+      await holder.waitForLine("DOWNGRADED");
+
+      const connection = await opening;
+      expect(isAlive(holder.pid)).toBe(true);
+      expect(getConnectionMode()).toBe("read_only");
+      const result = await connection.runAndReadAll("SELECT 42 AS answer");
+      expect(Number(result.getRows()[0][0])).toBe(42);
+    } finally {
+      errorSpy.mockRestore();
+    }
   }, 60000);
 
   it("never terminates a live holder by default, even when that means failing to open", async () => {
@@ -223,10 +250,19 @@ describe("DuckDB lock coexistence with a second server", () => {
     // must be to give up: the holder is somebody's working session.
     process.env.DUCKDB_OPEN_WAIT_MS = "2000";
     holder = await startHolder(dbPath, "rw");
-
-    await expect(getConnection(testDir)).rejects.toThrow(/lock/i);
-
-    expect(isAlive(holder.pid)).toBe(true);
+    const waitMessages: string[] = [];
+    const errorSpy = jest.spyOn(console, "error").mockImplementation((message) => {
+      if (String(message).startsWith("Waiting for another tradeblocks-mcp server")) {
+        waitMessages.push(String(message));
+      }
+    });
+    try {
+      await expect(getConnection(testDir)).rejects.toThrow(/lock/i);
+      expect(waitMessages).toHaveLength(1);
+      expect(isAlive(holder.pid)).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
   }, 60000);
 
   it("terminates an ORPHANED holder with no opt-in, and takes the lock", async () => {

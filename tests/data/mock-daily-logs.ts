@@ -1,5 +1,10 @@
 import { DailyLogEntry } from "@tradeblocks/lib";
 
+function localCalendarDate(key: string): Date {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 /**
  * Mock daily log data corresponding to the mock trades
  * Shows portfolio progression day by day
@@ -7,7 +12,7 @@ import { DailyLogEntry } from "@tradeblocks/lib";
 export const mockDailyLogs: DailyLogEntry[] = [
   // Starting period
   {
-    date: new Date("2024-01-01"),
+    date: localCalendarDate("2024-01-01"),
     netLiquidity: 10000,
     currentFunds: 10000,
     withdrawn: 0,
@@ -17,7 +22,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: 0,
   },
   {
-    date: new Date("2024-01-02"),
+    date: localCalendarDate("2024-01-02"),
     netLiquidity: 10000,
     currentFunds: 10000,
     withdrawn: 0,
@@ -27,7 +32,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: 0,
   },
   {
-    date: new Date("2024-01-03"),
+    date: localCalendarDate("2024-01-03"),
     netLiquidity: 10100,
     currentFunds: 10100,
     withdrawn: 0,
@@ -37,7 +42,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: 0,
   },
   {
-    date: new Date("2024-01-04"),
+    date: localCalendarDate("2024-01-04"),
     netLiquidity: 10150,
     currentFunds: 10150,
     withdrawn: 0,
@@ -47,7 +52,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: 0,
   },
   {
-    date: new Date("2024-01-05"),
+    date: localCalendarDate("2024-01-05"),
     netLiquidity: 10200, // First trade closes +$200
     currentFunds: 10200,
     withdrawn: 0,
@@ -57,7 +62,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: 0,
   },
   {
-    date: new Date("2024-01-08"),
+    date: localCalendarDate("2024-01-08"),
     netLiquidity: 10180,
     currentFunds: 10180,
     withdrawn: 0,
@@ -67,7 +72,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: -0.196, // Small drawdown
   },
   {
-    date: new Date("2024-01-09"),
+    date: localCalendarDate("2024-01-09"),
     netLiquidity: 10250,
     currentFunds: 10250,
     withdrawn: 0,
@@ -77,7 +82,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: 0,
   },
   {
-    date: new Date("2024-01-10"),
+    date: localCalendarDate("2024-01-10"),
     netLiquidity: 10350, // Second trade closes +$150
     currentFunds: 10350,
     withdrawn: 0,
@@ -87,7 +92,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: 0,
   },
   {
-    date: new Date("2024-01-12"),
+    date: localCalendarDate("2024-01-12"),
     netLiquidity: 10320,
     currentFunds: 10320,
     withdrawn: 0,
@@ -97,7 +102,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: -0.29,
   },
   {
-    date: new Date("2024-01-16"),
+    date: localCalendarDate("2024-01-16"),
     netLiquidity: 10750, // Third trade closes +$400
     currentFunds: 10750,
     withdrawn: 0,
@@ -107,7 +112,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: 0, // New peak
   },
   {
-    date: new Date("2024-01-18"),
+    date: localCalendarDate("2024-01-18"),
     netLiquidity: 10680,
     currentFunds: 10680,
     withdrawn: 0,
@@ -117,7 +122,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: -0.651,
   },
   {
-    date: new Date("2024-01-19"),
+    date: localCalendarDate("2024-01-19"),
     netLiquidity: 10580,
     currentFunds: 10580,
     withdrawn: 0,
@@ -127,7 +132,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: -1.581, // Deeper drawdown
   },
   {
-    date: new Date("2024-01-22"),
+    date: localCalendarDate("2024-01-22"),
     netLiquidity: 10450, // Fourth trade closes -$300
     currentFunds: 10450,
     withdrawn: 0,
@@ -137,7 +142,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: -2.79, // Max drawdown so far
   },
   {
-    date: new Date("2024-01-25"),
+    date: localCalendarDate("2024-01-25"),
     netLiquidity: 10380,
     currentFunds: 10380,
     withdrawn: 0,
@@ -147,7 +152,7 @@ export const mockDailyLogs: DailyLogEntry[] = [
     drawdownPct: -3.442, // Even deeper
   },
   {
-    date: new Date("2024-01-29"),
+    date: localCalendarDate("2024-01-29"),
     netLiquidity: 10050, // Fifth trade closes -$400
     currentFunds: 10050,
     withdrawn: 0,

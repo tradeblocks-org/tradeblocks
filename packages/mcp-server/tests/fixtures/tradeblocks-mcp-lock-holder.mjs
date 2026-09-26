@@ -13,10 +13,10 @@
  *
  *   mode = rw            open read-write and hold until killed
  *   mode = ro            open read-only and hold until killed
- *   mode = rw-then-ro    open read-write, hold rwHoldMs, then downgrade to
- *                        read-only and hold until killed. This is what a real
- *                        server does at startup: take the write lock to build
- *                        schemas, then release it.
+ *   mode = rw-on-signal   open read-write, then downgrade to read-only on
+ *                        SIGUSR2 and hold until killed. The test signals only
+ *                        after observing a contended open, rather than assuming
+ *                        that a timer has not already elapsed under worker load.
  *   mode = rw-respawn    open read-write and, on SIGTERM, spawn a REPLACEMENT
  *                        holder before exiting. Stands in for a client that
  *                        restarts the server we just killed — the pathological
@@ -102,15 +102,19 @@ try {
     });
   }
 
-  if (mode === "rw-then-ro") {
-    setTimeout(
-      async () => {
-        await closeHeld();
-        held = await open(true);
-        process.stdout.write(`DOWNGRADED ${process.pid}\n`);
-      },
-      Number.isFinite(rwHoldMs) && rwHoldMs >= 0 ? rwHoldMs : 1500,
-    );
+  if (mode === "rw-on-signal") {
+    process.on("SIGUSR2", () => {
+      void closeHeld()
+        .then(() => open(true))
+        .then((next) => {
+          held = next;
+          process.stdout.write(`DOWNGRADED ${process.pid}\n`);
+        })
+        .catch((error) => {
+          process.stderr.write(`HOLDER_FAILED ${error?.message || error}\n`);
+          process.exit(1);
+        });
+    });
   }
 
   // Hold until the test kills us.

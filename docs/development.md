@@ -146,6 +146,13 @@ elsewhere in the computation remain instants.
   - `npm test -- path/to/file.test.ts -t "test case name"`
 - Coverage reports output to `coverage/` via `npm run test:coverage`.
 
+The root Jest suite (`npm test`) covers `@tradeblocks/lib` and the frontend; run
+the MCP suite separately with `npm run test:mcp` after `npm run build:mcp`.
+Public CI runs both suites, with the root suite in the required `Frontend
+(Next.js)` check. The release workflow runs both before publishing; Docker
+tags are pushed only after the version's npm package is published, not on
+every source push.
+
 ## Development Tips
 
 - Use the `.planning/` directory for task breakdowns if you want structured TODOs (optional).
