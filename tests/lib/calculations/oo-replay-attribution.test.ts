@@ -227,4 +227,121 @@ describe("OO replay attribution public interface", () => {
     ]);
     expect(() => occReplayTickers(short(5000), "RUT", { RUT: [] })).toThrow(/Invalid OCC roots/);
   });
+  it.each([
+    [{ bid: 2, ask: 1 }, "crossed_quote"],
+    [{ bid: -1, ask: 1 }, "invalid_quote"],
+    [{ bid: Number.NaN, ask: 1 }, "invalid_quote"],
+    [{ bid: 1, ask: Number.POSITIVE_INFINITY }, "invalid_quote"],
+  ] as const)(
+    "records anomalous quotes as missing rather than marking (%s)",
+    (badQuote, reason) => {
+      const result = calculateOoReplayAttribution({
+        trades: [{ ...trade, dateClosed: "2026-06-11" }],
+        curve: [
+          { date: "2026-06-08", netLiquidity: 1000 },
+          { date: "2026-06-09", netLiquidity: 1020 },
+        ],
+        quoteLookup: (date, ticker) =>
+          ticker.startsWith("SPXW")
+            ? date === "2026-06-08"
+              ? { bid: 1, ask: 1 }
+              : badQuote
+            : undefined,
+      });
+      expect(result.stats.daily[0]).toMatchObject({
+        status: "unavailable",
+        contributions: null,
+        residual: null,
+        reason: { code: "missing_quote", tickers: expect.arrayContaining(["SPXW260612P05000000"]) },
+      });
+      expect(result.quotes.observations).toContainEqual({
+        date: "2026-06-09",
+        ticker: "SPXW260612P05000000",
+        missing: true,
+        reason,
+      });
+    },
+  );
+
+  it("keeps zero-bid and wide uncrossed quotes as valid raw mids", () => {
+    const value = valueReplayLegs([short(5000)], "SPX", "2026-06-09", () => ({ bid: 0, ask: 50 }));
+    expect(value.value).toBe(-2500);
+    expect(value.observations).toEqual([
+      { date: "2026-06-09", ticker: "SPXW260612P05000000", bid: 0, ask: 50, mid: 25 },
+    ]);
+  });
+
+  it("uses an uncrossed fallback after recording a crossed primary", () => {
+    const result = valueReplayLegs([short(5000)], "SPX", "2026-06-09", (_, ticker) =>
+      ticker.startsWith("SPXW") ? { bid: 2, ask: 1 } : { bid: 0.5, ask: 1.5 },
+    );
+    expect(result.value).toBe(-100);
+    expect(result.observations).toContainEqual({
+      date: "2026-06-09",
+      ticker: "SPXW260612P05000000",
+      missing: true,
+      reason: "crossed_quote",
+    });
+    expect(result.observations).toContainEqual({
+      date: "2026-06-09",
+      ticker: "SPX260612P05000000",
+      bid: 0.5,
+      ask: 1.5,
+      mid: 1,
+    });
+  });
+
+  it("withholds a day after zero prior NLV without discarding the book", () => {
+    const result = calculateOoReplayAttribution({
+      trades: [],
+      curve: [
+        { date: "2026-06-08", netLiquidity: 0 },
+        { date: "2026-06-09", netLiquidity: 100 },
+      ],
+      quoteLookup: () => undefined,
+    });
+    expect(result.stats.daily).toEqual([
+      {
+        date: "2026-06-09",
+        oo_change: 100,
+        contributions: null,
+        residual: null,
+        status: "unavailable",
+        reason: { code: "nonpositive_prior_nlv" },
+      },
+    ]);
+    expect(result.stats.episodes).toEqual([]);
+  });
+
+  it("keeps dollar drawdown episodes across nonpositive equity while withholding days with nonpositive prior NLV", () => {
+    const result = calculateOoReplayAttribution({
+      trades: [{ ...trade, dateOpened: "2026-06-09", dateClosed: "2026-06-09", profit: -15 }],
+      curve: [
+        { date: "2026-06-08", netLiquidity: 10 },
+        { date: "2026-06-09", netLiquidity: -5 },
+        { date: "2026-06-10", netLiquidity: -3 },
+      ],
+      quoteLookup: () => undefined,
+    });
+    expect(result.stats.daily[0]).toMatchObject({ status: "available", oo_change: -15 });
+    expect(result.stats.daily[1]).toEqual({
+      date: "2026-06-10",
+      oo_change: 2,
+      contributions: null,
+      residual: null,
+      status: "unavailable",
+      reason: { code: "nonpositive_prior_nlv" },
+    });
+    expect(result.stats.episodes[0]).toMatchObject({
+      peak_date: "2026-06-08",
+      trough_date: "2026-06-09",
+      oo_drawdown: 15,
+      contributions: { a: -15 },
+    });
+    expect(result.stats.coverage).toEqual({
+      available_days: 1,
+      total_days: 2,
+      unavailable_reasons: { nonpositive_prior_nlv: 1 },
+    });
+  });
 });

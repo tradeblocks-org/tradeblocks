@@ -1,5 +1,3 @@
-import { drawdownEpisodesFromEquity } from "./marked-equity.ts";
-
 export interface ReplayLeg {
   /** Contract expiry as YYYYMMDD (OO) or YYYY-MM-DD (market provider). */
   expiration: string;
@@ -34,7 +32,7 @@ export type ReplayQuoteLookup = (
 ) => ReplayQuote | undefined;
 export type ReplayQuoteObservation =
   | { date: string; ticker: string; bid: number; ask: number; mid: number }
-  | { date: string; ticker: string; missing: true };
+  | { date: string; ticker: string; missing: true; reason?: "invalid_quote" | "crossed_quote" };
 
 export interface ReplayMethodParameters {
   mark_time: string;
@@ -73,6 +71,7 @@ export interface ReplayContribution {
 export type ReplayUnavailableReason =
   | { code: "missing_quote"; tickers: string[] }
   | { code: "missing_prior_mark" }
+  | { code: "nonpositive_prior_nlv" }
   | { code: "over_tolerance"; residual: number };
 
 export interface ReplayDaily {
@@ -171,9 +170,12 @@ function observe(
     quote.bid < 0 ||
     quote.ask < 0
   ) {
-    throw new RangeError(`Invalid quote for ${ticker} on ${date}`);
+    return { date, ticker, missing: true, reason: "invalid_quote" };
   }
-  return { date, ticker, bid: quote.bid, ask: quote.ask, mid: (quote.bid + quote.ask) / 2 };
+  if (quote.bid > quote.ask) return { date, ticker, missing: true, reason: "crossed_quote" };
+  const mid = (quote.bid + quote.ask) / 2;
+  if (!Number.isFinite(mid)) return { date, ticker, missing: true, reason: "invalid_quote" };
+  return { date, ticker, bid: quote.bid, ask: quote.ask, mid };
 }
 
 export function valueReplayLegs(
@@ -301,6 +303,18 @@ export function calculateOoReplayAttribution({
   for (let day = 1; day < book.length; day++) {
     const current = book[day];
     const prior = book[day - 1];
+    const ooChange = current.netLiquidity - prior.netLiquidity;
+    if (prior.netLiquidity <= 0) {
+      daily.push({
+        date: current.date,
+        oo_change: ooChange,
+        contributions: null,
+        residual: null,
+        status: "unavailable",
+        reason: { code: "nonpositive_prior_nlv" },
+      });
+      continue;
+    }
     const amounts = new Map<string, number>();
     const parts: { index: number; amount: number }[] = [];
     const missing = new Set<string>();
@@ -333,7 +347,6 @@ export function calculateOoReplayAttribution({
       amounts.set(id, (amounts.get(id) ?? 0) + amount);
       parts.push({ index, amount });
     }
-    const ooChange = current.netLiquidity - prior.netLiquidity;
     if (missing.size || missingPrior) {
       daily.push({
         date: current.date,
@@ -355,8 +368,7 @@ export function calculateOoReplayAttribution({
         amount,
       }));
     const residual = ooChange - contributions.reduce((sum, row) => sum + row.amount, 0);
-    const available =
-      Math.abs(residual) <= Math.abs(prior.netLiquidity) * method.tolerance_fraction + 1e-8;
+    const available = Math.abs(residual) <= prior.netLiquidity * method.tolerance_fraction + 1e-8;
     daily.push({
       date: current.date,
       oo_change: ooChange,
@@ -397,9 +409,24 @@ export function calculateOoReplayAttribution({
         drawdown: { amount, peak_date, trough_date },
       };
     });
-  const episodes: ReplayEpisode[] = drawdownEpisodesFromEquity(
-    book.map(({ date, netLiquidity }) => ({ date, equity: netLiquidity })),
-  )
+  const bookEpisodes: { peakDate: string; troughDate: string }[] = [];
+  if (book.length) {
+    let peak = 0;
+    let trough: number | null = null;
+    for (let index = 1; index < book.length; index++) {
+      if (book[index].netLiquidity >= book[peak].netLiquidity) {
+        if (trough !== null)
+          bookEpisodes.push({ peakDate: book[peak].date, troughDate: book[trough].date });
+        peak = index;
+        trough = null;
+      } else if (trough === null || book[index].netLiquidity < book[trough].netLiquidity) {
+        trough = index;
+      }
+    }
+    if (trough !== null)
+      bookEpisodes.push({ peakDate: book[peak].date, troughDate: book[trough].date });
+  }
+  const episodes: ReplayEpisode[] = bookEpisodes
     .filter((episode) =>
       daily
         .filter((row) => row.date > episode.peakDate && row.date <= episode.troughDate)
