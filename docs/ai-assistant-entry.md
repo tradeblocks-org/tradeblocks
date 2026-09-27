@@ -1,7 +1,7 @@
 # TradeBlocks Repository Guide
 
-`docs/ai-assistant-entry.md` is the source for the root `CLAUDE.md` and `AGENTS.md` files. After
-editing the source, run `node scripts/generate-agent-entry-files.mjs` to update both copies.
+`docs/ai-assistant-entry.md` is the source for the root `AGENTS.md`; `CLAUDE.md` only imports it
+(`@AGENTS.md`). After editing the source, run `node scripts/generate-agent-entry-files.mjs`.
 
 ## Project
 

@@ -171,9 +171,9 @@ For questions or larger architectural changes, start with an architecture sketch
 
 ## AI-Assisted Development
 
-The root `CLAUDE.md` and `AGENTS.md` files provide the same concise repository orientation to AI
-coding assistants. Both are generated from `docs/ai-assistant-entry.md`; after changing the source,
-run `node scripts/generate-agent-entry-files.mjs` and commit both generated files.
+The root `AGENTS.md` gives AI coding assistants a concise repository orientation, and `CLAUDE.md`
+imports it with the single line `@AGENTS.md`. Both are generated from `docs/ai-assistant-entry.md`;
+after changing the source, run `node scripts/generate-agent-entry-files.mjs` and commit both files.
 
 Keep durable implementation guidance in `docs/` and link to it from the entry source instead of
 duplicating it there.
