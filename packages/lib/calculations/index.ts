@@ -54,6 +54,7 @@ export * from "./paired-block-bootstrap.ts";
 export * from "./selection-adjusted-lower-bound.ts";
 export * from "./parameter-study-selection.ts";
 
+export * from "./oo-replay-attribution.ts";
 // Re-export types for convenience
 export * from "../models/portfolio-stats.ts";
 

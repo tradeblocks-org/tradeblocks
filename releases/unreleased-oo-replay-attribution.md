@@ -1,0 +1,3 @@
+# Unreleased — OO replay attribution
+
+The public `@tradeblocks/lib` calculation entrypoints now include an additive, pure OO replay-attribution module. Given raw Option Omega trades, its dated book curve and an injected option-quote lookup, it values open legs at the requested close, reconciles daily per-strategy contributions to the book, and reports drawdowns, episodes, quote evidence and unavailable days. Existing calculation exports and MCP `replay_trade` pricing are unchanged. The method prefers SPXW quotes over SPX even for third-Friday expiries when both are present, as measured against the Option Omega book; it records this precedence alongside mark time, fee factor and tolerance.
