@@ -232,6 +232,8 @@ describe("OO replay attribution public interface", () => {
     [{ bid: -1, ask: 1 }, "invalid_quote"],
     [{ bid: Number.NaN, ask: 1 }, "invalid_quote"],
     [{ bid: 1, ask: Number.POSITIVE_INFINITY }, "invalid_quote"],
+    [{ bid: 0, ask: 1 }, "nonpositive_quote"],
+    [{ bid: 1, ask: 11 }, "blown_spread"],
   ] as const)(
     "records anomalous quotes as missing rather than marking (%s)",
     (badQuote, reason) => {
@@ -260,14 +262,15 @@ describe("OO replay attribution public interface", () => {
         missing: true,
         reason,
       });
+      expect(result.method_parameters.quote_validity).toBe("positive-uncrossed-max10x-v1");
     },
   );
 
-  it("keeps zero-bid and wide uncrossed quotes as valid raw mids", () => {
-    const value = valueReplayLegs([short(5000)], "SPX", "2026-06-09", () => ({ bid: 0, ask: 50 }));
-    expect(value.value).toBe(-2500);
+  it("marks an uncrossed spread inside 10× at its raw mid", () => {
+    const value = valueReplayLegs([short(5000)], "SPX", "2026-06-09", () => ({ bid: 1, ask: 8 }));
+    expect(value.value).toBe(-450);
     expect(value.observations).toEqual([
-      { date: "2026-06-09", ticker: "SPXW260612P05000000", bid: 0, ask: 50, mid: 25 },
+      { date: "2026-06-09", ticker: "SPXW260612P05000000", bid: 1, ask: 8, mid: 4.5 },
     ]);
   });
 
@@ -343,5 +346,31 @@ describe("OO replay attribution public interface", () => {
       total_days: 2,
       unavailable_reasons: { nonpositive_prior_nlv: 1 },
     });
+  });
+  it("orders drawdown episodes by cents before comparing peak dates", () => {
+    const curve = [
+      { date: "2026-02-06", netLiquidity: 1000 },
+      { date: "2026-02-09", netLiquidity: 663.8000000000466 },
+      { date: "2026-02-10", netLiquidity: 1100 },
+      { date: "2026-02-26", netLiquidity: 1200 },
+      { date: "2026-02-27", netLiquidity: 863.7999999999302 },
+    ];
+    const result = calculateOoReplayAttribution({
+      trades: curve.slice(1).map((point, index) => ({
+        ...trade,
+        dateOpened: point.date,
+        dateClosed: point.date,
+        profit: point.netLiquidity - curve[index].netLiquidity,
+        legs: [],
+      })),
+      curve,
+      quoteLookup: () => undefined,
+    });
+    expect(
+      result.stats.episodes.map((episode) => [episode.peak_date, episode.trough_date]),
+    ).toEqual([
+      ["2026-02-06", "2026-02-09"],
+      ["2026-02-26", "2026-02-27"],
+    ]);
   });
 });

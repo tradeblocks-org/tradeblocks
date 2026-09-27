@@ -32,13 +32,19 @@ export type ReplayQuoteLookup = (
 ) => ReplayQuote | undefined;
 export type ReplayQuoteObservation =
   | { date: string; ticker: string; bid: number; ask: number; mid: number }
-  | { date: string; ticker: string; missing: true; reason?: "invalid_quote" | "crossed_quote" };
+  | {
+      date: string;
+      ticker: string;
+      missing: true;
+      reason?: "invalid_quote" | "nonpositive_quote" | "crossed_quote" | "blown_spread";
+    };
 
 export interface ReplayMethodParameters {
   mark_time: string;
   opening_fee_factor: number;
   tolerance_fraction: number;
   root_precedence: Record<string, readonly string[]>;
+  quote_validity: "positive-uncrossed-max10x-v1";
 }
 export type ReplayMethodOverrides = Partial<
   Pick<
@@ -53,6 +59,7 @@ export const DEFAULT_REPLAY_METHOD_PARAMETERS: ReplayMethodParameters = {
   tolerance_fraction: 0.0005,
   // SPX is measured against OO. RUT/NDX are registry-derived and not OO-measured.
   root_precedence: { SPX: ["SPXW", "SPX"], RUT: ["RUTW", "RUT"], NDX: ["NDXP", "NDX"] },
+  quote_validity: "positive-uncrossed-max10x-v1",
 };
 
 export interface ReplayMark {
@@ -164,6 +171,8 @@ function observe(
 ): ReplayQuoteObservation {
   const quote = lookup(date, ticker, markTime);
   if (!quote) return { date, ticker, missing: true };
+  // Derived from MCP trade-replay.ts isUsableQuote (positive sides) and markPrice
+  // (crossed/10× spread). Unlike MCP, a rejected close has no HL2 fallback.
   if (
     !Number.isFinite(quote.bid) ||
     !Number.isFinite(quote.ask) ||
@@ -172,7 +181,11 @@ function observe(
   ) {
     return { date, ticker, missing: true, reason: "invalid_quote" };
   }
+  if (quote.bid === 0 || quote.ask === 0) {
+    return { date, ticker, missing: true, reason: "nonpositive_quote" };
+  }
   if (quote.bid > quote.ask) return { date, ticker, missing: true, reason: "crossed_quote" };
+  if (quote.ask / quote.bid > 10) return { date, ticker, missing: true, reason: "blown_spread" };
   const mid = (quote.bid + quote.ask) / 2;
   if (!Number.isFinite(mid)) return { date, ticker, missing: true, reason: "invalid_quote" };
   return { date, ticker, bid: quote.bid, ask: quote.ask, mid };
@@ -458,7 +471,11 @@ export function calculateOoReplayAttribution({
         }),
       };
     })
-    .sort((a, b) => b.oo_drawdown - a.oo_drawdown || a.peak_date.localeCompare(b.peak_date));
+    .sort(
+      (a, b) =>
+        Math.round(b.oo_drawdown * 100) - Math.round(a.oo_drawdown * 100) ||
+        a.peak_date.localeCompare(b.peak_date),
+    );
   const unavailable_reasons: Record<string, number> = {};
   for (const row of daily)
     if (row.reason)
