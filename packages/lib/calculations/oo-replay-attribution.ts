@@ -40,19 +40,21 @@ export interface ReplayMethodParameters {
   mark_time: string;
   opening_fee_factor: number;
   tolerance_fraction: number;
-  root_resolution: "spxw-spx/v1";
-  root_precedence: readonly ["SPXW", "SPX"];
+  root_precedence: Record<string, readonly string[]>;
 }
 export type ReplayMethodOverrides = Partial<
-  Pick<ReplayMethodParameters, "mark_time" | "opening_fee_factor" | "tolerance_fraction">
+  Pick<
+    ReplayMethodParameters,
+    "mark_time" | "opening_fee_factor" | "tolerance_fraction" | "root_precedence"
+  >
 >;
 
 export const DEFAULT_REPLAY_METHOD_PARAMETERS: ReplayMethodParameters = {
   mark_time: "15:59",
   opening_fee_factor: 2,
   tolerance_fraction: 0.0005,
-  root_resolution: "spxw-spx/v1",
-  root_precedence: ["SPXW", "SPX"],
+  // SPX is measured against OO. RUT/NDX are registry-derived and not OO-measured.
+  root_precedence: { SPX: ["SPXW", "SPX"], RUT: ["RUTW", "RUT"], NDX: ["NDXP", "NDX"] },
 };
 
 export interface ReplayMark {
@@ -120,7 +122,14 @@ export interface OoReplayAttribution {
 }
 
 /** SPXW is the observed OO-preferred PM-settled series, including on third Fridays. */
-export function occReplayTickers(leg: ReplayLeg, underlying: string): string[] {
+export function occReplayTickers(
+  leg: ReplayLeg,
+  underlying: string,
+  rootPrecedence: Record<
+    string,
+    readonly string[]
+  > = DEFAULT_REPLAY_METHOD_PARAMETERS.root_precedence,
+): string[] {
   const match = /^(\d{4})(?:-(\d{2})-(\d{2})|(\d{2})(\d{2}))$/.exec(leg.expiration);
   const year = Number(match?.[1]);
   const monthText = match?.[2] ?? match?.[4];
@@ -137,8 +146,15 @@ export function occReplayTickers(leg: ReplayLeg, underlying: string): string[] {
   )
     .toString()
     .padStart(8, "0")}`;
-  if (underlying !== "SPX") return [`${underlying}${tail}`];
-  return [`SPXW${tail}`, `SPX${tail}`];
+  const roots = rootPrecedence[underlying] ??
+    DEFAULT_REPLAY_METHOD_PARAMETERS.root_precedence[underlying] ?? [underlying];
+  if (
+    !roots.length ||
+    roots.some((root, index) => !/^[A-Z][A-Z0-9]{0,5}$/.test(root) || roots.indexOf(root) !== index)
+  ) {
+    throw new RangeError(`Invalid OCC roots for ${underlying}`);
+  }
+  return roots.map((root) => `${root}${tail}`);
 }
 
 function observe(
@@ -166,6 +182,10 @@ export function valueReplayLegs(
   date: string,
   quoteLookup: ReplayQuoteLookup,
   markTime = "15:59",
+  rootPrecedence: Record<
+    string,
+    readonly string[]
+  > = DEFAULT_REPLAY_METHOD_PARAMETERS.root_precedence,
 ): ReplayMark {
   const observations = new Map<string, ReplayQuoteObservation>();
   const missing = new Set<string>();
@@ -173,7 +193,7 @@ export function valueReplayLegs(
   let missingLeg = false;
   for (const leg of legs) {
     let mid: number | undefined;
-    for (const ticker of occReplayTickers(leg, underlying)) {
+    for (const ticker of occReplayTickers(leg, underlying, rootPrecedence)) {
       let quote = observations.get(ticker);
       if (!quote) {
         quote = observe(date, ticker, quoteLookup, markTime);
@@ -205,7 +225,14 @@ export function cumulativeReplayTradeMark(
   parameters: ReplayMethodOverrides = {},
 ): ReplayMark {
   const method = { ...DEFAULT_REPLAY_METHOD_PARAMETERS, ...parameters };
-  const marked = valueReplayLegs(trade.legs, trade.underlying, date, quoteLookup, method.mark_time);
+  const marked = valueReplayLegs(
+    trade.legs,
+    trade.underlying,
+    date,
+    quoteLookup,
+    method.mark_time,
+    method.root_precedence,
+  );
   if (marked.value === null) return marked;
   const entry = trade.legs.reduce(
     (sum, leg) =>
@@ -226,7 +253,14 @@ export function calculateOoReplayAttribution({
   quoteLookup: ReplayQuoteLookup;
   parameters?: ReplayMethodOverrides;
 }): OoReplayAttribution {
-  const method = { ...DEFAULT_REPLAY_METHOD_PARAMETERS, ...parameters };
+  const method = {
+    ...DEFAULT_REPLAY_METHOD_PARAMETERS,
+    ...parameters,
+    root_precedence: {
+      ...DEFAULT_REPLAY_METHOD_PARAMETERS.root_precedence,
+      ...parameters.root_precedence,
+    },
+  };
   if (
     !Number.isFinite(method.opening_fee_factor) ||
     !Number.isFinite(method.tolerance_fraction) ||

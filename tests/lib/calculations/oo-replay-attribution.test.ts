@@ -163,7 +163,8 @@ describe("OO replay attribution public interface", () => {
   it("prefers an observed SPXW mark on third Friday and records attempted monthly fallback", () => {
     const monthly = { ...short(5000), expiration: "20260619" };
     expect(occReplayTickers(monthly, "SPX")).toEqual(["SPXW260619P05000000", "SPX260619P05000000"]);
-    expect(occReplayTickers(monthly, "RUT")).toEqual(["RUT260619P05000000"]);
+    expect(occReplayTickers(monthly, "RUT")).toEqual(["RUTW260619P05000000", "RUT260619P05000000"]);
+    expect(occReplayTickers(monthly, "NDX")).toEqual(["NDXP260619P05000000", "NDX260619P05000000"]);
     const preferred = valueReplayLegs([monthly], "SPX", "2026-06-18", (_, ticker) => ({
       bid: ticker.startsWith("SPXW") ? 1 : 9,
       ask: ticker.startsWith("SPXW") ? 1 : 9,
@@ -198,5 +199,32 @@ describe("OO replay attribution public interface", () => {
     expect(() => occReplayTickers({ ...compact, expiration: "2026-02-30" }, "SPX")).toThrow(
       /Invalid leg expiration/,
     );
+  });
+  it("uses recorded caller root precedence to value a non-SPX leg", () => {
+    const rut = { ...trade, underlying: "RUT", strategyId: "rut" };
+    const result = calculateOoReplayAttribution({
+      trades: [rut],
+      curve: [
+        { date: "2026-06-08", netLiquidity: 1000 },
+        { date: "2026-06-09", netLiquidity: 1020 },
+      ],
+      quoteLookup: (date, ticker) =>
+        ticker.startsWith("RUTX")
+          ? { bid: date === "2026-06-08" ? 1 : 0.8, ask: date === "2026-06-08" ? 1 : 0.8 }
+          : ticker.startsWith("RUTW")
+            ? { bid: 9, ask: 9 }
+            : undefined,
+      parameters: { root_precedence: { RUT: ["RUTX", "RUTW", "RUT"] } },
+    });
+    expect(result.stats.daily[0]).toMatchObject({
+      status: "available",
+      contributions: [{ strategy_id: "rut", amount: 20 }],
+    });
+    expect(result.method_parameters.root_precedence.RUT).toEqual(["RUTX", "RUTW", "RUT"]);
+    expect(result.quotes.observations.map((row) => [row.date, row.ticker])).toEqual([
+      ["2026-06-08", "RUTX260612P05000000"],
+      ["2026-06-09", "RUTX260612P05000000"],
+    ]);
+    expect(() => occReplayTickers(short(5000), "RUT", { RUT: [] })).toThrow(/Invalid OCC roots/);
   });
 });
