@@ -1,6 +1,7 @@
 import { drawdownEpisodesFromEquity } from "./marked-equity.ts";
 
 export interface ReplayLeg {
+  /** Contract expiry as YYYYMMDD (OO) or YYYY-MM-DD (market provider). */
   expiration: string;
   strike: number;
   optionType: "Call" | "Put";
@@ -120,7 +121,20 @@ export interface OoReplayAttribution {
 
 /** SPXW is the observed OO-preferred PM-settled series, including on third Fridays. */
 export function occReplayTickers(leg: ReplayLeg, underlying: string): string[] {
-  const tail = `${leg.expiration.slice(2)}${leg.optionType[0]}${Math.round(leg.strike * 1000)
+  const match = /^(\d{4})(?:-(\d{2})-(\d{2})|(\d{2})(\d{2}))$/.exec(leg.expiration);
+  const year = Number(match?.[1]);
+  const monthText = match?.[2] ?? match?.[4];
+  const dayText = match?.[3] ?? match?.[5];
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (!match || month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]) {
+    throw new RangeError(`Invalid leg expiration: ${leg.expiration}`);
+  }
+  const tail = `${match[1].slice(2)}${monthText}${dayText}${leg.optionType[0]}${Math.round(
+    leg.strike * 1000,
+  )
     .toString()
     .padStart(8, "0")}`;
   if (underlying !== "SPX") return [`${underlying}${tail}`];

@@ -184,4 +184,19 @@ describe("OO replay attribution public interface", () => {
       missing: true,
     });
   });
+  it("normalizes both OO and market-provider expirations, rejecting malformed dates", () => {
+    const compact = { ...short(5000), expiration: "20260612" };
+    const hyphenated = { ...compact, expiration: "2026-06-12" };
+    expect(occReplayTickers(hyphenated, "SPX")).toEqual(occReplayTickers(compact, "SPX"));
+    expect(occReplayTickers(hyphenated, "SPX")).toEqual([
+      "SPXW260612P05000000",
+      "SPX260612P05000000",
+    ]);
+    expect(() => occReplayTickers({ ...compact, expiration: "June 12" }, "SPX")).toThrow(
+      /Invalid leg expiration/,
+    );
+    expect(() => occReplayTickers({ ...compact, expiration: "2026-02-30" }, "SPX")).toThrow(
+      /Invalid leg expiration/,
+    );
+  });
 });
