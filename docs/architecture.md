@@ -146,7 +146,6 @@ tradeblocks/
   packages/
     lib/                  # Core business logic (@tradeblocks/lib)
     mcp-server/           # MCP server (npm: tradeblocks-mcp)
-    agent-skills/         # AI agent skill definitions
   docs/                   # Documentation (single source of truth)
   releases/               # Release notes per version
   tests/                  # Jest test suites

@@ -93,7 +93,7 @@ describe("backtest-schemas integration", () => {
   });
 
   it("ensureBacktestsSchema creates the schema with NO trades catalog attached (standalone-safe)", async () => {
-    // The bootstrap guarantee for a standalone `db init` (tradeblocks-org/enterprise#983):
+    // The bootstrap guarantee for a standalone `db init`:
     // mint a standalone backtests.duckdb with no analytics/trades catalog present.
     // Deliberately NO setupTradesSchema() here — the pure-DDL path must not need it.
     const inst = await DuckDBInstance.create(":memory:");

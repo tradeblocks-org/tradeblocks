@@ -36,7 +36,7 @@ export type DbKind = "analytics" | "market" | "backtests";
  * (the engine's backtests-db resolver, the console reader, the calibration
  * probe) MUST resolve through this so the `database/` segment can never drift —
  * a missing segment silently splits reads from writes (runs succeed, the console
- * shows an empty history forever). See tradeblocks-org/enterprise#983.
+ * shows an empty history forever).
  */
 export function resolveDbPath(dataRoot: string, kind: DbKind): string {
   return path.join(dataRoot, "database", `${kind}.duckdb`);

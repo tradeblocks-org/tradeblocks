@@ -23,7 +23,7 @@ describe("data-root", () => {
       );
     });
 
-    it("always includes the database/ segment (the drift guard — enterprise#983)", () => {
+    it("always includes the database/ segment (the drift guard)", () => {
       // The whole point: a writer that omits `database/` silently splits from a
       // reader that includes it. Every path this resolver returns carries it.
       for (const kind of ["backtests", "market", "analytics"] as const) {

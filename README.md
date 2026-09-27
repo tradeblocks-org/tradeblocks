@@ -15,8 +15,7 @@ tradeblocks/
 │   └── development.md        # Architecture and local dev guide
 └── packages/
     ├── lib/                  # Core business logic (@tradeblocks/lib)
-    ├── mcp-server/           # MCP server (npm: tradeblocks-mcp)
-    └── agent-skills/         # AI agent skill definitions
+    └── mcp-server/           # MCP server (npm: tradeblocks-mcp)
 ```
 
 ## Quick Start
@@ -51,16 +50,16 @@ npm run test:coverage    # Coverage report
 
 ## Documentation
 
-| Guide                                           | Description                          |
-| ----------------------------------------------- | ------------------------------------ |
-| [Getting Started](docs/getting-started.md)      | Installation, env vars, first import |
-| [Market Data](docs/market-data.md)              | CSV import, Massive API, enrichment  |
-| [MCP Tools](docs/mcp-tools.md)                  | Complete tool reference by category  |
-| [Architecture](docs/architecture.md)            | Data flow, schemas, key patterns     |
-| [Development Guide](docs/development.md)        | Contributing, local dev setup        |
-| [MCP Server](packages/mcp-server/README.md)     | Installation, platform configuration |
-| [Usage Guide](docs/usage.md)                    | Tool reference, example workflows    |
-| [Agent Skills](packages/agent-skills/README.md) | Guided conversational analysis       |
+| Guide                                                            | Description                          |
+| ---------------------------------------------------------------- | ------------------------------------ |
+| [Getting Started](docs/getting-started.md)                       | Installation, env vars, first import |
+| [Market Data](docs/market-data.md)                               | CSV import, Massive API, enrichment  |
+| [MCP Tools](docs/mcp-tools.md)                                   | Complete tool reference by category  |
+| [Architecture](docs/architecture.md)                             | Data flow, schemas, key patterns     |
+| [Development Guide](docs/development.md)                         | Contributing, local dev setup        |
+| [MCP Server](packages/mcp-server/README.md)                      | Installation, platform configuration |
+| [Usage Guide](docs/usage.md)                                     | Tool reference, example workflows    |
+| [Agent Skills](https://github.com/davidromeo/tradeblocks-skills) | Guided conversational analysis       |
 
 ## Data Format
 

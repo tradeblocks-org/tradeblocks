@@ -201,8 +201,7 @@ tradeblocks/
 ├── tests/
 └── packages/
     ├── lib/               # Core business logic (@tradeblocks/lib)
-    ├── mcp-server/        # MCP server (npm: tradeblocks-mcp)
-    └── agent-skills/      # AI agent skill definitions
+    └── mcp-server/        # MCP server (npm: tradeblocks-mcp)
 ```
 
 ### Import Patterns
@@ -233,7 +232,7 @@ npm test
 
 1. **Web app development**: Work from the repository root with `npm run dev`
 2. **MCP server development**: Changes in `packages/mcp-server/src/` require rebuild with `npm run build -w packages/mcp-server`
-3. **Agent skills**: Markdown files in `packages/agent-skills/` that provide guided workflows for AI assistants
+3. **Agent skills**: Maintained in the standalone [tradeblocks-skills](https://github.com/davidromeo/tradeblocks-skills) plugin, not in this repository
 
 For MCP server development details, see [packages/mcp-server/README.md](../packages/mcp-server/README.md).
 

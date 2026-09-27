@@ -6,8 +6,8 @@
  *
  * Two input sources, both required to pass:
  *   1. A real already-written option-quote parquet day (illiquid wings,
- *      penny mids, near-expiry, the full strike grid). Skipped automatically
- *      when the local data root is absent (CI), exercised locally.
+ *      penny mids, near-expiry, the full strike grid). Runs only when
+ *      TRADEBLOCKS_PARITY_DATA_ROOT names a market data root holding that day.
  *   2. A synthetic edge-case set (zero/penny mids, deep OTM, near-expiry,
  *      both rights) that always runs.
  *
@@ -233,16 +233,17 @@ describe("IV solver parity — synthetic edge cases", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Real parquet-day fixture (runs locally; skips when data root absent)
+// Real parquet-day fixture (opt-in: set TRADEBLOCKS_PARITY_DATA_ROOT to a market data root)
 // ---------------------------------------------------------------------------
 
-const DATA_ROOT = process.env.TRADEBLOCKS_PARITY_DATA_ROOT ?? "/home/romeo/tradeblocks-data/market";
+const DATA_ROOT = process.env.TRADEBLOCKS_PARITY_DATA_ROOT;
 const PARITY_DATE = process.env.TRADEBLOCKS_PARITY_DATE ?? "2024-03-15";
 const QUOTE_PARQUET = `${DATA_ROOT}/option_quote_minutes/underlying=SPX/date=${PARITY_DATE}/data.parquet`;
 const CHAIN_GLOB = `${DATA_ROOT}/option_chain/underlying=SPX/date=${PARITY_DATE}/*.parquet`;
 const SPOT_PARQUET = `${DATA_ROOT}/spot/ticker=SPX/date=${PARITY_DATE}/data.parquet`;
 
-const hasRealData = existsSync(QUOTE_PARQUET) && existsSync(SPOT_PARQUET);
+const hasRealData =
+  DATA_ROOT !== undefined && existsSync(QUOTE_PARQUET) && existsSync(SPOT_PARQUET);
 const describeReal = hasRealData ? describe : describe.skip;
 
 async function loadRealFixture(): Promise<Fixture> {
