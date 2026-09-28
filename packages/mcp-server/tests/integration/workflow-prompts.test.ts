@@ -43,8 +43,31 @@ it("exposes version, instructions, four runnable OO prompts and all existing too
       "stress-oo-portfolio",
       "live-vs-oo",
     ]);
-    for (const name of prompts.prompts.map((p) => p.name)) {
+    expect(
+      Object.fromEntries(
+        prompts.prompts.map((p) => [
+          p.name,
+          p.arguments?.map((arg) => `${arg.name}${arg.required ? "" : "?"}`),
+        ]),
+      ),
+    ).toEqual({
+      "bring-in-oo-backtest": ["ooId?", "block?"],
+      "is-this-optimum-real": ["optimizationId?"],
+      "stress-oo-portfolio": ["ooId?", "block?"],
+      "live-vs-oo": ["block?"],
+    });
+    for (const { name, arguments: args = [] } of prompts.prompts) {
+      // MCP lets prompts/get omit arguments entirely; that must equal an empty set.
       const result = await client.getPrompt({ name });
+      const withEmpty = await client.getPrompt({ name, arguments: {} });
+      expect(withEmpty).toEqual(result);
+      const given = Object.fromEntries(args.map((arg) => [arg.name, `given-${arg.name}`]));
+      const withArgs = await client.getPrompt({ name, arguments: given });
+      const withArgsText = withArgs.messages[0].content;
+      if (withArgsText.type !== "text") throw new Error("Expected text prompt");
+      for (const [argName, value] of Object.entries(given)) {
+        expect(withArgsText.text).toContain(`${argName} = "${value}"`);
+      }
       expect(result.messages).toHaveLength(1);
       expect(result.messages[0].role).toBe("user");
       expect(result.messages[0].content.type).toBe("text");

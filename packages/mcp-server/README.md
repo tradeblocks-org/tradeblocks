@@ -281,6 +281,14 @@ as `/tradeblocks:bring-in-oo-backtest (MCP)`, `/tradeblocks:is-this-optimum-real
 clients can list and get these prompts through their prompt interface. The
 server name is chosen by the user; these are not Option Omega tool prefixes.
 
+Each prompt takes optional arguments, typed after the command in Claude Code in
+this order, for example
+`/mcp__tradeblocks__bring-in-oo-backtest <savedBacktestId> my-strategy`:
+`bring-in-oo-backtest` and `stress-oo-portfolio` take `ooId` (an OO saved
+backtest or portfolio ID, or a run's `runId`) and `block`; `is-this-optimum-real`
+takes `optimizationId`; `live-vs-oo` takes `block`. Without arguments the prompt
+works from the conversation.
+
 | Prompt                 | Purpose                                                                                                               |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `bring-in-oo-backtest` | Capture a backtest's trade log as a block, or import an OO-exported trade CSV.                                        |
@@ -294,9 +302,13 @@ optimum prompt directs to `/tradeblocks:is-this-optimum-real`. That skill
 captures each scratch run separately and combines verified trades under
 distinct strategies in one trade-only comparison block for a paired
 best-minus-centre test. This test covers jointly traded days, not the
-optimizer's selection from the grid. Without the plugin, export each run's
-trade-log CSV from OO and import into separate blocks: the prompt runs tests
-against zero per block and states that no paired difference ran. The CSV must
+optimizer's selection from the grid. Without the plugin,
+`bring-in-oo-backtest` asks for OO's trade-log and daily-log CSVs and imports
+both in one `import_csv` call with `dailyLogPath`, so the block carries OO's
+marked daily curve; it says so when the daily log is missing. The optimum
+prompt without the plugin has each run's trade-log CSV exported from OO and
+imported into separate blocks: it runs tests against zero per block and states
+that no paired difference ran. The CSV must
 be readable by the TradeBlocks server; for Docker/HTTP, put it inside the
 mounted server data directory. If unavailable, stop instead of rebuilding
 CSV from model responses. Portfolio capture is not supplied by that skill.

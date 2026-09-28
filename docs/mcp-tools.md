@@ -206,6 +206,22 @@ the server configured under the name `tradeblocks`, the `/` menu lists them as
 `prompts/list` and `prompts/get`. These prompts guide analysis, not server-side
 calls to Option Omega. The OO server name is chosen by the user.
 
+Each prompt takes optional arguments, passed after the command in Claude Code
+(space-separated, in this order) or as named `prompts/get` arguments elsewhere.
+Without them the prompt works from the conversation, as before.
+
+| Prompt                 | Arguments                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| `bring-in-oo-backtest` | `ooId` (OO `savedBacktestId`, or a scratch run's `runId`), `block` (new block name)      |
+| `is-this-optimum-real` | `optimizationId` (OO optimization to evaluate)                                           |
+| `stress-oo-portfolio`  | `ooId` (OO `savedPortfolioId`, or a portfolio run's `runId`), `block` (block ID or name) |
+| `live-vs-oo`           | `block` (block ID of the OO reference backtest)                                          |
+
+For example, `/mcp__tradeblocks__bring-in-oo-backtest <savedBacktestId> my-strategy`.
+A saved backtest's or portfolio's own OO headline figures come from
+`get_saved_backtest` or `get_saved_portfolio`; `get_backtest_results` and
+`get_portfolio_results` are only for a finished run's `runId`.
+
 | Prompt                 | Workflow                                                                                                                                                                                           |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bring-in-oo-backtest` | Bring OO trades into a block; verify it with `get_block_info` and `get_statistics`.                                                                                                                |
@@ -214,7 +230,11 @@ calls to Option Omega. The OO server name is chosen by the user.
 | `live-vs-oo`           | Compare a reporting log's live trades with the OO reference block it sits in, using `compare_backtest_to_actual`, `analyze_discrepancies`, `analyze_slippage_trends` and `analyze_live_alignment`. |
 
 The `bring-in-oo-backtest` prompt uses the `tradeblocks-skills` plugin's
-`/tradeblocks:oo-capture` when installed. The optimum prompt points plugin users
+`/tradeblocks:oo-capture` when installed. Without it, `bring-in-oo-backtest`
+asks for both OO's trade-log CSV and its daily-log CSV, saved at paths the
+TradeBlocks server can read, and calls `import_csv` once with `dailyLogPath`,
+so one block holds OO's trades and marked daily curve; with only a trade log it
+says the block has no OO marked daily curve. The optimum prompt points plugin users
 to `/tradeblocks:is-this-optimum-real`, which captures each run separately and
 combines the verified trades into one comparison block; its paired result is
 best minus centre on jointly traded days, not adjusted for grid selection.

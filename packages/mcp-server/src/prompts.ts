@@ -1,4 +1,11 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  ErrorCode,
+  GetPromptRequestSchema,
+  McpError,
+  type GetPromptResult,
+} from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 
 // Owned by the tradeblocks-skills plugin (#4167); the server does not install or invoke it.
 const captureSkill = "/tradeblocks:oo-capture";
@@ -13,31 +20,70 @@ isIgnored rows and still-open trades are not closed economic trades. OO profit
 already includes fees; never subtract fees twice. The user's OO MCP server name
 is unknown: find its tools by their names, not a hard-coded server prefix.`;
 
+// Names the arguments the user supplied; empty when the prompt was called without any.
+function givenArguments(args: Record<string, string | undefined>): string {
+  const given = Object.entries(args).flatMap(([name, value]) =>
+    value?.trim() ? [`${name} = ${JSON.stringify(value.trim())}`] : [],
+  );
+  return given.length ? `Arguments given: ${given.join("; ")}.\n` : "";
+}
+
+type PromptArgs = Record<string, z.ZodOptional<z.ZodString>>;
+type PromptConfig = { title: string; description: string; argsSchema: PromptArgs };
+type RenderPrompt = (args: Record<string, string | undefined>) => GetPromptResult;
+
 export function registerWorkflowPrompts(server: McpServer): void {
-  server.registerPrompt(
+  const prompts = new Map<string, { args: z.ZodObject<PromptArgs>; render: RenderPrompt }>();
+  const register = (name: string, config: PromptConfig, render: RenderPrompt) => {
+    server.registerPrompt(name, config, render);
+    prompts.set(name, { args: z.object(config.argsSchema), render });
+  };
+
+  register(
     "bring-in-oo-backtest",
     {
       title: "Bring in an OO backtest",
-      description: "Import an Option Omega trade log as a TradeBlocks block",
+      description:
+        "Import an Option Omega backtest's trade log and marked daily curve as a TradeBlocks block",
+      // Claude Code passes prompt arguments positionally, split on whitespace, so
+      // each is one token and the most-used argument comes first.
+      argsSchema: {
+        ooId: z
+          .string()
+          .optional()
+          .describe("OO savedBacktestId or a scratch run's runId; tried as savedBacktestId first"),
+        block: z.string().optional().describe("Name for the new TradeBlocks block"),
+      },
     },
-    () => ({
+    (args) => ({
       messages: [
         {
           role: "user",
           content: {
             type: "text",
             text: `Bring the requested Option Omega backtest into TradeBlocks.
-Use OO list_backtests and get_saved_backtest to identify the source and
-get_backtest_results for OO's own headline figures; ask for the source if
-ambiguous. If the tradeblocks-skills Claude Code plugin is installed, use its
-${captureSkill} skill for the selected saved backtest (or scratch run by runId).
-Its verified capture handles OO get_trade_log; do not manually transcribe pages.
-Otherwise ask the user to export OO's trade log CSV and save it at a path readable
-by the TradeBlocks server (for Docker/HTTP, inside the server's mounted data
-directory), then call TB import_csv with that file path. If there is no
-server-readable CSV, stop and say import cannot proceed; never reconstruct CSV
-from OO responses. Verify the resulting block with get_block_info and
-get_statistics, and report provenance and any missing marked daily curve.
+${givenArguments(args)}Identify the OO source; ask the user if it is ambiguous. A saved backtest:
+find it with OO list_backtests and read it with get_saved_backtest, whose result
+holds OO's own headline figures. A scratch run: poll OO get_backtest_status with
+its runId until it completes, then read get_backtest_results by that runId.
+get_backtest_results takes only a runId; never pass it a savedBacktestId. Given
+an ooId, try it as a savedBacktestId with get_saved_backtest first, and treat it
+as a runId only if OO has no saved backtest with that ID. Given a block, use it
+as the new block's name. If the tradeblocks-skills Claude Code plugin is
+installed, use its ${captureSkill} skill for the selected saved backtest (or
+scratch run by runId). Its verified capture handles OO get_trade_log and the
+marked daily curve; do not manually transcribe pages. Otherwise ask the user to
+export both OO's trade log CSV and its daily log CSV and save them at paths
+readable by the TradeBlocks server (for Docker/HTTP, inside the server's mounted
+data directory). Then call TB import_csv once, with csvPath set to the trade log
+and dailyLogPath set to the daily log, so one block holds OO's trades and OO's
+marked daily curve. If only the trade log is available, import it without
+dailyLogPath and say plainly that the block has no OO marked daily curve, so
+its drawdown is trade-realized only. If there is no server-readable trade-log
+CSV, stop and say import cannot proceed; never reconstruct CSV from OO
+responses. Verify the resulting block with get_block_info (tradeCount and
+dailyLogCount) and get_statistics, and report provenance and whether OO's
+marked daily curve is present.
 ${dataIntegrity}`,
           },
         },
@@ -45,19 +91,22 @@ ${dataIntegrity}`,
     }),
   );
 
-  server.registerPrompt(
+  register(
     "is-this-optimum-real",
     {
       title: "Is this optimum real?",
       description: "Test an OO optimizer lead against two captured scratch runs",
+      argsSchema: {
+        optimizationId: z.string().optional().describe("OO optimizationId to evaluate"),
+      },
     },
-    () => ({
+    (args) => ({
       messages: [
         {
           role: "user",
           content: {
             type: "text",
-            text: `Evaluate the requested OO optimization, not just its ranking.
+            text: `${givenArguments(args)}Evaluate the requested OO optimization, not just its ranking.
 Read OO get_optimization_results pages in context, without importing cells.
 Choose the best cell under the metric used to rank this optimization and the
 centre of the broadest stable region; state the neighbourhood/tolerance rule
@@ -121,21 +170,42 @@ ${dataIntegrity}`,
     }),
   );
 
-  server.registerPrompt(
+  register(
     "stress-oo-portfolio",
     {
       title: "Stress an OO portfolio",
       description: "Examine portfolio trade risk in TradeBlocks",
+      argsSchema: {
+        ooId: z
+          .string()
+          .optional()
+          .describe(
+            "OO savedPortfolioId or a scratch run's runId; tried as savedPortfolioId first",
+          ),
+        block: z
+          .string()
+          .optional()
+          .describe(
+            "TradeBlocks block ID holding the portfolio's trades, or a name for its import",
+          ),
+      },
     },
-    () => ({
+    (args) => ({
       messages: [
         {
           role: "user",
           content: {
             type: "text",
             text: `Stress the requested Option Omega portfolio's trades.
-Use OO list_portfolios, get_saved_portfolio and get_portfolio_results to establish
-identity and quote OO's own figures. Use an existing TradeBlocks block if it
+${givenArguments(args)}Identify the OO portfolio; ask the user if it is ambiguous. A saved portfolio:
+find it with OO list_portfolios and read it with get_saved_portfolio, whose
+result holds OO's own figures. A portfolio scratch run: poll OO
+get_portfolio_status with its runId until it completes, then read
+get_portfolio_results by that runId. get_portfolio_results takes only a runId;
+never pass it a savedPortfolioId. Given an ooId, try it as a savedPortfolioId
+with get_saved_portfolio first, and treat it as a runId only if OO has no saved
+portfolio with that ID. Given a block, check it with get_block_info: use that
+block if it exists, otherwise use it as the imported block's name. Use an existing TradeBlocks block if it
 contains that portfolio's economic trades; otherwise ask the user to export the
 portfolio trade-log CSV from OO and save it at a path readable by the TB server
 (Docker/HTTP: inside the mounted server data directory), then use import_csv.
@@ -155,20 +225,23 @@ ${dataIntegrity}`,
     }),
   );
 
-  server.registerPrompt(
+  register(
     "live-vs-oo",
     {
       title: "Live vs OO",
       description: "Compare live fills in a reporting log with an OO reference backtest",
+      argsSchema: {
+        block: z.string().optional().describe("TradeBlocks block ID of the OO reference backtest"),
+      },
     },
-    () => ({
+    (args) => ({
       messages: [
         {
           role: "user",
           content: {
             type: "text",
             text: `Compare the user's live trades with an Option Omega reference backtest.
-The OO reference must be a TradeBlocks block of OO's trades. If it is not one
+${givenArguments(args)}The OO reference must be a TradeBlocks block of OO's trades. If it is not one
 yet, bring it in as the bring-in-oo-backtest prompt does (${captureSkill} or an
 OO trade-log CSV with import_csv). Use list_blocks and get_block_info to select
 and verify the block; ask if ambiguous. Name the OO reference as the capture
@@ -206,4 +279,20 @@ ${dataIntegrity}`,
       ],
     }),
   );
+
+  // MCP lets prompts/get omit arguments, but the SDK's own handler (1.30) then
+  // rejects any prompt with an argsSchema. This one replaces it so a call without
+  // arguments renders the prompt as before.
+  server.server.setRequestHandler(GetPromptRequestSchema, ({ params }) => {
+    const prompt = prompts.get(params.name);
+    if (!prompt) throw new McpError(ErrorCode.InvalidParams, `Prompt ${params.name} not found`);
+    const args = prompt.args.safeParse(params.arguments ?? {});
+    if (!args.success) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid arguments for prompt ${params.name}: ${z.prettifyError(args.error)}`,
+      );
+    }
+    return prompt.render(args.data);
+  });
 }
