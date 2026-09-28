@@ -48,6 +48,9 @@ it("preserves displayed premiums while upgrading browser trades from v5", async 
     marginReq: 1000,
   });
   trades.put({ blockId: "legacy", premium: -2.5, premiumPrecision: "dollars", numContracts: 2 });
+  // Untagged records predate premiumPrecision; v5 read them exactly like "dollars".
+  trades.put({ blockId: "legacy", premium: 2.5, numContracts: 1, marginReq: 1000 });
+  trades.put({ blockId: "legacy", premium: 420, numContracts: 3, marginReq: 1000 });
   oldTransaction.objectStore(STORES.CALCULATIONS).put({
     id: "enriched_trades_legacy",
     blockId: "legacy",
@@ -67,8 +70,10 @@ it("preserves displayed premiums while upgrading browser trades from v5", async 
     expect(DB_VERSION).toBe(6);
     expect(db.version).toBe(6);
     const upgraded = await getTradesByBlock("legacy");
-    expect(upgraded.map((trade) => computeTotalPremium(trade))).toEqual([250, 1260, 6000, 500]);
-    expect(upgraded.map((trade) => trade.premium)).toEqual([250, 420, -6000, -250]);
+    expect(upgraded.map((trade) => computeTotalPremium(trade))).toEqual([
+      250, 1260, 6000, 500, 250, 1260,
+    ]);
+    expect(upgraded.map((trade) => trade.premium)).toEqual([250, 420, -6000, -250, 250, 420]);
     expect(upgraded.every((trade) => !Object.hasOwn(trade, "premiumPrecision"))).toBe(true);
     expect(await getEnrichedTradesCache("legacy")).toBeNull();
   } finally {

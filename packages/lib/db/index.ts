@@ -199,8 +199,11 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
           const cursor = tradeCursor.result;
           if (!cursor) return;
           const trade = cursor.value;
+          let changed = Object.hasOwn(trade, "premiumPrecision");
+          // v5 read every premium not tagged "cents" (including untagged records) through the
+          // option-multiplier heuristic; bake that result in so existing blocks keep their values.
           if (
-            trade.premiumPrecision === "dollars" &&
+            trade.premiumPrecision !== "cents" &&
             typeof trade.premium === "number" &&
             isFinite(trade.premium)
           ) {
@@ -209,19 +212,21 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
                 ? Math.abs(trade.numContracts)
                 : 0;
             const contracts = count > 0 ? count : 1;
-            let total = Math.abs(trade.premium) * contracts;
-            if (isFinite(total) && total > 0) {
-              const margin =
-                typeof trade.marginReq === "number" && isFinite(trade.marginReq)
-                  ? Math.abs(trade.marginReq)
-                  : 0;
-              if (margin > 0 ? total / margin > 0 && total / margin < 0.5 : total < 5000) {
-                total *= 100;
-              }
-              trade.premium = (Math.sign(trade.premium) * total) / contracts;
+            const total = Math.abs(trade.premium) * contracts;
+            const margin =
+              typeof trade.marginReq === "number" && isFinite(trade.marginReq)
+                ? Math.abs(trade.marginReq)
+                : 0;
+            if (
+              isFinite(total) &&
+              total > 0 &&
+              (margin > 0 ? total / margin < 0.5 : total < 5000)
+            ) {
+              trade.premium *= 100;
+              changed = true;
             }
           }
-          if (Object.hasOwn(trade, "premiumPrecision")) {
+          if (changed) {
             delete trade.premiumPrecision;
             cursor.update(trade);
           }
