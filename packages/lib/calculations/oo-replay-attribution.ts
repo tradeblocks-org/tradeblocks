@@ -262,6 +262,16 @@ export function valueReplayLegs(
   };
 }
 
+function packageContractCount(trade: ReplayTrade): number | undefined {
+  if (trade.numberOfContracts !== undefined) return trade.numberOfContracts;
+  const first = trade.legs[0]?.numberOfContracts;
+  if (first === undefined) return undefined;
+  for (const leg of trade.legs) {
+    if (leg.numberOfContracts !== first) return undefined;
+  }
+  return first;
+}
+
 export function cumulativeReplayTradeMark(
   trade: ReplayTrade,
   date: string,
@@ -270,7 +280,8 @@ export function cumulativeReplayTradeMark(
   markTime?: string,
   cost?: ReplayStrategyCost,
 ): ReplayMark {
-  if (!cost || trade.numberOfContracts === undefined) {
+  const contracts = packageContractCount(trade);
+  if (!cost || contracts === undefined) {
     return { value: null, reason: "missing_strategy_cost", missing_tickers: [], observations: [] };
   }
   const method = { ...DEFAULT_REPLAY_METHOD_PARAMETERS, ...parameters };
@@ -296,7 +307,7 @@ export function cumulativeReplayTradeMark(
       marked.value -
       entry -
       cost.opening_fee_per_leg_contract * legContracts -
-      cost.exit_slippage * 100 * trade.numberOfContracts,
+      cost.exit_slippage * 100 * contracts,
   };
 }
 
@@ -332,6 +343,7 @@ export function calculateOoReplayAttribution({
     }
   };
   const book = [...curve].sort((a, b) => a.date.localeCompare(b.date));
+  const contractCounts = trades.map(packageContractCount);
   const observations = new Map<string, ReplayQuoteObservation>();
   const memoLookup: ReplayQuoteLookup = (date, ticker, markTime) => {
     const key = `${date}|${ticker}`;
@@ -403,7 +415,7 @@ export function calculateOoReplayAttribution({
     for (let index = 0; index < trades.length; index++) {
       const trade = trades[index];
       if (trade.dateClosed < current.date || trade.dateOpened > current.date) continue;
-      if (!method.cost_schedule?.[trade.strategyId] || trade.numberOfContracts === undefined) {
+      if (!method.cost_schedule?.[trade.strategyId] || contractCounts[index] === undefined) {
         missingCosts.add(trade.strategyName.split("·")[0].trim());
         continue;
       }

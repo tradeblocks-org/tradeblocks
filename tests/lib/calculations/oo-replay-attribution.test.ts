@@ -303,17 +303,68 @@ describe("OO replay attribution public interface", () => {
       observations: [],
     });
     expect(quoteCalls).toBe(0);
-    const missingCount = cumulativeReplayTradeMark(
+    const inferredCount = cumulativeReplayTradeMark(
       { ...trade, numberOfContracts: undefined },
       "2026-06-09",
-      () => {
-        throw new Error("Missing contract count must not request a quote");
-      },
+      () => ({ bid: 1, ask: 1 }),
       {},
       undefined,
       cost,
     );
-    expect(missingCount).toEqual(mark);
+    expect(inferredCount.value).toBe(-1);
+  });
+  it("uses a shared package count for uniform legs and explicit mixed-ratio spreads", () => {
+    const uniform = {
+      ...trade,
+      dateOpened: "2026-06-09",
+      dateClosed: "2026-06-11",
+      numberOfContracts: undefined,
+      legs: [
+        { ...short(5000), numberOfContracts: 2 },
+        { ...short(5100), buySell: "Buy" as const, numberOfContracts: 2, pricePerContract: 50 },
+      ],
+    };
+    const slippageCost = { ...cost, exit_slippage: 0.2 };
+    const result = calculateOoReplayAttribution({
+      trades: [uniform],
+      curve: [
+        { date: "2026-06-08", netLiquidity: 1000 },
+        { date: "2026-06-09", netLiquidity: 1056 },
+      ],
+      quoteLookup: () => ({ bid: 1, ask: 1 }),
+      parameters: { cost_schedule: { a: slippageCost } },
+    });
+    expect(result.stats.daily[0]).toMatchObject({
+      status: "available",
+      contributions: [{ strategy_id: "a", amount: 56 }],
+      residual: 0,
+    });
+    const mixed = { ...uniform, legs: [uniform.legs[0], { ...uniform.legs[1], numberOfContracts: 1 }] };
+    const explicit = cumulativeReplayTradeMark(
+      { ...mixed, numberOfContracts: 2 },
+      "2026-06-09",
+      () => ({ bid: 1, ask: 1 }),
+      {},
+      undefined,
+      slippageCost,
+    );
+    expect(explicit.value).toBe(7);
+    const withoutAggregate = calculateOoReplayAttribution({
+      trades: [mixed],
+      curve: [
+        { date: "2026-06-08", netLiquidity: 1000 },
+        { date: "2026-06-09", netLiquidity: 1000 },
+      ],
+      quoteLookup: () => {
+        throw new Error("Mixed package counts must not request quotes");
+      },
+      parameters: { cost_schedule: { a: slippageCost } },
+    });
+    expect(withoutAggregate.stats.daily[0]).toMatchObject({
+      status: "unavailable",
+      reason: { code: "missing_strategy_cost", strategies: ["A"] },
+    });
+    expect(withoutAggregate.quotes.observations).toEqual([]);
   });
   it("prefers an observed SPXW mark on third Friday and records attempted monthly fallback", () => {
     const monthly = { ...short(5000), expiration: "20260619" };
