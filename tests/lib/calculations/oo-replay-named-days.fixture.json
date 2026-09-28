@@ -1,0 +1,1362 @@
+[
+  {
+    "name": "5/3 CD",
+    "date": "2026-09-18",
+    "curve": [
+      {
+        "date": "2026-09-17",
+        "netLiquidity": 3990493.96,
+        "startingLiquidity": 3990493.96,
+        "realizedFunds": 3990493.96,
+        "tradingFunds": 3990493.96,
+        "profitLoss": 0,
+        "profitLossPercentage": 0,
+        "drawdownPercentage": 0
+      },
+      {
+        "date": "2026-09-18",
+        "netLiquidity": 3925632.52,
+        "startingLiquidity": 3990493.96,
+        "realizedFunds": 3974479.24,
+        "tradingFunds": 3974479.24,
+        "profitLoss": -64861.44,
+        "profitLossPercentage": -1.63,
+        "drawdownPercentage": -1.63
+      }
+    ],
+    "rows": [
+      {
+        "dateOpened": "2026-09-18",
+        "dateClosed": "2026-09-18",
+        "underlying": "SPX",
+        "strategyId": "bt_fc6e62f80cf7d52b3209150d51f9a1666cc5534df6110588358f010c0ca2c1a2",
+        "strategyName": "bt_fc6e62f80cf7d52b3209150d51f9a1666cc5534df6110588358f010c0ca2c1a2",
+        "legs": [
+          {
+            "buySell": "Buy",
+            "delta": 0.2653,
+            "expiration": "20260923",
+            "numberOfContracts": 456,
+            "optionType": "Call",
+            "pricePerContract": 1210,
+            "strike": 7670
+          },
+          {
+            "buySell": "Buy",
+            "delta": -0.2191,
+            "expiration": "20260923",
+            "numberOfContracts": 456,
+            "optionType": "Put",
+            "pricePerContract": 1360,
+            "strike": 7540
+          }
+        ],
+        "numberOfContracts": 456,
+        "openingFees": 1623.36,
+        "profit": -16014.72
+      },
+      {
+        "dateOpened": "2026-09-18",
+        "dateClosed": "2026-09-21",
+        "underlying": "SPX",
+        "strategyId": "bt_fc6e62f80cf7d52b3209150d51f9a1666cc5534df6110588358f010c0ca2c1a2",
+        "strategyName": "bt_fc6e62f80cf7d52b3209150d51f9a1666cc5534df6110588358f010c0ca2c1a2",
+        "legs": [
+          {
+            "buySell": "Buy",
+            "delta": 0.0979,
+            "expiration": "20260921",
+            "numberOfContracts": 456,
+            "optionType": "Call",
+            "pricePerContract": 210,
+            "strike": 7680
+          },
+          {
+            "buySell": "Buy",
+            "delta": -0.1027,
+            "expiration": "20260921",
+            "numberOfContracts": 456,
+            "optionType": "Put",
+            "pricePerContract": 355,
+            "strike": 7530
+          },
+          {
+            "buySell": "Sell",
+            "delta": 0.221,
+            "expiration": "20260923",
+            "numberOfContracts": 456,
+            "optionType": "Call",
+            "pricePerContract": 940,
+            "strike": 7680
+          },
+          {
+            "buySell": "Sell",
+            "delta": -0.197,
+            "expiration": "20260923",
+            "numberOfContracts": 456,
+            "optionType": "Put",
+            "pricePerContract": 1210,
+            "strike": 7530
+          }
+        ],
+        "numberOfContracts": 456,
+        "openingFees": 3246.72,
+        "profit": 209650.56
+      }
+    ],
+    "costs": {
+      "bt_fc6e62f80cf7d52b3209150d51f9a1666cc5534df6110588358f010c0ca2c1a2": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.2,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_fc6e62f80cf7d52b3209150d51f9a1666cc5534df6110588358f010c0ca2c1a2"
+      }
+    },
+    "quotes": {
+      "2026-09-18|15:59|SPXW260921P07530000": [1.1, 1.2],
+      "2026-09-18|15:59|SPXW260923C07680000": [15.5, 15.700000000000001],
+      "2026-09-18|15:59|SPXW260923P07530000": [6.7, 6.9],
+      "2026-09-18|15:59|SPXW260921C07680000": [4.5, 4.7]
+    }
+  },
+  {
+    "name": "Big Money",
+    "date": "2025-05-12",
+    "curve": [
+      {
+        "date": "2025-05-09",
+        "netLiquidity": 588410.44,
+        "startingLiquidity": 587499.68,
+        "realizedFunds": 586407.36,
+        "tradingFunds": 586407.36,
+        "profitLoss": 910.76,
+        "profitLossPercentage": 0.16,
+        "drawdownPercentage": -2.68
+      },
+      {
+        "date": "2025-05-12",
+        "netLiquidity": 589616.76,
+        "startingLiquidity": 588410.44,
+        "realizedFunds": 590198.72,
+        "tradingFunds": 590198.72,
+        "profitLoss": 1206.32,
+        "profitLossPercentage": 0.21,
+        "drawdownPercentage": -2.48
+      }
+    ],
+    "rows": [
+      {
+        "dateOpened": "2025-05-12",
+        "dateClosed": "2025-05-15",
+        "underlying": "SPX",
+        "strategyId": "NPPJ4A6JJwQ5FA05kBCf",
+        "strategyName": "P11/22 C15/36 Skewed DC Mon — PT20 SLR10 RSI35 · bt_04cff199",
+        "legs": [
+          {
+            "numberOfContracts": 3,
+            "expiration": "20250523",
+            "strike": 5775,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 4110,
+            "delta": -0.3512
+          },
+          {
+            "numberOfContracts": 3,
+            "expiration": "20250527",
+            "strike": 5900,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 3980,
+            "delta": 0.3647
+          },
+          {
+            "numberOfContracts": 3,
+            "expiration": "20250603",
+            "strike": 5800,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 6895,
+            "delta": -0.4144
+          },
+          {
+            "numberOfContracts": 3,
+            "expiration": "20250617",
+            "strike": 5900,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 8610,
+            "delta": 0.4387
+          }
+        ],
+        "numberOfContracts": 3,
+        "openingFees": 21.36,
+        "profit": 1784.28
+      },
+      {
+        "dateOpened": "2025-05-09",
+        "dateClosed": "2025-05-12",
+        "underlying": "SPX",
+        "strategyId": "tnAOjyXxeuYwfL5KQKrE",
+        "strategyName": "5/3 CD Fri · bt_fc6e62f8",
+        "legs": [
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250512",
+            "strike": 5780,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 415,
+            "delta": 0.0978
+          },
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250512",
+            "strike": 5525,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 500,
+            "delta": -0.1018
+          },
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250514",
+            "strike": 5780,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 1110,
+            "delta": 0.1701
+          },
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250514",
+            "strike": 5525,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 1470,
+            "delta": -0.1815
+          }
+        ],
+        "numberOfContracts": 10,
+        "openingFees": 71.2,
+        "profit": -4702.4
+      },
+      {
+        "dateOpened": "2025-05-09",
+        "dateClosed": "2025-05-14",
+        "underlying": "SPX",
+        "strategyId": "HAYQe9smwGdE4cZKRvTp",
+        "strategyName": "5 BWB Fri · bt_d73d2dde",
+        "legs": [
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250514",
+            "strike": 5525,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 1390,
+            "delta": -0.1733
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250514",
+            "strike": 5490,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 930,
+            "delta": -0.1231
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250514",
+            "strike": 5550,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 1825,
+            "delta": -0.2171
+          }
+        ],
+        "numberOfContracts": 5,
+        "openingFees": 35.6,
+        "profit": 39.4
+      },
+      {
+        "dateOpened": "2025-05-08",
+        "dateClosed": "2025-05-12",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250602",
+            "strike": 5670,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 11375,
+            "delta": 0.5173
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250602",
+            "strike": 5600,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 15890,
+            "delta": 0.61
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250602",
+            "strike": 5730,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 8025,
+            "delta": 0.4277
+          }
+        ],
+        "numberOfContracts": 5,
+        "openingFees": 35.6,
+        "profit": 1723.8
+      },
+      {
+        "dateOpened": "2025-05-07",
+        "dateClosed": "2025-05-12",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250530",
+            "strike": 5630,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 12260,
+            "delta": 0.5186
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250530",
+            "strike": 5560,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 16780,
+            "delta": 0.6049
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250530",
+            "strike": 5690,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 8880,
+            "delta": 0.4354
+          }
+        ],
+        "numberOfContracts": 5,
+        "openingFees": 35.6,
+        "profit": 1698.8
+      },
+      {
+        "dateOpened": "2025-05-06",
+        "dateClosed": "2025-05-12",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250529",
+            "strike": 5610,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 11950,
+            "delta": 0.523
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250529",
+            "strike": 5540,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 16505,
+            "delta": 0.6122
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250529",
+            "strike": 5670,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 8550,
+            "delta": 0.4366
+          }
+        ],
+        "numberOfContracts": 5,
+        "openingFees": 35.6,
+        "profit": 1723.8
+      },
+      {
+        "dateOpened": "2025-05-05",
+        "dateClosed": "2025-05-12",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250528",
+            "strike": 5640,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 11860,
+            "delta": 0.528
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250528",
+            "strike": 5570,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 16450,
+            "delta": 0.6188
+          },
+          {
+            "numberOfContracts": 5,
+            "expiration": "20250528",
+            "strike": 5700,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 8415,
+            "delta": 0.4399
+          }
+        ],
+        "numberOfContracts": 5,
+        "openingFees": 35.6,
+        "profit": 1698.8
+      },
+      {
+        "dateOpened": "2025-05-02",
+        "dateClosed": "2025-05-12",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 12,
+            "expiration": "20250527",
+            "strike": 5660,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 11905,
+            "delta": 0.5308
+          },
+          {
+            "numberOfContracts": 6,
+            "expiration": "20250527",
+            "strike": 5590,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 16550,
+            "delta": 0.6215
+          },
+          {
+            "numberOfContracts": 6,
+            "expiration": "20250527",
+            "strike": 5725,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 8180,
+            "delta": 0.4341
+          }
+        ],
+        "numberOfContracts": 6,
+        "openingFees": 42.72,
+        "profit": 1648.56
+      }
+    ],
+    "costs": {
+      "NPPJ4A6JJwQ5FA05kBCf": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.15,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_04cff199e81da30568f1b67eac910a4b240320feae75796b7994fe6fe9964b4d"
+      },
+      "tnAOjyXxeuYwfL5KQKrE": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.2,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_fc6e62f80cf7d52b3209150d51f9a1666cc5534df6110588358f010c0ca2c1a2"
+      },
+      "HAYQe9smwGdE4cZKRvTp": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.1,
+        "exit_slippage_source": "entrySlippage_legacy",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_d73d2dde1a883bfa9021bce252477a7d8d89bc0a5d20389a7fdbad21ea83939b"
+      },
+      "uiJ2Vw6O1rCePCkrtcQ5": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.15,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_2550636f3d42961d7de71fb329c25bb0083e6d548ff2102f8002247bb98419b9"
+      }
+    },
+    "quotes": {
+      "2025-05-09|15:59|SPXW250527C05590000": [136.5, 137.7],
+      "2025-05-09|15:59|SPXW250527C05660000": [92.1, 93],
+      "2025-05-09|15:59|SPXW250527C05725000": [58.2, 58.9],
+      "2025-05-09|15:59|SPXW250528C05570000": [154.5, 155.4],
+      "2025-05-09|15:59|SPXW250512P05525000": [3.7, 3.9],
+      "2025-05-09|15:59|SPXW250602C05600000": [148, 148.8],
+      "2025-05-09|15:59|SPXW250602C05670000": [104.1, 105],
+      "2025-05-09|15:59|SPXW250602C05730000": [72.3, 73],
+      "2025-05-09|15:59|SPXW250530C05560000": [171.9, 172.8],
+      "2025-05-09|15:59|SPXW250530C05630000": [124.7, 125.4],
+      "2025-05-09|15:59|SPXW250530C05690000": [89.3, 89.8],
+      "2025-05-09|15:59|SPXW250512C05780000": [3.9, 4.1],
+      "2025-05-09|15:59|SPXW250528C05640000": [108.2, 108.9],
+      "2025-05-09|15:59|SPXW250528C05700000": [74.1, 74.8],
+      "2025-05-09|15:59|SPXW250529C05540000": [177.1, 187.4],
+      "2025-05-09|15:59|SPXW250529C05610000": [132.3, 133.2],
+      "2025-05-09|15:59|SPXW250529C05670000": [95.4, 96.3],
+      "2025-05-09|15:59|SPXW250514C05780000": [11, 11.2],
+      "2025-05-09|15:59|SPXW250514P05490000": [7.9, 8.1],
+      "2025-05-09|15:59|SPXW250514P05525000": [12.4, 12.7],
+      "2025-05-09|15:59|SPXW250514P05550000": [16.8, 17],
+      "2025-05-12|15:59|SPXW250523P05775000": [37.8, 38.3],
+      "2025-05-12|15:59|SPXW250527C05900000": [40.3, 40.8],
+      "2025-05-12|15:59|SPXW250514P05490000": [0.2, 0.3],
+      "2025-05-12|15:59|SPXW250514P05525000": [0.25, 0.35],
+      "2025-05-12|15:59|SPXW250514P05550000": [0.3, 0.4],
+      "2025-05-12|15:59|SPXW250603P05800000": [64.6, 65.4],
+      "2025-05-12|15:59|SPXW250617C05900000": [85.5, 86.3]
+    }
+  },
+  {
+    "name": "Big Money",
+    "date": "2025-06-16",
+    "curve": [
+      {
+        "date": "2025-06-13",
+        "netLiquidity": 646801.6,
+        "startingLiquidity": 650397.6,
+        "realizedFunds": 645903.04,
+        "tradingFunds": 645903.04,
+        "profitLoss": -3596,
+        "profitLossPercentage": -0.55,
+        "drawdownPercentage": -0.55
+      },
+      {
+        "date": "2025-06-16",
+        "netLiquidity": 667145.84,
+        "startingLiquidity": 646801.6,
+        "realizedFunds": 666392.48,
+        "tradingFunds": 666392.48,
+        "profitLoss": 20344.24,
+        "profitLossPercentage": 3.15,
+        "drawdownPercentage": 0
+      }
+    ],
+    "rows": [
+      {
+        "dateOpened": "2025-06-16",
+        "dateClosed": "2025-06-20",
+        "underlying": "SPX",
+        "strategyId": "NPPJ4A6JJwQ5FA05kBCf",
+        "strategyName": "P11/22 C15/36 Skewed DC Mon — PT20 SLR10 RSI35 · bt_04cff199",
+        "legs": [
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250627",
+            "strike": 5975,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 4005,
+            "delta": -0.3496
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250701",
+            "strike": 6105,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 3785,
+            "delta": 0.3526
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250708",
+            "strike": 5990,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 6445,
+            "delta": -0.3963
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250722",
+            "strike": 6125,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 7285,
+            "delta": 0.4022
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": 2699.04
+      },
+      {
+        "dateOpened": "2025-06-13",
+        "dateClosed": "2025-06-16",
+        "underlying": "SPX",
+        "strategyId": "BZyX9rs2PCkrMAldWcWN",
+        "strategyName": "P11/22 C15/36 Skewed DC Fri — PT20 SLR10 RSI35 · bt_c172524c",
+        "legs": [
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250624",
+            "strike": 5930,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 4520,
+            "delta": -0.3513
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250630",
+            "strike": 6075,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 4145,
+            "delta": 0.3475
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250707",
+            "strike": 5950,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 7620,
+            "delta": -0.407
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250721",
+            "strike": 6075,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 8675,
+            "delta": 0.4241
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": 1279.04
+      },
+      {
+        "dateOpened": "2025-06-13",
+        "dateClosed": "2025-06-16",
+        "underlying": "SPX",
+        "strategyId": "tnAOjyXxeuYwfL5KQKrE",
+        "strategyName": "5/3 CD Fri · bt_fc6e62f8",
+        "legs": [
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250616",
+            "strike": 6095,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 250,
+            "delta": 0.0931
+          },
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250616",
+            "strike": 5905,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 430,
+            "delta": -0.1031
+          },
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250618",
+            "strike": 6095,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 1090,
+            "delta": 0.2101
+          },
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250618",
+            "strike": 5905,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 1300,
+            "delta": -0.1848
+          }
+        ],
+        "numberOfContracts": 10,
+        "openingFees": 71.2,
+        "profit": 6447.6
+      },
+      {
+        "dateOpened": "2025-06-13",
+        "dateClosed": "2025-06-18",
+        "underlying": "SPX",
+        "strategyId": "HAYQe9smwGdE4cZKRvTp",
+        "strategyName": "5 BWB Fri · bt_d73d2dde",
+        "legs": [
+          {
+            "numberOfContracts": 12,
+            "expiration": "20250618",
+            "strike": 5905,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 1150,
+            "delta": -0.1689
+          },
+          {
+            "numberOfContracts": 6,
+            "expiration": "20250618",
+            "strike": 5870,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 790,
+            "delta": -0.1195
+          },
+          {
+            "numberOfContracts": 6,
+            "expiration": "20250618",
+            "strike": 5930,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 1515,
+            "delta": -0.215
+          }
+        ],
+        "numberOfContracts": 6,
+        "openingFees": 42.72,
+        "profit": -132.72
+      },
+      {
+        "dateOpened": "2025-06-13",
+        "dateClosed": "2025-06-16",
+        "underlying": "SPX",
+        "strategyId": "fx6iOGBkfiPnIo0QoGJj",
+        "strategyName": "2/7 CD Mon/Tue/Fri · bt_c81ef9fe",
+        "legs": [
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250616",
+            "strike": 5890,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 600,
+            "delta": -0.1224
+          },
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250616",
+            "strike": 6085,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 415,
+            "delta": 0.126
+          },
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250620",
+            "strike": 5890,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 2130,
+            "delta": -0.2268
+          },
+          {
+            "numberOfContracts": 10,
+            "expiration": "20250620",
+            "strike": 6085,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 1910,
+            "delta": 0.2672
+          }
+        ],
+        "numberOfContracts": 10,
+        "openingFees": 71.2,
+        "profit": 2947.6
+      },
+      {
+        "dateOpened": "2025-06-12",
+        "dateClosed": "2025-06-16",
+        "underlying": "SPX",
+        "strategyId": "Him7QqLObUfu5LwLsiDA",
+        "strategyName": "P11/22 C15/36 Skewed DC Thu — PT20 SLR10 RSI35 · bt_59b8d628",
+        "legs": [
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250623",
+            "strike": 5970,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 3600,
+            "delta": -0.3535
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250627",
+            "strike": 6090,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 3730,
+            "delta": 0.3531
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250707",
+            "strike": 5990,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 6980,
+            "delta": -0.4171
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250718",
+            "strike": 6090,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 8230,
+            "delta": 0.4343
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": 2859.04
+      },
+      {
+        "dateOpened": "2025-06-12",
+        "dateClosed": "2025-06-30",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 8,
+            "expiration": "20250707",
+            "strike": 6020,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 9245,
+            "delta": 0.5259
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250707",
+            "strike": 5950,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 13955,
+            "delta": 0.6393
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250707",
+            "strike": 6080,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 5970,
+            "delta": 0.4122
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": -1240.96
+      },
+      {
+        "dateOpened": "2025-06-11",
+        "dateClosed": "2025-06-16",
+        "underlying": "SPX",
+        "strategyId": "Zci8xmgDvTUoFaxVZetd",
+        "strategyName": "P11/22 C15/36 Skewed DC Wed — PT20 SLR10 RSI35 · bt_46f5ed20",
+        "legs": [
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250623",
+            "strike": 6005,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 3280,
+            "delta": -0.3441
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250626",
+            "strike": 6120,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 3500,
+            "delta": 0.3552
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250703",
+            "strike": 6020,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 5945,
+            "delta": -0.4035
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250717",
+            "strike": 6125,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 7675,
+            "delta": 0.4303
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": 2679.04
+      },
+      {
+        "dateOpened": "2025-06-11",
+        "dateClosed": "2025-06-30",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 8,
+            "expiration": "20250707",
+            "strike": 6040,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 9200,
+            "delta": 0.537
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250707",
+            "strike": 5970,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 13765,
+            "delta": 0.6542
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250707",
+            "strike": 6100,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 5995,
+            "delta": 0.421
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": -860.96
+      },
+      {
+        "dateOpened": "2025-06-10",
+        "dateClosed": "2025-06-16",
+        "underlying": "SPX",
+        "strategyId": "ojY8TcMTddZwRBWFmyW9",
+        "strategyName": "P11/22 C15/36 Skewed DC Tue — PT20 SLR10 RSI35 · bt_290b9e78",
+        "legs": [
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250623",
+            "strike": 5975,
+            "optionType": "Put",
+            "buySell": "Sell",
+            "pricePerContract": 3725,
+            "delta": -0.3535
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250625",
+            "strike": 6090,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 3685,
+            "delta": 0.3603
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250702",
+            "strike": 5990,
+            "optionType": "Put",
+            "buySell": "Buy",
+            "pricePerContract": 6025,
+            "delta": -0.4029
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250716",
+            "strike": 6100,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 7610,
+            "delta": 0.4243
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": 4419.04
+      },
+      {
+        "dateOpened": "2025-06-03",
+        "dateClosed": "2025-06-17",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 8,
+            "expiration": "20250626",
+            "strike": 5940,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 9705,
+            "delta": 0.531
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250626",
+            "strike": 5870,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 14390,
+            "delta": 0.6411
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250626",
+            "strike": 6000,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 6410,
+            "delta": 0.4214
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": 339.04
+      },
+      {
+        "dateOpened": "2025-06-02",
+        "dateClosed": "2025-06-16",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 8,
+            "expiration": "20250625",
+            "strike": 5900,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 10015,
+            "delta": 0.5318
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250625",
+            "strike": 5830,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 14800,
+            "delta": 0.6376
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250625",
+            "strike": 5960,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 6675,
+            "delta": 0.4255
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": -500.96
+      },
+      {
+        "dateOpened": "2025-05-29",
+        "dateClosed": "2025-06-16",
+        "underlying": "SPX",
+        "strategyId": "uiJ2Vw6O1rCePCkrtcQ5",
+        "strategyName": "23 BWB Daily — Sherman Tank · bt_2550636f",
+        "legs": [
+          {
+            "numberOfContracts": 8,
+            "expiration": "20250623",
+            "strike": 5925,
+            "optionType": "Call",
+            "buySell": "Sell",
+            "pricePerContract": 10095,
+            "delta": 0.5268
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250623",
+            "strike": 5850,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 15045,
+            "delta": 0.641
+          },
+          {
+            "numberOfContracts": 4,
+            "expiration": "20250623",
+            "strike": 5990,
+            "optionType": "Call",
+            "buySell": "Buy",
+            "pricePerContract": 6625,
+            "delta": 0.4141
+          }
+        ],
+        "numberOfContracts": 4,
+        "openingFees": 28.48,
+        "profit": 359.04
+      }
+    ],
+    "costs": {
+      "NPPJ4A6JJwQ5FA05kBCf": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.15,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_04cff199e81da30568f1b67eac910a4b240320feae75796b7994fe6fe9964b4d"
+      },
+      "BZyX9rs2PCkrMAldWcWN": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.15,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_c172524ce49c3743a3e2110420f3567a208668115b57228db17f7b1ed4895da3"
+      },
+      "tnAOjyXxeuYwfL5KQKrE": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.2,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_fc6e62f80cf7d52b3209150d51f9a1666cc5534df6110588358f010c0ca2c1a2"
+      },
+      "HAYQe9smwGdE4cZKRvTp": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.1,
+        "exit_slippage_source": "entrySlippage_legacy",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_d73d2dde1a883bfa9021bce252477a7d8d89bc0a5d20389a7fdbad21ea83939b"
+      },
+      "fx6iOGBkfiPnIo0QoGJj": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.2,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_c81ef9fe1b662240977002f861ee940622be661fcf76a45a2c0a837eb8352a3c"
+      },
+      "Him7QqLObUfu5LwLsiDA": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.15,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_59b8d628f20ab374aa9329bda868c59908c6b98b9ec2c9ade6dd8b8465b03e28"
+      },
+      "uiJ2Vw6O1rCePCkrtcQ5": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.15,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_2550636f3d42961d7de71fb329c25bb0083e6d548ff2102f8002247bb98419b9"
+      },
+      "Zci8xmgDvTUoFaxVZetd": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.15,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_46f5ed20b8c23dd9a272f3bb9b0df65fa42f3f29e1e1b15c0e0a7d677d06e741"
+      },
+      "ojY8TcMTddZwRBWFmyW9": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.15,
+        "exit_slippage_source": "exitSlippage",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_290b9e78d8d0ba840e0808d0b6b33ab24ad13732f0ea903218867a3532146498"
+      }
+    },
+    "quotes": {
+      "2025-06-13|15:59|SPXW250630C06075000": [33.6, 34],
+      "2025-06-13|15:59|SPXW250627C06090000": [25, 25.4],
+      "2025-06-13|15:59|SPXW250703P06020000": [107, 108],
+      "2025-06-13|15:59|SPXW250716C06100000": [57.8, 58.6],
+      "2025-06-13|15:59|SPXW250626C05870000": [143.4, 151.9],
+      "2025-06-13|15:59|SPXW250626C05940000": [96.2, 96.8],
+      "2025-06-13|15:59|SPXW250626C06000000": [59.6, 60.2],
+      "2025-06-13|15:59|SPXW250626C06120000": [13.8, 14.2],
+      "2025-06-13|15:59|SPXW250702P05990000": [91.2, 92.1],
+      "2025-06-13|15:59|SPXW250624P05930000": [50.2, 50.8],
+      "2025-06-13|15:59|SPXW250625C05830000": [171.4, 180.4],
+      "2025-06-13|15:59|SPXW250625C05900000": [120.6, 121.4],
+      "2025-06-13|15:59|SPXW250625C05960000": [79.4, 80],
+      "2025-06-13|15:59|SPXW250625C06090000": [18.9, 19.3],
+      "2025-06-13|15:59|SPXW250620C06085000": [10.5, 10.8],
+      "2025-06-13|15:59|SPX250718C06090000": [66.4, 67.7],
+      "2025-06-13|15:59|SPXW250717C06125000": [50.5, 51.3],
+      "2025-06-13|15:59|SPXW250618P05870000": [18.9, 19.3],
+      "2025-06-13|15:59|SPXW250618P05905000": [26.4, 26.7],
+      "2025-06-13|15:59|SPXW250618P05930000": [33.2, 33.5],
+      "2025-06-13|15:59|SPXW250620P05890000": [30.6, 31],
+      "2025-06-13|15:59|SPXW250623C05850000": [150.2, 152.6],
+      "2025-06-13|15:59|SPXW250623C05925000": [93.9, 94.4],
+      "2025-06-13|15:59|SPXW250623C05990000": [53, 53.5],
+      "2025-06-13|15:59|SPX250620C06085000": [8.6, 9.1],
+      "2025-06-13|15:59|SPXW250718C06090000": [68, 68.6],
+      "2025-06-13|15:59|SPXW250623P05970000": [60.4, 60.8],
+      "2025-06-13|15:59|SPXW250623P05975000": [62.4, 62.9],
+      "2025-06-13|15:59|SPXW250623P06005000": [75.9, 76.4],
+      "2025-06-13|15:59|SPXW250721C06075000": [77.4, 78.3],
+      "2025-06-13|15:59|SPXW250616C06085000": [0.85, 0.95],
+      "2025-06-13|15:59|SPXW250616C06095000": [0.55, 0.6],
+      "2025-06-13|15:59|SPXW250616P05890000": [9.7, 9.9],
+      "2025-06-13|15:59|SPXW250616P05905000": [12.1, 12.3],
+      "2025-06-13|15:59|SPXW250618C06095000": [3.9, 4],
+      "2025-06-13|15:59|SPX250620P05890000": [27.9, 28.7],
+      "2025-06-13|15:59|SPXW250707C05950000": [116, 117.2],
+      "2025-06-13|15:59|SPXW250707C05970000": [103, 104.4],
+      "2025-06-13|15:59|SPXW250707C06020000": [74.2, 75.3],
+      "2025-06-13|15:59|SPXW250707C06040000": [63.8, 65],
+      "2025-06-13|15:59|SPXW250707C06080000": [45.8, 46.8],
+      "2025-06-13|15:59|SPXW250707C06100000": [38.2, 38.9],
+      "2025-06-13|15:59|SPXW250707P05950000": [83.4, 84.5],
+      "2025-06-13|15:59|SPXW250707P05990000": [98.2, 99.4],
+      "2025-06-16|15:59|SPXW250707C06020000": [92, 92.6],
+      "2025-06-16|15:59|SPXW250707C06040000": [79.7, 80.3],
+      "2025-06-16|15:59|SPXW250707C06080000": [57.8, 58.4],
+      "2025-06-16|15:59|SPXW250707C06100000": [48.4, 48.9],
+      "2025-06-16|15:59|SPXW250627P05975000": [40.4, 40.7],
+      "2025-06-16|15:59|SPXW250618P05870000": [2.15, 2.25],
+      "2025-06-16|15:59|SPXW250618P05905000": [3.7, 3.8],
+      "2025-06-16|15:59|SPXW250618P05930000": [5.6, 5.8],
+      "2025-06-16|15:59|SPXW250707C05950000": [140.6, 141.4],
+      "2025-06-16|15:59|SPXW250707C05970000": [125.8, 126.6],
+      "2025-06-16|15:59|SPXW250701C06105000": [33.8, 34.2],
+      "2025-06-16|15:59|SPXW250708P05990000": [65, 65.7],
+      "2025-06-16|15:59|SPXW250722C06125000": [69, 69.6],
+      "2025-06-16|15:59|SPXW250626C05870000": [179.3, 181.9],
+      "2025-06-16|15:59|SPXW250626C05940000": [120.6, 123.3],
+      "2025-06-16|15:59|SPXW250626C06000000": [77.4, 77.8]
+    }
+  },
+  {
+    "name": "5 BWB",
+    "date": "2025-05-02",
+    "curve": [
+      {
+        "date": "2025-05-01",
+        "netLiquidity": 5183922.72,
+        "startingLiquidity": 5183922.72,
+        "realizedFunds": 5183922.72,
+        "tradingFunds": 5183922.72,
+        "profitLoss": 0,
+        "profitLossPercentage": 0,
+        "drawdownPercentage": -4.25
+      },
+      {
+        "date": "2025-05-02",
+        "netLiquidity": 5180104.92,
+        "startingLiquidity": 5183922.72,
+        "realizedFunds": 5183922.72,
+        "tradingFunds": 5183922.72,
+        "profitLoss": -3817.8,
+        "profitLossPercentage": -0.07,
+        "drawdownPercentage": -4.32
+      }
+    ],
+    "rows": [
+      {
+        "dateOpened": "2025-05-02",
+        "dateClosed": "2025-05-07",
+        "underlying": "SPX",
+        "strategyId": "bt_d73d2dde1a883bfa9021bce252477a7d8d89bc0a5d20389a7fdbad21ea83939b",
+        "strategyName": "bt_d73d2dde1a883bfa9021bce252477a7d8d89bc0a5d20389a7fdbad21ea83939b",
+        "legs": [
+          {
+            "buySell": "Sell",
+            "delta": -0.1702,
+            "expiration": "20250507",
+            "numberOfContracts": 630,
+            "optionType": "Put",
+            "pricePerContract": 1340,
+            "strike": 5560
+          },
+          {
+            "buySell": "Buy",
+            "delta": -0.1245,
+            "expiration": "20250507",
+            "numberOfContracts": 315,
+            "optionType": "Put",
+            "pricePerContract": 945,
+            "strike": 5525
+          },
+          {
+            "buySell": "Buy",
+            "delta": -0.2107,
+            "expiration": "20250507",
+            "numberOfContracts": 315,
+            "optionType": "Put",
+            "pricePerContract": 1710,
+            "strike": 5585
+          }
+        ],
+        "numberOfContracts": 315,
+        "openingFees": 2242.8,
+        "profit": 2482.2
+      }
+    ],
+    "costs": {
+      "bt_d73d2dde1a883bfa9021bce252477a7d8d89bc0a5d20389a7fdbad21ea83939b": {
+        "opening_fee_per_leg_contract": 1.78,
+        "exit_slippage": 0.1,
+        "exit_slippage_source": "entrySlippage_legacy",
+        "settings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "settings_run_id": "run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "backtest_id": "bt_d73d2dde1a883bfa9021bce252477a7d8d89bc0a5d20389a7fdbad21ea83939b"
+      }
+    },
+    "quotes": {
+      "2025-05-02|15:59|SPXW250507P05525000": [9.4, 9.7],
+      "2025-05-02|15:59|SPXW250507P05560000": [13.4, 13.7],
+      "2025-05-02|15:59|SPXW250507P05585000": [17.2, 17.5]
+    }
+  }
+]

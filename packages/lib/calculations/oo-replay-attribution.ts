@@ -22,6 +22,7 @@ export interface ReplayTrade {
   strategyId: string;
   strategyName: string;
   legs: readonly ReplayLeg[];
+  numberOfContracts?: number;
   openingFees: number;
   profit: number;
   isIgnored?: boolean;
@@ -46,6 +47,15 @@ export type ReplayQuoteObservation =
       reason?: "invalid_quote" | "nonpositive_quote" | "crossed_quote" | "blown_spread";
     };
 
+export interface ReplayStrategyCost {
+  opening_fee_per_leg_contract: number;
+  exit_slippage: number;
+  exit_slippage_source: "exitSlippage" | "entrySlippage_legacy";
+  settings_sha256: string;
+  settings_run_id: string;
+  backtest_id: string;
+}
+
 export interface ReplayMethodParameters {
   mark_time: string;
   opening_fee_factor: number;
@@ -57,14 +67,16 @@ export interface ReplayMethodV2Parameters extends ReplayMethodParameters {
   mark_time: "session_close_minus_1m";
   mark_rule: "equity_close_minus_1m";
   calendar_revision: typeof XNYS_SESSION_CALENDAR_REVISION;
+  mid_rounding: "half_up_0.05";
+  cost_schedule: Record<string, ReplayStrategyCost>;
 }
 export type ReplayMethodOverrides = Partial<
-  Pick<ReplayMethodParameters, "opening_fee_factor" | "tolerance_fraction" | "root_precedence">
->;
+  Pick<ReplayMethodParameters, "tolerance_fraction" | "root_precedence">
+> & { cost_schedule?: Record<string, ReplayStrategyCost> };
 
 export const DEFAULT_REPLAY_METHOD_PARAMETERS: ReplayMethodParameters = {
   mark_time: "15:59",
-  opening_fee_factor: 2,
+  opening_fee_factor: 1,
   tolerance_fraction: 0.0005,
   // SPX is measured against OO. RUT/NDX are registry-derived and not OO-measured.
   root_precedence: { SPX: ["SPXW", "SPX"], RUT: ["RUTW", "RUT"], NDX: ["NDXP", "NDX"] },
@@ -86,6 +98,7 @@ export interface ReplayContribution {
 
 export type ReplayUnavailableReason =
   | { code: "missing_quote"; tickers: string[] }
+  | { code: "missing_strategy_cost"; strategies: string[] }
   | { code: "calendar_unsupported" }
   | { code: "missing_prior_mark" }
   | { code: "nonpositive_prior_nlv" }
@@ -178,6 +191,7 @@ function observe(
   ticker: string,
   lookup: ReplayQuoteLookup,
   markTime: string,
+  roundMid = false,
 ): ReplayQuoteObservation {
   const quote = lookup(date, ticker, markTime);
   if (!quote) return { date, ticker, missing: true };
@@ -196,7 +210,10 @@ function observe(
   }
   if (quote.bid > quote.ask) return { date, ticker, missing: true, reason: "crossed_quote" };
   if (quote.ask / quote.bid > 10) return { date, ticker, missing: true, reason: "blown_spread" };
-  const mid = (quote.bid + quote.ask) / 2;
+  const mid = roundMid
+    ? Math.floor((Math.round(quote.bid * 10000) + Math.round(quote.ask * 10000) + 500) / 1000) *
+      0.05
+    : (quote.bid + quote.ask) / 2;
   if (!Number.isFinite(mid)) return { date, ticker, missing: true, reason: "invalid_quote" };
   return { date, ticker, bid: quote.bid, ask: quote.ask, mid };
 }
@@ -211,6 +228,7 @@ export function valueReplayLegs(
     string,
     readonly string[]
   > = DEFAULT_REPLAY_METHOD_PARAMETERS.root_precedence,
+  roundMid = false,
 ): ReplayMark {
   const observations = new Map<string, ReplayQuoteObservation>();
   const missing = new Set<string>();
@@ -221,7 +239,7 @@ export function valueReplayLegs(
     for (const ticker of occReplayTickers(leg, underlying, rootPrecedence)) {
       let quote = observations.get(ticker);
       if (!quote) {
-        quote = observe(date, ticker, quoteLookup, markTime);
+        quote = observe(date, ticker, quoteLookup, markTime, roundMid);
         observations.set(ticker, quote);
       }
       if ("mid" in quote) {
@@ -249,6 +267,7 @@ export function cumulativeReplayTradeMark(
   quoteLookup: ReplayQuoteLookup,
   parameters: ReplayMethodOverrides = {},
   markTime?: string,
+  cost?: ReplayStrategyCost,
 ): ReplayMark {
   const method = { ...DEFAULT_REPLAY_METHOD_PARAMETERS, ...parameters };
   const marked = valueReplayLegs(
@@ -258,14 +277,25 @@ export function cumulativeReplayTradeMark(
     quoteLookup,
     markTime ?? method.mark_time,
     method.root_precedence,
+    cost !== undefined,
   );
   if (marked.value === null) return marked;
-  const entry = trade.legs.reduce(
-    (sum, leg) =>
-      sum + (leg.buySell === "Buy" ? 1 : -1) * leg.numberOfContracts * leg.pricePerContract,
-    0,
-  );
-  return { ...marked, value: marked.value - entry - method.opening_fee_factor * trade.openingFees };
+  let entry = 0;
+  let legContracts = 0;
+  for (const leg of trade.legs) {
+    entry += (leg.buySell === "Buy" ? 1 : -1) * leg.numberOfContracts * leg.pricePerContract;
+    legContracts += leg.numberOfContracts;
+  }
+  return {
+    ...marked,
+    value:
+      marked.value -
+      entry -
+      (cost ? cost.opening_fee_per_leg_contract * legContracts : trade.openingFees) -
+      (cost?.exit_slippage ?? 0) *
+        100 *
+        (trade.numberOfContracts ?? trade.legs[0].numberOfContracts),
+  };
 }
 
 export function calculateOoReplayAttribution({
@@ -287,11 +317,7 @@ export function calculateOoReplayAttribution({
       ...parameters.root_precedence,
     },
   };
-  if (
-    !Number.isFinite(method.opening_fee_factor) ||
-    !Number.isFinite(method.tolerance_fraction) ||
-    method.tolerance_fraction < 0
-  ) {
+  if (!Number.isFinite(method.tolerance_fraction) || method.tolerance_fraction < 0) {
     throw new RangeError("Invalid replay method parameters");
   }
   const markTime = (date: string): string => (isEarlyCloseSession(date) ? "12:59" : "15:59");
@@ -309,7 +335,7 @@ export function calculateOoReplayAttribution({
     const key = `${date}|${ticker}`;
     const cached = observations.get(key);
     if (cached) return "missing" in cached ? undefined : cached;
-    const raw = observe(date, ticker, quoteLookup, markTime);
+    const raw = observe(date, ticker, quoteLookup, markTime, true);
     const observation = { ...raw, mark_time: markTime };
     observations.set(key, observation);
     return "missing" in observation ? undefined : observation;
@@ -319,7 +345,14 @@ export function calculateOoReplayAttribution({
     const key = `${index}|${date}`;
     let result = markCache.get(key);
     if (!result) {
-      result = cumulativeReplayTradeMark(trades[index], date, memoLookup, method, markTime(date));
+      result = cumulativeReplayTradeMark(
+        trades[index],
+        date,
+        memoLookup,
+        method,
+        markTime(date),
+        method.cost_schedule?.[trades[index].strategyId],
+      );
       markCache.set(key, result);
     }
     return result;
@@ -363,10 +396,15 @@ export function calculateOoReplayAttribution({
     const amounts = new Map<string, number>();
     const parts: { index: number; amount: number }[] = [];
     const missing = new Set<string>();
+    const missingCosts = new Set<string>();
     let missingPrior = false;
     for (let index = 0; index < trades.length; index++) {
       const trade = trades[index];
       if (trade.dateClosed < current.date || trade.dateOpened > current.date) continue;
+      if (!method.cost_schedule?.[trade.strategyId] || trade.numberOfContracts === undefined) {
+        missingCosts.add(trade.strategyName.split("·")[0].trim());
+        continue;
+      }
       let base = 0;
       if (trade.dateOpened < current.date) {
         const previousMark = mark(index, prior.date);
@@ -392,16 +430,18 @@ export function calculateOoReplayAttribution({
       amounts.set(id, (amounts.get(id) ?? 0) + amount);
       parts.push({ index, amount });
     }
-    if (missing.size || missingPrior) {
+    if (missingCosts.size || missing.size || missingPrior) {
       daily.push({
         date: current.date,
         oo_change: ooChange,
         contributions: null,
         residual: null,
         status: "unavailable",
-        reason: missing.size
-          ? { code: "missing_quote", tickers: [...missing].sort() }
-          : { code: "missing_prior_mark" },
+        reason: missingCosts.size
+          ? { code: "missing_strategy_cost", strategies: [...missingCosts].sort() }
+          : missing.size
+            ? { code: "missing_quote", tickers: [...missing].sort() }
+            : { code: "missing_prior_mark" },
       });
       continue;
     }
@@ -518,6 +558,8 @@ export function calculateOoReplayAttribution({
       ...method,
       mark_time: "session_close_minus_1m",
       mark_rule: "equity_close_minus_1m",
+      mid_rounding: "half_up_0.05",
+      cost_schedule: method.cost_schedule ?? {},
       calendar_revision: XNYS_SESSION_CALENDAR_REVISION,
     },
     stats: {
