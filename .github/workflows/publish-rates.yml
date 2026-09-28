@@ -22,6 +22,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+          cache: "npm"
+      # scripts/rates.mjs imports the library's validator, which depends on zod.
+      - name: Install dependencies
+        run: npm ci
       - name: Fetch and validate full DTB3 and SOFR history
         run: node scripts/rates.mjs publish --out "$RUNNER_TEMP/rates.json"
       - name: Commit rates.json only to rates-data
@@ -32,7 +36,7 @@ jobs:
           if [ -n "$(git ls-remote origin refs/heads/rates-data)" ]; then
             git fetch origin rates-data
             git worktree add --detach "$TARGET" origin/rates-data
-            git -C "$TARGET" switch -c rates-data
+            git -C "$TARGET" switch -C rates-data
           else
             git worktree add --detach "$TARGET" HEAD
             git -C "$TARGET" switch --orphan rates-data
@@ -41,5 +45,9 @@ jobs:
           git -C "$TARGET" config user.name "github-actions[bot]"
           git -C "$TARGET" config user.email "github-actions[bot]@users.noreply.github.com"
           git -C "$TARGET" add rates.json
+          if git -C "$TARGET" diff --cached --quiet; then
+            echo "rates.json is unchanged; nothing to publish."
+            exit 0
+          fi
           git -C "$TARGET" commit -m "data: publish DTB3 and SOFR rates"
           git -C "$TARGET" push origin HEAD:refs/heads/rates-data
