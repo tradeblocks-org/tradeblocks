@@ -116,6 +116,43 @@ describe("import_csv starting capital across tools", () => {
       expect(Math.abs(charts.drawdown?.[2].drawdownPct ?? NaN)).toBeCloseTo(expectedDrawdown);
       expect(charts.equityCurveCapitalSource).toBe("daily_log");
     });
+    await withTools(async (root, call) => {
+      const [header, ...rows] = daily.trim().split("\n");
+      const reversed = [header, ...rows.reverse()].join("\n") + "\n";
+      const { stats, charts } = await importAndRead(root, call, missing, reversed);
+      expect(stats.stats.initialCapital).toBe(10000);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("daily_log");
+      expect(charts.equityCurve[0].equity).toBe(10000);
+      expect(charts.equityCurveCapitalSource).toBe("daily_log");
+    });
+  });
+
+  it("agrees on a date-filtered start from the filtered daily log", async () => {
+    await withTools(async (root, call) => {
+      await importAndRead(root, call, missing, daily);
+      const stats = statistics.parse(
+        (
+          await call("get_statistics", {
+            blockId: "capital",
+            startDate: "2024-01-03",
+            riskFreeRateAnnualPct: 0,
+          })
+        ).structuredContent,
+      );
+      const charts = performance.parse(
+        (
+          await call("get_performance_charts", {
+            blockId: "capital",
+            charts: ["equity_curve"],
+            dateRange: { from: "2024-01-03" },
+          })
+        ).structuredContent,
+      );
+      expect(stats.stats.initialCapital).toBe(10200);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("daily_log");
+      expect(charts.equityCurve[0].equity).toBe(10200);
+      expect(charts.equityCurveCapitalSource).toBe("daily_log");
+    });
   });
 
   it("distinguishes an explicit zero after a loss from an omitted balance", async () => {
@@ -201,7 +238,7 @@ describe("import_csv starting capital across tools", () => {
     });
   });
 
-  it("uses observed trade funds when a funded daily start is impossible", async () => {
+  it("keeps daily-log metrics when a funded daily start is impossible", async () => {
     const funded =
       "Date Opened,Date Closed,Strategy,P/L,Legs,Funds at Close\n2024-01-02,2024-01-02,Alpha,200,SPY,10200\n";
     await withTools(async (root, call) => {
@@ -209,10 +246,12 @@ describe("import_csv starting capital across tools", () => {
         root,
         call,
         funded,
-        "Date,Net Liquidity,P/L\n2024-01-02,0,200\n",
+        "Date,Net Liquidity,P/L,Drawdown %\n2024-01-02,0,200,0\n2024-01-03,0,0,3\n",
       );
       expect(stats.stats.initialCapital).toBe(10000);
       expect(stats.calculationMethodology.initialCapital.source).toBe("observed_trade_funds");
+      // The single winning trade has no realized drawdown; 3 comes from the daily log.
+      expect(stats.stats.maxDrawdown).toBe(3);
       expect(charts.equityCurve[0].equity).toBe(10000);
       expect(charts.equityCurveCapitalSource).toBe("observed_trade_funds");
     });

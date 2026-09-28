@@ -502,16 +502,17 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
           if (!isSubsetFiltered && tradeCapital.source !== "observed_trade_funds") {
             trades = rebuildMissingFundsEquity(trades, capital.amount);
           }
-          const metricDailyLogs =
-            !isSubsetFiltered && capital.source === "daily_log" ? effectiveDailyLogs : undefined;
+          // Daily observations stay the metric source exactly as before; only the
+          // reported start is replaced when the daily row cannot evidence it.
           const requestCalculator = new PortfolioStatsCalculator({ riskFreeRateAnnualPct });
           const stats = requestCalculator.calculatePortfolioStats(
             trades,
-            metricDailyLogs,
+            effectiveDailyLogs,
             isSubsetFiltered,
           );
+          stats.initialCapital = capital.amount;
           const calculationMethodology = {
-            ...requestCalculator.getCalculationMethodology(trades, metricDailyLogs),
+            ...requestCalculator.getCalculationMethodology(trades, effectiveDailyLogs),
             initialCapital: { source: capital.source },
           };
 
