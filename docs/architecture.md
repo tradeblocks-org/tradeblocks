@@ -108,6 +108,11 @@ value, which can turn it into the previous Eastern day on a UTC host.
   be attributed safely to one strategy.
 - Drawdown calculations use daily logs when present and otherwise fall back to a trade-based equity
   curve.
+- `calmarRatio` divides CAGR by maximum drawdown from the **same curve**: first-to-last
+  `netLiquidity` over the daily log's own span and maximum absolute `drawdownPct` for
+  unfiltered blocks with a daily log; otherwise trade CAGR and trade-equity drawdown.
+  `cagr` remains trade-based and `maxDrawdown` keeps its existing source. The
+  `calculationMethodology.calmar.basis` label identifies the Calmar curve.
 - Sharpe calculations use sample standard deviation and daily excess returns. Sortino uses the root
   mean square of negative excess returns over all observations, rather than the standard deviation
   of only the negative subset.

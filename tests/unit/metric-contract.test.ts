@@ -268,6 +268,87 @@ describe("P/L and Sharpe calculation contract", () => {
     });
   });
 
+  it("uses the marked daily curve for Calmar without changing public CAGR or drawdown", () => {
+    const trades = [
+      trade({ pl: 1000, fundsAtClose: 101000, plBasis: PlBasis.NetIncludesFees }),
+      trade({
+        dateOpened: new Date("2026-07-02"),
+        dateClosed: new Date("2026-07-02"),
+        pl: -500,
+        fundsAtClose: 100500,
+        plBasis: PlBasis.NetIncludesFees,
+      }),
+      trade({
+        dateOpened: new Date("2027-01-02"),
+        dateClosed: new Date("2027-01-02"),
+        pl: 500,
+        fundsAtClose: 101000,
+        plBasis: PlBasis.NetIncludesFees,
+      }),
+    ];
+    const dailyLogs: DailyLogEntry[] = [
+      {
+        date: new Date("2026-01-02"),
+        netLiquidity: 100000,
+        currentFunds: 100000,
+        withdrawn: 0,
+        tradingFunds: 100000,
+        dailyPl: 0,
+        dailyPlPct: 0,
+        drawdownPct: 0,
+      },
+      {
+        date: new Date("2026-07-02"),
+        netLiquidity: 90000,
+        currentFunds: 90000,
+        withdrawn: 0,
+        tradingFunds: 90000,
+        dailyPl: -10000,
+        dailyPlPct: -10,
+        drawdownPct: -10,
+      },
+      {
+        date: new Date("2027-01-02"),
+        netLiquidity: 110000,
+        currentFunds: 110000,
+        withdrawn: 0,
+        tradingFunds: 110000,
+        dailyPl: 20000,
+        dailyPlPct: 22.22,
+        drawdownPct: 0,
+      },
+    ];
+    const calculator = new PortfolioStatsCalculator({ riskFreeRateAnnualPct: 0 });
+    const marked = calculator.calculatePortfolioStats(trades, dailyLogs);
+    // 365 calendar days: ((110000 / 100000) ^ (365.25 / 365) - 1) * 100 / 10.
+    expect(marked.calmarRatio).toBeCloseTo(1.000718113835, 8);
+    expect(calculator.getCalculationMethodology(trades, dailyLogs).calmar.basis).toBe(
+      "daily_log_marked_curve",
+    );
+    expect(marked.cagr).toBeCloseTo(1.000688347151, 8);
+    expect(marked.maxDrawdown).toBe(10);
+
+    const tradeOnly = calculator.calculatePortfolioStats(trades);
+    // Before this change: 1.000688347151 trade CAGR / (500 / 101000 * 100) trade drawdown.
+    expect(tradeOnly.calmarRatio).toBeCloseTo(2.021390461245, 8);
+    expect(calculator.getCalculationMethodology(trades).calmar.basis).toBe("realized_trade_equity");
+
+    const filtered = calculator.calculatePortfolioStats(trades, dailyLogs, true);
+    expect(filtered.calmarRatio).toBeCloseTo(2.021390461245, 8);
+    expect(calculator.getCalculationMethodology(trades).calmar.basis).toBe("realized_trade_equity");
+
+    // A marked curve with no positive starting liquidity or no span cannot use trade CAGR.
+    expect(
+      calculator.calculatePortfolioStats(trades, dailyLogs.slice(0, 1)).calmarRatio,
+    ).toBeUndefined();
+    expect(
+      calculator.calculatePortfolioStats(trades, [
+        { ...dailyLogs[0], netLiquidity: 0 },
+        dailyLogs[1],
+      ]).calmarRatio,
+    ).toBeUndefined();
+  });
+
   it("matches the reduced OO display benchmark at a fixed 2.5% RFR", () => {
     // Synthetic excess-return shape reduced from the supplied OO parity case.
     // It locks the two independently displayed rounded risk metrics without

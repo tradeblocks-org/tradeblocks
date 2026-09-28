@@ -95,12 +95,18 @@ describe("import_csv paired daily log", () => {
       const stats = await call("get_statistics", { blockId: "paired" });
       expect(stats.isError).not.toBe(true);
       expect(drawdown(stats)).toBe(20);
+      expect(stats.structuredContent?.calculationMethodology).toMatchObject({
+        calmar: { basis: "daily_log_marked_curve" },
+      });
       const filtered = await call("get_statistics", {
         blockId: "paired",
         strategy: "Alpha",
       });
       expect(filtered.isError).not.toBe(true);
       expect(drawdown(filtered)).not.toBe(20);
+      expect(filtered.structuredContent?.calculationMethodology).toMatchObject({
+        calmar: { basis: "realized_trade_equity" },
+      });
     });
   });
 

@@ -183,6 +183,13 @@ holds its first and last calendar dates (`YYYY-MM-DD`, or null when no row
 converts). Paired imports additionally return `dailyLog.recordCount` and
 `dailyLog.dateRange` in the same calendar-date form. Unfiltered `get_statistics`
 uses the daily-log portfolio drawdown; strategy-filtered statistics remain trade-based.
+Unfiltered `get_statistics` with a daily log computes `calmarRatio` from marked
+first-to-last net-liquidity CAGR divided by the daily log's maximum absolute
+drawdown percentage. Without a daily log, or with a strategy/ticker filter, it
+uses trade CAGR divided by trade-equity drawdown. The result labels the basis
+as `calculationMethodology.calmar.basis` (`daily_log_marked_curve` or
+`realized_trade_equity`); `cagr` remains trade-based and `maxDrawdown` retains
+its current source independently.
 
 ---
 

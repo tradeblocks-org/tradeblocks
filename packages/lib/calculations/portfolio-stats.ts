@@ -49,6 +49,20 @@ function getMetricPl(trade: Trade): number {
   return getNetPl(trade);
 }
 
+function hasDailyLog(entries?: DailyLogEntry[]): entries is DailyLogEntry[] {
+  return !!entries?.length;
+}
+
+/** Annual percentage growth between the first and last marked daily-log observations. */
+export function markedCagrFromDailyLogs(dailyLogs: DailyLogEntry[]): number | undefined {
+  if (dailyLogs.length < 2) return undefined;
+  const first = dailyLogs[0];
+  const last = dailyLogs[dailyLogs.length - 1];
+  const years = (last.date.getTime() - first.date.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+  if (years <= 0 || first.netLiquidity <= 0 || last.netLiquidity <= 0) return undefined;
+  return (Math.pow(last.netLiquidity / first.netLiquidity, 1 / years) - 1) * 100;
+}
+
 /**
  * Default analysis configuration
  */
@@ -511,7 +525,9 @@ export class PortfolioStatsCalculator {
     trades: Trade[],
     dailyLogEntries?: DailyLogEntry[],
   ): number | undefined {
-    const cagr = this.calculateCAGR(trades);
+    const cagr = hasDailyLog(dailyLogEntries)
+      ? markedCagrFromDailyLogs(dailyLogEntries)
+      : this.calculateCAGR(trades);
     const maxDrawdown = Math.abs(this.calculateMaxDrawdown(trades, dailyLogEntries));
 
     if (!cagr || maxDrawdown === 0) return undefined;
@@ -871,7 +887,7 @@ export class PortfolioStatsCalculator {
       };
     }
 
-    const usesDailyLog = !!dailyLogEntries?.length;
+    const usesDailyLog = hasDailyLog(dailyLogEntries);
     const warnings: string[] = [];
     if (!usesDailyLog) {
       warnings.push(
@@ -904,6 +920,9 @@ export class PortfolioStatsCalculator {
           : this.config.useBusinessDaysOnly
             ? "included_business_days"
             : "included_calendar_days",
+      },
+      calmar: {
+        basis: usesDailyLog ? "daily_log_marked_curve" : "realized_trade_equity",
       },
       sharpe: {
         annualizationFactor: this.config.annualizationFactor,

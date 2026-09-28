@@ -14,7 +14,10 @@ import type {
   StrategyMatch,
   CalendarDayData,
 } from "../stores/trading-calendar-store.ts";
-import { PortfolioStatsCalculator } from "../calculations/portfolio-stats.ts";
+import {
+  PortfolioStatsCalculator,
+  markedCagrFromDailyLogs,
+} from "../calculations/portfolio-stats.ts";
 import { getNetPl } from "../utils/equity-curve.ts";
 import { getRiskFreeRate } from "../utils/risk-free-rate.ts";
 
@@ -1129,18 +1132,7 @@ function calculateMetricsFromDailyLogs(filteredLogs: DailyLogEntry[]): AdvancedP
   // Max Drawdown from daily log drawdownPct
   const maxDrawdown = Math.max(...filteredLogs.map((l) => Math.abs(l.drawdownPct || 0)));
 
-  // CAGR calculation
-  const startValue = filteredLogs[0].netLiquidity;
-  const endValue = filteredLogs[filteredLogs.length - 1].netLiquidity;
-  const startDateObj = filteredLogs[0].date;
-  const endDateObj = filteredLogs[filteredLogs.length - 1].date;
-  const totalYears =
-    (endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-
-  let cagr: number | null = null;
-  if (totalYears > 0 && startValue > 0 && endValue > 0) {
-    cagr = (Math.pow(endValue / startValue, 1 / totalYears) - 1) * 100;
-  }
+  const cagr = markedCagrFromDailyLogs(filteredLogs) ?? null;
 
   // Calmar Ratio = CAGR / Max Drawdown
   const calmar = cagr !== null && maxDrawdown > 0 ? cagr / maxDrawdown : null;

@@ -138,6 +138,9 @@ export interface PortfolioCalculationMethodology {
     dateRange: { start: string | null; end: string | null };
     idleDays: "included_as_provided" | "included_business_days" | "included_calendar_days";
   };
+  calmar: {
+    basis: "daily_log_marked_curve" | "realized_trade_equity";
+  };
   sharpe: {
     annualizationFactor: number;
     volatilityEstimator: "sample_standard_deviation_n_minus_1";

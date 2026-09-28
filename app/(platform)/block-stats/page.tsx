@@ -895,7 +895,7 @@ export default function BlockStatsPage() {
           tooltip={{
             flavor: "Recovery building rate - annual growth compared to worst foundation damage.",
             detailed:
-              "CAGR divided by maximum drawdown. This shows how much annual return you're getting relative to the worst decline experienced. Higher values indicate strategies that generate good returns without severe drawdowns.",
+              "Annual growth divided by the worst drawdown from the same curve. With a daily log, both use the marked daily account curve; otherwise both use realized trades. The separate CAGR metric always uses trades. Higher values indicate more return relative to drawdown.",
           }}
         />
       </MetricSection>
