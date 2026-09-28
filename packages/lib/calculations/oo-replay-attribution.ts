@@ -85,6 +85,7 @@ export const DEFAULT_REPLAY_METHOD_PARAMETERS: ReplayMethodParameters = {
 
 export interface ReplayMark {
   value: number | null;
+  reason?: "missing_strategy_cost";
   missing_tickers: string[];
   observations: ReplayQuoteObservation[];
 }
@@ -269,6 +270,9 @@ export function cumulativeReplayTradeMark(
   markTime?: string,
   cost?: ReplayStrategyCost,
 ): ReplayMark {
+  if (!cost || trade.numberOfContracts === undefined) {
+    return { value: null, reason: "missing_strategy_cost", missing_tickers: [], observations: [] };
+  }
   const method = { ...DEFAULT_REPLAY_METHOD_PARAMETERS, ...parameters };
   const marked = valueReplayLegs(
     trade.legs,
@@ -291,10 +295,8 @@ export function cumulativeReplayTradeMark(
     value:
       marked.value -
       entry -
-      (cost ? cost.opening_fee_per_leg_contract * legContracts : trade.openingFees) -
-      (cost?.exit_slippage ?? 0) *
-        100 *
-        (trade.numberOfContracts ?? trade.legs[0].numberOfContracts),
+      cost.opening_fee_per_leg_contract * legContracts -
+      cost.exit_slippage * 100 * trade.numberOfContracts,
   };
 }
 

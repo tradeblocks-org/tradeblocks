@@ -290,6 +290,31 @@ describe("OO replay attribution public interface", () => {
     );
   });
 
+  it("withholds a direct trade mark when its per-strategy cost is absent", () => {
+    let quoteCalls = 0;
+    const mark = cumulativeReplayTradeMark(trade, "2026-06-09", () => {
+      quoteCalls++;
+      return { bid: 1, ask: 1 };
+    });
+    expect(mark).toEqual({
+      value: null,
+      reason: "missing_strategy_cost",
+      missing_tickers: [],
+      observations: [],
+    });
+    expect(quoteCalls).toBe(0);
+    const missingCount = cumulativeReplayTradeMark(
+      { ...trade, numberOfContracts: undefined },
+      "2026-06-09",
+      () => {
+        throw new Error("Missing contract count must not request a quote");
+      },
+      {},
+      undefined,
+      cost,
+    );
+    expect(missingCount).toEqual(mark);
+  });
   it("prefers an observed SPXW mark on third Friday and records attempted monthly fallback", () => {
     const monthly = { ...short(5000), expiration: "20260619" };
     expect(occReplayTickers(monthly, "SPX")).toEqual(["SPXW260619P05000000", "SPX260619P05000000"]);
@@ -307,6 +332,9 @@ describe("OO replay attribution public interface", () => {
       { ...trade, legs: [monthly] },
       "2026-06-18",
       (_, ticker) => (ticker.startsWith("SPXW") ? undefined : { bid: 0.5, ask: 0.5 }),
+      {},
+      undefined,
+      cost,
     );
     expect(fallback.value).toBe(49);
     expect(fallback.observations).toContainEqual({
