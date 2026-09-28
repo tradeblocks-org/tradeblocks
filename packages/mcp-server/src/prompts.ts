@@ -62,7 +62,9 @@ cells) and identify the top-scoring cell and the centre of the broadest stable
 region. Read OO get_saved_backtest for the base configuration; change only the
 candidate coordinates in memory and call OO run_backtest twice as scratch runs,
 one per candidate. Do not use OO save_backtest, replace_saved_backtest,
-edit_saved_backtest, or any save_*, replace_* or edit_* tool. Use
+edit_saved_backtest, or any save_*, replace_* or edit_* tool. run_backtest
+returns before the run finishes: poll OO get_backtest_status for each runId until
+it completes, and stop if a run fails or is cancelled. Then use
 get_backtest_results by runId for each run's OO figures. Bring each run's trade
 log into a separate TB block: when the tradeblocks-skills plugin is installed
 use ${captureSkill} with each runId (OO get_trade_log); otherwise have the user
