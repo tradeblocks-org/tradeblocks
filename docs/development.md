@@ -121,20 +121,25 @@ elsewhere in the computation remain instants.
 
 ### Trade Logs
 
-- MCP `import_csv` requires `Date Opened` and `P/L` (`packages/mcp-server/src/utils/block-loader.ts`).
-  Other Option Omega headers provide additional trade context (`packages/lib/models/trade.ts`):
+- The web importer requires the full Option Omega header set in `REQUIRED_TRADE_COLUMNS`
+  (`packages/lib/models/trade.ts`). MCP `import_csv` requires only `Date Opened` and `P/L`
+  (`packages/mcp-server/src/utils/block-loader.ts`). Key columns:
   - `Date Opened`, `Time Opened`, `Legs`, `P/L`, `Strategy`
-  - Option Omega `P/L` already includes commission and fees. MCP `import_csv` defaults
-    `plBasis` to `net_includes_fees`; use `gross_before_fees` only when the fee columns
-    still need deducting. The web CSV importer stamps OO imports as `net_includes_fees`.
-  - `Opening Commissions + Fees`, `Closing Commissions + Fees` (required for gross-before-fees imports)
+  - Option Omega `P/L` already includes commission and fees. The web importer stamps
+    `plBasis: "net_includes_fees"`; MCP `import_csv` takes a `plBasis` input that defaults to
+    `net_includes_fees`; use `gross_before_fees` only when P/L has not yet deducted fees.
+  - `Opening Commissions + Fees`, `Closing Commissions + Fees` (MCP `import_csv` requires both
+    with `gross_before_fees`)
   - `Premium` decimal values such as `2.50` are dollars; integer values are interpreted as cents.
   - Ratio columns such as `Opening Short/Long Ratio` are optional but supported.
+- Aliases in `TRADE_COLUMN_ALIASES` normalize variants (e.g., `Opening comms & fees`).
 
 ### Daily Logs (optional)
 
-- MCP `import_csv` requires `Date` and `Net Liquidity` for a paired daily log
-  (`packages/mcp-server/src/utils/block-loader.ts`); `P/L`, `P/L %`, and `Drawdown %` are optional.
+- The web importer requires `REQUIRED_DAILY_LOG_COLUMNS` (`packages/lib/models/daily-log.ts`):
+  `Date`, `Net Liquidity`, `Current Funds`, `Trading Funds`, `P/L`, `P/L %`, `Drawdown %`.
+- MCP `import_csv` requires only `Date` and `Net Liquidity` for a paired daily log
+  (`packages/mcp-server/src/utils/block-loader.ts`); the other columns are optional.
 - When absent, drawdown calculations fall back to trade-based equity curves.
 
 ## Testing
