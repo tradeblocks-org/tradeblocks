@@ -397,18 +397,12 @@ export class TradeProcessor {
         return parsed;
       };
 
-      // Build trade object
-      const rawPremiumString = (rawData["Premium"] || "").replace(/[$,]/g, "").trim();
-      const premiumPrecision: Trade["premiumPrecision"] =
-        rawPremiumString && !rawPremiumString.includes(".") ? "cents" : "dollars";
-
       const trade: Trade = {
         dateOpened,
         timeOpened: rawData["Time Opened"] || "00:00:00",
         openingPrice: parseNumber(rawData["Opening Price"], "Opening Price"),
         legs: rawData["Legs"] || "",
         premium: parseNumber(rawData["Premium"], "Premium"),
-        premiumPrecision,
         closingPrice: rawData["Closing Price"]
           ? parseNumber(rawData["Closing Price"], "Closing Price")
           : undefined,

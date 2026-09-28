@@ -355,7 +355,7 @@ backtests/
 - P/L (Option Omega exports already include fees; `import_csv` defaults to
   `plBasis: "net_includes_fees"`. Use `"gross_before_fees"` only if fees still need deducting)
 - Strategy (optional; the block ID is used when missing), Legs (or Symbol)
-- No. of Contracts, Premium (optional; decimal `2.50` is dollars, integer `250` is cents)
+- No. of Contracts, Premium (optional; dollars per contract: `250` and `250.00` both mean $250)
 
 **dailylog.csv** - Daily portfolio values:
 

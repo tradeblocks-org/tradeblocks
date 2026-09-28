@@ -1,26 +1,5 @@
 import type { Trade } from "../models/trade.ts";
 
-/**
- * Standard options multiplier used to convert per-contract values into notional dollars.
- * Equity and index option contracts typically control 100 shares, so premium/max profit
- * values need to be scaled by 100 to reflect the total economic exposure.
- */
-const OPTION_CONTRACT_MULTIPLIER = 100;
-
-/**
- * Margin-to-notional ratio threshold that indicates a trade is lightly margined.
- * When gross notional is less than 50% of the posted margin requirement we treat
- * the trade as an option-style structure and apply the contract multiplier.
- */
-const MARGIN_RATIO_THRESHOLD = 0.5;
-
-/**
- * Notional dollar threshold under which trades are considered "small". These trades
- * likely represent single-lot option structures, so we apply the option multiplier
- * even if there is no explicit margin requirement to compare against.
- */
-const SMALL_NOTIONAL_THRESHOLD = 5_000;
-
 function getNormalizedContractCount(trade: Trade): number {
   const contracts =
     typeof trade.numContracts === "number" && isFinite(trade.numContracts)
@@ -30,49 +9,12 @@ function getNormalizedContractCount(trade: Trade): number {
   return contracts > 0 ? contracts : 1;
 }
 
-function applyOptionMultiplierIfNeeded(total: number, trade: Trade): number {
-  if (!isFinite(total) || total <= 0) {
-    return total;
-  }
-
-  const margin =
-    typeof trade.marginReq === "number" && isFinite(trade.marginReq)
-      ? Math.abs(trade.marginReq)
-      : undefined;
-
-  if (margin && margin > 0) {
-    const ratio = total / margin;
-    if (ratio > 0 && ratio < MARGIN_RATIO_THRESHOLD) {
-      return total * OPTION_CONTRACT_MULTIPLIER;
-    }
-    return total;
-  }
-
-  if (total < SMALL_NOTIONAL_THRESHOLD) {
-    return total * OPTION_CONTRACT_MULTIPLIER;
-  }
-
-  return total;
-}
-
-function normalisePerContractValue(value: number, trade: Trade, isPremium: boolean): number {
-  const contracts = getNormalizedContractCount(trade);
-  let base = Math.abs(value);
-
-  if (isPremium && trade.premiumPrecision === "cents") {
-    base = base / 100;
-  }
-
-  const total = base * contracts;
-  return applyOptionMultiplierIfNeeded(total, trade);
-}
-
 export function computeTotalPremium(trade: Trade): number | undefined {
   if (typeof trade.premium !== "number" || !isFinite(trade.premium)) {
     return undefined;
   }
 
-  const total = normalisePerContractValue(Math.abs(trade.premium), trade, true);
+  const total = Math.abs(trade.premium) * getNormalizedContractCount(trade);
   return isFinite(total) && total > 0 ? total : undefined;
 }
 

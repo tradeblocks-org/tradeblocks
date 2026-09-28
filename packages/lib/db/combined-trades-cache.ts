@@ -30,7 +30,7 @@ interface CombinedTradesCache {
  * Generate the cache ID for a block
  */
 function getCacheId(blockId: string): string {
-  return `combined_trades_${blockId}`;
+  return `combined_trades_v2_${blockId}`;
 }
 
 /**

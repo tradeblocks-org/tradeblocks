@@ -130,7 +130,7 @@ elsewhere in the computation remain instants.
     `net_includes_fees`; use `gross_before_fees` only when P/L has not yet deducted fees.
   - `Opening Commissions + Fees`, `Closing Commissions + Fees` (MCP `import_csv` requires both
     with `gross_before_fees`)
-  - `Premium` decimal values such as `2.50` are dollars; integer values are interpreted as cents.
+  - `Premium` is dollars per contract (one lot): `250` and `250.00` both mean $250.
   - Ratio columns such as `Opening Short/Long Ratio` are optional but supported.
 - Aliases in `TRADE_COLUMN_ALIASES` normalize variants (e.g., `Opening comms & fees`).
 

@@ -200,7 +200,7 @@ Optional columns:
 - Time Opened, Date Closed, Time Closed
 - Strategy, Symbol (or Legs)
 - No. of Contracts
-- Premium (decimal dollars such as `2.50`; integer values are interpreted as cents)
+- Premium (dollars per contract; `250` and `250.00` both mean $250 per lot)
 - Opening/Closing Commissions + Fees (both required for `gross_before_fees`)
 - Funds at Close (optional; if absent, `get_statistics` and the realized
   `get_performance_charts` equity curve use the first daily log's Net Liquidity
@@ -213,8 +213,8 @@ Example:
 
 ```csv
 Date Opened,Time Opened,Date Closed,Time Closed,P/L,Strategy,Legs,No. of Contracts,Premium
-2024-01-02,09:35:00,2024-01-02,15:30:00,200,Iron Condor,SPX 4800P/4750P,1,2.50
-2024-01-03,09:35:00,2024-01-03,15:45:00,250,Iron Condor,SPX 4820P/4770P,1,2.75
+2024-01-02,09:35:00,2024-01-02,15:30:00,200,Iron Condor,SPX 4800P/4750P,1,250
+2024-01-03,09:35:00,2024-01-03,15:45:00,250,Iron Condor,SPX 4820P/4770P,1,275
 ```
 
 `import_csv` refuses a trade or reporting row with an invalid opened/closed calendar date or an

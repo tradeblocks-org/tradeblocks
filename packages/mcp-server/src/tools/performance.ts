@@ -33,6 +33,9 @@ import {
   buildRealizedHoldingPeriods as buildHoldingPeriods,
   buildRealizedPremiumEfficiencyByCloseDate as buildPremiumEfficiency,
   buildRealizedPeriodReturnsByCloseDate,
+  computeTotalPremium,
+  computeTotalMaxProfit,
+  computeTotalMaxLoss,
 } from "@tradeblocks/lib";
 
 function getRealizationDate(trade: Trade): Date {
@@ -69,41 +72,11 @@ interface MFEMAEDistributionBucket {
 }
 
 /**
- * Calculate total max profit from trade (handles multi-leg spreads)
- */
-function computeTotalMaxProfit(trade: Trade): number {
-  if (typeof trade.maxProfit === "number" && isFinite(trade.maxProfit)) {
-    return Math.abs(trade.maxProfit);
-  }
-  return 0;
-}
-
-/**
- * Calculate total max loss from trade (handles multi-leg spreads)
- */
-function computeTotalMaxLoss(trade: Trade): number {
-  if (typeof trade.maxLoss === "number" && isFinite(trade.maxLoss)) {
-    return Math.abs(trade.maxLoss);
-  }
-  return 0;
-}
-
-/**
- * Calculate total premium from trade
- */
-function computeTotalPremium(trade: Trade): number {
-  if (typeof trade.premium === "number" && isFinite(trade.premium)) {
-    return Math.abs(trade.premium);
-  }
-  return 0;
-}
-
-/**
  * Calculate MFE/MAE metrics for a single trade
  */
 function calculateTradeExcursionMetrics(trade: Trade, tradeNumber: number): MFEMAEDataPoint | null {
-  const totalMFE = computeTotalMaxProfit(trade);
-  const totalMAE = computeTotalMaxLoss(trade);
+  const totalMFE = computeTotalMaxProfit(trade) ?? 0;
+  const totalMAE = computeTotalMaxLoss(trade) ?? 0;
 
   // Skip trades without excursion data
   if (!totalMFE && !totalMAE) {

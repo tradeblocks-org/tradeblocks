@@ -257,9 +257,6 @@ function convertToTrade(
 
     const strategy = (raw["Strategy"] || "").trim() || blockId || "Unknown";
 
-    const rawPremium = (raw["Premium"] || "").replace(/[$,]/g, "").trim();
-    const premiumPrecision: Trade["premiumPrecision"] =
-      rawPremium && !rawPremium.includes(".") ? "cents" : "dollars";
     const legs = raw["Legs"] || raw["Symbol"] || "";
     const fundsAtClose = parseNumber(raw["Funds at Close"], NaN);
 
@@ -269,7 +266,6 @@ function convertToTrade(
       openingPrice: parseNumber(raw["Opening Price"]),
       legs,
       premium: parseNumber(raw["Premium"]),
-      premiumPrecision,
       closingPrice: raw["Closing Price"] ? parseNumber(raw["Closing Price"]) : undefined,
       dateClosed,
       timeClosed: raw["Time Closed"] || undefined,

@@ -11,7 +11,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
 import { fileURLToPath } from "url";
-
+import { computeTotalPremium, calculatePremiumEfficiencyPercent } from "@tradeblocks/lib";
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
 import {
@@ -164,6 +164,29 @@ describe("block-loader", () => {
   });
 
   describe("importCsv", () => {
+    it.each(["420", "420.00"])("imports OO Premium %s as dollars per lot", async (premium) => {
+      const source = await fs.readFile(
+        path.resolve(__dirname, "../../../tests/data/EMA Test Data/ema-tradelog.csv"),
+        "utf8",
+      );
+      const [header, firstRow] = source.replace(/^\uFEFF/, "").split(/\r?\n/);
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), "tb-premium-"));
+      try {
+        const csvPath = path.join(root, "ema-tradelog.csv");
+        await fs.writeFile(csvPath, `${header}\n${firstRow.replace(/,420,/, `,${premium},`)}\n`);
+        const result = await importCsv(root, { csvPath, blockName: "EMA", csvType: "tradelog" });
+        const block = await loadBlock(root, result.blockId);
+        expect(block.trades).toHaveLength(1);
+        expect(block.trades[0].premium).toBe(420);
+        expect(computeTotalPremium(block.trades[0])).toBe(1260);
+        expect(calculatePremiumEfficiencyPercent(block.trades[0]).percentage).toBeCloseTo(
+          99.2857142857,
+        );
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+
     it("should import into nested blocks directory when data root contains blocks/", async () => {
       await withNestedBlocksFixture(async (dataRoot) => {
         const sourceCsv = path.join(FIXTURES_DIR, "nonstandard-name", "my-custom-trades.csv");

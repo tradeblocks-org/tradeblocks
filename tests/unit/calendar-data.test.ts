@@ -204,7 +204,7 @@ describe("Calendar Data Service", () => {
         // Backtest: (310-10)/3 = 100 per contract (net of commissions)
         expect(result.backtest?.pl).toBe(100);
         expect(result.backtest?.contracts).toBe(1);
-        expect(result.backtest?.premium).toBe(200); // 600/3
+        expect(result.backtest?.premium).toBe(600); // Already dollars for one contract
 
         // Actual: 800/8 = 100 per contract (no commissions in ReportingTrade)
         expect(result.actual?.pl).toBe(100);
@@ -257,7 +257,7 @@ describe("Calendar Data Service", () => {
         // Scale BT DOWN to 1 contract: 1000 * (1/10) = 100
         expect(result.backtest?.pl).toBe(100);
         expect(result.backtest?.contracts).toBe(1);
-        expect(result.backtest?.premium).toBe(500); // 5000 * (1/10)
+        expect(result.backtest?.premium).toBe(5000); // Per-lot premium does not scale with position size
 
         // Actual unchanged
         expect(result.actual?.pl).toBe(75);

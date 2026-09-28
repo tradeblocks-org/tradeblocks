@@ -11,7 +11,6 @@ function createMockTrade(overrides: Partial<Trade> = {}): Trade {
     openingPrice: 4500,
     legs: "CALL 4500",
     premium: 100,
-    premiumPrecision: "dollars",
     closingPrice: 50,
     dateClosed: new Date("2024-01-20"),
     timeClosed: "15:00:00",

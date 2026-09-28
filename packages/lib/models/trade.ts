@@ -14,12 +14,8 @@ export interface Trade {
   timeOpened: string; // HH:mm:ss format
   openingPrice: number;
   legs: string; // Option legs description
+  /** Opening premium in dollars for one contract (one lot). */
   premium: number;
-  /**
-   * Records how the premium value was encoded in the source CSV.
-   * Some exports (OptionOmega) provide cents as whole numbers without decimals.
-   */
-  premiumPrecision?: "dollars" | "cents";
 
   // Closing information (optional for open trades)
   closingPrice?: number;

@@ -2,6 +2,7 @@ import type { Trade } from "../models/trade.ts";
 import { formatDateKey } from "./trade-matching.ts";
 import { getGrossPl, getNetPl } from "../utils/equity-curve.ts";
 import { PortfolioStatsCalculator } from "./portfolio-stats.ts";
+import { computeTotalPremium } from "../metrics/trade-efficiency.ts";
 
 function getRealizationDate(trade: Trade): Date {
   return new Date(trade.dateClosed ?? trade.dateOpened);
@@ -439,7 +440,8 @@ function buildPremiumEfficiency(trades: Trade[]): Array<{
       typeof trade.premium === "number" && isFinite(trade.premium) ? trade.premium : null;
     let efficiencyPct: number | null = null;
     if (premium !== null && premium !== 0) {
-      efficiencyPct = (getNetPl(trade) / Math.abs(premium)) * 100;
+      const totalPremium = computeTotalPremium(trade);
+      if (totalPremium) efficiencyPct = (getNetPl(trade) / totalPremium) * 100;
     }
 
     return {

@@ -20,6 +20,7 @@ import {
 } from "../calculations/portfolio-stats.ts";
 import { getNetPl } from "../utils/equity-curve.ts";
 import { getRiskFreeRate } from "../utils/risk-free-rate.ts";
+import { computeTotalPremium } from "../metrics/trade-efficiency.ts";
 
 /**
  * Configuration for risk metric calculations
@@ -587,10 +588,7 @@ export function scaleTradeValues(
       backtest: backtestTrade
         ? {
             pl: btPerContract!,
-            premium:
-              backtestTrade.numContracts > 0
-                ? backtestTrade.premium / backtestTrade.numContracts
-                : 0,
+            premium: backtestTrade.premium,
             contracts: 1,
             plPerContract: btPerContract!,
           }
@@ -643,7 +641,7 @@ export function scaleTradeValues(
   const scaleFactor =
     backtestTrade.numContracts > 0 ? targetContracts / backtestTrade.numContracts : 0;
   const scaledBacktestPl = backtestTrade.pl * scaleFactor;
-  const scaledBacktestPremium = backtestTrade.premium * scaleFactor;
+  const scaledBacktestPremium = backtestTrade.premium;
 
   return {
     backtest: {
@@ -760,7 +758,10 @@ function aggregateBacktestTrades(trades: Trade[]) {
   return {
     trades,
     totalPl: trades.reduce((sum, t) => sum + t.pl, 0),
-    totalPremium: trades.reduce((sum, t) => sum + t.premium, 0),
+    totalPremium: trades.reduce(
+      (sum, t) => sum + t.premium * (t.numContracts > 0 ? t.numContracts : 1),
+      0,
+    ),
     totalContracts,
     // unitContracts now equals totalContracts for accurate scaling with variable sizes
     unitContracts: totalContracts,
@@ -1195,8 +1196,9 @@ export function calculateTradeMetrics(
         tradeCount++;
 
         // Premium capture
-        if (trade.premium !== 0) {
-          const capture = (trade.pl / Math.abs(trade.premium)) * 100;
+        const totalPremium = computeTotalPremium(trade);
+        if (totalPremium) {
+          const capture = (trade.pl / totalPremium) * 100;
           totalPremiumCapture += capture;
           premiumCaptureCount++;
         }
@@ -1257,14 +1259,15 @@ export function calculateAvgPremiumCapture(
 
     return totalCapture / tradesWithPremium.length;
   } else {
-    const tradesWithPremium = backtestTrades.filter((t) => t.premium !== 0);
-    if (tradesWithPremium.length === 0) return null;
-
-    const totalCapture = tradesWithPremium.reduce((sum, t) => {
-      return sum + (t.pl / Math.abs(t.premium)) * 100;
-    }, 0);
-
-    return totalCapture / tradesWithPremium.length;
+    let totalCapture = 0;
+    let count = 0;
+    for (const trade of backtestTrades) {
+      const totalPremium = computeTotalPremium(trade);
+      if (totalPremium === undefined) continue;
+      totalCapture += (trade.pl / totalPremium) * 100;
+      count++;
+    }
+    return count > 0 ? totalCapture / count : null;
   }
 }
 
@@ -1315,13 +1318,15 @@ export function calculateDayMetrics(dayData: CalendarDayData): DayPerformanceMet
 
   // Calculate Avg Premium Capture
   let avgPremiumCapture: number | null = null;
-  const tradesWithPremium = trades.filter((t) => t.premium !== 0);
-  if (tradesWithPremium.length > 0) {
-    const totalCapture = tradesWithPremium.reduce((sum, t) => {
-      return sum + (t.pl / Math.abs(t.premium)) * 100;
-    }, 0);
-    avgPremiumCapture = totalCapture / tradesWithPremium.length;
+  let totalCapture = 0;
+  let premiumCount = 0;
+  for (const trade of trades) {
+    const totalPremium = computeTotalPremium(trade);
+    if (totalPremium === undefined) continue;
+    totalCapture += (trade.pl / totalPremium) * 100;
+    premiumCount++;
   }
+  if (premiumCount > 0) avgPremiumCapture = totalCapture / premiumCount;
 
   return {
     maxDrawdown,

@@ -19,16 +19,11 @@ import {
 } from "@tradeblocks/lib";
 import { cn } from "@tradeblocks/lib";
 
-/**
- * Normalize backtest premium to dollars
- * Backtest trades may store premium in cents (whole numbers without decimals)
- * while reporting trades store premium in dollars
- */
-function normalizeBacktestPremium(trade: Trade | CombinedTrade): number {
-  if (trade.premiumPrecision === "cents") {
-    return trade.premium / 100;
-  }
-  return trade.premium;
+// Trade.premium is dollars per lot; OO reporting Initial Premium uses a per-share quote.
+const SHARES_PER_OPTION_CONTRACT = 100;
+
+function backtestPremiumQuote(trade: Trade | CombinedTrade): number {
+  return trade.premium / SHARES_PER_OPTION_CONTRACT;
 }
 
 interface DetailRowProps {
@@ -115,9 +110,8 @@ interface IndividualLegCardProps {
 
 function IndividualLegCard({ trade, index, type }: IndividualLegCardProps) {
   const isBacktest = type === "backtest";
-  // Normalize backtest premium from cents to dollars if needed
   const premium = isBacktest
-    ? normalizeBacktestPremium(trade as Trade)
+    ? backtestPremiumQuote(trade as Trade)
     : (trade as ReportingTrade).initialPremium;
 
   return (
@@ -212,7 +206,11 @@ function CombinedActualTradeGroup({
           <DetailRow label="Time Closed" value={combined.timeClosed ?? "-"} />
           <DetailRow label="Opening Price" value={combined.openingPrice} format="number" />
           <LegsRow legs={combined.legs} />
-          <DetailRow label="Premium" value={combined.initialPremium} format="premium" />
+          <DetailRow
+            label="Initial Premium (reported)"
+            value={combined.initialPremium}
+            format="premium"
+          />
           <DetailRow label="Contracts" value={combined.numContracts} format="number" />
           <DetailRow label="Closing Price" value={combined.closingPrice} format="number" />
           <DetailRow
@@ -320,7 +318,11 @@ function CombinedBacktestTradeGroup({
         <DetailRow label="Time Closed" value={combined.timeClosed ?? "-"} />
         <DetailRow label="Opening Price" value={combined.openingPrice} format="number" />
         <LegsRow legs={combined.legs} />
-        <DetailRow label="Premium" value={normalizeBacktestPremium(combined)} format="premium" />
+        <DetailRow
+          label="Premium ($/share quote)"
+          value={backtestPremiumQuote(combined)}
+          format="premium"
+        />
         <DetailRow label="Contracts" value={combined.numContracts} format="number" />
         <DetailRow label="Closing Price" value={combined.closingPrice} format="number" />
         <DetailRow
@@ -488,7 +490,11 @@ function ActualTradeCard({
         <DetailRow label="Time Closed" value={trade.timeClosed ?? "-"} />
         <DetailRow label="Opening Price" value={trade.openingPrice} format="number" />
         <LegsRow legs={trade.legs} />
-        <DetailRow label="Premium" value={trade.initialPremium} format="premium" />
+        <DetailRow
+          label="Initial Premium (reported)"
+          value={trade.initialPremium}
+          format="premium"
+        />
         <DetailRow label="Contracts" value={trade.numContracts} format="number" />
         <DetailRow label="Closing Price" value={trade.closingPrice} format="number" />
         <DetailRow
@@ -568,7 +574,11 @@ function BacktestTradeCard({
         <DetailRow label="Time Closed" value={trade.timeClosed ?? "-"} />
         <DetailRow label="Opening Price" value={trade.openingPrice} format="number" />
         <LegsRow legs={trade.legs} />
-        <DetailRow label="Premium" value={normalizeBacktestPremium(trade)} format="premium" />
+        <DetailRow
+          label="Premium ($/share quote)"
+          value={backtestPremiumQuote(trade)}
+          format="premium"
+        />
         <DetailRow label="Contracts" value={trade.numContracts} format="number" />
         <DetailRow label="Closing Price" value={trade.closingPrice} format="number" />
         <DetailRow

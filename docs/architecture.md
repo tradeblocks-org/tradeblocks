@@ -115,6 +115,10 @@ drops the row rather than manufacturing zero.
 - Keep the P&L basis explicit and commissions available separately. When `trade.pl` is declared as
   gross, net P&L is gross P&L minus opening and closing commissions. Option Omega imports declare a
   net basis, so their fees must not be deducted a second time.
+- `Trade.premium` and the trade-log `Premium` column are dollars per contract (one lot),
+  independent of decimal-point spelling. Position premium is its absolute value times
+  the contract count (missing or non-positive counts use one). Reporting-log
+  `Initial Premium` is a separate source-specific field, not `Trade.premium`.
 - Strategy filtering uses trades, not daily logs. Daily logs represent the full portfolio and cannot
   be attributed safely to one strategy.
 - Drawdown calculations use daily logs when present and otherwise fall back to a trade-based equity

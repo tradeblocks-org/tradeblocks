@@ -17,6 +17,7 @@ import {
   type ExposureAtOpen,
 } from "./daily-exposure.ts";
 import { getNetPl } from "../utils/equity-curve.ts";
+import { computeTotalPremium } from "../metrics/trade-efficiency.ts";
 
 /**
  * Static dataset with its rows for matching
@@ -163,13 +164,11 @@ function enrichSingleTrade(
 
   // Return metrics
   const rom = trade.marginReq > 0 ? (trade.pl / trade.marginReq) * 100 : undefined;
-  // Premium in CSV is per-contract, P/L is total across all contracts
-  // Multiply premium by contracts to get total premium for accurate P/L %
-  const totalPremium = trade.premium * trade.numContracts;
+  const totalPremium = computeTotalPremium(trade);
   const premiumEfficiency =
-    totalPremium !== 0 ? (trade.pl / Math.abs(totalPremium)) * 100 : undefined;
+    totalPremium !== undefined ? (trade.pl / totalPremium) * 100 : undefined;
   const plPct = premiumEfficiency; // Alias for easier discovery
-  const netPlPct = totalPremium !== 0 ? (netPl / Math.abs(totalPremium)) * 100 : undefined;
+  const netPlPct = totalPremium !== undefined ? (netPl / totalPremium) * 100 : undefined;
 
   // Risk multiple: P/L divided by MAE (how many R's won/lost)
   const rMultiple =

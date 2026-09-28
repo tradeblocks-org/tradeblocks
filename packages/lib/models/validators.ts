@@ -45,7 +45,6 @@ export const tradeSchema = z.object({
   openingPrice: z.number().finite(),
   legs: z.string().min(1),
   premium: z.number().finite(),
-  premiumPrecision: z.enum(["dollars", "cents"]).optional(),
   closingPrice: z.number().finite().optional(),
   dateClosed: z.date().optional(),
   timeClosed: z

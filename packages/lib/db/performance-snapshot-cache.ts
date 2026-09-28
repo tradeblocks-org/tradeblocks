@@ -42,7 +42,7 @@ export interface CachedPerformanceSnapshot {
  * Generate the cache ID for a block
  */
 function getCacheId(blockId: string): string {
-  return `performance_snapshot_${blockId}`;
+  return `performance_snapshot_v2_${blockId}`;
 }
 
 /**

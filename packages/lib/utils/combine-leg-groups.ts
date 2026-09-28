@@ -232,7 +232,6 @@ export function combineLegGroup(trades: Trade[]): CombinedTrade {
     openingPrice: firstTrade.openingPrice,
     legs: combinedLegsString,
     premium: totalPremium,
-    premiumPrecision: firstTrade.premiumPrecision,
     openingVix: firstTrade.openingVix,
 
     // Closing information (from last closed trade)

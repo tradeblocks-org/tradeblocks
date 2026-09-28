@@ -1,9 +1,14 @@
+import "fake-indexeddb/auto";
 import {
   Trade,
   calculatePremiumEfficiencyPercent,
   computeTotalPremium,
   computeTotalMaxProfit,
   computeTotalMaxLoss,
+  initializeDatabase,
+  closeDatabase,
+  addTrades,
+  getTradesByBlock,
 } from "@tradeblocks/lib";
 
 const baseTrade: Trade = {
@@ -12,7 +17,6 @@ const baseTrade: Trade = {
   openingPrice: 6751.7,
   legs: "Test trade",
   premium: -1735,
-  premiumPrecision: "cents",
   closingPrice: 6690.39,
   dateClosed: new Date("2025-10-10"),
   timeClosed: "11:02:00",
@@ -36,23 +40,23 @@ const baseTrade: Trade = {
 };
 
 describe("trade-efficiency helpers", () => {
-  it("normalises Option Omega premiums that are stored in cents", () => {
-    const totalPremium = computeTotalPremium(baseTrade);
-    expect(totalPremium).toBeDefined();
-    expect(totalPremium!).toBeCloseTo(116245, 0);
-
-    const efficiency = calculatePremiumEfficiencyPercent(baseTrade);
-    expect(efficiency.percentage).toBeDefined();
-    expect(efficiency.percentage!).toBeCloseTo(-7.8, 1);
-    expect(efficiency.basis).toBe("premium");
-    expect(efficiency.denominator).toBeCloseTo(116245, 0);
+  it("uses the OO EMA premium of $420 per lot for three contracts regardless of margin", () => {
+    const ema = { ...baseTrade, premium: 420, numContracts: 3, pl: 1251 };
+    for (const marginReq of [undefined, 1000, 2519, 2520, 43740, 500000]) {
+      const trade = { ...ema, marginReq: marginReq ?? 0 };
+      expect(computeTotalPremium(trade)).toBe(1260);
+      expect(calculatePremiumEfficiencyPercent(trade)).toEqual({
+        percentage: (1251 / 1260) * 100,
+        denominator: 1260,
+        basis: "premium",
+      });
+    }
   });
 
-  it("handles trades where premium is already expressed in total dollars", () => {
+  it("multiplies the dollar premium of each lot by the contract count", () => {
     const trade: Trade = {
       ...baseTrade,
       premium: -2400,
-      premiumPrecision: "dollars",
       numContracts: 2,
       marginReq: 4800,
       pl: 480,
@@ -74,7 +78,6 @@ describe("trade-efficiency helpers", () => {
     const trade: Trade = {
       ...baseTrade,
       premium: 0,
-      premiumPrecision: "dollars",
       numContracts: 10,
       pl: 250,
       marginReq: 5000,
@@ -96,76 +99,30 @@ describe("trade-efficiency helpers", () => {
     expect(efficiency.percentage).toBeCloseTo((250 / 5000) * 100);
   });
 
-  describe("OptionOmega percentage-based MFE/MAE", () => {
-    // Test case from GitHub issue: OO exports Max Profit/Max Loss as percentages of initial premium
-    // Example trade from: Example Trade - OO Trade Log.csv
-    // Premium: -830 (cents) = $8.30 per contract
-    // Max Profit: 18.67 (percentage of initial premium)
-    // Max Loss: -12.65 (percentage of initial premium)
-    // P/L: -11786.88, P/L %: -12.68%
-    // Contracts: 112, Margin: 92960
-    const ooTrade: Trade = {
-      dateOpened: new Date("2016-04-05"),
-      timeOpened: "12:05:00",
-      openingPrice: 2050.62,
-      legs: "112 Apr 6 2045 P STO 4.35 | 112 Apr 6 2055 C STO 4.05 | 112 Apr 8 2045 P BTO 8.60 | 112 Apr 8 2055 C BTO 8.00",
-      premium: -830, // cents
-      premiumPrecision: "cents",
-      closingPrice: 2061.54,
-      dateClosed: new Date("2016-04-06"),
-      timeClosed: "13:47:00",
-      avgClosingCost: -735,
-      reasonForClose: "Below Delta",
-      pl: -11786.88,
+  it("keeps option excursion dollars tied to premium, not margin", () => {
+    const ooTrade = {
+      ...baseTrade,
+      premium: -830,
       numContracts: 112,
-      fundsAtClose: 988213.12,
-      marginReq: 92960,
-      strategy: "",
-      openingCommissionsFees: 797.44,
-      closingCommissionsFees: 349.44,
-      openingShortLongRatio: 0.506,
-      closingShortLongRatio: 0.507,
-      gap: -3.63,
-      movement: -11.88,
-      maxProfit: 18.67, // percentage of premium
-      maxLoss: -12.65, // percentage of premium
+      maxProfit: 18.67,
+      maxLoss: -12.65,
     };
+    expect(computeTotalPremium(ooTrade)).toBe(92960);
+    expect(computeTotalMaxProfit(ooTrade)).toBeCloseTo(17355.632);
+    expect(computeTotalMaxLoss(ooTrade)).toBeCloseTo(11759.44);
+  });
 
-    it("calculates total premium correctly for OO cents-based premium", () => {
-      const totalPremium = computeTotalPremium(ooTrade);
-      expect(totalPremium).toBeDefined();
-      // Premium = 830 cents = $8.30 per contract
-      // Total = $8.30 * 112 contracts * 100 multiplier = $92,960
-      expect(totalPremium!).toBeCloseTo(92960, 0);
-    });
-
-    it("calculates MFE from percentage-based maxProfit", () => {
-      const totalMaxProfit = computeTotalMaxProfit(ooTrade);
-      expect(totalMaxProfit).toBeDefined();
-      // maxProfit 18.67% means MFE = 18.67% of total premium
-      // MFE = 0.1867 * $92,960 = $17,356
-      const expectedMfe = (18.67 / 100) * 92960;
-      expect(totalMaxProfit!).toBeCloseTo(expectedMfe, 0);
-    });
-
-    it("calculates MAE from percentage-based maxLoss", () => {
-      const totalMaxLoss = computeTotalMaxLoss(ooTrade);
-      expect(totalMaxLoss).toBeDefined();
-      // maxLoss -12.65% means MAE = 12.65% of total premium
-      // MAE = 0.1265 * $92,960 = $11,759
-      const expectedMae = (12.65 / 100) * 92960;
-      expect(totalMaxLoss!).toBeCloseTo(expectedMae, 0);
-    });
-
-    it("validates that MAE approximately matches actual loss for this trade", () => {
-      // The trade lost $11,786.88 which is very close to the calculated MAE
-      // This validates that our interpretation of maxLoss as percentage is correct
-      const totalMaxLoss = computeTotalMaxLoss(ooTrade);
-      const actualLoss = Math.abs(ooTrade.pl);
-      // MAE should be close to actual loss (within ~1% difference)
-      expect(totalMaxLoss).toBeDefined();
-      const difference = Math.abs(totalMaxLoss! - actualLoss) / actualLoss;
-      expect(difference).toBeLessThan(0.01); // Less than 1% difference
-    });
+  it("reads and ignores obsolete precision on an existing IndexedDB record", async () => {
+    const oldRecord = { ...baseTrade, premium: 250, numContracts: 2, premiumPrecision: "cents" };
+    await initializeDatabase();
+    try {
+      await addTrades("legacy-premium-record", [oldRecord]);
+      const [stored] = await getTradesByBlock("legacy-premium-record");
+      expect(stored.premium).toBe(250);
+      expect(computeTotalPremium(stored)).toBe(500);
+      expect(calculatePremiumEfficiencyPercent(stored).denominator).toBe(500);
+    } finally {
+      closeDatabase();
+    }
   });
 });

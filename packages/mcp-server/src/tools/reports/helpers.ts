@@ -7,6 +7,7 @@
 
 import {
   getNetPl,
+  computeTotalPremium,
   getNumericTradeFieldValue,
   type Trade,
   type FilterOperator,
@@ -131,9 +132,9 @@ export function enrichTrades(trades: Trade[]): EnrichedTrade[] {
 
     // Return metrics
     const rom = trade.marginReq > 0 ? (trade.pl / trade.marginReq) * 100 : undefined;
-    const totalPremium = trade.premium * trade.numContracts;
-    const plPct = totalPremium !== 0 ? (trade.pl / Math.abs(totalPremium)) * 100 : undefined;
-    const netPlPct = totalPremium !== 0 ? (netPl / Math.abs(totalPremium)) * 100 : undefined;
+    const totalPremium = computeTotalPremium(trade);
+    const plPct = totalPremium !== undefined ? (trade.pl / totalPremium) * 100 : undefined;
+    const netPlPct = totalPremium !== undefined ? (netPl / totalPremium) * 100 : undefined;
 
     // MFE/MAE approximation from maxProfit/maxLoss (if available in trade data)
     let mfePercent: number | undefined;
