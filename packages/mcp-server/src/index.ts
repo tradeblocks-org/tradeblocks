@@ -14,6 +14,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as fs from "fs/promises";
+import { readFileSync } from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { registerBlockTools } from "./tools/blocks.ts";
@@ -48,10 +49,28 @@ import type { StoreContext, MarketStores } from "./market/stores/index.ts";
 import type { TradeBlocksPlugin, TradeBlocksPluginContext } from "./plugins.ts";
 import { shouldShutdownOnParentChange } from "./parent-watchdog.ts";
 import { leaseToolHandlers } from "./tools/middleware/connection-lease.ts";
+import { registerWorkflowPrompts } from "./prompts.ts";
 
 // How often the stdio parent-death watchdog polls process.ppid. See the
 // watchdog install site in startTradeBlocksMcp() below.
 const PARENT_WATCHDOG_INTERVAL_MS = 2000;
+
+// src/ and the published server/ bundle are siblings of the installed manifest.
+const packageManifest: unknown = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+);
+if (
+  !packageManifest ||
+  typeof packageManifest !== "object" ||
+  !("version" in packageManifest) ||
+  typeof packageManifest.version !== "string"
+) {
+  throw new Error("tradeblocks-mcp package manifest has no version");
+}
+const packageVersion = packageManifest.version;
+
+const serverInstructions =
+  "TradeBlocks analyzes options trades and portfolios as blocks: use it to inspect realized performance, test robustness and stress risk after a backtest or trade log exists. Option Omega (OO) runs and iterates strategies in its own MCP server; TradeBlocks never calls OO. Bring OO's resulting trades in as a block via the tradeblocks-skills capture in Claude Code when installed, or a CSV export at a path this TradeBlocks server can read followed by import_csv. Do not copy trade logs through the model. OO's marked-account headline figures and TradeBlocks' trade-realized statistics are distinct; never present trade-realized drawdown as OO's marked drawdown or subtract fees twice from OO net profit. Call list_blocks first to discover block IDs; other block tools use those IDs. Before run_sql, call describe_database for schema and block_ids, then filter trades by block_id.";
 
 export interface StartTradeBlocksMcpOptions {
   plugins?: TradeBlocksPlugin[];
@@ -336,11 +355,10 @@ export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = 
   // Used by HTTP transport which needs fresh instances per request (stateless mode)
   const createServer = (): McpServer => {
     const server = new McpServer(
-      { name: "tradeblocks-mcp", version: "2.0.0" },
+      { name: "tradeblocks-mcp", version: packageVersion },
       {
         capabilities: { tools: {} },
-        instructions:
-          "Call list_blocks first to discover available block IDs. All other block tools require a blockId returned by list_blocks. For SQL queries, call describe_database first to discover block_ids and column names, then filter trades with WHERE block_id = '...'.",
+        instructions: serverInstructions,
       },
     );
     // Bracket every tool call in a connection lease (#445), before anything
@@ -348,6 +366,7 @@ export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = 
     // per-tool opt-in. See tools/middleware/connection-lease.ts.
     const leasedServer = leaseToolHandlers(server);
     registerTradeBlocksCoreTools(leasedServer, pluginContext);
+    registerWorkflowPrompts(server);
     for (const plugin of plugins) {
       plugin.registerTools?.(leasedServer, pluginContext);
     }

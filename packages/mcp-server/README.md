@@ -271,6 +271,30 @@ Skills provide structured prompts for tasks like:
 
 See the [tradeblocks-skills README](https://github.com/tradeblocks-org/tradeblocks-skills) for details.
 
+## Prompts
+
+The same MCP server exposes three prompts in stdio and HTTP. In Claude Code, when
+the server is named `tradeblocks`, invoke `/tradeblocks:bring-in-oo-backtest`,
+`/tradeblocks:is-this-optimum-real`, or `/tradeblocks:stress-oo-portfolio`.
+Other MCP clients can list and get these prompts through their prompt interface.
+The server name is chosen by the user; these are not Option Omega tool prefixes.
+
+| Prompt | Purpose |
+| --- | --- |
+| `bring-in-oo-backtest` | Capture a backtest's trade log as a block, or import an OO-exported trade CSV. |
+| `is-this-optimum-real` | Compare the optimizer's best cell with a stable-region candidate using scratch runs and TradeBlocks robustness tests. |
+| `stress-oo-portfolio` | Stress a portfolio's economic trades in an existing or imported block. |
+
+TradeBlocks never calls Option Omega. With the `tradeblocks-skills` Claude Code
+plugin installed, the first two prompts can use its `/tradeblocks:oo-capture`
+skill for saved backtests or scratch runs. Without the plugin, export a trade-log
+CSV from OO and place it where the TradeBlocks server can read it before using
+`import_csv`; for Docker/HTTP, put the file inside the mounted server data
+directory. If that path is unavailable, the prompts stop instead of rebuilding
+CSV from model responses. Portfolio capture is not supplied by that skill.
+OO's headline and marked-equity figures remain OO's; TradeBlocks' realized
+trade statistics are separate, not a replacement for marked-account drawdown.
+
 ## Block Directory Structure
 
 Each folder in your blocks directory represents a trading strategy:
