@@ -407,9 +407,10 @@ and optional `dailyLogPath` for a daily log paired with a trade log. Both paths
 support absolute paths, `~`, or filename-only search using `searchPaths` (default:
 Downloads, Desktop, Documents). The pair creates one block with a stamped
 `tradelog.csv` and verbatim `dailylog.csv`. A bad daily log rejects the whole
-import without creating a block. The usual result fields describe the trade
-log; paired results also include `dailyLog.recordCount` and
-`dailyLog.dateRange` (calendar dates, `YYYY-MM-DD`). Unfiltered `get_statistics` uses daily-log drawdown;
+import without creating a block. The usual result fields describe the primary
+CSV; its `dateRange` holds the first and last calendar dates (`YYYY-MM-DD`).
+Paired results also include `dailyLog.recordCount` and `dailyLog.dateRange`
+in the same calendar-date form. Unfiltered `get_statistics` uses daily-log drawdown;
 strategy-filtered statistics use the trade log instead.
 
 ## Development

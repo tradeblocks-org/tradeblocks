@@ -157,9 +157,10 @@ these truncated windows as well as any windows skipped for insufficient trades.
 For a trade log, `dailyLogPath` optionally supplies a daily-log CSV in the same new block.
 Both paths accept absolute paths, `~`, or filename-only lookup in `searchPaths`
 (default: Downloads, Desktop, Documents). Invalid daily logs refuse the entire
-import without creating a block. The result's existing `recordCount` and `dateRange`
-describe the primary CSV; paired imports additionally return `dailyLog.recordCount`
-and `dailyLog.dateRange` (calendar dates, `YYYY-MM-DD`). Unfiltered `get_statistics` uses the daily-log portfolio
+import without creating a block. The result's `recordCount` and `dateRange`
+describe the primary CSV; `dateRange` holds its first and last calendar dates
+(`YYYY-MM-DD`, or null when no row converts). Paired imports additionally return
+`dailyLog.recordCount` and `dailyLog.dateRange` in the same calendar-date form. Unfiltered `get_statistics` uses the daily-log portfolio
 drawdown; strategy-filtered statistics remain trade-based.
 
 ---

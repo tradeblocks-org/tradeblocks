@@ -773,6 +773,7 @@ export interface ImportCsvResult {
   name: string;
   csvType: CsvType;
   recordCount: number;
+  /** First and last calendar days in the CSV (`YYYY-MM-DD`), or null when no row converts. */
   dateRange: {
     start: string | null;
     end: string | null;
@@ -919,6 +920,17 @@ function validateCsvColumns(
   }
 
   return { valid: true };
+}
+
+/** First and last calendar days of local-midnight CSV dates, as `YYYY-MM-DD`. */
+function calendarDateRange(dates: Date[]): { start: string; end: string } {
+  let first = dates[0];
+  let last = dates[0];
+  for (const date of dates) {
+    if (date < first) first = date;
+    if (date > last) last = date;
+  }
+  return { start: formatDateKey(first), end: formatDateKey(last) };
 }
 
 /**
@@ -1073,11 +1085,7 @@ export async function importCsv(
     }
 
     if (trades.length > 0) {
-      const dates = trades.map((t) => new Date(t.dateOpened).getTime());
-      dateRange = {
-        start: new Date(Math.min(...dates)).toISOString(),
-        end: new Date(Math.max(...dates)).toISOString(),
-      };
+      dateRange = calendarDateRange(trades.map((t) => t.dateOpened));
       strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
     }
   } else if (csvType === "dailylog") {
@@ -1089,11 +1097,7 @@ export async function importCsv(
     }
 
     if (entries.length > 0) {
-      const dates = entries.map((e) => new Date(e.date).getTime());
-      dateRange = {
-        start: new Date(Math.min(...dates)).toISOString(),
-        end: new Date(Math.max(...dates)).toISOString(),
-      };
+      dateRange = calendarDateRange(entries.map((e) => e.date));
     }
   } else if (csvType === "reportinglog") {
     // Parse reporting trades to extract metadata
@@ -1104,11 +1108,7 @@ export async function importCsv(
     }
 
     if (trades.length > 0) {
-      const dates = trades.map((t) => new Date(t.dateOpened).getTime());
-      dateRange = {
-        start: new Date(Math.min(...dates)).toISOString(),
-        end: new Date(Math.max(...dates)).toISOString(),
-      };
+      dateRange = calendarDateRange(trades.map((t) => t.dateOpened));
       strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
     }
   }

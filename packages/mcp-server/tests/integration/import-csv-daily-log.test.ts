@@ -2,6 +2,11 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { describe, it, expect, afterAll } from "@jest/globals";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import {
+  getDefaultEnvironment,
+  StdioClientTransport,
+} from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { closeConnection, importCsv } from "../../src/test-exports.ts";
 import { registerImportTools } from "../../src/tools/imports.ts";
@@ -59,8 +64,8 @@ const REPORTING = "Date Opened,P/L,Strategy\n2024-01-02,100,Alpha\n";
 const TAT = "TradeID,ProfitLoss,BuyingPower,OpenDate,Strategy\n123,100,1000,2024-01-02,Alpha\n";
 const STAMPED_TRADES =
   "Date Opened,Date Closed,P/L,Strategy,Legs,P/L Basis\n2024-01-02,2024-01-02,100,Alpha,SPY,net_includes_fees\n2024-01-03,2024-01-03,100,Beta,SPY,net_includes_fees\n";
-const FIRST_DATE = new Date(2024, 0, 2).toISOString();
-const SECOND_DATE = new Date(2024, 0, 3).toISOString();
+const FIRST_DATE = "2024-01-02";
+const SECOND_DATE = "2024-01-03";
 
 afterAll(async () => {
   await closeConnection();
@@ -297,3 +302,51 @@ describe("import_csv paired daily log", () => {
     });
   });
 });
+
+// Jest's sandboxed process.env cannot change the V8 time zone, so each zone runs the real
+// MCP server in a child process started with that TZ.
+describe.each(["UTC", "Pacific/Kiritimati", "America/Los_Angeles"])(
+  "import_csv single-file dateRange in %s",
+  (timeZone) => {
+    // Rows are out of order and span a year boundary, so both ends must come from the data.
+    const csvFiles = {
+      tradelog:
+        "Date Opened,Date Closed,P/L,Strategy,Legs\n2024-01-02,2024-01-02,100,Alpha,SPY\n2023-12-29,2023-12-29,100,Alpha,SPY\n2024-01-05,2024-01-05,100,Alpha,SPY\n",
+      dailylog:
+        "Date,Net Liquidity,P/L,Drawdown %\n2024-01-02,100000,0,0\n2023-12-29,100000,0,0\n2024-01-05,100000,0,0\n",
+      reportinglog:
+        "Date Opened,P/L,Strategy\n2024-01-02,100,Alpha\n2023-12-29,100,Alpha\n2024-01-05,100,Alpha\n",
+    };
+
+    it("reports each CSV type's first and last calendar days", async () => {
+      const packageDir = path.resolve(import.meta.dirname, "../..");
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), "tb-import-tz-"));
+      const client = new Client({ name: "import-csv-tz-test", version: "1.0.0" });
+      const transport = new StdioClientTransport({
+        command: process.execPath,
+        args: ["--experimental-strip-types", path.join(packageDir, "src/index.ts"), root],
+        cwd: path.resolve(packageDir, "../.."),
+        env: { ...getDefaultEnvironment(), TZ: timeZone },
+        stderr: "pipe",
+      });
+      try {
+        await client.connect(transport);
+        for (const [csvType, contents] of Object.entries(csvFiles)) {
+          const csvPath = await source(root, `${csvType}.csv`, contents);
+          const result = await client.callTool({
+            name: "import_csv",
+            arguments: { csvPath, blockName: csvType, csvType },
+          });
+          expect(result.isError).not.toBe(true);
+          expect([csvType, result.structuredContent?.dateRange]).toEqual([
+            csvType,
+            { start: "2023-12-29", end: "2024-01-05" },
+          ]);
+        }
+      } finally {
+        await client.close();
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    }, 60_000);
+  },
+);

@@ -1,0 +1,5 @@
+# Unreleased — `import_csv` reports its date range as calendar dates
+
+**Behaviour change to existing `import_csv` output.** For every CSV type (`tradelog`, `dailylog`, `reportinglog`), the result's `dateRange.start` and `dateRange.end` are now the file's first and last calendar dates as `YYYY-MM-DD`, for example `{ "start": "2024-01-02", "end": "2024-03-28" }`. Previously they were ISO timestamps such as `2024-01-02T06:00:00.000Z`. That timestamp came from the server's local midnight, so on a server east of UTC it could name the day before the date in the file (local 2024-01-02 in UTC+14 became `2024-01-01T10:00:00.000Z`).
+
+Clients that parse `dateRange` as a timestamp should read it as a calendar date instead. `dateRange` is still null when no row converts, and the paired `dailyLog.dateRange` already used this form. Nothing else about `import_csv` changes: inputs, record counts, stored block files, strategies, and the summary text are the same. This note does not bump a version or publish a release.
