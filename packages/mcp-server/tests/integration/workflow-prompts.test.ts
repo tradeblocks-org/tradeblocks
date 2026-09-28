@@ -15,7 +15,7 @@ const expectedVersion =
     ? manifest.version
     : null;
 
-it("exposes version, instructions, four runnable OO prompts and all existing tools through MCP", async () => {
+it("exposes five OO prompts and existing tools through MCP", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "tb-prompts-"));
   const client = new Client({ name: "workflow-prompts-test", version: "1.0.0" });
   const transport = new StdioClientTransport({
@@ -42,6 +42,7 @@ it("exposes version, instructions, four runnable OO prompts and all existing too
       "is-this-optimum-real",
       "stress-oo-portfolio",
       "live-vs-oo",
+      "allocate-oo-portfolio",
     ]);
     expect(
       Object.fromEntries(
@@ -55,6 +56,7 @@ it("exposes version, instructions, four runnable OO prompts and all existing too
       "is-this-optimum-real": ["optimizationId?"],
       "stress-oo-portfolio": ["ooId?", "block?"],
       "live-vs-oo": ["block?"],
+      "allocate-oo-portfolio": ["ooId?", "block?"],
     });
     for (const { name, arguments: args = [] } of prompts.prompts) {
       // MCP lets prompts/get omit arguments entirely; that must equal an empty set.
@@ -72,6 +74,28 @@ it("exposes version, instructions, four runnable OO prompts and all existing too
       expect(result.messages[0].role).toBe("user");
       expect(result.messages[0].content.type).toBe("text");
     }
+    const allocation = prompts.prompts.find((p) => p.name === "allocate-oo-portfolio");
+    expect(allocation?.arguments?.map((arg) => [arg.name, arg.required])).toEqual([
+      ["ooId", false],
+      ["block", false],
+    ]);
+    const guided = await client.getPrompt({
+      name: "allocate-oo-portfolio",
+      arguments: { ooId: "saved-portfolio-1", block: "book-block" },
+    });
+    const content = guided.messages[0].content;
+    if (content.type !== "text") throw new Error("Expected text prompt");
+    expect(content.text).toContain('ooId = "saved-portfolio-1"');
+    expect(content.text).toContain('block = "book-block"');
+    expect(content.text).toMatch(
+      /run_portfolio[\s\S]*get_portfolio_status[\s\S]*get_portfolio_results/,
+    );
+    expect(content.text).toMatch(/complete[\s\S]*get_portfolio_results[\s\S]*OO-tested/);
+    expect(content.text).toMatch(/never save|do not save/i);
+    expect(content.text).toMatch(/explicitly asks[\s\S]*new portfolio/i);
+    expect(content.text).toMatch(/trade-derived counterfactual/i);
+    expect(content.text).toMatch(/whole-book[\s\S]*no per-member marks/i);
+    expect(content.text).toContain("dailyLogPath");
 
     const tools = await client.listTools();
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual(EXISTING_TOOL_NAMES);

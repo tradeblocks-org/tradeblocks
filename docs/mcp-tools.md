@@ -204,10 +204,11 @@ For usage examples and common workflows, see the [Usage Guide](usage.md).
 
 ## Prompts
 
-The MCP server also lists four prompts in stdio and HTTP. In Claude Code, with
+The MCP server also lists five prompts in stdio and HTTP. In Claude Code, with
 the server configured under the name `tradeblocks`, the `/` menu lists them as
 `/tradeblocks:bring-in-oo-backtest (MCP)`, `/tradeblocks:is-this-optimum-real (MCP)`,
-`/tradeblocks:stress-oo-portfolio (MCP)` and `/tradeblocks:live-vs-oo (MCP)`; typed, they run as
+`/tradeblocks:stress-oo-portfolio (MCP)`, `/tradeblocks:live-vs-oo (MCP)` and
+`/tradeblocks:allocate-oo-portfolio (MCP)`; typed, they run as
 `/mcp__tradeblocks__bring-in-oo-backtest` and so on. Other MCP clients use
 `prompts/list` and `prompts/get`. These prompts guide analysis, not server-side
 calls to Option Omega. The OO server name is chosen by the user.
@@ -216,24 +217,26 @@ Each prompt takes optional arguments, passed after the command in Claude Code
 (space-separated, in this order) or as named `prompts/get` arguments elsewhere.
 Without them the prompt works from the conversation, as before.
 
-| Prompt                 | Arguments                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------- |
-| `bring-in-oo-backtest` | `ooId` (OO `savedBacktestId`, or a scratch run's `runId`), `block` (new block name)      |
-| `is-this-optimum-real` | `optimizationId` (OO optimization to evaluate)                                           |
-| `stress-oo-portfolio`  | `ooId` (OO `savedPortfolioId`, or a portfolio run's `runId`), `block` (block ID or name) |
-| `live-vs-oo`           | `block` (block ID of the OO reference backtest)                                          |
+| Prompt                  | Arguments                                                                                |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| `bring-in-oo-backtest`  | `ooId` (OO `savedBacktestId`, or a scratch run's `runId`), `block` (new block name)      |
+| `is-this-optimum-real`  | `optimizationId` (OO optimization to evaluate)                                           |
+| `stress-oo-portfolio`   | `ooId` (OO `savedPortfolioId`, or a portfolio run's `runId`), `block` (block ID or name) |
+| `live-vs-oo`            | `block` (block ID of the OO reference backtest)                                          |
+| `allocate-oo-portfolio` | `ooId` (OO saved portfolio ID or run ID), `block` (block ID or import name)              |
 
 For example, `/mcp__tradeblocks__bring-in-oo-backtest <savedBacktestId> my-strategy`.
 A saved backtest's or portfolio's own OO headline figures come from
 `get_saved_backtest` or `get_saved_portfolio`; `get_backtest_results` and
 `get_portfolio_results` are only for a finished run's `runId`.
 
-| Prompt                 | Workflow                                                                                                                                                                                           |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bring-in-oo-backtest` | Bring OO trades into a block; verify it with `get_block_info` and `get_statistics`.                                                                                                                |
-| `is-this-optimum-real` | Capture verified scratch runs, combine in a trade-only block and test both arms and their paired difference.                                                                                       |
-| `stress-oo-portfolio`  | Analyze a portfolio's economic trades with portfolio risk tools.                                                                                                                                   |
-| `live-vs-oo`           | Compare a reporting log's live trades with the OO reference block it sits in, using `compare_backtest_to_actual`, `analyze_discrepancies`, `analyze_slippage_trends` and `analyze_live_alignment`. |
+| Prompt                  | Workflow                                                                                                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bring-in-oo-backtest`  | Bring OO trades into a block; verify it with `get_block_info` and `get_statistics`.                                                                                                                |
+| `is-this-optimum-real`  | Capture verified scratch runs, combine in a trade-only block and test both arms and their paired difference.                                                                                       |
+| `stress-oo-portfolio`   | Analyze a portfolio's economic trades with portfolio risk tools.                                                                                                                                   |
+| `live-vs-oo`            | Compare a reporting log's live trades with the OO reference block it sits in, using `compare_backtest_to_actual`, `analyze_discrepancies`, `analyze_slippage_trends` and `analyze_live_alignment`. |
+| `allocate-oo-portfolio` | Propose allocations using a strategy-labelled portfolio block, then check each candidate with OO `run_portfolio` against shared funds; do not save the original portfolio.                         |
 
 The `bring-in-oo-backtest` prompt uses the `tradeblocks-skills` plugin's
 `/tradeblocks:oo-capture` when installed. Without it, `bring-in-oo-backtest`
@@ -249,10 +252,25 @@ blocks: only per-block tests against zero run, not a paired difference. Export
 to a path readable by the TradeBlocks server and import with `import_csv`.
 In Docker/HTTP the CSV must be inside the server's mounted data directory.
 If the server cannot read it, the workflow stops instead of re-typing OO's
-responses. Portfolio capture is not available through that skill; use an
-existing portfolio block or export its trade log. OO's marked-account
-headlines and TradeBlocks' realized-trade statistics must be labelled
-separately, especially drawdown; OO profit already includes fees.
+responses. The read-only `stress-oo-portfolio` prompt can use the plugin's
+saved-portfolio capture where available, or an existing portfolio block or
+OO's exported trade log elsewhere. OO's marked-account headlines and
+TradeBlocks' realized-trade statistics must be labelled separately, especially
+drawdown; OO profit already includes fees.
+
+The `allocate-oo-portfolio` prompt takes optional `ooId` (saved portfolio ID,
+or a scratch run ID) and `block` (block ID or import name) arguments; without
+arguments it resolves the source from the conversation. In plugin-capable
+clients, `/tradeblocks:oo-capture` captures a saved portfolio with distinct
+member strategy labels and its whole-book daily curve. Otherwise use an
+OO-exported portfolio trade-log CSV with `import_csv`, adding `dailyLogPath`
+when the daily-log export is available. Both files must be server-readable.
+TradeBlocks' correlation, marginal, tail, what-if and health analyses are
+trade-derived counterfactual proposals, not OO's marked-account results.
+Only a completed `run_portfolio` whose `get_portfolio_results` was read is
+OO-tested. Saving a candidate requires an explicit request and a new portfolio;
+the prompt never changes the saved source.
+
 For `live-vs-oo`, save the reporting-log CSV inside the OO reference block's own
 folder, beside its trade log; `import_csv` would make a separate block that the
 comparison tools cannot pair.

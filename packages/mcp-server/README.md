@@ -273,28 +273,31 @@ See the [tradeblocks-skills README](https://github.com/tradeblocks-org/tradebloc
 
 ## Prompts
 
-The same MCP server exposes four prompts in stdio and HTTP. In Claude Code, when
+The same MCP server exposes five prompts in stdio and HTTP. In Claude Code, when
 the server is named `tradeblocks`, pick them from the `/` menu, where they appear
 as `/tradeblocks:bring-in-oo-backtest (MCP)`, `/tradeblocks:is-this-optimum-real (MCP)`,
-`/tradeblocks:stress-oo-portfolio (MCP)` and `/tradeblocks:live-vs-oo (MCP)`, or type
-`/mcp__tradeblocks__bring-in-oo-backtest` (likewise for the others). Other MCP
-clients can list and get these prompts through their prompt interface. The
-server name is chosen by the user; these are not Option Omega tool prefixes.
+`/tradeblocks:stress-oo-portfolio (MCP)`, `/tradeblocks:live-vs-oo (MCP)` and
+`/tradeblocks:allocate-oo-portfolio (MCP)`, or type
+`/mcp__tradeblocks__bring-in-oo-backtest` (likewise for the others).
+Other MCP clients can list and get these prompts through their prompt interface.
+The server name is chosen by the user; these are not Option Omega tool prefixes.
 
 Each prompt takes optional arguments, typed after the command in Claude Code in
 this order, for example
 `/mcp__tradeblocks__bring-in-oo-backtest <savedBacktestId> my-strategy`:
 `bring-in-oo-backtest` and `stress-oo-portfolio` take `ooId` (an OO saved
 backtest or portfolio ID, or a run's `runId`) and `block`; `is-this-optimum-real`
-takes `optimizationId`; `live-vs-oo` takes `block`. Without arguments the prompt
-works from the conversation.
+takes `optimizationId`; `live-vs-oo` takes `block`; `allocate-oo-portfolio`
+takes `ooId` (saved portfolio ID or run ID) and `block`. Without arguments the
+prompts work from the conversation.
 
-| Prompt                 | Purpose                                                                                                               |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `bring-in-oo-backtest` | Capture a backtest's trade log as a block, or import an OO-exported trade CSV.                                        |
-| `is-this-optimum-real` | Compare the optimizer's best cell with a stable-region candidate using scratch runs and TradeBlocks robustness tests. |
-| `stress-oo-portfolio`  | Stress a portfolio's economic trades in an existing or imported block.                                                |
-| `live-vs-oo`           | Compare live trades in a reporting log with an OO reference backtest's block.                                         |
+| Prompt                  | Purpose                                                                                                               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `bring-in-oo-backtest`  | Capture a backtest's trade log as a block, or import an OO-exported trade CSV.                                        |
+| `is-this-optimum-real`  | Compare the optimizer's best cell with a stable-region candidate using scratch runs and TradeBlocks robustness tests. |
+| `stress-oo-portfolio`   | Stress a portfolio's economic trades in an existing or imported block.                                                |
+| `live-vs-oo`            | Compare live trades in a reporting log with an OO reference backtest's block.                                         |
+| `allocate-oo-portfolio` | Check TradeBlocks allocation leads in OO shared-funds runs; never alter the saved source.                             |
 
 TradeBlocks never calls Option Omega. With the `tradeblocks-skills` Claude Code
 plugin installed, the import prompt uses `/tradeblocks:oo-capture`, and the
@@ -311,9 +314,22 @@ imported into separate blocks: it runs tests against zero per block and states
 that no paired difference ran. The CSV must
 be readable by the TradeBlocks server; for Docker/HTTP, put it inside the
 mounted server data directory. If unavailable, stop instead of rebuilding
-CSV from model responses. Portfolio capture is not supplied by that skill.
-OO's headline and marked-equity figures remain OO's; TradeBlocks' realized
-trade statistics are separate, not a replacement for marked-account drawdown.
+CSV from model responses.
+
+The new allocation prompt uses `/tradeblocks:oo-capture` for a saved portfolio
+only in clients with that plugin; otherwise import OO's portfolio trade-log CSV
+with `import_csv` and optionally its whole-book daily log with `dailyLogPath`.
+The read-only stress prompt can also use that capture, an existing block, or
+exported CSV. `allocate-oo-portfolio` takes optional `ooId` (saved portfolio
+ID or run ID) and `block` (block ID or import name); it also works
+without arguments. TradeBlocks' correlation, marginal, tail, what-if and health
+results are trade-derived counterfactual proposals, never OO marked equity or
+OO headline figures. The whole-book curve has no per-member marks. A candidate
+is OO-tested only after `get_portfolio_status` reports complete and
+`get_portfolio_results` is read; saving requires an explicit request and a
+new portfolio. OO's headline and marked-equity figures remain OO's;
+TradeBlocks' realized trade statistics do not replace marked-account drawdown.
+
 `live-vs-oo` reads the reporting log from the OO reference block's own folder
 (see below); put the CSV there instead of importing it as a separate block.
 
