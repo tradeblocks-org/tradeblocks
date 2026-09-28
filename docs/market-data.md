@@ -20,8 +20,10 @@ The browser requests this file on load by default and caches the last valid
 copy in IndexedDB; the Performance Metrics screen shows the effective rate
 date and allows opt-out, falling back to the bundled rates. The MCP server uses
 the same validation and caches an atomic local copy under `market-meta` in its
-data directory; on network failure it uses that copy or the bundle. No key is
-needed for either path, and CSV-only analysis remains available offline. A
+data directory; on network failure it uses that copy or the bundle. Set
+`TRADEBLOCKS_PUBLISHED_RATES=off` to keep the MCP server on the bundled rates
+without any request. No key is needed for either path, and CSV-only analysis
+remains available offline. A
 live published observation updates risk-free lookups and date-based canonical
 rate slices without changing the identities of older unchanged slices.
 

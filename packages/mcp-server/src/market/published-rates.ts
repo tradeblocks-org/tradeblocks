@@ -11,12 +11,18 @@ import { getDataRoot } from "../db/data-root.ts";
 
 export type RateSource = "network" | "cache" | "bundle";
 
+/** Environment opt-out for the published-rate fetch; the bundled tables apply when it is set. */
+export const PUBLISHED_RATES_ENV = "TRADEBLOCKS_PUBLISHED_RATES";
+
 /** Load current published rates for the MCP process; an offline reader may use its validated disk copy. */
 export async function loadPublishedRates(
   dataDir: string,
 ): Promise<{ source: RateSource; dtb3Through: string }> {
   const cachePath = path.join(getDataRoot(dataDir), "market-meta", "rates.json");
   clearPublishedRates();
+  if (/^(0|false|off|no)$/i.test(process.env[PUBLISHED_RATES_ENV] ?? "")) {
+    return { source: "bundle", dtb3Through: getEffectiveRateDate("DTB3") };
+  }
   try {
     const response = await fetch(PUBLISHED_RATES_URL, { signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw new Error(`Published rates HTTP ${response.status}`);

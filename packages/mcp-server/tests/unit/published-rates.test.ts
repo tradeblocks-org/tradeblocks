@@ -67,6 +67,19 @@ describe("MCP published-rate reader", () => {
     expect(getEffectiveRateDate("SOFR")).toBe(Object.keys(SOFR_RATES).at(-1));
   });
 
+  it("uses only the bundle and makes no request when the published-rate fetch is turned off", async () => {
+    const fetchMock = jest.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(publication())));
+    process.env.TRADEBLOCKS_PUBLISHED_RATES = "off";
+    try {
+      expect(await loadPublishedRates(dir)).toEqual({ source: "bundle", dtb3Through: tail });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.TRADEBLOCKS_PUBLISHED_RATES;
+    }
+  });
+
   it("does not persist a conflicting rate or replace a valid cached publication", async () => {
     const local = mkdtempSync(join(tmpdir(), "mcp-published-rates-invalid-"));
     try {
