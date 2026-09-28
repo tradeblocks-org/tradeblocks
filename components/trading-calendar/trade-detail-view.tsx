@@ -8,7 +8,12 @@ import { ChevronDown } from "lucide-react";
 import { useTradingCalendarStore } from "@tradeblocks/lib/stores";
 import { Trade } from "@tradeblocks/lib";
 import { ReportingTrade } from "@tradeblocks/lib";
-import { formatCurrency, createScalingContext, getScaleFactor } from "@tradeblocks/lib";
+import {
+  formatCurrency,
+  createScalingContext,
+  getScaleFactor,
+  hasReportingPremiumQuote,
+} from "@tradeblocks/lib";
 import {
   groupTradesByEntry,
   combineLegGroup,
@@ -131,7 +136,11 @@ function IndividualLegCard({ trade, index, type }: IndividualLegCardProps) {
       <div className="text-xs text-muted-foreground space-y-1">
         <div className="truncate">Legs: {trade.legs}</div>
         <div>
-          Premium: {Math.abs(premium).toFixed(2)} {premium < 0 ? "db" : "cr"}
+          Premium{" "}
+          {isBacktest || hasReportingPremiumQuote(trade as ReportingTrade)
+            ? "($/share)"
+            : "(unit unknown)"}
+          : {Math.abs(premium).toFixed(2)} {premium < 0 ? "db" : "cr"}
         </div>
         <div>
           Close: {"timeClosed" in trade ? (trade.timeClosed ?? "-") : "-"}
@@ -207,7 +216,11 @@ function CombinedActualTradeGroup({
           <DetailRow label="Opening Price" value={combined.openingPrice} format="number" />
           <LegsRow legs={combined.legs} />
           <DetailRow
-            label="Initial Premium (reported)"
+            label={
+              hasReportingPremiumQuote(combined)
+                ? "Initial Premium ($/share quote)"
+                : "Initial Premium (legacy unit unknown)"
+            }
             value={combined.initialPremium}
             format="premium"
           />
@@ -491,7 +504,11 @@ function ActualTradeCard({
         <DetailRow label="Opening Price" value={trade.openingPrice} format="number" />
         <LegsRow legs={trade.legs} />
         <DetailRow
-          label="Initial Premium (reported)"
+          label={
+            hasReportingPremiumQuote(trade)
+              ? "Initial Premium ($/share quote)"
+              : "Initial Premium (legacy unit unknown)"
+          }
           value={trade.initialPremium}
           format="premium"
         />

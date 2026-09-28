@@ -5,7 +5,7 @@
  * Callers must establish the pair before invoking it.
  */
 
-import type { ReportingTrade } from "../models/reporting-trade.ts";
+import { hasReportingPremiumQuote, type ReportingTrade } from "../models/reporting-trade.ts";
 import type { Trade } from "../models/trade.ts";
 import { getGrossPl, getNetPl } from "../utils/equity-curve.ts";
 
@@ -28,6 +28,7 @@ export type TradeCostReconciliationUnavailableReason =
   | "invalid-model-opening-fees"
   | "invalid-model-closing-fees"
   | "invalid-actual-initial-premium"
+  | "unknown-actual-premium-unit"
   | "invalid-actual-closing-cost"
   | "negative-model-fees"
   | "negative-inferred-actual-fees"
@@ -160,6 +161,12 @@ export function reconcileTradeCosts(
   }
   if (!isFiniteNumber(actual.initialPremium)) {
     return unavailable("invalid-actual-initial-premium", "Actual initial premium must be finite");
+  }
+  if (!hasReportingPremiumQuote(actual)) {
+    return unavailable(
+      "unknown-actual-premium-unit",
+      "Actual initial premium must have a confirmed per-share quote unit",
+    );
   }
   if (actual.avgClosingCost === undefined || actual.avgClosingCost === null) {
     return unavailable(

@@ -200,7 +200,8 @@ describe("TAT Adapter", () => {
       expect(trade!.strategy).toBe("MEDC 3/7"); // Template, not Strategy
       expect(trade!.pl).toBe(1929.35);
       expect(trade!.numContracts).toBe(5); // Qty, NOT ContractCount
-      expect(trade!.initialPremium).toBe(-5310); // TotalPremium / Qty (-26550 / 5)
+      expect(trade!.initialPremium).toBe(-53.1); // -26550 / 5 / 100 = PriceOpen quote
+      expect(trade!.initialPremiumUnit).toBe("quote");
       expect(trade!.openingPrice).toBe(0); // TAT does not report underlying price
       expect(trade!.reasonForClose).toBe("Manual Closed");
     });

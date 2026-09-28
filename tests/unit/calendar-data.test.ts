@@ -196,7 +196,7 @@ describe("Calendar Data Service", () => {
         const actualTrade = createActualTrade({
           pl: 800,
           numContracts: 8,
-          initialPremium: 800,
+          initialPremium: 4.2, // $4.20/share stays $4.20/share at one lot
         });
 
         const result = scaleTradeValues(btTrade, actualTrade, "perContract");
@@ -209,7 +209,7 @@ describe("Calendar Data Service", () => {
         // Actual: 800/8 = 100 per contract (no commissions in ReportingTrade)
         expect(result.actual?.pl).toBe(100);
         expect(result.actual?.contracts).toBe(1);
-        expect(result.actual?.premium).toBe(100); // 800/8
+        expect(result.actual?.premium).toBe(4.2); // Quote is per lot, not a position total
 
         // Slippage: actual - backtest = 100 - 100 = 0
         expect(result.slippage).toBe(0);
@@ -338,6 +338,17 @@ describe("Calendar Data Service", () => {
       expect(result[0].backtest?.totalPl).toBe(100);
       expect(result[0].actual?.totalPl).toBe(90);
       expect(result[0].scaled.slippage).toBe(-10);
+    });
+
+    it("aggregates signed quote premiums in dollars across position sizes", () => {
+      const multiLot = createDayData({
+        actualTrades: [
+          createActualTrade({ strategy: "Live Strategy", initialPremium: 4.2, numContracts: 3 }),
+          createActualTrade({ strategy: "Live Strategy", initialPremium: -2, numContracts: 2 }),
+        ],
+      });
+      // 4.2 * 100 * 3 - 2 * 100 * 2 = $860 signed opening cash flow.
+      expect(aggregateTradesByStrategy(multiLot, [])[0].actual?.totalPremium).toBeCloseTo(860);
     });
 
     it("should include unmatched actual strategies separately", () => {

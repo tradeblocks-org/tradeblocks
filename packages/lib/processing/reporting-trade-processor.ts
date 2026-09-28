@@ -325,6 +325,7 @@ export class ReportingTradeProcessor {
       openingPrice: parseFloat(raw["Opening Price"]),
       legs: raw["Legs"].trim(),
       initialPremium: parseFloat(raw["Initial Premium"]),
+      initialPremiumUnit: "quote" as const, // OO Initial Premium is already a signed $/share quote.
       numContracts: parseFloat(raw["No. of Contracts"]),
       pl: parseFloat(raw["P/L"]),
       closingPrice: raw["Closing Price"] ? parseFloat(raw["Closing Price"]) : undefined,

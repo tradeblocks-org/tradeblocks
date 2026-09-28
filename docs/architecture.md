@@ -118,7 +118,15 @@ drops the row rather than manufacturing zero.
 - `Trade.premium` and the trade-log `Premium` column are dollars per contract (one lot),
   independent of decimal-point spelling. Position premium is its absolute value times
   the contract count (missing or non-positive counts use one). Reporting-log
-  `Initial Premium` is a separate source-specific field, not `Trade.premium`.
+  `ReportingTrade.initialPremium` is instead the signed opening price in dollars
+  per share of one contract (positive credit, negative debit). OO `Initial Premium`
+  is already a quote; TAT `TotalPremium` is position dollars and is divided by
+  `Qty × 100` at ingestion. Position premium dollars are
+  `abs(initialPremium) × 100 × numContracts`; actual Calendar Premium Capture is
+  reported P/L divided by that amount, times 100. Legacy browser reporting
+  rows without a confirmed quote unit cannot contribute a Premium Capture value;
+  rows with a matching saved OO source `Initial Premium` cell retain their
+  verifiable quote provenance.
 - Strategy filtering uses trades, not daily logs. Daily logs represent the full portfolio and cannot
   be attributed safely to one strategy.
 - Drawdown calculations use daily logs when present and otherwise fall back to a trade-based equity

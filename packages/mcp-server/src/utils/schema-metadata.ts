@@ -179,7 +179,8 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
             hypothesis: true,
           },
           initial_premium: {
-            description: "Credit received (+) or debit paid (-) at entry",
+            description:
+              "Signed opening price in dollars per share of one contract (positive credit, negative debit); multiply its absolute value by 100 and num_contracts for position premium dollars",
             hypothesis: false,
           },
           num_contracts: {

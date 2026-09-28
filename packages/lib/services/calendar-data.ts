@@ -7,7 +7,7 @@
 
 import { std, mean } from "mathjs";
 import type { Trade } from "../models/trade.ts";
-import type { ReportingTrade } from "../models/reporting-trade.ts";
+import { hasReportingPremiumQuote, type ReportingTrade } from "../models/reporting-trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
 import type {
   ScalingMode,
@@ -596,10 +596,7 @@ export function scaleTradeValues(
       actual: actualTrade
         ? {
             pl: actualPerContract!,
-            premium:
-              actualTrade.numContracts > 0
-                ? actualTrade.initialPremium / actualTrade.numContracts
-                : 0,
+            premium: actualTrade.initialPremium,
             contracts: 1,
             plPerContract: actualPerContract!,
           }
@@ -781,7 +778,7 @@ function aggregateActualTrades(trades: ReportingTrade[]) {
   return {
     trades,
     totalPl: trades.reduce((sum, t) => sum + t.pl, 0),
-    totalPremium: trades.reduce((sum, t) => sum + t.initialPremium, 0),
+    totalPremium: trades.reduce((sum, t) => sum + t.initialPremium * t.numContracts * 100, 0),
     totalContracts,
     // unitContracts now equals totalContracts for accurate scaling with variable sizes
     unitContracts: totalContracts,
@@ -1147,6 +1144,20 @@ function calculateMetricsFromDailyLogs(filteredLogs: DailyLogEntry[]): AdvancedP
   };
 }
 
+function reportingPremiumCapture(trade: ReportingTrade): number | null | undefined {
+  if (
+    !hasReportingPremiumQuote(trade) ||
+    !Number.isFinite(trade.initialPremium) ||
+    !Number.isFinite(trade.pl) ||
+    !Number.isFinite(trade.numContracts) ||
+    trade.numContracts <= 0
+  ) {
+    return null;
+  }
+  if (trade.initialPremium === 0) return undefined;
+  return (trade.pl / (Math.abs(trade.initialPremium) * 100 * trade.numContracts)) * 100;
+}
+
 /**
  * Calculate trade-based metrics from trades in a date range
  * Works with both actual trades (Trade) and backtest trades (ReportingTrade)
@@ -1168,6 +1179,7 @@ export function calculateTradeMetrics(
   let romCount = 0;
   let totalPremiumCapture = 0;
   let premiumCaptureCount = 0;
+  let actualPremiumUnavailable = false;
 
   for (const [dateKey, day] of calendarDays) {
     if (dateKey < startDate || dateKey > endDate) continue;
@@ -1184,8 +1196,10 @@ export function calculateTradeMetrics(
       // Actual trades (ReportingTrade) - calculate premium capture
       for (const trade of day.actualTrades) {
         tradeCount++;
-        if (trade.initialPremium !== 0) {
-          const capture = (trade.pl / Math.abs(trade.initialPremium)) * 100;
+        const capture = reportingPremiumCapture(trade);
+        if (capture === null) {
+          actualPremiumUnavailable = true;
+        } else if (capture !== undefined) {
           totalPremiumCapture += capture;
           premiumCaptureCount++;
         }
@@ -1219,7 +1233,10 @@ export function calculateTradeMetrics(
   return {
     winRate: tradingDays > 0 ? (winningDays / tradingDays) * 100 : 0,
     avgRom: romCount > 0 ? totalRom / romCount : null,
-    avgPremiumCapture: premiumCaptureCount > 0 ? totalPremiumCapture / premiumCaptureCount : null,
+    avgPremiumCapture:
+      actualPremiumUnavailable || premiumCaptureCount === 0
+        ? null
+        : totalPremiumCapture / premiumCaptureCount,
     totalPl,
     tradeCount,
     tradingDays,
@@ -1250,14 +1267,17 @@ export function calculateAvgPremiumCapture(
   useActual: boolean,
 ): number | null {
   if (useActual) {
-    const tradesWithPremium = actualTrades.filter((t) => t.initialPremium !== 0);
-    if (tradesWithPremium.length === 0) return null;
-
-    const totalCapture = tradesWithPremium.reduce((sum, t) => {
-      return sum + (t.pl / Math.abs(t.initialPremium)) * 100;
-    }, 0);
-
-    return totalCapture / tradesWithPremium.length;
+    let totalCapture = 0;
+    let count = 0;
+    for (const trade of actualTrades) {
+      const capture = reportingPremiumCapture(trade);
+      if (capture === null) return null;
+      if (capture !== undefined) {
+        totalCapture += capture;
+        count++;
+      }
+    }
+    return count > 0 ? totalCapture / count : null;
   } else {
     let totalCapture = 0;
     let count = 0;

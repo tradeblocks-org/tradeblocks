@@ -355,8 +355,9 @@ async function insertReportingBatch(
  * v2: Use blockId as strategy fallback for empty Strategy columns
  * v3: Preserve reported P/L provenance and parse formatted/aliased Option Omega fields
  * v4: Reject gross-before-fees rows whose fee fields are unavailable
+ * v5: Re-express TAT reporting initial premium as a signed per-share quote
  */
-const PARSE_VERSION = "v4";
+const PARSE_VERSION = "v5";
 
 function versionedHash(hash: string): string {
   return `${hash}:${PARSE_VERSION}`;

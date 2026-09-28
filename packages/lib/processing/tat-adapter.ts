@@ -14,7 +14,7 @@
  * Key mapping differences from OO:
  *   - strategy ← Template (not Strategy, which is a user-defined grouping in TAT)
  *   - openingPrice: TAT does not report underlying price level (always 0)
- *   - initialPremium ← TotalPremium / Qty (per-spread, matching OO semantics)
+ *   - initialPremium ← TotalPremium / Qty / 100: signed $/share quote of one lot
  *   - numContracts ← Qty (spreads), NOT ContractCount (total legs)
  */
 
@@ -216,7 +216,12 @@ export function convertTatRowToReportingTrade(row: Record<string, string>): Repo
     timeOpened,
     openingPrice: 0, // OO reports underlying price level; TAT does not provide this
     legs,
-    initialPremium: qty !== 0 ? parseNumber(row.TotalPremium) / qty : parseNumber(row.TotalPremium), // Per-spread premium (matches OO semantics)
+    initialPremium:
+      qty > 0 ? parseNumber(row.TotalPremium) / qty / 100 : parseNumber(row.TotalPremium),
+    // TAT TotalPremium is position dollars; without Qty and a premium cell no quote is known.
+    ...(qty > 0 && Number.isFinite(Number(row.Qty)) && row.TotalPremium?.trim()
+      ? { initialPremiumUnit: "quote" as const }
+      : {}),
     numContracts: qty, // Qty = spreads (matches OO semantics)
     pl: parseNumber(row.ProfitLoss),
     closingPrice: row.PriceClose ? parseNumber(row.PriceClose) : undefined,

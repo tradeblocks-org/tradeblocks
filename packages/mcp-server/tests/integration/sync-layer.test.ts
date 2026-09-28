@@ -165,6 +165,42 @@ describe("Sync Layer Integration", () => {
       expect(hasMetadata).toBe(true);
     });
 
+    it("stores TAT reporting premium as a signed per-share quote after folder sync", async () => {
+      await createBlockWithTrades(testDir, "tat-quote", [SAMPLE_TRADE_ROW_1]);
+      const tatHeaders =
+        "TradeID,ProfitLoss,BuyingPower,OpenDate,PriceOpen,TotalPremium,Qty,Template,ShortPut,LongPut,ShortCall,LongCall";
+      const tatRow = "15780,1929.35,26550,2026-01-30,-53.1,-26550,5,MEDC 3/7,6945,6945,6945,6945";
+      await fs.writeFile(
+        path.join(testDir, "tat-quote", "reportinglog.csv"),
+        `${tatHeaders}\n${tatRow}`,
+      );
+
+      const synced = await syncAllBlocks(testDir);
+      expect(synced.blocksSynced).toBe(1);
+      expect(synced.errors).toEqual([]);
+      const conn = await getConnection(testDir);
+      const reader = await conn.runAndReadAll(
+        "SELECT initial_premium, num_contracts, pl FROM trades.reporting_data WHERE block_id = $1",
+        ["tat-quote"],
+      );
+      expect(reader.getRows()).toEqual([[-53.1, 5, 1929.35]]);
+
+      // A v4 TAT value was dollars per spread; the v5 hash forces source re-parsing.
+      await conn.run(
+        "UPDATE trades._sync_metadata SET reportinglog_hash = replace(reportinglog_hash, ':v5', ':v4') WHERE block_id = 'tat-quote'",
+      );
+      await conn.run(
+        "UPDATE trades.reporting_data SET initial_premium = -5310 WHERE block_id = 'tat-quote'",
+      );
+      const resynced = await syncAllBlocks(testDir);
+      expect(resynced.blocksSynced).toBe(1);
+      const restored = await conn.runAndReadAll(
+        "SELECT initial_premium, num_contracts, pl FROM trades.reporting_data WHERE block_id = $1",
+        ["tat-quote"],
+      );
+      expect(restored.getRows()).toEqual([[-53.1, 5, 1929.35]]);
+    });
+
     it("detects changed blocks correctly", async () => {
       // Create and sync a block
       await createBlockWithTrades(testDir, "changed-block", [SAMPLE_TRADE_ROW_1]);
@@ -409,7 +445,7 @@ describe("Sync Layer Integration", () => {
       const conn = await getConnection(testDir);
       await conn.run(
         `UPDATE trades._sync_metadata
-         SET tradelog_hash = replace(tradelog_hash, ':v4', ':v3')
+         SET tradelog_hash = replace(tradelog_hash, ':v5', ':v4')
          WHERE block_id = 'old-parser-block'`,
       );
       await conn.run(`UPDATE trades.trade_data SET pl = -999 WHERE block_id = 'old-parser-block'`);
@@ -424,7 +460,7 @@ describe("Sync Layer Integration", () => {
          WHERE d.block_id = 'old-parser-block'`,
       );
       expect(Number(reader.getRows()[0][0])).toBe(200);
-      expect(String(reader.getRows()[0][1])).toMatch(/:v4$/);
+      expect(String(reader.getRows()[0][1])).toMatch(/:v5$/);
     });
 
     it("persists gross P/L basis and reports basis-aware net P/L", async () => {

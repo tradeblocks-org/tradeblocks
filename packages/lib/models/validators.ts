@@ -108,6 +108,7 @@ export const reportingTradeSchema = z.object({
   openingPrice: z.number().finite(),
   legs: z.string().min(1),
   initialPremium: z.number().finite(),
+  initialPremiumUnit: z.literal("quote").optional(),
   numContracts: z.number().finite(),
   pl: z.number().finite(),
   closingPrice: z.number().finite().optional(),

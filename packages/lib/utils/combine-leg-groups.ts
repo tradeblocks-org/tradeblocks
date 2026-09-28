@@ -9,7 +9,7 @@
  */
 
 import { PlBasis, type Trade } from "../models/trade.ts";
-import type { ReportingTrade } from "../models/reporting-trade.ts";
+import { hasReportingPremiumQuote, type ReportingTrade } from "../models/reporting-trade.ts";
 import { yieldToMain, checkCancelled } from "./async-helpers.ts";
 import { getNetPl } from "./equity-curve.ts";
 
@@ -432,7 +432,7 @@ export function groupReportingTradesByEntry(
  * Rules for combining (simpler than Trade - fewer fields):
  * - Opening fields: Use first trade's values (should be identical)
  * - Closing fields: Use the last closing time among all trades
- * - Premium: Sum of all initial premiums
+ * - Premium: Sum of the signed per-share quotes (all component rows share the lot count)
  * - P/L: Sum of all P/Ls
  * - Contracts: Use first trade's contract count (strategy unit size)
  * - Legs: Concatenate all leg descriptions
@@ -493,6 +493,7 @@ export function combineReportingLegGroup(trades: ReportingTrade[]): CombinedRepo
     openingPrice: firstTrade.openingPrice,
     legs: combinedLegsString,
     initialPremium: totalPremium,
+    initialPremiumUnit: trades.every(hasReportingPremiumQuote) ? "quote" : undefined,
     numContracts: totalContracts,
     pl: totalPL,
     closingPrice,

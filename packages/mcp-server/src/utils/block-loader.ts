@@ -759,6 +759,7 @@ export function convertToReportingTrade(raw: Record<string, string>): ReportingT
       openingPrice: parseNumber(normalized["Opening Price"]),
       legs: normalized["Legs"] || "",
       initialPremium: parseNumber(normalized["Initial Premium"]),
+      initialPremiumUnit: "quote", // OO Initial Premium is verbatim signed $/share per lot.
       numContracts: parseNumber(normalized["No. of Contracts"], 1),
       pl: parseNumber(normalized["P/L"]),
       closingPrice: normalized["Closing Price"]

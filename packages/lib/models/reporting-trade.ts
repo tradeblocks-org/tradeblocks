@@ -13,6 +13,8 @@ export interface ReportingTrade {
   openingPrice: number;
   legs: string;
   initialPremium: number;
+  /** Confirmed signed opening price per share of one lot; absent on unclassified legacy rows. */
+  initialPremiumUnit?: "quote";
   numContracts: number;
   pl: number;
   closingPrice?: number;
@@ -25,6 +27,19 @@ export interface ReportingTrade {
   reasonForClose?: string;
   /** Lossless source row, including columns unknown to this library version. */
   sourceFields?: Record<string, string>;
+}
+
+/**
+ * Old OO rows retained their raw Initial Premium cell; old TAT rows did not.
+ * A matching source cell is evidence of a verbatim quote, not a price-size guess.
+ */
+export function hasReportingPremiumQuote(trade: ReportingTrade): boolean {
+  if (trade.initialPremiumUnit === "quote") return true;
+  const source = trade.sourceFields;
+  if (!source) return false;
+  const cell =
+    source["Initial Premium"] ?? source["Initial Premium ($)"] ?? source["Initial Credit"];
+  return cell !== undefined && cell.trim() !== "" && Number(cell) === trade.initialPremium;
 }
 
 /**

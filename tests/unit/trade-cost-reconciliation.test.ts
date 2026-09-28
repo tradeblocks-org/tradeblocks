@@ -33,6 +33,7 @@ function actualTrade(overrides: Partial<ReportingTrade> = {}): ReportingTrade {
     openingPrice: 6000,
     legs: "legs",
     initialPremium: 1.5,
+    initialPremiumUnit: "quote",
     avgClosingCost: -0.5,
     numContracts: 2,
     pl: 190,
@@ -114,6 +115,15 @@ describe("reconcileTradeCosts", () => {
       reason: "missing-actual-closing-cost",
       message: "Actual average closing cost is required for cost reconciliation",
     });
+  });
+
+  it("does not infer actual fees from an unclassified legacy premium", () => {
+    expect(
+      reconcileTradeCosts(
+        modelTrade(),
+        actualTrade({ initialPremiumUnit: undefined, initialPremium: 5310, pl: 190 }),
+      ),
+    ).toMatchObject({ available: false, reason: "unknown-actual-premium-unit" });
   });
 
   it("fails closed for invalid contract counts and negative inferred fees", () => {
