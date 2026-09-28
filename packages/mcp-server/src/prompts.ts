@@ -84,8 +84,11 @@ Check each arm's count and SUM(pl) via TB run_sql grouped by strategy against
 that run's verification. On this one block run TB run_walk_forward,
 run_monte_carlo and analyze_edge_decay for EACH arm using its strategy filter;
 run paired_bootstrap_comparison with strategyA=best and strategyB=centre.
-Report its mode, jointly traded days and arm-only days, interval and status
-(or its refusal); never silently replace a refused paired test with zero.
+Report its mode, per-arm observedDays, interval and status (or its refusal);
+never silently replace a refused paired test with zero. The tool does not
+report shared days: derive jointly held, best-only and centre-only days with
+TB run_sql over the block's trade open-to-close dates, check the per-arm
+counts equal observedDays, and report them.
 If winner equals centre, analyze the one verified run without claiming a
 best-minus-centre comparison.
 
