@@ -534,7 +534,7 @@ export class PortfolioStatsCalculator {
       : this.calculateCAGR(trades);
     const maxDrawdown = Math.abs(this.calculateMaxDrawdown(trades, dailyLogEntries));
 
-    if (!cagr || maxDrawdown === 0) return undefined;
+    if (cagr === undefined || maxDrawdown === 0) return undefined;
 
     return cagr / maxDrawdown;
   }

@@ -354,6 +354,15 @@ describe("P/L and Sharpe calculation contract", () => {
         dailyLogs[1],
       ]).calmarRatio,
     ).toBeUndefined();
+
+    // Flat endpoints with a drawdown between them: marked CAGR is 0, so Calmar is 0, not unavailable.
+    expect(
+      calculator.calculatePortfolioStats(trades, [
+        dailyLogs[0],
+        dailyLogs[1],
+        { ...dailyLogs[2], netLiquidity: 100000 },
+      ]).calmarRatio,
+    ).toBe(0);
   });
 
   it("matches the reduced OO display benchmark at a fixed 2.5% RFR", () => {
