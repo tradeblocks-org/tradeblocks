@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "@jest/globals";
-import { existsSync, linkSync, mkdirSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import { createMarketStores } from "../../src/test-exports.ts";
@@ -81,6 +81,51 @@ describe("enrichment with unrelated published history", () => {
     await stores.enriched.compute("XLC", targetDates[24], targetDates[24], {
       persistWatermark: false,
     });
+    expect(await getEnrichedThrough("XLC", dataDir)).toBe(through);
+  }, 30_000);
+
+  it("recovers missing history before a bounded refresh watermark", async () => {
+    fixture = await buildStoreFixture({ parquetMode: true });
+    const { conn, dataDir } = fixture.ctx;
+    const stores = createMarketStores(fixture.ctx);
+    // Two real sessions precede the refresh by more than the 200-day
+    // incremental lookback, so re-reading only the watermark window misses them.
+    const sessions = ["2024-01-02", "2024-01-03", "2025-02-07"];
+    for (const [index, date] of sessions.entries()) {
+      const close = 100 + index;
+      await stores.spot.writeBars("XLC", date, [
+        {
+          ticker: "XLC",
+          date,
+          time: "09:30",
+          open: close,
+          high: close + 1,
+          low: close - 1,
+          close,
+          volume: 1,
+        },
+      ]);
+    }
+    await createMarketParquetViews(conn, dataDir);
+    const through = sessions.at(-1)!;
+    await stores.enriched.compute("XLC", through, through);
+    expect((await stores.enriched.getCoverage("XLC")).totalDates).toBe(1);
+
+    const blocked = join(dataDir, "market", "enriched", "ticker=XLC", `date=${sessions[0]}`);
+    writeFileSync(blocked, "block publication of the oldest missing session");
+    await expect(stores.enriched.compute("XLC", "", "")).rejects.toThrow();
+    expect(await getEnrichedThrough("XLC", dataDir)).toBe(through);
+    expect((await stores.enriched.getCoverage("XLC")).totalDates).toBe(1);
+    unlinkSync(blocked);
+
+    await stores.enriched.compute("XLC", "", "");
+    await createMarketParquetViews(conn, dataDir);
+    const rows = await stores.enriched.read({ ticker: "XLC", from: sessions[0], to: through });
+    expect(rows).toHaveLength(3);
+    expect(rows[0].Prior_Close).toBeNull();
+    expect(rows[1].Prior_Close).toBe(100);
+    expect(rows[2].Prior_Close).toBeNull();
+    expect(rows[2].RSI_14).toBeNull();
     expect(await getEnrichedThrough("XLC", dataDir)).toBe(through);
   }, 30_000);
 });

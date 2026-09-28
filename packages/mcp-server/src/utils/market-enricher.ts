@@ -1374,13 +1374,15 @@ export async function runEnrichment(
       }
     }
 
-    // 2. Compute enough history for both incremental progress and an explicit
-    // bounded repair/backfill window. A later watermark must not hide an older
-    // requested slice that needs to be reconstructed.
+    // 2. Bounded refreshes retain their 200-day indicator lookback. An
+    // unbounded enrichment must inspect the whole ticker history: a newer
+    // refresh watermark can coexist with unpublished older sessions.
+    const unbounded = !opts.from && !opts.to;
     const watermarkLookback = watermark ? subtractDays(watermark, 200) : null;
     const requestedLookback = opts.from ? subtractDays(opts.from, 200) : null;
-    const lookbackStart =
-      watermarkLookback && requestedLookback
+    const lookbackStart = unbounded
+      ? null
+      : watermarkLookback && requestedLookback
         ? watermarkLookback < requestedLookback
           ? watermarkLookback
           : requestedLookback
@@ -1399,10 +1401,8 @@ export async function runEnrichment(
     let rawRows: Array<Array<unknown>>;
     if (io?.spotStore) {
       const startDate = lookbackStart ?? "1970-01-01";
-      // The interactive enrichment tool intentionally passes an empty string
-      // to request the operational, watermark-driven window. Treat that the
-      // same as an omitted upper bound; an empty string is not a logical date
-      // and would otherwise make SpotStore return no rows.
+      // An empty upper bound from the interactive tool means all available
+      // history, not a date literal. Bounded refreshes supply an explicit end.
       const endDate = opts.to || "9999-12-31";
       const dailyBars = await io.spotStore.readDailyBars(ticker, startDate, endDate);
       rawRows = dailyBars.map((b) => [b.ticker, b.date, b.open, b.high, b.low, b.close]);
@@ -1522,11 +1522,21 @@ export async function runEnrichment(
     const rvol20 = computeRealizedVol(closes, 20);
     const consecutiveDays = computeConsecutiveDays(closes);
 
-    // 6. Determine which rows to write back (only rows after watermark)
+    // 6. A watermark is progress, not proof that every earlier session was
+    // published. The working table holds the ticker's existing rows in both
+    // physical and Parquet modes; recover absent dates on unbounded calls.
+    const publishedDates = new Set<string>();
+    if (watermark && unbounded) {
+      const existing = await conn.runAndReadAll(
+        `SELECT date FROM ${dailyTarget} WHERE ticker = '${ticker}'`,
+      );
+      for (const row of existing.getRows()) publishedDates.add(normalizeMarketRowDate(row[0]));
+    }
     const writeRows = rawRows
       .map((_, i) => i)
       .filter((i) => {
         if (forceFull || !watermark || dates[i] > watermark) return true;
+        if (unbounded && !publishedDates.has(dates[i])) return true;
         return Boolean(opts.from && opts.to && dates[i] >= opts.from && dates[i] <= opts.to);
       });
 

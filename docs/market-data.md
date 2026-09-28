@@ -411,9 +411,16 @@ Replay historical trades using minute-level option bars for P&L analysis with gr
 
 After imports, enrichment runs automatically (unless `skip_enrichment=true`). Run manually with `enrich_market_data`.
 
+The interactive `enrich_market_data` call checks the requested ticker's full spot
+history and fills unpublished sessions, even if a newer one-day refresh already
+advanced its watermark. Its temporary working table reads only that ticker's
+existing enriched slices; cross-ticker VIX context reads spot history separately.
+`refresh_market_data` publishes the requested session only. A failed publication
+does not advance the ticker's enrichment watermark.
+
 ### Tier 1: Technical Indicators
 
-Written to `market.daily` for the imported ticker. ~20 fields:
+Written to `market.enriched` for the imported ticker. ~20 fields:
 
 | Category     | Fields                                                           |
 | ------------ | ---------------------------------------------------------------- |
@@ -427,16 +434,16 @@ Written to `market.daily` for the imported ticker. ~20 fields:
 
 ### Tier 2: VIX Context
 
-Runs when VIX-family tickers exist in `market.daily`. Discovers tickers dynamically (`SELECT DISTINCT ticker WHERE ticker LIKE 'VIX%'`).
+Runs when VIX-family spot tickers exist. Discovers VIX tickers from their daily bars.
 
-**Per-ticker (written to `market.daily`):**
+**Per-ticker (written to `market.enriched`):**
 
 | Field | Description                                                                    |
 | ----- | ------------------------------------------------------------------------------ |
 | ivr   | Implied Volatility Rank (252-day): position in min-max range (0-100)           |
 | ivp   | Implied Volatility Percentile (252-day): % of days at or below current (0-100) |
 
-**Cross-ticker derived (written to `market.date_context`):**
+**Cross-ticker derived (written to `market.enriched_context`):**
 
 | Field                | Description                                                                                                    |
 | -------------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -448,7 +455,7 @@ Runs when VIX-family tickers exist in `market.daily`. Discovers tickers dynamica
 
 ### Tier 3: Intraday Timing
 
-Runs when `market.intraday` has bars for the ticker. Written to `market.daily`:
+Uses `market.spot` minute bars for the ticker. Written to `market.enriched`:
 
 | Field                  | Description                                |
 | ---------------------- | ------------------------------------------ |
@@ -463,9 +470,10 @@ Runs when `market.intraday` has bars for the ticker. Written to `market.daily`:
 
 | Table                         | Key                            | Purpose                                                              |
 | ----------------------------- | ------------------------------ | -------------------------------------------------------------------- |
-| `market.daily`                | `ticker, date`                 | Daily OHLCV + Tier 1 indicators + VIX ivr/ivp                        |
-| `market.date_context`         | `date`                         | Cross-ticker derived fields (Vol_Regime, Term_Structure_State, etc.) |
-| `market.intraday`             | `ticker, date, time`           | Minute/hourly bars, including cached option bars from replay         |
+| `market.spot`                 | `ticker, date, time`           | Raw intraday bars, including daily bars stamped at 09:30             |
+| `market.spot_daily`           | `ticker, date`                 | Regular-hours daily OHLCV derived from spot bars                     |
+| `market.enriched`             | `ticker, date`                 | Ticker indicators and VIX ivr/ivp                                    |
+| `market.enriched_context`     | `date`                         | Cross-ticker derived fields (Vol_Regime, Term_Structure_State, etc.) |
 | `market.option_chain`         | `underlying, date, ticker`     | Option contract-universe snapshots                                   |
 | `market.option_quote_minutes` | `ticker, date, time`           | Dense option quote cache for replay/backtests                        |
-| `market._sync_metadata`       | `source, ticker, target_table` | Import tracking and enrichment watermarks                            |
+| `market._sync_metadata`       | `source, ticker, target_table` | Import tracking                                                      |
