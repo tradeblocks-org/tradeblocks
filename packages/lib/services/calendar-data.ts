@@ -1144,17 +1144,18 @@ function calculateMetricsFromDailyLogs(filteredLogs: DailyLogEntry[]): AdvancedP
   };
 }
 
-function reportingPremiumCapture(trade: ReportingTrade): number | null | undefined {
+/** Actual capture for one reporting row, or null when its unit or denominator is unusable. */
+function reportingPremiumCapture(trade: ReportingTrade): number | null {
   if (
     !hasReportingPremiumQuote(trade) ||
     !Number.isFinite(trade.initialPremium) ||
+    trade.initialPremium === 0 ||
     !Number.isFinite(trade.pl) ||
     !Number.isFinite(trade.numContracts) ||
     trade.numContracts <= 0
   ) {
     return null;
   }
-  if (trade.initialPremium === 0) return undefined;
   return (trade.pl / (Math.abs(trade.initialPremium) * 100 * trade.numContracts)) * 100;
 }
 
@@ -1199,7 +1200,7 @@ export function calculateTradeMetrics(
         const capture = reportingPremiumCapture(trade);
         if (capture === null) {
           actualPremiumUnavailable = true;
-        } else if (capture !== undefined) {
+        } else {
           totalPremiumCapture += capture;
           premiumCaptureCount++;
         }
@@ -1272,10 +1273,8 @@ export function calculateAvgPremiumCapture(
     for (const trade of actualTrades) {
       const capture = reportingPremiumCapture(trade);
       if (capture === null) return null;
-      if (capture !== undefined) {
-        totalCapture += capture;
-        count++;
-      }
+      totalCapture += capture;
+      count++;
     }
     return count > 0 ? totalCapture / count : null;
   } else {

@@ -109,6 +109,22 @@ describe("Reporting premium capture from imported CSVs", () => {
     expect(calculateAvgPremiumCapture([], [zeroQty], true)).toBeNull();
   });
 
+  it("makes the aggregate unavailable when a confirmed quote row has zero premium", async () => {
+    const parsed = await new ReportingTradeProcessor().processText(emaCsv);
+    const valid = parsed.trades.find((row) => row.pl === 1251)!;
+    const zeroQuote = { ...valid, initialPremium: 0, sourceFields: undefined };
+    expect(hasReportingPremiumQuote(zeroQuote)).toBe(true);
+    expect(calculateAvgPremiumCapture([], [valid, zeroQuote], true)).toBeNull();
+    expect(
+      calculateTradeMetrics(
+        dayOf([valid, zeroQuote], "2025-10-08"),
+        "2025-10-08",
+        "2025-10-08",
+        true,
+      ).avgPremiumCapture,
+    ).toBeNull();
+  });
+
   it("preserves legacy OO rows with recorded source-column provenance", async () => {
     const parsed = await new ReportingTradeProcessor().processText(emaCsv);
     const oldOo = {
