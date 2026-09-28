@@ -202,6 +202,12 @@ Optional columns:
 - No. of Contracts
 - Premium (decimal dollars such as `2.50`; integer values are interpreted as cents)
 - Opening/Closing Commissions + Fees (both required for `gross_before_fees`)
+- Funds at Close (optional; if absent, `get_statistics` and the realized
+  `get_performance_charts` equity curve use the first daily log's Net Liquidity
+  minus P/L when both are supplied and usable, otherwise assume $100,000.
+  `calculationMethodology.initialCapital.source` and
+  `equityCurveCapitalSource` distinguish `daily_log`, `assumed_default`, and
+  `observed_trade_funds`. The chart remains trade-realized, not daily marked equity.)
 
 Example:
 
@@ -227,7 +233,8 @@ Required columns:
 
 Optional columns:
 
-- P/L (daily profit/loss)
+- P/L (daily profit/loss; supply it with Net Liquidity to derive starting
+  capital from a paired daily log)
 - Drawdown %
 - Current Funds, Trading Funds
 

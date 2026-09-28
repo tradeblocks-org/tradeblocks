@@ -7,6 +7,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock, listBlocks, loadReportingLog } from "../../utils/block-loader.ts";
+import { resolveStartingCapital } from "../../utils/starting-capital.ts";
 import {
   createToolOutput,
   formatCurrency,
@@ -33,7 +34,11 @@ export function rebuildSubsetEquity(
   allTrades: Trade[],
   dailyLogs?: DailyLogEntry[],
 ): Trade[] {
-  const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(allTrades, dailyLogs);
+  const tradeCapital = resolveStartingCapital(allTrades);
+  const initialCapital =
+    tradeCapital.source === "assumed_default"
+      ? tradeCapital.amount
+      : resolveStartingCapital(allTrades, dailyLogs).amount;
   return rebuildEquityCurve(trades, {
     initialCapital,
     useNetPl: true,
@@ -470,10 +475,15 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
             effectiveDailyLogs,
             isSubsetFiltered,
           );
-          const calculationMethodology = requestCalculator.getCalculationMethodology(
-            trades,
+          const capital = resolveStartingCapital(
+            isSubsetFiltered ? allTrades : trades,
             effectiveDailyLogs,
           );
+          stats.initialCapital = capital.amount;
+          const calculationMethodology = {
+            ...requestCalculator.getCalculationMethodology(trades, effectiveDailyLogs),
+            initialCapital: { source: capital.source },
+          };
 
           // Calculate peak daily exposure
           const peakExposure = calculatePeakExposure(trades, stats.initialCapital);

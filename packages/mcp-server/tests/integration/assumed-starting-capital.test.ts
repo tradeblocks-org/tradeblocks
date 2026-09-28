@@ -1,0 +1,207 @@
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
+import { describe, it, expect } from "@jest/globals";
+import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { closeConnection } from "../../src/test-exports.ts";
+import { registerImportTools } from "../../src/tools/imports.ts";
+import { registerCoreBlockTools } from "../../src/tools/blocks/core.ts";
+import { registerPerformanceTools } from "../../src/tools/performance.ts";
+
+type Result = { structuredContent?: Record<string, unknown>; isError?: boolean };
+type Handler = (input: Record<string, unknown>) => Promise<Result>;
+
+async function withTools(
+  run: (
+    root: string,
+    call: (name: string, args: Record<string, unknown>) => Promise<Result>,
+  ) => Promise<void>,
+) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "tb-capital-"));
+  const handlers = new Map<string, Handler>();
+  const server = {
+    registerTool(name: string, _config: unknown, handler: Handler) {
+      handlers.set(name, handler);
+    },
+  } as McpServer;
+  registerImportTools(server, root);
+  registerCoreBlockTools(server, root);
+  registerPerformanceTools(server, root);
+  try {
+    await run(root, (name, args) => handlers.get(name)!(args));
+  } finally {
+    await closeConnection();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}
+
+const missing =
+  "Date Opened,Date Closed,Strategy,P/L,Legs\n2024-01-02,2024-01-02,Alpha,200,SPY\n2024-01-03,2024-01-03,Beta,-50,SPY\n";
+const daily = "Date,Net Liquidity,P/L\n2024-01-02,10200,200\n";
+const statistics = z.object({
+  stats: z.object({ initialCapital: z.number(), netPl: z.number() }),
+  calculationMethodology: z.object({ initialCapital: z.object({ source: z.string() }) }),
+});
+const performance = z.object({
+  equityCurve: z.array(z.object({ equity: z.number() })),
+  equityCurveCapitalSource: z.string(),
+});
+
+async function importAndRead(
+  root: string,
+  call: (name: string, args: Record<string, unknown>) => Promise<Result>,
+  contents: string,
+  dailyContents?: string,
+) {
+  const csvPath = path.join(root, "source.csv");
+  await fs.writeFile(csvPath, contents);
+  const dailyLogPath = path.join(root, "daily.csv");
+  if (dailyContents) await fs.writeFile(dailyLogPath, dailyContents);
+  const imported = await call("import_csv", {
+    csvPath,
+    blockName: "Capital",
+    ...(dailyContents ? { dailyLogPath } : {}),
+  });
+  expect(imported.isError).not.toBe(true);
+  const stats = await call("get_statistics", { blockId: "capital" });
+  const charts = await call("get_performance_charts", {
+    blockId: "capital",
+    charts: ["equity_curve"],
+  });
+  expect(stats.isError).not.toBe(true);
+  expect(charts.isError).not.toBe(true);
+  return {
+    stats: statistics.parse(stats.structuredContent),
+    charts: performance.parse(charts.structuredContent),
+  };
+}
+
+describe("import_csv starting capital across tools", () => {
+  it("assumes 100000 for a trade-only log without Funds at Close", async () => {
+    await withTools(async (root, call) => {
+      const { stats, charts } = await importAndRead(root, call, missing);
+      expect(stats.stats.initialCapital).toBe(100000);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("assumed_default");
+      expect(charts.equityCurve[0].equity).toBe(100000);
+      expect(charts.equityCurve[1].equity).toBe(100200);
+      expect(charts.equityCurveCapitalSource).toBe("assumed_default");
+    });
+  });
+  it("uses the daily-derived start for the same unfunded trade log", async () => {
+    await withTools(async (root, call) => {
+      const { stats, charts } = await importAndRead(root, call, missing, daily);
+      expect(stats.stats.initialCapital).toBe(10000);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("daily_log");
+      expect(charts.equityCurve[0].equity).toBe(10000);
+      expect(charts.equityCurveCapitalSource).toBe("daily_log");
+    });
+  });
+
+  it("distinguishes an explicit zero after a loss from an omitted balance", async () => {
+    const loss =
+      "Date Opened,Date Closed,Strategy,P/L,Legs,Funds at Close\n2024-01-02,2024-01-02,Alpha,-200,SPY,0\n";
+    await withTools(async (root, call) => {
+      const observed = await importAndRead(root, call, loss);
+      expect(observed.stats.stats.initialCapital).toBe(200);
+      expect(observed.stats.calculationMethodology.initialCapital.source).toBe(
+        "observed_trade_funds",
+      );
+      expect(observed.charts.equityCurve[0].equity).toBe(200);
+      expect(observed.charts.equityCurveCapitalSource).toBe("observed_trade_funds");
+    });
+    await withTools(async (root, call) => {
+      const absent = await importAndRead(
+        root,
+        call,
+        loss.replace(",Funds at Close", "").replace(",-200,SPY,0", ",-200,SPY"),
+      );
+      expect(absent.stats.stats.initialCapital).toBe(100000);
+      expect(absent.stats.calculationMethodology.initialCapital.source).toBe("assumed_default");
+      expect(absent.charts.equityCurve[0].equity).toBe(100000);
+      expect(absent.charts.equityCurveCapitalSource).toBe("assumed_default");
+    });
+  });
+
+  it("preserves a funded gross-basis block and deducts fees exactly once", async () => {
+    const csv =
+      "Date Opened,Date Closed,Strategy,P/L,Legs,Funds at Close,Opening Commissions + Fees,Closing Commissions + Fees\n2024-01-02,2024-01-02,Alpha,200,SPY,10190,5,5\n";
+    await withTools(async (root, call) => {
+      const csvPath = path.join(root, "source.csv");
+      await fs.writeFile(csvPath, csv);
+      const imported = await call("import_csv", {
+        csvPath,
+        blockName: "Capital",
+        plBasis: "gross_before_fees",
+      });
+      expect(imported.isError).not.toBe(true);
+      const stats = statistics.parse(
+        (await call("get_statistics", { blockId: "capital" })).structuredContent,
+      );
+      const charts = performance.parse(
+        (
+          await call("get_performance_charts", {
+            blockId: "capital",
+            charts: ["equity_curve"],
+          })
+        ).structuredContent,
+      );
+      expect(stats.stats.initialCapital).toBe(10000);
+      expect(stats.stats.netPl).toBe(190);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("observed_trade_funds");
+      expect(charts.equityCurve.map((point) => point.equity)).toEqual([10000, 10190]);
+      expect(charts.equityCurveCapitalSource).toBe("observed_trade_funds");
+    });
+  });
+  it("does not treat a daily log without P/L or an impossible balance as observed", async () => {
+    await withTools(async (root, call) => {
+      const { stats, charts } = await importAndRead(
+        root,
+        call,
+        missing,
+        "Date,Net Liquidity\n2024-01-02,10200\n",
+      );
+      expect(stats.stats.initialCapital).toBe(100000);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("assumed_default");
+      expect(charts.equityCurve[0].equity).toBe(100000);
+      expect(charts.equityCurveCapitalSource).toBe("assumed_default");
+    });
+    await withTools(async (root, call) => {
+      const impossible =
+        "Date Opened,Date Closed,Strategy,P/L,Legs,Funds at Close\n2024-01-02,2024-01-02,Alpha,200,SPY,-100\n";
+      const { stats, charts } = await importAndRead(root, call, impossible);
+      expect(stats.stats.initialCapital).toBe(100000);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("assumed_default");
+      expect(charts.equityCurve[0].equity).toBe(100000);
+      expect(charts.equityCurveCapitalSource).toBe("assumed_default");
+    });
+  });
+
+  it("does not apply whole-portfolio daily capital to a strategy subset", async () => {
+    await withTools(async (root, call) => {
+      const csvPath = path.join(root, "source.csv");
+      const dailyLogPath = path.join(root, "daily.csv");
+      await fs.writeFile(csvPath, missing);
+      await fs.writeFile(dailyLogPath, daily);
+      expect(
+        (await call("import_csv", { csvPath, dailyLogPath, blockName: "Capital" })).isError,
+      ).not.toBe(true);
+      const stats = statistics.parse(
+        (await call("get_statistics", { blockId: "capital", strategy: "Alpha" })).structuredContent,
+      );
+      const charts = performance.parse(
+        (
+          await call("get_performance_charts", {
+            blockId: "capital",
+            strategy: "Alpha",
+            charts: ["equity_curve"],
+          })
+        ).structuredContent,
+      );
+      expect(stats.stats.initialCapital).toBe(100000);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("assumed_default");
+      expect(charts.equityCurve[0].equity).toBe(100000);
+      expect(charts.equityCurveCapitalSource).toBe("assumed_default");
+    });
+  });
+});

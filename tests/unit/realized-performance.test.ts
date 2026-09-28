@@ -78,6 +78,13 @@ describe("public close-date realized calculations", () => {
     expect(buildRealizedDrawdownAttributionByCloseDate([trades[0]], 5)).toBeNull();
   });
 
+  it("accepts an evidenced starting amount without changing direct callers' default", () => {
+    const explicit = buildRealizedEquityCurveByCloseDate(trades, 10000);
+    expect(explicit.map((point) => point.equity)).toEqual([10000, 10100, 9900, 9950]);
+    expect(explicit.map((point) => point.highWaterMark)).toEqual([10000, 10100, 10100, 10100]);
+    expect(buildRealizedEquityCurveByCloseDate(trades)[0].equity).toBe(1000);
+  });
+
   it.each(["daily", "weekly", "monthly"] as const)(
     "groups %s fee-aware reported, gross and net figures by close date",
     (period) => {

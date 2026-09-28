@@ -17,7 +17,10 @@ function getISOWeekNumber(date: Date): number {
 /**
  * Calculate equity curve from trades
  */
-function buildEquityCurve(trades: Trade[]): Array<{
+function buildEquityCurve(
+  trades: Trade[],
+  startingCapital?: number,
+): Array<{
   date: string;
   equity: number;
   highWaterMark: number;
@@ -31,8 +34,9 @@ function buildEquityCurve(trades: Trade[]): Array<{
     (a, b) => getRealizationDate(a).getTime() - getRealizationDate(b).getTime(),
   );
 
-  // Calculate initial capital from first trade
-  let initialCapital = PortfolioStatsCalculator.calculateInitialCapital(sortedTrades);
+  // Existing direct library callers retain the trade-derived/default start.
+  let initialCapital =
+    startingCapital ?? PortfolioStatsCalculator.calculateInitialCapital(sortedTrades);
   if (!isFinite(initialCapital) || initialCapital <= 0) {
     initialCapital = 100000;
   }

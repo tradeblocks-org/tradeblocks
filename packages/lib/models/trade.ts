@@ -40,6 +40,8 @@ export interface Trade {
   plBasis?: PlBasis;
   numContracts: number;
   fundsAtClose: number;
+  /** False when the MCP trade CSV omitted or left Funds at Close blank. */
+  fundsAtCloseProvided?: boolean;
   marginReq: number;
 
   // Trade metadata

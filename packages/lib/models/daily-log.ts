@@ -9,6 +9,8 @@ export interface DailyLogEntry {
   withdrawn: number;
   tradingFunds: number;
   dailyPl: number; // P/L for the day
+  /** False when MCP CSV lacks a usable Net Liquidity or daily P/L for capital inference. */
+  startingCapitalInputsProvided?: boolean;
   dailyPlPct: number; // P/L percentage
   drawdownPct: number; // Drawdown percentage
   blockId?: string; // Optional block ID for linking to trades

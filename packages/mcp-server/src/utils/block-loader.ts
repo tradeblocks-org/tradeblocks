@@ -261,6 +261,7 @@ function convertToTrade(
     const premiumPrecision: Trade["premiumPrecision"] =
       rawPremium && !rawPremium.includes(".") ? "cents" : "dollars";
     const legs = raw["Legs"] || raw["Symbol"] || "";
+    const fundsAtClose = parseNumber(raw["Funds at Close"], NaN);
 
     const trade: Trade = {
       dateOpened,
@@ -280,7 +281,8 @@ function convertToTrade(
           ? raw["P/L Basis"]
           : defaultPlBasis,
       numContracts: Math.round(parseNumber(raw["No. of Contracts"], 1)),
-      fundsAtClose: parseNumber(raw["Funds at Close"]),
+      fundsAtClose: Number.isFinite(fundsAtClose) ? fundsAtClose : 0,
+      fundsAtCloseProvided: Number.isFinite(fundsAtClose),
       marginReq: parseNumber(raw["Margin Req."]),
       strategy,
       openingCommissionsFees: parseNumber(
@@ -333,14 +335,17 @@ function convertToDailyLogEntry(
     if (isNaN(date.getTime())) return null;
     const valueColumn = dailyValueColumn(raw);
     if (!valueColumn || !isParsedNumber(raw[valueColumn])) return null;
+    const netLiquidity = parseNumber(raw[valueColumn]);
+    const dailyPl = parseNumber(raw["P/L"], NaN);
 
     return {
       date,
-      netLiquidity: parseNumber(raw[valueColumn]),
+      netLiquidity,
       currentFunds: parseNumber(raw["Current Funds"]),
       withdrawn: parseNumber(raw["Withdrawn"], 0),
       tradingFunds: parseNumber(raw["Trading Funds"]),
-      dailyPl: parseNumber(raw["P/L"]),
+      dailyPl: Number.isFinite(dailyPl) ? dailyPl : 0,
+      startingCapitalInputsProvided: Number.isFinite(dailyPl),
       dailyPlPct: parseNumber(raw["P/L %"]),
       drawdownPct: parseNumber(raw["Drawdown %"]),
       blockId,

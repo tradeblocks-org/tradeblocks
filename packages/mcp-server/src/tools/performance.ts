@@ -7,8 +7,9 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock, loadReportingLog } from "../utils/block-loader.ts";
+import { resolveStartingCapital } from "../utils/starting-capital.ts";
 import { createToolOutput, formatPercent, formatCurrency } from "../utils/output-formatter.ts";
-import { filterByRealizationDateRange } from "./shared/filters.ts";
+import { filterByRealizationDateRange, filterDailyLogsByDateRange } from "./shared/filters.ts";
 import type { Trade, ReportingTrade } from "@tradeblocks/lib";
 import {
   normalizeToOneLot,
@@ -700,6 +701,14 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
         }
 
         // Build requested chart data
+        const tradeCapital = resolveStartingCapital(trades);
+        const dailyLogs =
+          !strategy && tradeCapital.source === "assumed_default"
+            ? dateRange
+              ? filterDailyLogsByDateRange(block.dailyLogs ?? [], dateRange.from, dateRange.to)
+              : block.dailyLogs
+            : undefined;
+        const capital = resolveStartingCapital(trades, dailyLogs);
         const chartData: Record<string, unknown> = {};
         let dataPoints = 0;
         let anyTruncated = false;
@@ -725,7 +734,8 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
         }
 
         if (charts.includes("equity_curve")) {
-          chartData.equityCurve = buildEquityCurve(trades);
+          chartData.equityCurve = buildEquityCurve(trades, capital.amount);
+          chartData.equityCurveCapitalSource = capital.source;
           dataPoints += (chartData.equityCurve as unknown[]).length;
         }
 
@@ -735,7 +745,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
               date: string;
               equity: number;
               highWaterMark: number;
-            }>) || buildEquityCurve(trades);
+            }>) || buildEquityCurve(trades, capital.amount);
           chartData.drawdown = buildDrawdownSeries(equityCurve);
           dataPoints += (chartData.drawdown as unknown[]).length;
         }
@@ -828,7 +838,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
               date: string;
               equity: number;
               tradeNumber: number;
-            }>) || buildEquityCurve(trades);
+            }>) || buildEquityCurve(trades, capital.amount);
           const result = truncateArray(buildMarginUtilization(trades, equityCurve));
           chartData.marginUtilization = result;
           dataPoints += outputLength(result);
@@ -928,7 +938,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
               date: string;
               equity: number;
               highWaterMark: number;
-            }>) || buildEquityCurve(trades);
+            }>) || buildEquityCurve(trades, capital.amount);
 
           const exposureData = buildDailyExposure(trades, equityCurve);
 
