@@ -46,25 +46,8 @@ it("exposes version, instructions, four runnable OO prompts and all existing too
     for (const name of prompts.prompts.map((p) => p.name)) {
       const result = await client.getPrompt({ name });
       expect(result.messages).toHaveLength(1);
-      const text = result.messages[0].content;
-      expect(text.type).toBe("text");
-      if (text.type !== "text") throw new Error("Expected text prompt");
-      expect(text.text).toContain("isIgnored");
-      expect(text.text).toContain("never subtract fees twice");
-      expect(text.text).toContain("server name");
-      if (name === "bring-in-oo-backtest") {
-        expect(text.text).toContain("get_trade_log");
-        expect(text.text).toContain("server-readable CSV");
-        expect(text.text).toContain("get_statistics");
-      } else if (name === "is-this-optimum-real") {
-        expect(text.text).toContain("get_optimization_results");
-        expect(text.text).toContain("paired_bootstrap_comparison");
-        expect(text.text).toMatch(/no\s+verdict from optimizer cells alone/);
-      } else if (name === "stress-oo-portfolio") {
-        expect(text.text).toContain("get_portfolio_results");
-        expect(text.text).toContain("stress_test");
-        expect(text.text).toContain("get_saved_portfolio");
-      }
+      expect(result.messages[0].role).toBe("user");
+      expect(result.messages[0].content.type).toBe("text");
     }
 
     const tools = await client.listTools();

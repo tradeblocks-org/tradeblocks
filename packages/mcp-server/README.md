@@ -289,11 +289,16 @@ server name is chosen by the user; these are not Option Omega tool prefixes.
 | `live-vs-oo`           | Compare live trades in a reporting log with an OO reference backtest's block.                                         |
 
 TradeBlocks never calls Option Omega. With the `tradeblocks-skills` Claude Code
-plugin installed, the first two prompts can use its `/tradeblocks:oo-capture`
-skill for saved backtests or scratch runs. Without the plugin, export a trade-log
-CSV from OO and place it where the TradeBlocks server can read it before using
-`import_csv`; for Docker/HTTP, put the file inside the mounted server data
-directory. If that path is unavailable, the prompts stop instead of rebuilding
+plugin installed, the import prompt uses `/tradeblocks:oo-capture`, and the
+optimum prompt directs to `/tradeblocks:is-this-optimum-real`. That skill
+captures each scratch run separately and combines verified trades under
+distinct strategies in one trade-only comparison block for a paired
+best-minus-centre test. This test covers jointly traded days, not the
+optimizer's selection from the grid. Without the plugin, export each run's
+trade-log CSV from OO and import into separate blocks: the prompt runs tests
+against zero per block and states that no paired difference ran. The CSV must
+be readable by the TradeBlocks server; for Docker/HTTP, put it inside the
+mounted server data directory. If unavailable, stop instead of rebuilding
 CSV from model responses. Portfolio capture is not supplied by that skill.
 OO's headline and marked-equity figures remain OO's; TradeBlocks' realized
 trade statistics are separate, not a replacement for marked-account drawdown.

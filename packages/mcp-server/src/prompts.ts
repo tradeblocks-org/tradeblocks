@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 // Owned by the tradeblocks-skills plugin (#4167); the server does not install or invoke it.
 const captureSkill = "/tradeblocks:oo-capture";
+const optimumSkill = "/tradeblocks:is-this-optimum-real";
 
 const dataIntegrity = `Keep Option Omega (OO) and TradeBlocks (TB) evidence separate.
 Never re-type OO trade data from tool responses: move bytes via a file. Quote OO
@@ -57,30 +58,57 @@ ${dataIntegrity}`,
           content: {
             type: "text",
             text: `Evaluate the requested OO optimization, not just its ranking.
-Read OO get_optimization_results (paged, in context; do not import optimizer
-cells) and identify the top-scoring cell and the centre of the broadest stable
-region. Read OO get_saved_backtest for the base configuration; change only the
-candidate coordinates in memory and call OO run_backtest twice as scratch runs,
-one per candidate. Do not use OO save_backtest, replace_saved_backtest,
-edit_saved_backtest, or any save_*, replace_* or edit_* tool. run_backtest
-returns before the run finishes: poll OO get_backtest_status for each runId until
-it completes, and stop if a run fails or is cancelled. Then use
-get_backtest_results by runId for each run's OO figures. Bring each run's trade
-log into a separate TB block: when the tradeblocks-skills plugin is installed
-use ${captureSkill} with each runId (OO get_trade_log); otherwise have the user
-export a CSV for each scratch run to a path the TB server can read and call
-import_csv for each. For Docker/HTTP the files must be inside the mounted server
-data directory. If either server-readable CSV is unavailable, stop: the
-robustness verdict cannot be reached. Verify each block with get_block_info and
-get_statistics. Run TB run_walk_forward, run_monte_carlo, analyze_edge_decay
-and paired_bootstrap_comparison (strategyA only: that run versus zero) on each
-block, and set them side by side with compare_blocks. paired_bootstrap_comparison
-reads one block, so it cannot test one run minus the other across two blocks;
-never pass both arms from the same block as if they were the two runs. Name each
-test's result, including insufficient-data outcomes, state that no paired
-difference test between the runs was run, and explain what the evidence does or
-does not establish. An optimizer ranking is only a lead, never a finding; no
-verdict from optimizer cells alone.
+Read OO get_optimization_results pages in context, without importing cells.
+Choose the best cell under the metric used to rank this optimization and the
+centre of the broadest stable region; state the neighbourhood/tolerance rule
+used to judge stability. Call out a boundary optimum, flat grid, tied regions
+or too few cells instead of inventing a plateau. If winner and centre are the
+same cell, make only ONE scratch run and skip the paired test for that reason.
+Read OO get_saved_backtest for the base configuration. Change only candidate
+coordinates in memory and call OO run_backtest for each distinct candidate.
+Do not use OO save_backtest, replace_saved_backtest, edit_saved_backtest, or
+any save_*, replace_* or edit_* tool. Poll OO get_backtest_status for each runId
+until complete; stop on failure or cancellation. Quote each completed run's
+get_backtest_results headline as OO's own figures.
+
+If the tradeblocks-skills Claude Code plugin is installed, invoke
+${optimumSkill}. For each distinct runId use ${captureSkill} to capture
+get_backtest_results and unfiltered, contiguous get_trade_log pages; verify
+each run's source identity and reconcile its trade P/L to the cent separately.
+Do not proceed with an unverified capture. For two distinct verified runs,
+use oo-capture combine with both capture IDs and distinct best/centre Strategy
+labels. Import the trade-only comparison CSV ONCE with TB import_csv using
+plBasis: net_includes_fees and no dailyLogPath. Do not attach either OO curve
+to this comparison block or call its trade-derived curve a marked curve.
+Check each arm's count and SUM(pl) via TB run_sql grouped by strategy against
+that run's verification. On this one block run TB run_walk_forward,
+run_monte_carlo and analyze_edge_decay for EACH arm using its strategy filter;
+run paired_bootstrap_comparison with strategyA=best and strategyB=centre.
+Report its mode, jointly traded days and arm-only days, interval and status
+(or its refusal); never silently replace a refused paired test with zero.
+If winner equals centre, analyze the one verified run without claiming a
+best-minus-centre comparison.
+
+Without the plugin, ask the user to export each scratch run's trade-log CSV
+to a path readable by the TB server (Docker/HTTP: inside its mounted data
+directory). If no server-readable CSV is available, stop; never reconstruct
+trades from OO responses. Import each distinct run into a SEPARATE block
+with TB import_csv (plBasis: net_includes_fees), verify with get_block_info
+and get_statistics, then run run_walk_forward, run_monte_carlo,
+analyze_edge_decay and paired_bootstrap_comparison against zero (strategyA
+only) per block. Compare the blocks side by side, but state explicitly that
+NO paired difference between the runs ran. Never describe a test against
+zero as best minus centre.
+
+Give a verdict naming each test's result, evidence and limit, including any
+insufficient-data outcomes. Neighbourhood cells are leads, not findings.
+The paired best-minus-centre interval answers only whether their difference
+is distinguishable from noise on jointly traded days; it is NOT adjusted
+for selecting coordinates from the grid. Walk-forward, Monte Carlo and edge
+decay are single-tape diagnostics on the history used for selection, not
+out-of-sample confirmation; OO-executed select/confirm is separate work.
+Never call a setting robust from ranking or a confidence interval alone.
+Do not label a TB-recomputed figure as OO's.
 ${dataIntegrity}`,
           },
         },
