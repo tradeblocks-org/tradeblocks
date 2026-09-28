@@ -13,11 +13,22 @@ export async function syncDirectory(directory: string): Promise<void> {
 
 type DirectoryIdentity = string;
 
-function identityOf(stat: { dev: bigint; ino: bigint; birthtimeNs: bigint }): DirectoryIdentity {
+/**
+ * Device, inode and birth time name one directory generation. Without a birth
+ * time a reused inode would look like the directory already synced, so a
+ * filesystem that reports none yields no identity and the directory is never
+ * treated as known.
+ */
+function identityOf(stat: {
+  dev: bigint;
+  ino: bigint;
+  birthtimeNs: bigint;
+}): DirectoryIdentity | undefined {
+  if (stat.birthtimeNs === 0n) return undefined;
   return `${stat.dev}:${stat.ino}:${stat.birthtimeNs}`;
 }
 
-async function syncDirectoryIdentity(directory: string): Promise<DirectoryIdentity> {
+async function syncDirectoryIdentity(directory: string): Promise<DirectoryIdentity | undefined> {
   const handle = await fs.open(directory, "r");
   try {
     const identity = identityOf(await handle.stat({ bigint: true }));
@@ -49,9 +60,10 @@ async function currentIdentity(directory: string): Promise<DirectoryIdentity | u
  * directory whose path still resolves to the same device, inode and birth time,
  * because a durable entry stays durable until it is removed or renamed.
  * Removing or recreating a directory gives the path a new identity, so it is
- * synced again, together with its parent entry. The store never renames
- * directories it ensures; an external rename of an ancestor is outside this
- * invariant.
+ * synced again, together with its parent entry. Where the filesystem reports
+ * no birth time, no identity is recorded and every call syncs the directory
+ * and its parent, as before this memo. The store never renames directories it
+ * ensures; an external rename of an ancestor is outside this invariant.
  */
 export class DurableDirectories {
   private readonly known = new Map<string, DirectoryIdentity>();
@@ -75,6 +87,6 @@ export class DurableDirectories {
     // not have finished either sync, so an existing directory gets both too.
     const identity = await syncDirectoryIdentity(directory);
     if (parent !== directory) await syncDirectory(parent);
-    this.known.set(directory, identity);
+    if (identity !== undefined) this.known.set(directory, identity);
   }
 }
