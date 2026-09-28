@@ -220,7 +220,7 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
             if (
               isFinite(total) &&
               total > 0 &&
-              (margin > 0 ? total / margin < 0.5 : total < 5000)
+              (margin > 0 ? total / margin > 0 && total / margin < 0.5 : total < 5000)
             ) {
               trade.premium *= 100;
               changed = true;
