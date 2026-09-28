@@ -945,18 +945,14 @@ function validateCsvColumns(
     case "reportinglog": {
       // Check for TAT format first (has TradeID, ProfitLoss, BuyingPower)
       if (isTatFormat(headers)) break;
-      // Required columns for OO reporting log (with aliases)
-      const dateOpenedAliases = ["Date Opened", "date_opened"];
-      const plAliases = ["P/L", "pl"];
-      const hasDateOpened = dateOpenedAliases.some((col) => headers.includes(col));
-      const hasPl = plAliases.some((col) => headers.includes(col));
-      const missing: string[] = [];
-      if (!hasDateOpened) missing.push("Date Opened");
-      if (!hasPl) missing.push("P/L");
+      // Required columns for OO reporting log, after the REPORTING_TRADE_COLUMN_ALIASES
+      // normalization that convertToReportingTrade applies (e.g. PL → P/L).
+      const normalizedHeaders = Object.keys(normalizeRecordHeaders(records[0]));
+      const missing = ["Date Opened", "P/L"].filter((col) => !normalizedHeaders.includes(col));
       if (missing.length > 0) {
         return {
           valid: false,
-          error: `Missing required columns for reportinglog: ${missing.join(", ")}. Expected columns include: Date Opened (or date_opened), P/L (or pl), Strategy, etc.`,
+          error: `Missing required columns for reportinglog: ${missing.join(", ")}. Expected columns include: Date Opened, P/L (or PL), Strategy, etc.`,
         };
       }
       break;
@@ -973,8 +969,9 @@ function validateCsvColumns(
     ? (headers.find((key) => key.toLowerCase() === "profitloss") ?? "ProfitLoss")
     : "P/L";
 
-  for (const [index, record] of records.entries()) {
+  for (const [index, raw] of records.entries()) {
     const row = index + 2; // Header is file line 1.
+    const record = csvType === "reportinglog" && !tat ? normalizeRecordHeaders(raw) : raw;
     if (csvType === "dailylog") {
       if (!isValidCsvDate(record["Date"])) {
         return { valid: false, error: `CSV row ${row}: invalid Date "${record["Date"]}"` };
@@ -1005,7 +1002,7 @@ function validateCsvColumns(
         error: `CSV row ${row}: invalid ${plColumn} "${record[plColumn] ?? ""}"`,
       };
     }
-    if (csvType === "reportinglog" && !convertToReportingTrade(record)) {
+    if (csvType === "reportinglog" && !convertToReportingTrade(raw)) {
       return { valid: false, error: `CSV row ${row}: could not load reporting trade` };
     }
   }

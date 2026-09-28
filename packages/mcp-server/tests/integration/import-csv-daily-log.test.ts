@@ -8,7 +8,7 @@ import {
   StdioClientTransport,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { closeConnection, importCsv, loadBlock } from "../../src/test-exports.ts";
+import { closeConnection, importCsv, loadBlock, loadReportingLog } from "../../src/test-exports.ts";
 import { registerImportTools } from "../../src/tools/imports.ts";
 import { registerCoreBlockTools } from "../../src/tools/blocks/core.ts";
 import { registerComparisonBlockTools } from "../../src/tools/blocks/comparison.ts";
@@ -409,6 +409,35 @@ describe("import_csv row acceptance and loaded receipts", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain(`CSV row 2: invalid ${column}`);
       await expect(fs.access(path.join(root, "blocks", "bad-reporting"))).rejects.toThrow();
+    });
+  });
+
+  it("imports a reporting log through the PL alias the loader normalizes", async () => {
+    await fixture(async (root, call) => {
+      const csvPath = await source(root, "pl.csv", "Date Opened,PL,Strategy\n2024-01-02,100,A\n");
+      const result = await call("import_csv", {
+        csvPath,
+        blockName: "PL Alias",
+        csvType: "reportinglog",
+      });
+      expect(result.isError).toBeFalsy();
+      expect((await loadReportingLog(root, "pl-alias")).map((trade) => trade.pl)).toEqual([100]);
+    });
+  });
+
+  it("refuses reporting headers the loader cannot read instead of loading nothing or zero", async () => {
+    await fixture(async (root, call) => {
+      const csvPath = await source(root, "raw.csv", "date_opened,pl,Strategy\n2024-01-02,100,A\n");
+      const result = await call("import_csv", {
+        csvPath,
+        blockName: "Raw Headers",
+        csvType: "reportinglog",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(
+        "Missing required columns for reportinglog: Date Opened, P/L",
+      );
+      await expect(fs.access(path.join(root, "blocks", "raw-headers"))).rejects.toThrow();
     });
   });
 
