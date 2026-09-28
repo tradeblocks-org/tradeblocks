@@ -8,7 +8,7 @@ import {
   StdioClientTransport,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { closeConnection, importCsv } from "../../src/test-exports.ts";
+import { closeConnection, importCsv, loadBlock } from "../../src/test-exports.ts";
 import { registerImportTools } from "../../src/tools/imports.ts";
 import { registerCoreBlockTools } from "../../src/tools/blocks/core.ts";
 import { registerComparisonBlockTools } from "../../src/tools/blocks/comparison.ts";
@@ -154,7 +154,11 @@ describe("import_csv paired daily log", () => {
 
   it.each([
     ["missing required column", "Date,P/L\n2024-01-02,2\n", "Missing required columns"],
-    ["no convertible rows", "Date,Net Liquidity\ninvalid,100000\n", "no rows could be converted"],
+    [
+      "no convertible rows",
+      "Date,Net Liquidity\ninvalid,100000\n",
+      'CSV row 2: invalid Date "invalid"',
+    ],
   ])("rejects invalid daily log: %s", async (_reason, contents, message) => {
     await fixture(async (root, call) => {
       const csvPath = await source(root, "trades.csv", TRADES);
@@ -342,6 +346,173 @@ describe("import_csv paired daily log", () => {
         expect(await fs.readdir(blockPath)).toEqual([item.file]);
         expect(await fs.readFile(path.join(blockPath, item.file), "utf-8")).toBe(item.stored);
       }
+    });
+  });
+});
+
+describe("import_csv row acceptance and loaded receipts", () => {
+  it.each(["2024-02-30", "2024-13-01"])(
+    "refuses impossible opened date %s before writing a paired block",
+    async (date) => {
+      await fixture(async (root, call) => {
+        const csvPath = await source(
+          root,
+          "bad.csv",
+          `Date Opened,Date Closed,P/L\n${date},2024-03-01,100\n`,
+        );
+        const dailyLogPath = await source(root, "daily.csv", DAILY);
+        const result = await call("import_csv", { csvPath, dailyLogPath, blockName: "Bad Date" });
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain(`CSV row 2: invalid Date Opened "${date}"`);
+        await expect(fs.access(path.join(root, "blocks", "bad-date"))).rejects.toThrow();
+      });
+    },
+  );
+  it("refuses a calendar prefix with an unloadable timestamp suffix", async () => {
+    await fixture(async (root, call) => {
+      const csvPath = await source(root, "bad.csv", "Date Opened,P/L\n2024-01-02Tinvalid,100\n");
+      const result = await call("import_csv", { csvPath, blockName: "Bad Timestamp" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("CSV row 2: invalid Date Opened");
+      await expect(fs.access(path.join(root, "blocks", "bad-timestamp"))).rejects.toThrow();
+    });
+  });
+
+  it("refuses nonnumeric trade P/L and leaves no block", async () => {
+    await fixture(async (root, call) => {
+      const csvPath = await source(root, "bad.csv", "Date Opened,P/L\n2024-01-02,abc\n");
+      const result = await call("import_csv", { csvPath, blockName: "Bad PL" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('CSV row 2: invalid P/L "abc"');
+      await expect(fs.access(path.join(root, "blocks", "bad-pl"))).rejects.toThrow();
+    });
+  });
+
+  it.each([
+    ["tradelog", "Date Opened,Date Closed,P/L\n2024-01-02,2024-02-30,100\n", "Date Closed"],
+    ["reportinglog", "Date Opened,Date Closed,P/L\n2024-01-02,2024-02-30,100\n", "Date Closed"],
+    ["reportinglog", "Date Opened,P/L\n2024-01-02,abc\n", "P/L"],
+    [
+      "reportinglog",
+      "TradeID,ProfitLoss,BuyingPower,OpenDate\n123,abc,1000,2024-01-02\n",
+      "ProfitLoss",
+    ],
+    [
+      "reportinglog",
+      "TradeID,ProfitLoss,BuyingPower,OpenDate\n123,100,1000,2024-02-30\n",
+      "OpenDate",
+    ],
+  ])("refuses %s invalid %s before creating a block", async (csvType, csv, column) => {
+    await fixture(async (root, call) => {
+      const csvPath = await source(root, "bad.csv", csv);
+      const result = await call("import_csv", { csvPath, blockName: "Bad Reporting", csvType });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(`CSV row 2: invalid ${column}`);
+      await expect(fs.access(path.join(root, "blocks", "bad-reporting"))).rejects.toThrow();
+    });
+  });
+
+  it("retains folder trade acceptance for unparseable P/L while import refuses it", async () => {
+    await fixture(async (root) => {
+      const folder = path.join(root, "blocks", "legacy");
+      await fs.mkdir(folder);
+      await fs.writeFile(path.join(folder, "tradelog.csv"), "Date Opened,P/L\n2024-01-02,abc\n");
+      expect((await loadBlock(root, "legacy")).trades.map((trade) => trade.pl)).toEqual([0]);
+    });
+  });
+
+  it("imports the repository's complete OO trade export without dropping rows", async () => {
+    await fixture(async (root, call) => {
+      const csvPath = path.join(process.cwd(), "../../tests/data/MEIC Test Data/meic-tradelog.csv");
+      const result = await call("import_csv", { csvPath, blockName: "OO MEIC Real" });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        recordCount: 532,
+        strategies: ["oo-meic-real"],
+        dateRange: { start: "2025-01-03", end: "2025-11-21" },
+      });
+      const loaded = await loadBlock(root, "oo-meic-real");
+      expect(loaded.trades).toHaveLength(532);
+      expect(loaded.trades.some((trade) => trade.pl === 231.44)).toBe(true);
+      const stored = await fs.readFile(
+        path.join(root, "blocks", "oo-meic-real", "tradelog.csv"),
+        "utf8",
+      );
+      expect(stored).toContain("P/L Basis");
+      expect(stored).toContain("net_includes_fees");
+      expect(await fs.readFile(csvPath, "utf8")).toContain('"Opening Short/Long Ratio"');
+    });
+  }, 20_000);
+
+  it.each(["Portfolio Value", "Value", "Equity"])(
+    "loads daily-log %s from import and folder",
+    async (alias) => {
+      await fixture(async (root, call) => {
+        const csvPath = await source(root, "trades.csv", TRADES);
+        const daily = `Date,${alias},P/L,Drawdown %\n2024-01-02,100000,0,0\n2024-01-03,80000,-20000,-20\n`;
+        const dailyLogPath = await source(root, "daily.csv", daily);
+        const result = await call("import_csv", { csvPath, dailyLogPath, blockName: "Aliased" });
+        expect(result.isError).not.toBe(true);
+        expect(
+          (await loadBlock(root, "aliased")).dailyLogs?.map((entry) => entry.netLiquidity),
+        ).toEqual([100000, 80000]);
+        const stats = await call("get_statistics", { blockId: "aliased" });
+        expect(stats.isError).not.toBe(true);
+        expect(drawdown(stats)).toBe(20);
+        const folder = path.join(root, "blocks", "manual");
+        await fs.mkdir(folder);
+        await fs.writeFile(path.join(folder, "tradelog.csv"), TRADES);
+        await fs.writeFile(path.join(folder, "dailylog.csv"), daily);
+        expect(
+          (await loadBlock(root, "manual")).dailyLogs?.map((entry) => entry.netLiquidity),
+        ).toEqual([100000, 80000]);
+        const alternate = path.join(root, "blocks", "custom");
+        await fs.mkdir(alternate);
+        await fs.writeFile(path.join(alternate, "tradelog.csv"), TRADES);
+        await fs.writeFile(path.join(alternate, "account-values.csv"), daily);
+        expect(
+          (await loadBlock(root, "custom")).dailyLogs?.map((entry) => entry.netLiquidity),
+        ).toEqual([100000, 80000]);
+      });
+    },
+  );
+
+  it.each(["", "abc"])("refuses daily-log value %s and folder loading drops it", async (value) => {
+    await fixture(async (root, call) => {
+      const csvPath = await source(root, "trades.csv", TRADES);
+      const daily = `Date,Equity\n2024-01-02,100000\n2024-01-03,${value}\n`;
+      const dailyLogPath = await source(root, "daily.csv", daily);
+      const result = await call("import_csv", { csvPath, dailyLogPath, blockName: "Bad Daily" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("CSV row 3: invalid Equity");
+      await expect(fs.access(path.join(root, "blocks", "bad-daily"))).rejects.toThrow();
+      const folder = path.join(root, "blocks", "manual");
+      await fs.mkdir(folder);
+      await fs.writeFile(path.join(folder, "tradelog.csv"), TRADES);
+      await fs.writeFile(path.join(folder, "dailylog.csv"), daily);
+      expect(
+        (await loadBlock(root, "manual")).dailyLogs?.map((entry) => entry.netLiquidity),
+      ).toEqual([100000]);
+    });
+  });
+
+  it("uses the loaded blockId strategy in receipt and trade count", async () => {
+    await fixture(async (root, call) => {
+      const csvPath = await source(
+        root,
+        "oo.csv",
+        "Date Opened,Date Closed,P/L,Legs,No. of Contracts,Premium,Opening Commissions + Fees,Closing Commissions + Fees\n2024-01-02,2024-01-03,100,SPY,1,2.00,1.50,1.50\n",
+      );
+      const result = await call("import_csv", { csvPath, blockName: "OO RIC 2025" });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        recordCount: 1,
+        strategies: ["oo-ric-2025"],
+      });
+      const info = await call("get_block_info", { blockId: "oo-ric-2025" });
+      expect(info.isError).not.toBe(true);
+      expect(info.structuredContent?.strategies).toEqual(result.structuredContent?.strategies);
+      expect(await fs.readdir(path.join(root, "blocks", "oo-ric-2025"))).toContain("tradelog.csv");
     });
   });
 });

@@ -99,6 +99,15 @@ Market-feed timestamps are real instants. Convert those timestamps to `America/N
 the trading date. The recurring error is to apply that conversion to a local-midnight calendar
 value, which can turn it into the previous Eastern day on a UTC host.
 
+`import_csv` checks every trade/reporting opened and populated closed date as a
+calendar day before creating a block; impossible days are refused, not rolled
+forward by the local `Date` constructor. Its required P/L and paired daily-log
+value cells must parse as numbers (gross-before-fees trade imports also require
+numeric opening/closing commissions). Folder-discovered trade rows and DuckDB
+sync retain their existing acceptance rules. Folder daily-log rows read Net
+Liquidity, Portfolio Value, Value or Equity; a missing or unparseable value
+drops the row rather than manufacturing zero.
+
 ### Portfolio Calculation Invariants
 
 - Keep the P&L basis explicit and commissions available separately. When `trade.pl` is declared as

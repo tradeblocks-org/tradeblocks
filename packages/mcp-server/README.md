@@ -339,13 +339,13 @@ backtests/
 - Date Opened, Time Opened, Date Closed, Time Closed
 - P/L (Option Omega exports already include fees; `import_csv` defaults to
   `plBasis: "net_includes_fees"`. Use `"gross_before_fees"` only if fees still need deducting)
-- Strategy, Legs (or Symbol)
+- Strategy (optional; the block ID is used when missing), Legs (or Symbol)
 - No. of Contracts, Premium (optional; decimal `2.50` is dollars, integer `250` is cents)
 
 **dailylog.csv** - Daily portfolio values:
 
 - Date
-- Net Liquidity
+- Net Liquidity (or Portfolio Value, Value, Equity)
 - P/L, Drawdown % (optional)
 
 **Flexible Detection**: Files don't need standard names. The server detects CSV types by examining column headers (ISS-006).
@@ -438,6 +438,15 @@ calendar dates (`YYYY-MM-DD`).
 Paired results also include `dailyLog.recordCount` and `dailyLog.dateRange`
 in the same calendar-date form. Unfiltered `get_statistics` uses daily-log drawdown;
 strategy-filtered statistics use the trade log instead.
+
+Before writing a block, `import_csv` refuses an invalid opened/closed trade or reporting
+calendar date, missing or unparseable P/L, or missing/unparseable daily-log value. For
+gross-before-fees trade imports, both commission values are also required. Errors
+identify the CSV file line including the header; a rejected pair leaves no block.
+Daily-log aliases load as net liquidity in imported and folder-discovered blocks;
+folder loading drops a row with a missing/unparseable value rather than using zero.
+`recordCount` counts loaded rows, and a missing Strategy in a trade log uses the
+block ID in the receipt and in subsequent tools.
 
 ## Development
 

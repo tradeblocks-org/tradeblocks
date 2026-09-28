@@ -176,13 +176,19 @@ when P/L has not yet deducted commissions and fees). Both paths must be
 readable by the server: local paths for stdio, or paths inside the server's
 mounted data directory for Docker/HTTP. Paths accept absolute values, `~`,
 or filename-only lookup in `searchPaths` (default: Downloads, Desktop, Documents).
-Paired daily logs require `Date` and `Net Liquidity`; `P/L` and `Drawdown %` are optional.
-Invalid daily logs refuse the entire import without creating a block. The
-result's `recordCount` and `dateRange` describe the primary CSV. `dateRange`
-holds its first and last calendar dates (`YYYY-MM-DD`, or null when no row
-converts). Paired imports additionally return `dailyLog.recordCount` and
-`dailyLog.dateRange` in the same calendar-date form. Unfiltered `get_statistics`
-uses the daily-log portfolio drawdown; strategy-filtered statistics remain trade-based.
+Before creating a block, `import_csv` refuses a trade or reporting row with an
+impossible opened/closed calendar date or a missing or unparseable P/L;
+gross-before-fees trade rows also need numeric commission fields. Paired daily
+logs require `Date` and a numeric `Net Liquidity` (or `Portfolio Value`,
+`Value`, `Equity`); `P/L` and `Drawdown %` are optional. Errors name the CSV
+file line (the header is line 1). Any refused row, in either file, refuses the
+entire import without creating a block. The result's `recordCount` counts the
+rows actually loaded from the primary CSV, and its `strategies` use the block
+ID when the CSV has no Strategy column, matching `get_block_info`. `dateRange`
+holds the first and last calendar dates (`YYYY-MM-DD`). Paired imports
+additionally return `dailyLog.recordCount` and `dailyLog.dateRange` in the same
+calendar-date form. Unfiltered `get_statistics` uses the daily-log portfolio
+drawdown; strategy-filtered statistics remain trade-based.
 Unfiltered `get_statistics` with a daily log computes `calmarRatio` from marked
 first-to-last net-liquidity CAGR divided by the daily log's maximum absolute
 drawdown percentage. Without a daily log, or with a strategy/ticker filter, it

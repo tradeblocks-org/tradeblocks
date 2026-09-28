@@ -54,6 +54,11 @@ describe("detectCsvType", () => {
     expect(result).toBe("dailylog");
   });
 
+  it("does not treat a blank or partial value header as a daily-log alias", async () => {
+    expect(await detectCsvType(await createCsv("blank.csv", "Date,"))).toBeNull();
+    expect(await detectCsvType(await createCsv("partial.csv", "Date,Val"))).toBeNull();
+  });
+
   it("identifies a reportinglog CSV (TAT format)", async () => {
     const filePath = await createCsv("tat.csv", "TradeID,ProfitLoss,BuyingPower,EntryDate");
     const result = await detectCsvType(filePath);

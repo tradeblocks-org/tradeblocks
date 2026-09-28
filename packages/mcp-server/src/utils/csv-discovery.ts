@@ -119,9 +119,7 @@ export async function detectCsvType(filePath: string): Promise<CsvType> {
       "net liquidity",
       "netliquidity",
     ];
-    const hasValue = valueColumnAliases.some((alias) =>
-      headers.some((h) => h.includes(alias) || alias.includes(h)),
-    );
+    const hasValue = valueColumnAliases.some((alias) => headers.includes(alias));
 
     // Dailylog: has date + value columns but lacks trade-specific columns
     if (hasSimpleDate && hasValue && matchedTradeColumns.length < 2) {

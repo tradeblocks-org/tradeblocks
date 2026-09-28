@@ -211,12 +211,18 @@ Date Opened,Time Opened,Date Closed,Time Closed,P/L,Strategy,Legs,No. of Contrac
 2024-01-03,09:35:00,2024-01-03,15:45:00,250,Iron Condor,SPX 4820P/4770P,1,2.75
 ```
 
+`import_csv` refuses a trade or reporting row with an invalid opened/closed calendar date or an
+unparseable P/L (including a missing value), reporting the CSV file line including the header.
+For gross-before-fees trade logs, opening and closing commission values are also required.
+The entire import is refused before creating a block, including when a daily log is paired.
+The import receipt counts loaded trades and uses the same strategy names as the loaded block.
+
 ### Daily Log (dailylog.csv)
 
 Required columns:
 
 - Date
-- Net Liquidity
+- Net Liquidity (or Portfolio Value, Value, Equity)
 
 Optional columns:
 
@@ -232,6 +238,9 @@ Date,Net Liquidity,P/L,Drawdown %
 2024-01-03,10450,250,0.00
 2024-01-04,10300,-150,1.44
 ```
+
+The value must be numeric in every daily-log row. `import_csv` refuses a missing or
+unparseable value with the CSV file line; folder loading skips that row rather than using zero.
 
 ### Reporting Log (reportinglog.csv)
 
@@ -276,7 +285,7 @@ The date range or strategy filter may be too restrictive. Try without filters fi
 Ensure your CSV has the expected columns:
 
 - Trade log needs: P/L, Date Opened
-- Daily log needs: Date, Net Liquidity
+- Daily log needs: Date, Net Liquidity (or Portfolio Value, Value, Equity)
 
 ---
 
