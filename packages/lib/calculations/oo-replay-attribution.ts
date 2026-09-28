@@ -276,9 +276,9 @@ export function cumulativeReplayTradeMark(
   trade: ReplayTrade,
   date: string,
   quoteLookup: ReplayQuoteLookup,
+  cost: ReplayStrategyCost,
   parameters: ReplayMethodOverrides = {},
   markTime?: string,
-  cost?: ReplayStrategyCost,
 ): ReplayMark {
   const contracts = packageContractCount(trade);
   if (!cost || contracts === undefined) {
@@ -292,7 +292,7 @@ export function cumulativeReplayTradeMark(
     quoteLookup,
     markTime ?? method.mark_time,
     method.root_precedence,
-    cost !== undefined,
+    true,
   );
   if (marked.value === null) return marked;
   let entry = 0;
@@ -355,7 +355,7 @@ export function calculateOoReplayAttribution({
     return "missing" in observation ? undefined : observation;
   };
   const markCache = new Map<string, ReplayMark>();
-  const mark = (index: number, date: string): ReplayMark => {
+  const mark = (index: number, date: string, cost: ReplayStrategyCost): ReplayMark => {
     const key = `${index}|${date}`;
     let result = markCache.get(key);
     if (!result) {
@@ -363,9 +363,9 @@ export function calculateOoReplayAttribution({
         trades[index],
         date,
         memoLookup,
+        cost,
         method,
         markTime(date),
-        method.cost_schedule?.[trades[index].strategyId],
       );
       markCache.set(key, result);
     }
@@ -415,13 +415,14 @@ export function calculateOoReplayAttribution({
     for (let index = 0; index < trades.length; index++) {
       const trade = trades[index];
       if (trade.dateClosed < current.date || trade.dateOpened > current.date) continue;
-      if (!method.cost_schedule?.[trade.strategyId] || contractCounts[index] === undefined) {
+      const cost = method.cost_schedule?.[trade.strategyId];
+      if (!cost || contractCounts[index] === undefined) {
         missingCosts.add(trade.strategyName.split("·")[0].trim());
         continue;
       }
       let base = 0;
       if (trade.dateOpened < current.date) {
-        const previousMark = mark(index, prior.date);
+        const previousMark = mark(index, prior.date, cost);
         if (previousMark.value === null) {
           missingPrior = true;
           continue;
@@ -432,7 +433,7 @@ export function calculateOoReplayAttribution({
       if (trade.dateClosed === current.date) {
         value = trade.isIgnored ? 0 : trade.profit;
       } else {
-        const currentMark = mark(index, current.date);
+        const currentMark = mark(index, current.date, cost);
         if (currentMark.value === null) {
           currentMark.missing_tickers.forEach((ticker) => missing.add(ticker));
           continue;

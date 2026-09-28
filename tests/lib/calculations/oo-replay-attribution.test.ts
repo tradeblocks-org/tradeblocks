@@ -292,6 +292,7 @@ describe("OO replay attribution public interface", () => {
 
   it("withholds a direct trade mark when its per-strategy cost is absent", () => {
     let quoteCalls = 0;
+    // @ts-expect-error Untyped callers can still omit the required strategy cost.
     const mark = cumulativeReplayTradeMark(trade, "2026-06-09", () => {
       quoteCalls++;
       return { bid: 1, ask: 1 };
@@ -307,8 +308,6 @@ describe("OO replay attribution public interface", () => {
       { ...trade, numberOfContracts: undefined },
       "2026-06-09",
       () => ({ bid: 1, ask: 1 }),
-      {},
-      undefined,
       cost,
     );
     expect(inferredCount.value).toBe(-1);
@@ -339,13 +338,14 @@ describe("OO replay attribution public interface", () => {
       contributions: [{ strategy_id: "a", amount: 56 }],
       residual: 0,
     });
-    const mixed = { ...uniform, legs: [uniform.legs[0], { ...uniform.legs[1], numberOfContracts: 1 }] };
+    const mixed = {
+      ...uniform,
+      legs: [uniform.legs[0], { ...uniform.legs[1], numberOfContracts: 1 }],
+    };
     const explicit = cumulativeReplayTradeMark(
       { ...mixed, numberOfContracts: 2 },
       "2026-06-09",
       () => ({ bid: 1, ask: 1 }),
-      {},
-      undefined,
       slippageCost,
     );
     expect(explicit.value).toBe(7);
@@ -383,8 +383,6 @@ describe("OO replay attribution public interface", () => {
       { ...trade, legs: [monthly] },
       "2026-06-18",
       (_, ticker) => (ticker.startsWith("SPXW") ? undefined : { bid: 0.5, ask: 0.5 }),
-      {},
-      undefined,
       cost,
     );
     expect(fallback.value).toBe(49);
