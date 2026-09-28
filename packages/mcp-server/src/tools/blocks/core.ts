@@ -29,6 +29,16 @@ import {
 } from "../shared/filters.ts";
 import { withSyncedBlock, withFullSync } from "../middleware/sync-middleware.ts";
 
+function rebuildMissingFundsEquity(trades: Trade[], initialCapital: number): Trade[] {
+  const rebuilt = rebuildEquityCurve(trades, { initialCapital, useNetPl: true });
+  if (rebuilt.every((trade) => trade.dateClosed)) return rebuilt;
+  // The shared rebuild leaves open rows untouched; their placeholder 0 must not
+  // become a fictitious pre-trade balance when statistics include an open row.
+  return rebuilt.map((trade) =>
+    trade.dateClosed ? trade : { ...trade, fundsAtClose: initialCapital + getNetPl(trade) },
+  );
+}
+
 export function rebuildSubsetEquity(
   trades: Trade[],
   allTrades: Trade[],
@@ -39,10 +49,9 @@ export function rebuildSubsetEquity(
     tradeCapital.source === "assumed_default"
       ? tradeCapital.amount
       : resolveStartingCapital(allTrades, dailyLogs).amount;
-  return rebuildEquityCurve(trades, {
-    initialCapital,
-    useNetPl: true,
-  });
+  return tradeCapital.source === "assumed_default"
+    ? rebuildMissingFundsEquity(trades, initialCapital)
+    : rebuildEquityCurve(trades, { initialCapital, useNetPl: true });
 }
 
 /**
@@ -469,19 +478,27 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
           // When a subset filter is applied, daily logs cannot be used because they
           // represent the full portfolio rather than the selected strategy/ticker.
           const effectiveDailyLogs = isSubsetFiltered ? undefined : filteredDailyLogs;
-          const requestCalculator = new PortfolioStatsCalculator({ riskFreeRateAnnualPct });
-          const stats = requestCalculator.calculatePortfolioStats(
-            trades,
-            effectiveDailyLogs,
-            isSubsetFiltered,
-          );
           const capital = resolveStartingCapital(
             isSubsetFiltered ? allTrades : trades,
             effectiveDailyLogs,
           );
-          stats.initialCapital = capital.amount;
+          // The calculator uses fundsAtClose for trade drawdown and CAGR too.
+          // Reconstruct absent balances before calculating, not only the reported start.
+          if (
+            !isSubsetFiltered &&
+            resolveStartingCapital(trades).source !== "observed_trade_funds"
+          ) {
+            trades = rebuildMissingFundsEquity(trades, capital.amount);
+          }
+          const metricDailyLogs = capital.source === "daily_log" ? effectiveDailyLogs : undefined;
+          const requestCalculator = new PortfolioStatsCalculator({ riskFreeRateAnnualPct });
+          const stats = requestCalculator.calculatePortfolioStats(
+            trades,
+            metricDailyLogs,
+            isSubsetFiltered,
+          );
           const calculationMethodology = {
-            ...requestCalculator.getCalculationMethodology(trades, effectiveDailyLogs),
+            ...requestCalculator.getCalculationMethodology(trades, metricDailyLogs),
             initialCapital: { source: capital.source },
           };
 

@@ -38,13 +38,21 @@ async function withTools(
 
 const missing =
   "Date Opened,Date Closed,Strategy,P/L,Legs\n2024-01-02,2024-01-02,Alpha,200,SPY\n2024-01-03,2024-01-03,Beta,-50,SPY\n";
-const daily = "Date,Net Liquidity,P/L\n2024-01-02,10200,200\n";
+const daily =
+  "Date,Net Liquidity,P/L,Drawdown %\n2024-01-02,10200,200,0\n2024-01-03,10150,-50,0.49019607843137253\n";
 const statistics = z.object({
-  stats: z.object({ initialCapital: z.number(), netPl: z.number() }),
+  stats: z.object({
+    initialCapital: z.number(),
+    netPl: z.number(),
+    cagr: z.number().optional(),
+    maxDrawdown: z.number(),
+    calmarRatio: z.number().optional(),
+  }),
   calculationMethodology: z.object({ initialCapital: z.object({ source: z.string() }) }),
 });
 const performance = z.object({
   equityCurve: z.array(z.object({ equity: z.number() })),
+  drawdown: z.array(z.object({ drawdownPct: z.number() })).optional(),
   equityCurveCapitalSource: z.string(),
 });
 
@@ -67,7 +75,7 @@ async function importAndRead(
   const stats = await call("get_statistics", { blockId: "capital" });
   const charts = await call("get_performance_charts", {
     blockId: "capital",
-    charts: ["equity_curve"],
+    charts: ["equity_curve", "drawdown"],
   });
   expect(stats.isError).not.toBe(true);
   expect(charts.isError).not.toBe(true);
@@ -81,19 +89,30 @@ describe("import_csv starting capital across tools", () => {
   it("assumes 100000 for a trade-only log without Funds at Close", async () => {
     await withTools(async (root, call) => {
       const { stats, charts } = await importAndRead(root, call, missing);
+      const expectedCagr = (Math.pow(100150 / 100000, 365.25) - 1) * 100;
+      const expectedDrawdown = (50 / 100200) * 100;
       expect(stats.stats.initialCapital).toBe(100000);
+      expect(stats.stats.cagr).toBeCloseTo(expectedCagr);
+      expect(stats.stats.maxDrawdown).toBeCloseTo(expectedDrawdown);
+      expect(stats.stats.calmarRatio).toBeCloseTo(expectedCagr / expectedDrawdown);
       expect(stats.calculationMethodology.initialCapital.source).toBe("assumed_default");
       expect(charts.equityCurve[0].equity).toBe(100000);
       expect(charts.equityCurve[1].equity).toBe(100200);
+      expect(Math.abs(charts.drawdown?.[2].drawdownPct ?? NaN)).toBeCloseTo(expectedDrawdown);
       expect(charts.equityCurveCapitalSource).toBe("assumed_default");
     });
   });
   it("uses the daily-derived start for the same unfunded trade log", async () => {
     await withTools(async (root, call) => {
       const { stats, charts } = await importAndRead(root, call, missing, daily);
+      const expectedCagr = (Math.pow(10150 / 10000, 365.25) - 1) * 100;
+      const expectedDrawdown = (50 / 10200) * 100;
       expect(stats.stats.initialCapital).toBe(10000);
+      expect(stats.stats.cagr).toBeCloseTo(expectedCagr);
+      expect(stats.stats.maxDrawdown).toBeCloseTo(expectedDrawdown);
       expect(stats.calculationMethodology.initialCapital.source).toBe("daily_log");
       expect(charts.equityCurve[0].equity).toBe(10000);
+      expect(Math.abs(charts.drawdown?.[2].drawdownPct ?? NaN)).toBeCloseTo(expectedDrawdown);
       expect(charts.equityCurveCapitalSource).toBe("daily_log");
     });
   });
@@ -174,6 +193,16 @@ describe("import_csv starting capital across tools", () => {
       expect(stats.calculationMethodology.initialCapital.source).toBe("assumed_default");
       expect(charts.equityCurve[0].equity).toBe(100000);
       expect(charts.equityCurveCapitalSource).toBe("assumed_default");
+    });
+  });
+
+  it("keeps initial capital positive when the unfunded trade has no close date", async () => {
+    await withTools(async (root, call) => {
+      const open = "Date Opened,Strategy,P/L,Legs\n2024-01-02,Alpha,200,SPY\n";
+      const { stats, charts } = await importAndRead(root, call, open);
+      expect(stats.stats.initialCapital).toBe(100000);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("assumed_default");
+      expect(charts.equityCurve[0].equity).toBe(100000);
     });
   });
 
