@@ -122,7 +122,11 @@ function isParsedNumber(value: string | undefined): boolean {
   );
 }
 
-/** CSV calendar days are local dates; compare parts rather than converting to UTC. */
+/**
+ * A CSV date is valid when its calendar prefix names a real day and the whole value parses.
+ * The calendar check uses UTC arithmetic on the parts, and the full-value check only tests
+ * parseability, so acceptance never depends on the server's timezone.
+ */
 function isValidCsvDate(value: string | undefined, tat = false): boolean {
   if (!value) return false;
   const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})(?=$|[T ])/);
@@ -132,18 +136,15 @@ function isValidCsvDate(value: string | undefined, tat = false): boolean {
     const month = Number(iso ? iso[2] : us![1]);
     const day = Number(iso ? iso[3] : us![2]);
     const date = new Date(0);
-    date.setFullYear(year, month - 1, day);
-    if (date.getFullYear() !== year || date.getMonth() + 1 !== month || date.getDate() !== day) {
+    date.setUTCFullYear(year, month - 1, day);
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() + 1 !== month ||
+      date.getUTCDate() !== day
+    ) {
       return false;
     }
     if (tat) return true;
-    const loaded = parseDatePreservingCalendarDay(value);
-    return (
-      !Number.isNaN(loaded.getTime()) &&
-      loaded.getFullYear() === year &&
-      loaded.getMonth() + 1 === month &&
-      loaded.getDate() === day
-    );
   }
   return !tat && !Number.isNaN(parseDatePreservingCalendarDay(value).getTime());
 }

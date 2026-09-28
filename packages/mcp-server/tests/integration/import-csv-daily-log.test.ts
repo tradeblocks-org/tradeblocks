@@ -452,7 +452,10 @@ describe("import_csv row acceptance and loaded receipts", () => {
 
   it("imports the repository's complete OO trade export without dropping rows", async () => {
     await fixture(async (root, call) => {
-      const csvPath = path.join(process.cwd(), "../../tests/data/MEIC Test Data/meic-tradelog.csv");
+      const csvPath = path.resolve(
+        import.meta.dirname,
+        "../../../../tests/data/MEIC Test Data/meic-tradelog.csv",
+      );
       const result = await call("import_csv", { csvPath, blockName: "OO MEIC Real" });
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toMatchObject({
@@ -593,6 +596,18 @@ describe.each(["UTC", "Pacific/Kiritimati", "America/Los_Angeles"])(
             expect(toolName).toBeDefined();
             expect(registeredTools.has(toolName!)).toBe(true);
           }
+        }
+        // Row acceptance must not depend on the server's timezone.
+        for (const [date, refused] of [
+          ["2024-01-02T00:00:00Z", false],
+          ["2024-02-30T00:00:00Z", true],
+        ] as const) {
+          const csvPath = await source(root, "stamped.csv", `Date Opened,P/L\n${date},100\n`);
+          const result = await client.callTool({
+            name: "import_csv",
+            arguments: { csvPath, blockName: `stamped ${date.slice(0, 10)}` },
+          });
+          expect([date, result.isError === true]).toEqual([date, refused]);
         }
       } finally {
         await client.close();
