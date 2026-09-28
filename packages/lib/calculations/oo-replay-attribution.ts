@@ -1,3 +1,9 @@
+import {
+  isEarlyCloseSession,
+  isXnysSessionDate,
+  XNYS_SESSION_CALENDAR_REVISION,
+} from "./xnys-session-calendar.ts";
+
 export interface ReplayLeg {
   /** Contract expiry as YYYYMMDD (OO) or YYYY-MM-DD (market provider). */
   expiration: string;
@@ -31,11 +37,12 @@ export type ReplayQuoteLookup = (
   markTime: string,
 ) => ReplayQuote | undefined;
 export type ReplayQuoteObservation =
-  | { date: string; ticker: string; bid: number; ask: number; mid: number }
+  | { date: string; ticker: string; bid: number; ask: number; mid: number; mark_time?: string }
   | {
       date: string;
       ticker: string;
       missing: true;
+      mark_time?: string;
       reason?: "invalid_quote" | "nonpositive_quote" | "crossed_quote" | "blown_spread";
     };
 
@@ -45,6 +52,11 @@ export interface ReplayMethodParameters {
   tolerance_fraction: number;
   root_precedence: Record<string, readonly string[]>;
   quote_validity: "positive-uncrossed-max10x-v1";
+}
+export interface ReplayMethodV2Parameters extends ReplayMethodParameters {
+  mark_time: "session_close_minus_1m";
+  mark_rule: "equity_close_minus_1m";
+  calendar_revision: typeof XNYS_SESSION_CALENDAR_REVISION;
 }
 export type ReplayMethodOverrides = Partial<
   Pick<
@@ -77,6 +89,7 @@ export interface ReplayContribution {
 
 export type ReplayUnavailableReason =
   | { code: "missing_quote"; tickers: string[] }
+  | { code: "calendar_unsupported" }
   | { code: "missing_prior_mark" }
   | { code: "nonpositive_prior_nlv" }
   | { code: "over_tolerance"; residual: number };
@@ -107,8 +120,8 @@ export interface ReplayEpisode {
 }
 
 export interface OoReplayAttribution {
-  method_id: "oo-replay-method/v1";
-  method_parameters: ReplayMethodParameters;
+  method_id: "oo-replay-method/v1" | "oo-replay-method/v2";
+  method_parameters: ReplayMethodParameters | ReplayMethodV2Parameters;
   stats: {
     schema_id: "tradeblocks.oo-replay-attribution-stats/v1";
     basis: "replay_marked";
@@ -238,6 +251,7 @@ export function cumulativeReplayTradeMark(
   date: string,
   quoteLookup: ReplayQuoteLookup,
   parameters: ReplayMethodOverrides = {},
+  markTime?: string,
 ): ReplayMark {
   const method = { ...DEFAULT_REPLAY_METHOD_PARAMETERS, ...parameters };
   const marked = valueReplayLegs(
@@ -245,7 +259,7 @@ export function cumulativeReplayTradeMark(
     trade.underlying,
     date,
     quoteLookup,
-    method.mark_time,
+    markTime ?? method.mark_time,
     method.root_precedence,
   );
   if (marked.value === null) return marked;
@@ -262,11 +276,13 @@ export function calculateOoReplayAttribution({
   curve,
   quoteLookup,
   parameters = {},
+  method_id = "oo-replay-method/v1",
 }: {
   trades: readonly ReplayTrade[];
   curve: readonly { date: string; netLiquidity: number }[];
   quoteLookup: ReplayQuoteLookup;
   parameters?: ReplayMethodOverrides;
+  method_id?: "oo-replay-method/v1" | "oo-replay-method/v2";
 }): OoReplayAttribution {
   const method = {
     ...DEFAULT_REPLAY_METHOD_PARAMETERS,
@@ -283,13 +299,28 @@ export function calculateOoReplayAttribution({
   ) {
     throw new RangeError("Invalid replay method parameters");
   }
+  const markTime = (date: string): string =>
+    method_id === "oo-replay-method/v2"
+      ? isEarlyCloseSession(date)
+        ? "12:59"
+        : "15:59"
+      : method.mark_time;
+  const supported = (date: string): boolean => {
+    try {
+      return isXnysSessionDate(date);
+    } catch (error) {
+      if (error instanceof RangeError) return false;
+      throw error;
+    }
+  };
   const book = [...curve].sort((a, b) => a.date.localeCompare(b.date));
   const observations = new Map<string, ReplayQuoteObservation>();
   const memoLookup: ReplayQuoteLookup = (date, ticker, markTime) => {
     const key = `${date}|${ticker}`;
     const cached = observations.get(key);
     if (cached) return "missing" in cached ? undefined : cached;
-    const observation = observe(date, ticker, quoteLookup, markTime);
+    const raw = observe(date, ticker, quoteLookup, markTime);
+    const observation = method_id === "oo-replay-method/v2" ? { ...raw, mark_time: markTime } : raw;
     observations.set(key, observation);
     return "missing" in observation ? undefined : observation;
   };
@@ -298,7 +329,7 @@ export function calculateOoReplayAttribution({
     const key = `${index}|${date}`;
     let result = markCache.get(key);
     if (!result) {
-      result = cumulativeReplayTradeMark(trades[index], date, memoLookup, method);
+      result = cumulativeReplayTradeMark(trades[index], date, memoLookup, method, markTime(date));
       markCache.set(key, result);
     }
     return result;
@@ -317,6 +348,20 @@ export function calculateOoReplayAttribution({
     const current = book[day];
     const prior = book[day - 1];
     const ooChange = current.netLiquidity - prior.netLiquidity;
+    if (
+      method_id === "oo-replay-method/v2" &&
+      (!supported(current.date) || !supported(prior.date))
+    ) {
+      daily.push({
+        date: current.date,
+        oo_change: ooChange,
+        contributions: null,
+        residual: null,
+        status: "unavailable",
+        reason: { code: "calendar_unsupported" },
+      });
+      continue;
+    }
     if (prior.netLiquidity <= 0) {
       daily.push({
         date: current.date,
@@ -481,8 +526,16 @@ export function calculateOoReplayAttribution({
     if (row.reason)
       unavailable_reasons[row.reason.code] = (unavailable_reasons[row.reason.code] ?? 0) + 1;
   return {
-    method_id: "oo-replay-method/v1",
-    method_parameters: method,
+    method_id,
+    method_parameters:
+      method_id === "oo-replay-method/v2"
+        ? {
+            ...method,
+            mark_time: "session_close_minus_1m" as const,
+            mark_rule: "equity_close_minus_1m" as const,
+            calendar_revision: XNYS_SESSION_CALENDAR_REVISION,
+          }
+        : method,
     stats: {
       schema_id: "tradeblocks.oo-replay-attribution-stats/v1",
       basis: "replay_marked",

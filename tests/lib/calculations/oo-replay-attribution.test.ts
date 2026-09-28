@@ -28,6 +28,58 @@ const trade: ReplayTrade = {
 };
 
 describe("OO replay attribution public interface", () => {
+  it("uses the equity close minus one minute on an early session, retaining v1 marks", () => {
+    const curve = [
+      { date: "2025-07-02", netLiquidity: 1000 },
+      { date: "2025-07-03", netLiquidity: 1020 },
+      { date: "2025-07-07", netLiquidity: 1038 },
+      { date: "2025-07-08", netLiquidity: 1040 },
+    ];
+    const times: string[] = [];
+    const quoteLookup = (date: string, ticker: string, markTime: string) => {
+      if (ticker.startsWith("SPXW")) times.push(`${date} ${markTime}`);
+      return ticker.startsWith("SPXW")
+        ? { bid: date === "2025-07-02" ? 1 : 0.8, ask: date === "2025-07-02" ? 1 : 0.8 }
+        : undefined;
+    };
+    const position = { ...trade, dateOpened: "2025-07-02", dateClosed: "2025-07-08" };
+    const v2 = calculateOoReplayAttribution({
+      trades: [position],
+      curve,
+      quoteLookup,
+      method_id: "oo-replay-method/v2",
+    });
+    expect(v2.method_id).toBe("oo-replay-method/v2");
+    expect(v2.method_parameters).toMatchObject({
+      mark_rule: "equity_close_minus_1m",
+      calendar_revision: "xnys-full-day-2022-2030-v1",
+    });
+    expect(times).toEqual(["2025-07-02 15:59", "2025-07-03 12:59", "2025-07-07 15:59"]);
+    times.length = 0;
+    const v1 = calculateOoReplayAttribution({ trades: [position], curve, quoteLookup });
+    expect(v1.method_id).toBe("oo-replay-method/v1");
+    expect(times).toEqual(["2025-07-02 15:59", "2025-07-03 15:59", "2025-07-07 15:59"]);
+  });
+  it("withholds a date outside the calendar revision instead of guessing 15:59", () => {
+    const result = calculateOoReplayAttribution({
+      trades: [{ ...trade, dateOpened: "2030-12-30", dateClosed: "2031-01-03" }],
+      curve: [
+        { date: "2030-12-30", netLiquidity: 1000 },
+        { date: "2031-01-02", netLiquidity: 1020 },
+      ],
+      quoteLookup: () => {
+        throw new Error("No quote may be requested outside the calendar");
+      },
+      method_id: "oo-replay-method/v2",
+    });
+    expect(result.stats.daily[0]).toMatchObject({
+      date: "2031-01-02",
+      status: "unavailable",
+      contributions: null,
+      reason: { code: "calendar_unsupported" },
+    });
+    expect(result.quotes.observations).toEqual([]);
+  });
   it("attributes marked open positions and realized closes against the supplied OO book", () => {
     const mids: Record<string, number> = { "2026-06-08": 1, "2026-06-09": 0.8 };
     const result = calculateOoReplayAttribution({

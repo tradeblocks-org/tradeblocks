@@ -5,6 +5,8 @@
 // annual holiday schedules. Full closures are owned by the caller's bounded
 // XNYS session calendar; a date that is not a session must not be judged here.
 
+import { earlyCloseDates } from "../packages/lib/calculations/xnys-early-close-dates.mjs";
+
 const SPOT_REGULAR_EXPECTATION = new Map([
   // Cboe index RTH continues after the 16:00 core-equity close. These indices
   // are sparse, so they need not print at 16:15; requiring one observation in
@@ -22,24 +24,8 @@ const SPOT_REGULAR_EXPECTATION = new Map([
 ]);
 const CBOE_INDEX_TICKERS = new Set(["SPX", "VIX", "VIX3M", "VIX9D"]);
 
-function nthWeekdayOfMonth(year, monthIndex, weekday, occurrence) {
-  const first = new Date(Date.UTC(year, monthIndex, 1));
-  const offset = (weekday - first.getUTCDay() + 7) % 7;
-  return new Date(Date.UTC(year, monthIndex, 1 + offset + (occurrence - 1) * 7));
-}
-
 export function isEarlyCloseSession(date, isSession) {
-  if (!isSession(date)) return false;
-  const parsed = new Date(`${date}T12:00:00Z`);
-  const year = parsed.getUTCFullYear();
-  const month = parsed.getUTCMonth();
-  const day = parsed.getUTCDate();
-  if ((month === 6 && day === 3) || (month === 11 && day === 24)) return true;
-  const thanksgiving = nthWeekdayOfMonth(year, 10, 4, 4);
-  const fridayAfter = new Date(thanksgiving.getTime() + 24 * 60 * 60 * 1_000)
-    .toISOString()
-    .slice(0, 10);
-  return date === fridayAfter;
+  return isSession(date) && earlyCloseDates.has(date);
 }
 
 export function knownSpotSessionClose(ticker, date, isSession) {
