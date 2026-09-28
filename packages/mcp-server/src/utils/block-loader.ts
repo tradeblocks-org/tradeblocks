@@ -76,11 +76,12 @@ export interface LoadedBlock {
 }
 
 /**
- * Parse a YYYY-MM-DD date string preserving the calendar date.
+ * Parse a date string preserving its YYYY-MM-DD calendar date, including when a time or
+ * timezone suffix follows it (`2024-01-02T00:00:00Z` is January 2 on every server).
  * Same approach as lib/processing for consistency.
  */
 function parseDatePreservingCalendarDay(dateStr: string): Date {
-  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})(?=$|[T ])/);
   if (match) {
     const [, year, month, day] = match;
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
@@ -984,8 +985,9 @@ function validateCsvColumns(
       continue;
     }
 
+    // TAT conversion reads OpenDate whenever it starts with a date, else Date (parseTatDate).
     const opened = tat
-      ? openDate && isValidCsvDate(record[openDate], true)
+      ? openDate && /^(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4})/.test(record[openDate] ?? "")
         ? openDate
         : (fallbackDate ?? openDate ?? "OpenDate")
       : "Date Opened";

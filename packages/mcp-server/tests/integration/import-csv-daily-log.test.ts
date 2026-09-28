@@ -368,15 +368,6 @@ describe("import_csv row acceptance and loaded receipts", () => {
       });
     },
   );
-  it("refuses a calendar prefix with an unloadable timestamp suffix", async () => {
-    await fixture(async (root, call) => {
-      const csvPath = await source(root, "bad.csv", "Date Opened,P/L\n2024-01-02Tinvalid,100\n");
-      const result = await call("import_csv", { csvPath, blockName: "Bad Timestamp" });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("CSV row 2: invalid Date Opened");
-      await expect(fs.access(path.join(root, "blocks", "bad-timestamp"))).rejects.toThrow();
-    });
-  });
 
   it("refuses nonnumeric trade P/L and leaves no block", async () => {
     await fixture(async (root, call) => {
@@ -400,6 +391,11 @@ describe("import_csv row acceptance and loaded receipts", () => {
     [
       "reportinglog",
       "TradeID,ProfitLoss,BuyingPower,OpenDate\n123,100,1000,2024-02-30\n",
+      "OpenDate",
+    ],
+    [
+      "reportinglog",
+      "TradeID,ProfitLoss,BuyingPower,OpenDate,Date\n123,100,1000,2024-02-30,1/2/2024\n",
       "OpenDate",
     ],
   ])("refuses %s invalid %s before creating a block", async (csvType, csv, column) => {
@@ -608,6 +604,13 @@ describe.each(["UTC", "Pacific/Kiritimati", "America/Los_Angeles"])(
             arguments: { csvPath, blockName: `stamped ${date.slice(0, 10)}` },
           });
           expect([date, result.isError === true]).toEqual([date, refused]);
+          if (!refused) {
+            // The loaded trade keeps the CSV's calendar day, not the host-local day of the instant.
+            expect(result.structuredContent?.dateRange).toEqual({
+              start: "2024-01-02",
+              end: "2024-01-02",
+            });
+          }
         }
       } finally {
         await client.close();
