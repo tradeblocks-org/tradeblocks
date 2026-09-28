@@ -222,7 +222,8 @@ The import receipt counts loaded trades and uses the same strategy names as the 
 Required columns:
 
 - Date
-- Net Liquidity (or Portfolio Value, Value, Equity)
+- Net Liquidity (the MCP server also reads Portfolio Value, Value or Equity; the web importer
+  needs Net Liquidity)
 
 Optional columns:
 

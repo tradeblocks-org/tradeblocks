@@ -138,8 +138,10 @@ elsewhere in the computation remain instants.
 
 - The web importer requires `REQUIRED_DAILY_LOG_COLUMNS` (`packages/lib/models/daily-log.ts`):
   `Date`, `Net Liquidity`, `Current Funds`, `Trading Funds`, `P/L`, `P/L %`, `Drawdown %`.
-- MCP `import_csv` requires only `Date` and `Net Liquidity` for a paired daily log
-  (`packages/mcp-server/src/utils/block-loader.ts`); the other columns are optional.
+- MCP `import_csv` requires only `Date` and a numeric `Net Liquidity` for a paired daily log
+  (`packages/mcp-server/src/utils/block-loader.ts`); the other columns are optional. The MCP
+  server also reads `Portfolio Value`, `Value` or `Equity` as net liquidity; the web importer
+  does not.
 - When absent, drawdown calculations fall back to trade-based equity curves.
 
 ## Testing
