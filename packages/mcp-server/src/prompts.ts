@@ -153,16 +153,16 @@ reporting log, stop and say no live comparison was run. Trades match on date,
 exact strategy name and opening minute; OO trades with no strategy name take the
 block ID as their name. Compare the strategy names from get_block_info and
 get_reporting_log_stats; if they differ, tell the user which, and let them
-decide how to align them; never rename or edit files yourself. Then run, with
-one scaling for all, compare_backtest_to_actual with detailLevel "trades" (its
-default summary level pairs by date and strategy only), analyze_discrepancies,
-analyze_slippage_trends and analyze_live_alignment on that block. Report the
-scaling, matched and unmatched trade counts and the dates compared, and each
-tool's insufficient-data or error result by name. With no matched trades, give
-no slippage verdict.
-Slippage here is live P/L versus the reference's per-trade realized P/L, not
-OO's marked equity; matching within one minute is order-dependent. The tools
-use the block's recorded P/L basis: deduct no fees yourself.
+decide how to align them; never rename or edit files yourself. Then run, each
+with scaling "perContract" so live and OO sizes compare per contract,
+compare_backtest_to_actual with detailLevel "trades" (its default summary level
+pairs by date and strategy only), analyze_discrepancies, analyze_slippage_trends
+and analyze_live_alignment on that block. Report the matched and unmatched trade
+counts and the dates compared, and each tool's insufficient-data or error result
+by name. With no matched trades, give no slippage verdict. Slippage here is live
+P/L versus the reference's per-trade realized P/L, per contract, not OO's marked
+equity; matching within one minute is order-dependent. The tools use the block's
+recorded P/L basis: deduct no fees yourself.
 ${dataIntegrity}`,
           },
         },
