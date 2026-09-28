@@ -252,10 +252,10 @@ Or set `TRADEBLOCKS_NO_AUTH=true` in `.env`.
 ## Agent Skills
 
 For guided conversational workflows, install the agent skills from their standalone plugin,
-[tradeblocks-skills](https://github.com/davidromeo/tradeblocks-skills). In Claude Code:
+[tradeblocks-skills](https://github.com/tradeblocks-org/tradeblocks-skills). In Claude Code:
 
 ```bash
-/plugin marketplace add davidromeo/tradeblocks-skills
+/plugin marketplace add tradeblocks-org/tradeblocks-skills
 /plugin install tradeblocks@tradeblocks-skills
 ```
 
@@ -269,7 +269,7 @@ Skills provide structured prompts for tasks like:
 - Portfolio addition recommendations
 - Correlation analysis
 
-See the [tradeblocks-skills README](https://github.com/davidromeo/tradeblocks-skills) for details.
+See the [tradeblocks-skills README](https://github.com/tradeblocks-org/tradeblocks-skills) for details.
 
 ## Block Directory Structure
 
@@ -422,6 +422,6 @@ See the [Market Data Guide](../../docs/market-data.md) for import examples, tick
 
 - [Usage Guide](../../docs/usage.md) - Detailed usage examples and workflows
 - [Web Platforms Guide](../../docs/web-platforms.md) - Connect to ChatGPT, Google AI Studio, Julius
-- [Agent Skills](https://github.com/davidromeo/tradeblocks-skills) - Conversational workflows for guided analysis
+- [Agent Skills](https://github.com/tradeblocks-org/tradeblocks-skills) - Conversational workflows for guided analysis
 - [Market Data Guide](../../docs/market-data.md) - Import workflow, Massive API, and column mapping reference
 - [Main Application](../../README.md) - Web-based UI for TradeBlocks

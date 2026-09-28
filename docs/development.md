@@ -232,7 +232,7 @@ npm test
 
 1. **Web app development**: Work from the repository root with `npm run dev`
 2. **MCP server development**: Changes in `packages/mcp-server/src/` require rebuild with `npm run build -w packages/mcp-server`
-3. **Agent skills**: Maintained in the standalone [tradeblocks-skills](https://github.com/davidromeo/tradeblocks-skills) plugin, not in this repository
+3. **Agent skills**: Maintained in the standalone [tradeblocks-skills](https://github.com/tradeblocks-org/tradeblocks-skills) plugin, not in this repository
 
 For MCP server development details, see [packages/mcp-server/README.md](../packages/mcp-server/README.md).
 

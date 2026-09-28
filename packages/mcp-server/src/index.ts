@@ -167,10 +167,10 @@ function parseServerArgs(): {
 // Handle skill CLI commands (deprecated — now use plugin)
 async function handleSkillCommand(command: string): Promise<void> {
   console.log("Skills have moved to a standalone plugin:");
-  console.log("  https://github.com/davidromeo/tradeblocks-skills");
+  console.log("  https://github.com/tradeblocks-org/tradeblocks-skills");
   console.log("");
   console.log("Install via Claude Code:");
-  console.log("  /plugin marketplace add davidromeo/tradeblocks-skills");
+  console.log("  /plugin marketplace add tradeblocks-org/tradeblocks-skills");
   console.log("  /plugin install tradeblocks@tradeblocks-skills");
 
   switch (command) {
