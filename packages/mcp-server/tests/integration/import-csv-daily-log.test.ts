@@ -11,6 +11,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { closeConnection, importCsv } from "../../src/test-exports.ts";
 import { registerImportTools } from "../../src/tools/imports.ts";
 import { registerCoreBlockTools } from "../../src/tools/blocks/core.ts";
+import { registerComparisonBlockTools } from "../../src/tools/blocks/comparison.ts";
 
 type ToolResult = {
   structuredContent?: Record<string, unknown>;
@@ -31,6 +32,7 @@ async function fixture(run: (root: string, call: CallTool) => Promise<void>) {
   } as McpServer;
   registerImportTools(server, root);
   registerCoreBlockTools(server, root);
+  registerComparisonBlockTools(server, root);
   try {
     await run(root, (tool, args) => handlers.get(tool)!(args));
   } finally {
@@ -107,6 +109,46 @@ describe("import_csv paired daily log", () => {
       expect(filtered.structuredContent?.calculationMethodology).toMatchObject({
         calmar: { basis: "realized_trade_equity" },
       });
+    });
+  });
+
+  it("labels each compared block's Calmar with the basis get_statistics reports", async () => {
+    await fixture(async (root, call) => {
+      const csvPath = await source(root, "trades.csv", TRADES);
+      const dailyLogPath = await source(root, "daily.csv", DAILY);
+      await call("import_csv", { csvPath, dailyLogPath, blockName: "Paired" });
+      await call("import_csv", { csvPath, blockName: "Trade Only" });
+
+      const compared = await call("compare_blocks", {
+        blockIds: ["paired", "trade-only"],
+        sortBy: "calmarRatio",
+      });
+      expect(compared.isError).not.toBe(true);
+      const rows = compared.structuredContent?.comparisons as Array<{
+        blockId: string;
+        stats: { calmarRatio: number | null };
+        calmarBasis?: string;
+      }>;
+      expect(Object.fromEntries(rows.map((row) => [row.blockId, row.calmarBasis]))).toEqual({
+        paired: "daily_log_marked_curve",
+        "trade-only": "realized_trade_equity",
+      });
+      for (const row of rows) {
+        const stats = await call("get_statistics", { blockId: row.blockId });
+        const single = stats.structuredContent as {
+          stats: { calmarRatio?: number | null };
+          calculationMethodology: { calmar: { basis: string } };
+        };
+        expect(row.stats.calmarRatio).toBe(single.stats.calmarRatio ?? null);
+        expect(row.calmarBasis).toBe(single.calculationMethodology.calmar.basis);
+      }
+
+      const withoutCalmar = await call("compare_blocks", {
+        blockIds: ["paired", "trade-only"],
+        metrics: ["netPl"],
+      });
+      const plainRows = withoutCalmar.structuredContent?.comparisons as Array<object>;
+      expect(plainRows.every((row) => !("calmarBasis" in row))).toBe(true);
     });
   });
 

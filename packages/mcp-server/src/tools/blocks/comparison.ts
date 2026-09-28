@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput, formatCurrency } from "../../utils/output-formatter.ts";
-import { PortfolioStatsCalculator } from "@tradeblocks/lib";
+import { PortfolioStatsCalculator, type CalmarBasis } from "@tradeblocks/lib";
 import { resolveTradeTicker } from "../../utils/ticker.ts";
 import { filterByDateRange, filterDailyLogsByDateRange } from "../shared/filters.ts";
 import { withSyncedBlock, withSyncedBlocks } from "../middleware/sync-middleware.ts";
@@ -162,7 +162,7 @@ export function registerComparisonBlockTools(server: McpServer, baseDir: string)
     "compare_blocks",
     {
       description:
-        "Compare performance statistics across multiple portfolios side-by-side. Use blockIds from list_blocks.",
+        "Compare performance statistics across multiple portfolios side-by-side. Use blockIds from list_blocks. When calmarRatio is included, each block's calmarBasis names its curve: daily_log_marked_curve (block has a daily log) or realized_trade_equity.",
       inputSchema: z.object({
         blockIds: z
           .array(z.string())
@@ -208,13 +208,16 @@ export function registerComparisonBlockTools(server: McpServer, baseDir: string)
         const blockStats: Array<{
           blockId: string;
           stats: ReturnType<typeof calculator.calculatePortfolioStats>;
+          calmarBasis: CalmarBasis;
         }> = [];
 
         for (const blockId of blockIds!) {
           try {
             const block = await loadBlock(baseDir, blockId);
             const stats = calculator.calculatePortfolioStats(block.trades, block.dailyLogs);
-            blockStats.push({ blockId, stats });
+            const calmarBasis = calculator.getCalculationMethodology(block.trades, block.dailyLogs)
+              .calmar.basis;
+            blockStats.push({ blockId, stats, calmarBasis });
           } catch (error) {
             // Include error info in output but continue with other blocks
             console.error(`Failed to load block ${blockId}:`, error);
@@ -288,7 +291,7 @@ export function registerComparisonBlockTools(server: McpServer, baseDir: string)
             sortBy,
             sortOrder,
           },
-          comparisons: blockStats.map(({ blockId, stats }) => {
+          comparisons: blockStats.map(({ blockId, stats, calmarBasis }) => {
             const filteredStats: Record<string, number | null> = {};
             if (requestedMetrics.totalTrades) filteredStats.totalTrades = stats.totalTrades;
             if (requestedMetrics.winRate) filteredStats.winRate = stats.winRate;
@@ -302,6 +305,7 @@ export function registerComparisonBlockTools(server: McpServer, baseDir: string)
             return {
               blockId,
               stats: filteredStats,
+              ...(requestedMetrics.calmarRatio ? { calmarBasis } : {}),
             };
           }),
           failedBlocks: failedIds,

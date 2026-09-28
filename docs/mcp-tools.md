@@ -189,7 +189,8 @@ drawdown percentage. Without a daily log, or with a strategy/ticker filter, it
 uses trade CAGR divided by trade-equity drawdown. The result labels the basis
 as `calculationMethodology.calmar.basis` (`daily_log_marked_curve` or
 `realized_trade_equity`); `cagr` remains trade-based and `maxDrawdown` retains
-its current source independently.
+its current source independently. `compare_blocks` carries the same value per
+block as `calmarBasis` whenever `calmarRatio` is among its requested metrics.
 
 ---
 
