@@ -335,6 +335,9 @@ describe("P/L and Sharpe calculation contract", () => {
 
     const filtered = calculator.calculatePortfolioStats(trades, dailyLogs, true);
     expect(filtered.calmarRatio).toBeCloseTo(2.021390461245, 8);
+    const filteredMethodology = calculator.getCalculationMethodology(trades, dailyLogs, true);
+    expect(filteredMethodology.calmar.basis).toBe("realized_trade_equity");
+    expect(filteredMethodology.returns.source).toBe("realized_trade_pl");
 
     // Callers of the public calculator may pass daily logs in any order.
     expect(

@@ -833,11 +833,15 @@ export class PortfolioStatsCalculator {
   /**
    * Return the exact methodology used by risk-adjusted-return and net P/L calculations.
    * MCP consumers can use this instead of inferring semantics from metric names.
+   * Pass the same `isStrategyFiltered` as `calculatePortfolioStats`: a filtered call
+   * ignores the whole-portfolio daily log here too, so the methodology matches the values.
    */
   getCalculationMethodology(
     trades: Trade[],
-    dailyLogEntries?: DailyLogEntry[],
+    providedDailyLogs?: DailyLogEntry[],
+    isStrategyFiltered = false,
   ): PortfolioCalculationMethodology {
+    const dailyLogEntries = isStrategyFiltered ? undefined : providedDailyLogs;
     const returns = this.calculateDailyReturnsWithDates(trades, dailyLogEntries);
     const basisCounts = {
       netIncludesFees: trades.filter((trade) => trade.plBasis === PlBasis.NetIncludesFees).length,
