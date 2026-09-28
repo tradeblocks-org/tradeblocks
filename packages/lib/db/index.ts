@@ -13,7 +13,7 @@
 
 // Database configuration
 export const DB_NAME = "TradeBlocksDB";
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 // Object store names
 export const STORES = {
@@ -190,6 +190,53 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains(STORES.PUBLISHED_RATES)) {
         db.createObjectStore(STORES.PUBLISHED_RATES);
+      }
+
+      if (event.oldVersion < 6) {
+        const trades = transaction.objectStore(STORES.TRADES);
+        const tradeCursor = trades.openCursor();
+        tradeCursor.onsuccess = () => {
+          const cursor = tradeCursor.result;
+          if (!cursor) return;
+          const trade = cursor.value;
+          if (
+            trade.premiumPrecision === "dollars" &&
+            typeof trade.premium === "number" &&
+            isFinite(trade.premium)
+          ) {
+            const count =
+              typeof trade.numContracts === "number" && isFinite(trade.numContracts)
+                ? Math.abs(trade.numContracts)
+                : 0;
+            const contracts = count > 0 ? count : 1;
+            let total = Math.abs(trade.premium) * contracts;
+            if (isFinite(total) && total > 0) {
+              const margin =
+                typeof trade.marginReq === "number" && isFinite(trade.marginReq)
+                  ? Math.abs(trade.marginReq)
+                  : 0;
+              if (margin > 0 ? total / margin > 0 && total / margin < 0.5 : total < 5000) {
+                total *= 100;
+              }
+              trade.premium = (Math.sign(trade.premium) * total) / contracts;
+            }
+          }
+          if (Object.hasOwn(trade, "premiumPrecision")) {
+            delete trade.premiumPrecision;
+            cursor.update(trade);
+          }
+          cursor.continue();
+        };
+
+        // Enriched trades contain derived efficiencies and must be rebuilt from migrated trades.
+        const calculations = transaction.objectStore(STORES.CALCULATIONS);
+        const cacheCursor = calculations.openCursor();
+        cacheCursor.onsuccess = () => {
+          const cursor = cacheCursor.result;
+          if (!cursor) return;
+          if (cursor.value.calculationType === "enriched_trades") cursor.delete();
+          cursor.continue();
+        };
       }
 
       transaction.oncomplete = () => {
