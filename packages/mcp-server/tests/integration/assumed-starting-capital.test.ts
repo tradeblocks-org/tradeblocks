@@ -115,6 +115,15 @@ describe("import_csv starting capital across tools", () => {
       expect(charts.equityCurve[0].equity).toBe(10000);
       expect(Math.abs(charts.drawdown?.[2].drawdownPct ?? NaN)).toBeCloseTo(expectedDrawdown);
       expect(charts.equityCurveCapitalSource).toBe("daily_log");
+      const monthly = await call("get_performance_charts", {
+        blockId: "capital",
+        charts: ["monthly_returns_percent"],
+      });
+      const percent = z
+        .object({ monthlyReturnsPercent: z.record(z.string(), z.record(z.string(), z.number())) })
+        .parse(monthly.structuredContent);
+      // January's +150 against the same 10000 start the equity curve uses.
+      expect(percent.monthlyReturnsPercent["2024"]["1"]).toBeCloseTo(1.5);
     });
     await withTools(async (root, call) => {
       const [header, ...rows] = daily.trim().split("\n");

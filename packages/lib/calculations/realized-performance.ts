@@ -454,9 +454,12 @@ function buildPremiumEfficiency(trades: Trade[]): Array<{
 }
 /**
  * Build monthly returns percent (percentage-based)
- * Note: Uses trade-based calculation (initial capital derived from first trade)
+ * Note: Uses trade-based calculation (initial capital derived from the first trade unless supplied)
  */
-function buildMonthlyReturnsPercent(trades: Trade[]): Record<number, Record<number, number>> {
+function buildMonthlyReturnsPercent(
+  trades: Trade[],
+  startingCapital?: number,
+): Record<number, Record<number, number>> {
   if (trades.length === 0) return {};
 
   // Sort trades by date
@@ -464,8 +467,9 @@ function buildMonthlyReturnsPercent(trades: Trade[]): Record<number, Record<numb
     (a, b) => getRealizationDate(a).getTime() - getRealizationDate(b).getTime(),
   );
 
-  // Calculate initial capital from first trade
-  let runningCapital = PortfolioStatsCalculator.calculateInitialCapital(sortedTrades);
+  // Existing direct library callers retain the trade-derived/default start.
+  let runningCapital =
+    startingCapital ?? PortfolioStatsCalculator.calculateInitialCapital(sortedTrades);
   if (!isFinite(runningCapital) || runningCapital <= 0) {
     runningCapital = 100000;
   }

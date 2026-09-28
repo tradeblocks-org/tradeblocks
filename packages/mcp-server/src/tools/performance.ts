@@ -761,7 +761,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
         }
 
         if (charts.includes("monthly_returns_percent")) {
-          chartData.monthlyReturnsPercent = buildMonthlyReturnsPercent(trades);
+          chartData.monthlyReturnsPercent = buildMonthlyReturnsPercent(trades, capital.amount);
           const mrp = chartData.monthlyReturnsPercent as Record<number, Record<number, number>>;
           for (const year of Object.keys(mrp)) {
             for (const month of Object.keys(mrp[Number(year)])) {
