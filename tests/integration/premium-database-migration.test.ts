@@ -53,6 +53,14 @@ it("preserves displayed premiums while upgrading browser trades from v5", async 
   trades.put({ blockId: "legacy", premium: 420, numContracts: 3, marginReq: 1000 });
   // v5 required a positive ratio; an underflowed ratio was never scaled.
   trades.put({ blockId: "legacy", premium: Number.MIN_VALUE, marginReq: Number.MAX_VALUE });
+  // v5 showed this cents record as $500: 50000 / 100, with the ratio at 0.5 so no ×100.
+  trades.put({
+    blockId: "legacy",
+    premium: 50000,
+    premiumPrecision: "cents",
+    numContracts: 1,
+    marginReq: 1000,
+  });
   oldTransaction.objectStore(STORES.CALCULATIONS).put({
     id: "enriched_trades_legacy",
     blockId: "legacy",
@@ -80,6 +88,7 @@ it("preserves displayed premiums while upgrading browser trades from v5", async 
       250,
       1260,
       Number.MIN_VALUE,
+      500,
     ]);
     expect(upgraded.map((trade) => trade.premium)).toEqual([
       250,
@@ -89,6 +98,7 @@ it("preserves displayed premiums while upgrading browser trades from v5", async 
       250,
       420,
       Number.MIN_VALUE,
+      500,
     ]);
     expect(upgraded.every((trade) => !Object.hasOwn(trade, "premiumPrecision"))).toBe(true);
     expect(await getEnrichedTradesCache("legacy")).toBeNull();

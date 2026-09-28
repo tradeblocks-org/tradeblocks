@@ -200,28 +200,28 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
           if (!cursor) return;
           const trade = cursor.value;
           let changed = Object.hasOwn(trade, "premiumPrecision");
-          // v5 read every premium not tagged "cents" (including untagged records) through the
-          // option-multiplier heuristic; bake that result in so existing blocks keep their values.
-          if (
-            trade.premiumPrecision !== "cents" &&
-            typeof trade.premium === "number" &&
-            isFinite(trade.premium)
-          ) {
+          // v5 divided "cents"-tagged premiums by 100, then applied its option-multiplier heuristic
+          // to every record. Rescale each premium so existing blocks keep the totals v5 displayed.
+          if (typeof trade.premium === "number" && isFinite(trade.premium)) {
+            const cents = trade.premiumPrecision === "cents";
             const count =
               typeof trade.numContracts === "number" && isFinite(trade.numContracts)
                 ? Math.abs(trade.numContracts)
                 : 0;
             const contracts = count > 0 ? count : 1;
-            const total = Math.abs(trade.premium) * contracts;
+            const total = (Math.abs(trade.premium) / (cents ? 100 : 1)) * contracts;
             const margin =
               typeof trade.marginReq === "number" && isFinite(trade.marginReq)
                 ? Math.abs(trade.marginReq)
                 : 0;
-            if (
+            const multiplied =
               isFinite(total) &&
               total > 0 &&
-              (margin > 0 ? total / margin > 0 && total / margin < 0.5 : total < 5000)
-            ) {
+              (margin > 0 ? total / margin > 0 && total / margin < 0.5 : total < 5000);
+            if (cents && !multiplied) {
+              trade.premium /= 100;
+              changed = true;
+            } else if (!cents && multiplied) {
               trade.premium *= 100;
               changed = true;
             }
