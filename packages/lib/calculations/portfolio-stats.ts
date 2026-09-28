@@ -53,11 +53,15 @@ function hasDailyLog(entries?: DailyLogEntry[]): entries is DailyLogEntry[] {
   return !!entries?.length;
 }
 
-/** Annual percentage growth between the first and last marked daily-log observations. */
+/** Annual percentage growth between the earliest and latest marked daily-log observations. */
 export function markedCagrFromDailyLogs(dailyLogs: DailyLogEntry[]): number | undefined {
   if (dailyLogs.length < 2) return undefined;
-  const first = dailyLogs[0];
-  const last = dailyLogs[dailyLogs.length - 1];
+  let first = dailyLogs[0];
+  let last = dailyLogs[0];
+  for (const entry of dailyLogs) {
+    if (entry.date.getTime() < first.date.getTime()) first = entry;
+    if (entry.date.getTime() > last.date.getTime()) last = entry;
+  }
   const years = (last.date.getTime() - first.date.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
   if (years <= 0 || first.netLiquidity <= 0 || last.netLiquidity <= 0) return undefined;
   return (Math.pow(last.netLiquidity / first.netLiquidity, 1 / years) - 1) * 100;

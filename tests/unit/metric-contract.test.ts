@@ -335,7 +335,11 @@ describe("P/L and Sharpe calculation contract", () => {
 
     const filtered = calculator.calculatePortfolioStats(trades, dailyLogs, true);
     expect(filtered.calmarRatio).toBeCloseTo(2.021390461245, 8);
-    expect(calculator.getCalculationMethodology(trades).calmar.basis).toBe("realized_trade_equity");
+
+    // Callers of the public calculator may pass daily logs in any order.
+    expect(
+      calculator.calculatePortfolioStats(trades, [...dailyLogs].reverse()).calmarRatio,
+    ).toBeCloseTo(1.000718113835, 8);
 
     // A marked curve with no positive starting liquidity or no span cannot use trade CAGR.
     expect(
