@@ -1,4 +1,4 @@
-import { getSofrRateByKey } from "@tradeblocks/lib";
+import { getEffectiveRateDate, getSofrRateByKey } from "@tradeblocks/lib";
 import type { ContractRow } from "./chain-loader.ts";
 import { computeLegGreeks } from "./black-scholes.ts";
 import { computeFractionalDte } from "./option-time.ts";
@@ -60,14 +60,18 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-// `getSofrRateByKey` does a binary search over the rate table on every call,
-// but within a quote-ingest batch the date is constant (one partition = one
-// trading day) and across batches a date repeats for every row of that day.
-// Memoize the lookup by date key — the function is a pure deterministic map
-// from key → rate, so the cached value is identical to a fresh lookup.
+// Quote batches repeat a rate date across many rows. The active SOFR tail
+// changes when a validated published file is applied, so retire memoized
+// lookups on a source change rather than keeping a formerly stale rate.
 const sofrRateByDateKey = new Map<string, number>();
+let memoizedSofrThrough = "";
 
 function memoizedSofrRate(dateKey: string): number {
+  const through = getEffectiveRateDate("SOFR");
+  if (through !== memoizedSofrThrough) {
+    sofrRateByDateKey.clear();
+    memoizedSofrThrough = through;
+  }
   const cached = sofrRateByDateKey.get(dateKey);
   if (cached !== undefined) return cached;
   const rate = getSofrRateByKey(dateKey);

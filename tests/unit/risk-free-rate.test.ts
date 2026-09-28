@@ -204,8 +204,8 @@ describe("Risk-Free Rate Lookup Utility", () => {
 
     it("keeps both bundled rate tails refreshed through the declared release horizon", () => {
       const expectedTail = "2026-07-20";
-      expect(Object.keys(SOFR_RATES).at(-1)).toBe(expectedTail);
-      expect(Object.keys(TREASURY_RATES).at(-1)).toBe(expectedTail);
+      expect(Object.keys(SOFR_RATES).at(-1)! >= expectedTail).toBe(true);
+      expect(Object.keys(TREASURY_RATES).at(-1)! >= expectedTail).toBe(true);
       // FRED publishes blank observations on these federal/market holidays;
       // blank rows are absence, never numeric zero-rate observations.
       for (const holiday of ["2026-05-25", "2026-06-19", "2026-07-03"]) {
@@ -229,6 +229,26 @@ describe("Risk-Free Rate Lookup Utility", () => {
       });
     });
 
+    it("resolves the corrected January 2026 Treasury weekdays and weekend from FRED", () => {
+      expect(resolveTreasuryRateByKey("2026-01-05")).toMatchObject({
+        effectiveDate: "2026-01-05",
+        annualRateBasisPoints: 354,
+        resolution: "exact",
+      });
+      expect(resolveTreasuryRateByKey("2026-01-12")).toMatchObject({
+        effectiveDate: "2026-01-12",
+        annualRateBasisPoints: 356,
+        resolution: "exact",
+      });
+      for (const date of ["2026-01-10", "2026-01-11"]) {
+        expect(resolveTreasuryRateByKey(date)).toMatchObject({
+          effectiveDate: "2026-01-09",
+          annualRateBasisPoints: 352,
+          resolution: "prior",
+        });
+      }
+    });
+
     it("distinguishes prior-day, earliest clamp, and stale-tail resolution", () => {
       expect(resolveSofrRateByKey("2024-07-13")).toMatchObject({
         effectiveDate: "2024-07-12",
@@ -248,12 +268,19 @@ describe("Risk-Free Rate Lookup Utility", () => {
         effectiveDate: "2026-05-08",
         resolution: "exact",
       });
-      expect(resolveSofrRateByKey("2026-07-21")).toMatchObject({
-        effectiveDate: "2026-07-20",
+      const sofrTail = Object.keys(SOFR_RATES).at(-1)!;
+      const treasuryTail = Object.keys(TREASURY_RATES).at(-1)!;
+      const dayAfter = (date: string) => {
+        const next = new Date(`${date}T00:00:00Z`);
+        next.setUTCDate(next.getUTCDate() + 1);
+        return next.toISOString().slice(0, 10);
+      };
+      expect(resolveSofrRateByKey(dayAfter(sofrTail))).toMatchObject({
+        effectiveDate: sofrTail,
         resolution: "stale-after-latest",
       });
-      expect(resolveTreasuryRateByKey("2026-07-21")).toMatchObject({
-        effectiveDate: "2026-07-20",
+      expect(resolveTreasuryRateByKey(dayAfter(treasuryTail))).toMatchObject({
+        effectiveDate: treasuryTail,
         resolution: "stale-after-latest",
       });
     });

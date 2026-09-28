@@ -18,5 +18,7 @@
     "./metrics": "./metrics/index.ts",
     "./types": "./types/index.ts"
   },
-  "dependencies": {}
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
 }

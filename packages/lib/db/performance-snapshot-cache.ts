@@ -10,6 +10,7 @@ import type { Trade } from "../models/trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
 import type { SnapshotChartData } from "../services/performance-snapshot.ts";
 import { promisifyRequest, STORES, withReadTransaction, withWriteTransaction } from "./index.ts";
+import { getEffectiveRateDate } from "../utils/risk-free-rate.ts";
 
 /**
  * Cache entry for performance snapshot
@@ -23,6 +24,7 @@ interface PerformanceSnapshotCache {
   filteredTrades: Trade[];
   filteredDailyLogs: DailyLogEntry[];
   calculatedAt: Date;
+  riskFreeRatesThrough: string;
 }
 
 /**
@@ -64,6 +66,7 @@ export async function storePerformanceSnapshotCache(
     filteredTrades: snapshot.filteredTrades,
     filteredDailyLogs: snapshot.filteredDailyLogs,
     calculatedAt: new Date(),
+    riskFreeRatesThrough: getEffectiveRateDate("DTB3"),
   };
 
   await withWriteTransaction(STORES.CALCULATIONS, async (transaction) => {
@@ -123,6 +126,7 @@ export async function getPerformanceSnapshotCache(
     }
 
     const cache = result as PerformanceSnapshotCache;
+    if (cache.riskFreeRatesThrough !== getEffectiveRateDate("DTB3")) return null;
 
     // Restore Date objects that were serialized
     return {

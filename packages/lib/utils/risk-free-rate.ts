@@ -10,10 +10,45 @@
 
 import { TREASURY_RATES } from "../data/treasury-rates.ts";
 import { SOFR_RATES } from "../data/sofr-rates.ts";
+import { validatePublishedRates } from "./published-rates.ts";
 
-// Cache sorted keys for efficient lookup
-let sortedKeys: string[] | null = null;
-let sortedSofrKeys: string[] | null = null;
+interface ActiveRates {
+  treasury: Readonly<Record<string, number>>;
+  sofr: Readonly<Record<string, number>>;
+  treasuryKeys: string[] | null;
+  sofrKeys: string[] | null;
+}
+
+// MCP dist can inline the library in multiple chunks; one realm must still use one rate source.
+const slot = globalThis as typeof globalThis & { __tradeblocksActiveRates?: ActiveRates };
+const active = (slot.__tradeblocksActiveRates ??= {
+  treasury: TREASURY_RATES,
+  sofr: SOFR_RATES,
+  treasuryKeys: null,
+  sofrKeys: null,
+});
+
+/** Install a validated published superset for both series; invalid input leaves the active rates unchanged. */
+export function setPublishedRates(input: unknown): void {
+  const published = validatePublishedRates(input);
+  active.treasury = published.series.DTB3.rates;
+  active.sofr = published.series.SOFR.rates;
+  active.treasuryKeys = null;
+  active.sofrKeys = null;
+}
+
+/** Restore exactly the bundled series (for offline mode or an invalid remote file). */
+export function clearPublishedRates(): void {
+  active.treasury = TREASURY_RATES;
+  active.sofr = SOFR_RATES;
+  active.treasuryKeys = null;
+  active.sofrKeys = null;
+}
+
+export function getEffectiveRateDate(series: "DTB3" | "SOFR"): string {
+  const keys = series === "DTB3" ? getSortedKeys() : getSortedSofrKeys();
+  return keys[keys.length - 1];
+}
 
 export type RateResolution = "exact" | "prior" | "clamped-earliest" | "stale-after-latest";
 
@@ -29,10 +64,10 @@ export interface ResolvedRateByKey {
  * Get all rate date keys sorted in ascending order
  */
 function getSortedKeys(): string[] {
-  if (!sortedKeys) {
-    sortedKeys = Object.keys(TREASURY_RATES).sort();
+  if (!active.treasuryKeys) {
+    active.treasuryKeys = Object.keys(active.treasury).sort();
   }
-  return sortedKeys;
+  return active.treasuryKeys;
 }
 
 /**
@@ -72,18 +107,18 @@ export function getRiskFreeRate(date: Date): number {
   const dateKey = formatDateToKey(date);
 
   // Direct lookup first (most common case for trading days)
-  if (TREASURY_RATES[dateKey] !== undefined) {
-    return TREASURY_RATES[dateKey];
+  if (active.treasury[dateKey] !== undefined) {
+    return active.treasury[dateKey];
   }
 
   // Date is before our data range - return earliest rate
   if (dateKey < keys[0]) {
-    return TREASURY_RATES[keys[0]];
+    return active.treasury[keys[0]];
   }
 
   // Date is after our data range - return latest rate
   if (dateKey > keys[keys.length - 1]) {
-    return TREASURY_RATES[keys[keys.length - 1]];
+    return active.treasury[keys[keys.length - 1]];
   }
 
   // Date is within range but not found (weekend/holiday)
@@ -101,14 +136,14 @@ export function getRiskFreeRate(date: Date): number {
   }
 
   // Return the rate from the most recent prior trading day
-  return TREASURY_RATES[keys[left]];
+  return active.treasury[keys[left]];
 }
 
 function getSortedSofrKeys(): string[] {
-  if (!sortedSofrKeys) {
-    sortedSofrKeys = Object.keys(SOFR_RATES).sort();
+  if (!active.sofrKeys) {
+    active.sofrKeys = Object.keys(active.sofr).sort();
   }
-  return sortedSofrKeys;
+  return active.sofrKeys;
 }
 
 function resolveRateByKey(
@@ -153,12 +188,12 @@ function resolveRateByKey(
 
 /** Resolve SOFR with explicit prior-day and stale-tail semantics. */
 export function resolveSofrRateByKey(dateKey: string): ResolvedRateByKey {
-  return resolveRateByKey(SOFR_RATES, getSortedSofrKeys(), dateKey);
+  return resolveRateByKey(active.sofr, getSortedSofrKeys(), dateKey);
 }
 
 /** Resolve the 3-month Treasury rate with explicit prior-day and stale-tail semantics. */
 export function resolveTreasuryRateByKey(dateKey: string): ResolvedRateByKey {
-  return resolveRateByKey(TREASURY_RATES, getSortedKeys(), dateKey);
+  return resolveRateByKey(active.treasury, getSortedKeys(), dateKey);
 }
 
 /**

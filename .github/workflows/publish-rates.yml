@@ -1,0 +1,45 @@
+name: Publish risk-free rates
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-rates-data
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Fetch and validate full DTB3 and SOFR history
+        run: node scripts/rates.mjs publish --out "$RUNNER_TEMP/rates.json"
+      - name: Commit rates.json only to rates-data
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$RUNNER_TEMP/rates-data-worktree"
+          if [ -n "$(git ls-remote origin refs/heads/rates-data)" ]; then
+            git fetch origin rates-data
+            git worktree add --detach "$TARGET" origin/rates-data
+            git -C "$TARGET" switch -c rates-data
+          else
+            git worktree add --detach "$TARGET" HEAD
+            git -C "$TARGET" switch --orphan rates-data
+          fi
+          cp "$RUNNER_TEMP/rates.json" "$TARGET/rates.json"
+          git -C "$TARGET" config user.name "github-actions[bot]"
+          git -C "$TARGET" config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C "$TARGET" add rates.json
+          git -C "$TARGET" commit -m "data: publish DTB3 and SOFR rates"
+          git -C "$TARGET" push origin HEAD:refs/heads/rates-data

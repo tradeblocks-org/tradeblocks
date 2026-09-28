@@ -13,7 +13,7 @@
 
 // Database configuration
 export const DB_NAME = "TradeBlocksDB";
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 // Object store names
 export const STORES = {
@@ -25,6 +25,7 @@ export const STORES = {
   WALK_FORWARD: "walkForwardAnalyses",
   STATIC_DATASETS: "staticDatasets",
   STATIC_DATASET_ROWS: "staticDatasetRows",
+  PUBLISHED_RATES: "publishedRates",
 } as const;
 
 // Index names
@@ -185,6 +186,10 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
           ["datasetId", "timestamp"],
           { unique: false },
         );
+      }
+
+      if (!db.objectStoreNames.contains(STORES.PUBLISHED_RATES)) {
+        db.createObjectStore(STORES.PUBLISHED_RATES);
       }
 
       transaction.oncomplete = () => {
@@ -432,6 +437,7 @@ export {
   deletePerformanceSnapshotCache,
   hasPerformanceSnapshotCache,
 } from "./performance-snapshot-cache.ts";
+export { loadBrowserPublishedRates } from "./published-rates-store.ts";
 export type { CachedPerformanceSnapshot } from "./performance-snapshot-cache.ts";
 export {
   storeEnrichedTradesCache,

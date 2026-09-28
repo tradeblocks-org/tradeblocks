@@ -76,6 +76,7 @@ const DIST_SOURCE_PATHS = [
   resolve(REPO_ROOT, "packages/mcp-server/package.json"),
   resolve(REPO_ROOT, "packages/mcp-server/tsconfig.json"),
   resolve(REPO_ROOT, "packages/mcp-server/src"),
+  resolve(REPO_ROOT, "packages/lib"),
   resolve(REPO_ROOT, "packages/mcp-server/tsup.config.ts"),
 ];
 
@@ -851,6 +852,7 @@ async function main() {
     }
   }
   setDataRoot(dataRoot);
+  await mod.loadPublishedRates(baseDir);
 
   console.log(`[refresh] baseDir=${baseDir} dataRoot=${dataRoot}`);
   console.log(

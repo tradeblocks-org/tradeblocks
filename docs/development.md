@@ -259,8 +259,25 @@ Test empty input, single-record input, and missing optional data where applicabl
 - Zustand stores coordinate UI state and cached derived data. IndexedDB store modules own durable
   browser records; load referenced records explicitly when using a block.
 
-### Maintaining Treasury Rates
+### Published risk-free rates
 
-Historical rates live in `packages/lib/data/treasury-rates.ts`. Follow the update instructions in
-that file, add the new `YYYY-MM-DD` entries from the FRED DTB3 series, and run
-`npm test -- tests/unit/risk-free-rate.test.ts`.
+DTB3 and SOFR are public, key-free FRED observations. The daily
+`publish-rates.yml` job fetches both full series, validates their chronological
+numeric histories against the prior publication and bundled observations, and
+commits only `rates.json` to the unprotected `rates-data` branch. It does not
+open a PR or write to `master`. Browser performance statistics and the MCP
+server load that file by default, validate it before use, cache the last valid
+copy (IndexedDB or local market metadata), and fall back to their bundled rates
+when offline. Browser users can disable published rates in Performance Metrics;
+the displayed effective date identifies the active rates. CSV import needs no
+provider key and works without the endpoint. The library's bundled rates remain
+available without network access.
+
+Run `node scripts/rates.mjs check --json` to inspect publication against FRED
+(`current`, `behind`, or `unknown`); `--rates-url URL` overrides the published
+endpoint for local proof. An HTTP or parsing failure is `unknown` (exit 2), not
+`current`. To prepare a reviewed release, run `node scripts/rates.mjs seed` to
+update both bundled tables from the published file. Release workflows run
+`node scripts/rates.mjs seed-check --max-lag-days 10` against that publication,
+not against a live FRED check. Run the rate and market resolver tests after
+seeding. See [Market Data](market-data.md) for the published file contract.

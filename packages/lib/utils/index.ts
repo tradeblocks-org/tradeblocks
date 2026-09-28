@@ -32,6 +32,7 @@ export function truncateStrategyName(strategyName: string, maxLength: number = 4
 export * from "./id.ts";
 export * from "./equity-curve.ts";
 export * from "./risk-free-rate.ts";
+export * from "./published-rates.ts";
 export * from "./time-conversions.ts";
 export * from "./time-formatting.ts";
 export * from "./csv-headers.ts";

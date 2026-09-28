@@ -27,6 +27,7 @@ export {
 
 // Export canonical metric helpers for integration tests.
 export { PortfolioStatsCalculator, getNetPl } from "@tradeblocks/lib";
+export { loadPublishedRates } from "./market/published-rates.ts";
 
 // Export correlation and tail-risk utilities for testing strategy_similarity
 export { calculateCorrelationMatrix, performTailRiskAnalysis } from "@tradeblocks/lib";

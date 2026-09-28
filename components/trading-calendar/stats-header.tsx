@@ -1,6 +1,7 @@
 "use client";
 
 import { MetricCard } from "@/components/metric-card";
+import { usePublishedRates } from "@/components/published-rates-provider";
 import { MetricSection } from "@/components/metric-section";
 import { MultiSelect } from "@/components/multi-select";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ interface StatsHeaderProps {
 }
 
 export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
+  const { through: ratesThrough } = usePublishedRates();
   const {
     performanceStats,
     comparisonStats,
@@ -518,6 +520,7 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
         <MetricCard
           title="Sharpe"
           value={isViewingDay ? "-" : formatRatio(performanceStats?.sharpe)}
+          subtitle={`Risk-free rates through ${ratesThrough}`}
           isPositive={
             !isViewingDay && performanceStats?.sharpe !== null
               ? isPositive(performanceStats?.sharpe ?? 0)
@@ -532,6 +535,7 @@ export function StatsHeader({ onMatchStrategiesClick }: StatsHeaderProps) {
         <MetricCard
           title="Sortino"
           value={isViewingDay ? "-" : formatRatio(performanceStats?.sortino)}
+          subtitle={`Risk-free rates through ${ratesThrough}`}
           isPositive={
             !isViewingDay && performanceStats?.sortino !== null
               ? isPositive(performanceStats?.sortino ?? 0)

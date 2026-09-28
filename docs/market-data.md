@@ -2,6 +2,35 @@
 
 TradeBlocks supports multiple paths for importing market data: CSV files, the Massive.com API (default), and custom data providers. All paths write to the same DuckDB tables and trigger the same enrichment pipeline.
 
+## Published risk-free rates
+
+DTB3 (annual percent for Sharpe and Sortino) and SOFR (annual percent for
+options analytics) are key-free public FRED series, independent of the optional
+market-data providers below. The daily GitHub Action publishes a complete
+`rates.json` to the dedicated, unprotected `rates-data` branch. Its default URL
+is `https://raw.githubusercontent.com/tradeblocks-org/tradeblocks/rates-data/rates.json`.
+Each publication includes `schemaVersion: 1`, `source`, ISO `fetchedAt`, and
+`series.DTB3` / `series.SOFR`, each with `unit: "annual-percent"`, `firstDate`,
+`lastDate`, and a chronologically ordered `rates` date-to-number map. Missing
+FRED days are omitted, not represented with a zero or a forward-looking value.
+Older published values must agree with the bundled history; invalid or
+conflicting publications are rejected rather than silently changing metrics.
+
+The browser requests this file on load by default and caches the last valid
+copy in IndexedDB; the Performance Metrics screen shows the effective rate
+date and allows opt-out, falling back to the bundled rates. The MCP server uses
+the same validation and caches an atomic local copy under `market-meta` in its
+data directory; on network failure it uses that copy or the bundle. No key is
+needed for either path, and CSV-only analysis remains available offline. A
+live published observation updates risk-free lookups and date-based canonical
+rate slices without changing the identities of older unchanged slices.
+
+The publication check is `node scripts/rates.mjs check --json`; status
+`current` exits 0, `behind` exits 1, and `unknown` exits 2. `--rates-url URL`
+supports a local copy. A reviewed release updates both bundled histories with
+`node scripts/rates.mjs seed`, and release automation rejects a bundle more
+than 10 calendar days behind the published file.
+
 ## Data Provider Architecture
 
 TradeBlocks uses a provider abstraction for external API calls. The active provider is selected via the `MARKET_DATA_PROVIDER` environment variable (default: `"massive"`).

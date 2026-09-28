@@ -43,6 +43,7 @@ import { closeConnection, getConnection, getCurrentConnection } from "./db/index
 import { isProcessAlive, isWindows } from "./db/connection.ts";
 import { setDataRoot } from "./db/data-root.ts";
 import { createMarketStores } from "./market/stores/index.ts";
+import { loadPublishedRates } from "./market/published-rates.ts";
 import type { StoreContext, MarketStores } from "./market/stores/index.ts";
 import type { TradeBlocksPlugin, TradeBlocksPluginContext } from "./plugins.ts";
 import { shouldShutdownOnParentChange } from "./parent-watchdog.ts";
@@ -302,6 +303,7 @@ export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = 
   // 2026-04-17 from Phase 3 — see ROADMAP.md). The `void` line below
   // suppresses the unused-variable warning until then.
   // ============================================================================
+  await loadPublishedRates(resolvedDir);
   await getConnection(resolvedDir);
   const parquetMode = process.env.TRADEBLOCKS_PARQUET === "true";
   // `conn` is a getter that resolves the *current* connection on every access.

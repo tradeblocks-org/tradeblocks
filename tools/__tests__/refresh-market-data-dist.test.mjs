@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from "@jest/globals";
-import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { copyFile, mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -59,5 +60,42 @@ describe("market-data tool dist freshness", () => {
     await expect(
       assertFreshDist({ sourcePaths: [f.src], distEntrypoint: f.distEntrypoint }),
     ).resolves.toBeUndefined();
+  });
+  it("refuses a dist older than a lib-only change through the default source list", async () => {
+    const root = await mkdtemp(join(tmpdir(), "market-data-dist-lib-"));
+    tempRoots.push(root);
+    const copiedTool = join(root, "tools", "refresh-market-data.mjs");
+    await mkdir(dirname(copiedTool), { recursive: true });
+    await copyFile(resolve(__dirname, "../refresh-market-data.mjs"), copiedTool);
+    const sourceFiles = [
+      "package.json",
+      "package-lock.json",
+      "tsconfig.json",
+      "packages/mcp-server/package.json",
+      "packages/mcp-server/tsconfig.json",
+      "packages/mcp-server/src/index.ts",
+      "packages/mcp-server/tsup.config.ts",
+    ];
+    for (const file of sourceFiles) {
+      const path = join(root, file);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "source");
+      await utimes(path, earlier, earlier);
+    }
+    const dist = join(root, "packages/mcp-server/dist/test-exports.js");
+    await mkdir(dirname(dist), { recursive: true });
+    await writeFile(dist, "dist");
+    await utimes(dist, later, later);
+    const lib = join(root, "packages/lib/data/treasury-rates.ts");
+    await mkdir(dirname(lib), { recursive: true });
+    await writeFile(lib, "new rates");
+    await utimes(lib, new Date("2026-01-03T00:00:00Z"), new Date("2026-01-03T00:00:00Z"));
+    const code = `import { assertFreshDist } from ${JSON.stringify(pathToFileURL(copiedTool).href)};
+      await assertFreshDist();`;
+    const checked = spawnSync(process.execPath, ["--input-type=module", "-e", code], {
+      encoding: "utf8",
+    });
+    expect(checked.status).toBe(1);
+    expect(checked.stderr).toMatch(/TradeBlocks MCP dist is stale/);
   });
 });

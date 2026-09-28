@@ -45,6 +45,9 @@ jobs:
       - name: Run MCP Server tests
         run: NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=6144' npx jest --config packages/mcp-server/jest.config.js --ci
 
+      - name: Verify bundled rates are within 10 calendar days of published rates
+        run: node scripts/rates.mjs seed-check --max-lag-days 10
+
       - name: Get version
         id: version
         run: echo "version=$(node -p "require('./packages/mcp-server/package.json').version")" >> $GITHUB_OUTPUT

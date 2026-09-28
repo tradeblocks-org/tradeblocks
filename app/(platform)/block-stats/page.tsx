@@ -5,6 +5,7 @@ import { MetricSection } from "@/components/metric-section";
 import { MultiSelect } from "@/components/multi-select";
 import { NoActiveBlock } from "@/components/no-active-block";
 import { StrategyBreakdownTable } from "@/components/strategy-breakdown-table";
+import { usePublishedRates } from "@/components/published-rates-provider";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { SizingModeToggle } from "@/components/sizing-mode-toggle";
@@ -47,6 +48,12 @@ import { DateRange } from "react-day-picker";
 const NORMALIZE_STORAGE_KEY_PREFIX = "block-stats:normalizeTo1Lot:";
 
 export default function BlockStatsPage() {
+  const {
+    through: ratesThrough,
+    revision: ratesRevision,
+    enabled: fetchRates,
+    setEnabled: setFetchRates,
+  } = usePublishedRates();
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
   const [normalizeTo1Lot, setNormalizeTo1Lot] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
@@ -232,7 +239,7 @@ export default function BlockStatsPage() {
     // Use a small delay to avoid closing the popover during selection
     const timeoutId = setTimeout(calculateMetrics, 0);
     return () => clearTimeout(timeoutId);
-  }, [trades, dailyLogs, selectedStrategies, normalizeTo1Lot, dateRange]);
+  }, [trades, dailyLogs, selectedStrategies, normalizeTo1Lot, dateRange, ratesRevision]);
 
   // Helper functions
   const getDateRange = () => {
@@ -800,6 +807,16 @@ export default function BlockStatsPage() {
         />
       </MetricSection>
 
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={fetchRates}
+          onChange={(event) => setFetchRates(event.target.checked)}
+          className="accent-primary"
+        />
+        Fetch published risk-free rates
+      </label>
+
       {/* Risk & Drawdown */}
       <MetricSection
         title="Risk & Drawdown"
@@ -847,6 +864,7 @@ export default function BlockStatsPage() {
         <MetricCard
           title="Sharpe Ratio"
           value={portfolioStats?.sharpeRatio || 0}
+          subtitle={`Risk-free rates through ${ratesThrough}`}
           format="ratio"
           isPositive={(portfolioStats?.sharpeRatio || 0) > 0}
           tooltip={{
@@ -859,6 +877,7 @@ export default function BlockStatsPage() {
         <MetricCard
           title="Sortino Ratio"
           value={portfolioStats?.sortinoRatio || 0}
+          subtitle={`Risk-free rates through ${ratesThrough}`}
           format="ratio"
           isPositive={(portfolioStats?.sortinoRatio || 0) > 0}
           tooltip={{

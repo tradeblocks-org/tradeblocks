@@ -3,6 +3,13 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  clearPublishedRates,
+  getEffectiveRateDate,
+  setPublishedRates,
+  TREASURY_RATES,
+} from "@tradeblocks/lib";
+import { SOFR_RATES } from "../../../lib/data/sofr-rates.ts";
+import {
   FilePartitionCommitStore,
   CANONICAL_REFRESH_COMPLETION_KIND,
   CANONICAL_REFRESH_COMPLETION_VERSION,
@@ -13,6 +20,7 @@ import {
   proveCanonicalMarketDataPrefix,
   publishCanonicalMarketResolverRegistry,
   publishCanonicalRateSlice,
+  isXnysSessionDate,
   publishRefreshCompletionAuthority,
   publishInputClosure,
   verifyCanonicalRefreshCompletion,
@@ -40,6 +48,7 @@ describe("producer-owned canonical market resolver", () => {
   });
 
   afterEach(() => {
+    clearPublishedRates();
     rmSync(dataRoot, { recursive: true, force: true });
   });
 
@@ -353,7 +362,12 @@ describe("producer-owned canonical market resolver", () => {
 
   it("refuses to certify a session beyond the bundled rate horizon", async () => {
     const registry = await publishCanonicalMarketResolverRegistry(partitions.objects);
-    const session = "2026-07-21";
+    const tail = getEffectiveRateDate("SOFR");
+    const next = new Date(`${tail}T00:00:00Z`);
+    do {
+      next.setUTCDate(next.getUTCDate() + 1);
+    } while (!isXnysSessionDate(next.toISOString().slice(0, 10)));
+    const session = next.toISOString().slice(0, 10);
     const closure = await publishInputClosure(partitions.objects, {
       registry: registry.address,
       observations: [
@@ -380,7 +394,52 @@ describe("producer-owned canonical market resolver", () => {
         completeThrough: session,
         refreshCompletion: completion.address,
       }),
-    ).rejects.toThrow(/sofr_rates input is stale after 2026-07-20/);
+    ).rejects.toThrow(new RegExp(`sofr_rates input is stale after ${tail}`));
+  });
+
+  it("publishes a September 2026 rate slice from a validated overlay while preserving historical identities", async () => {
+    const session = "2026-09-25";
+    const historical = await publishCanonicalRateSlice(
+      partitions.objects,
+      "treasury_rates",
+      "2026-05-07",
+    );
+    await expect(
+      publishCanonicalRateSlice(partitions.objects, "sofr_rates", session),
+    ).rejects.toThrow(/stale after/);
+    const published = {
+      schemaVersion: 1,
+      source: "Federal Reserve Economic Data (FRED), Federal Reserve Bank of St. Louis",
+      fetchedAt: "2026-09-27T06:00:00Z",
+      series: {
+        DTB3: {
+          unit: "annual-percent",
+          firstDate: Object.keys(TREASURY_RATES)[0],
+          lastDate: Object.keys(TREASURY_RATES).at(-1),
+          rates: { ...TREASURY_RATES },
+        },
+        SOFR: {
+          unit: "annual-percent",
+          firstDate: Object.keys(SOFR_RATES)[0],
+          lastDate: session,
+          rates: { ...SOFR_RATES, [session]: 3.88 },
+        },
+      },
+    };
+    setPublishedRates(published);
+    const current = await publishCanonicalRateSlice(partitions.objects, "sofr_rates", session);
+    expect(current.value).toMatchObject({
+      requestedDate: session,
+      effectiveDate: session,
+      annualRateBasisPoints: 388,
+      resolution: "exact",
+    });
+    const sameHistorical = await publishCanonicalRateSlice(
+      partitions.objects,
+      "treasury_rates",
+      "2026-05-07",
+    );
+    expect(sameHistorical.address).toBe(historical.address);
   });
 
   it("slices blackout semantics by cutoff and detects a historical content change", async () => {

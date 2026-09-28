@@ -1,4 +1,5 @@
 "use client";
+import { usePublishedRates } from "@/components/published-rates-provider";
 
 import React from "react";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
@@ -77,6 +78,7 @@ function MetricCard({
 }
 
 export function PerformanceMetrics({ className }: PerformanceMetricsProps) {
+  const { through: ratesThrough } = usePublishedRates();
   const { data } = usePerformanceStore();
 
   if (!data?.portfolioStats) {
@@ -172,7 +174,7 @@ export function PerformanceMetrics({ className }: PerformanceMetricsProps) {
                   ? "neutral"
                   : "negative"
             }
-            subtitle="Risk-adjusted return"
+            subtitle={`Risk-free rates through ${ratesThrough}`}
           />
 
           <MetricCard

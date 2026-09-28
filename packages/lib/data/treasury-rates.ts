@@ -10,22 +10,12 @@
  *
  * @see https://fred.stlouisfed.org/series/DTB3
  *
- * ## How to Update (for Claude or developers)
+ * ## How to Update
  *
- * 1. Download CSV from FRED:
- *    https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3&cosd=YYYY-MM-DD&coed=YYYY-MM-DD
- *    Replace YYYY-MM-DD with your date range (cosd = start, coed = end)
- *
- * 2. CSV format is:
- *    DATE,DTB3
- *    2026-01-02,3.54
- *    2026-01-03,3.54
- *    ...
- *
- * 3. Add entries to this file in the format:
- *    "YYYY-MM-DD": X.XX,
- *
- * 4. Run tests to verify: npm test -- tests/unit/risk-free-rate.test.ts
+ * Daily DTB3 and SOFR observations are published to the rates-data branch.
+ * For a reviewed release, run `node scripts/rates.mjs seed` to refresh both
+ * bundled tables from that validated publication. The release workflow checks
+ * bundle freshness with `node scripts/rates.mjs seed-check --max-lag-days 10`.
  *
  * Note: Rates are only available for trading days (weekdays, excluding market holidays).
  * The lookup utility handles weekends/holidays by finding the most recent prior trading day.
@@ -3283,12 +3273,12 @@ export const TREASURY_RATES: Record<string, number> = {
   "2025-12-31": 3.57,
   // 2026
   "2026-01-02": 3.54,
-  "2026-01-03": 3.54,
+  "2026-01-05": 3.54,
   "2026-01-06": 3.53,
   "2026-01-07": 3.52,
   "2026-01-08": 3.52,
   "2026-01-09": 3.52,
-  "2026-01-10": 3.56,
+  "2026-01-12": 3.56,
   "2026-01-13": 3.57,
   "2026-01-14": 3.57,
   "2026-01-15": 3.57,
@@ -3419,4 +3409,51 @@ export const TREASURY_RATES: Record<string, number> = {
   "2026-07-16": 3.7,
   "2026-07-17": 3.71,
   "2026-07-20": 3.73,
+  "2026-07-21": 3.74,
+  "2026-07-22": 3.75,
+  "2026-07-23": 3.81,
+  "2026-07-24": 3.81,
+  "2026-07-27": 3.82,
+  "2026-07-28": 3.77,
+  "2026-07-29": 3.7,
+  "2026-07-30": 3.69,
+  "2026-07-31": 3.69,
+  "2026-08-03": 3.75,
+  "2026-08-04": 3.74,
+  "2026-08-05": 3.74,
+  "2026-08-06": 3.74,
+  "2026-08-07": 3.72,
+  "2026-08-10": 3.74,
+  "2026-08-11": 3.74,
+  "2026-08-12": 3.72,
+  "2026-08-13": 3.71,
+  "2026-08-14": 3.71,
+  "2026-08-17": 3.72,
+  "2026-08-18": 3.71,
+  "2026-08-19": 3.71,
+  "2026-08-20": 3.71,
+  "2026-08-21": 3.72,
+  "2026-08-24": 3.72,
+  "2026-08-25": 3.71,
+  "2026-08-26": 3.7,
+  "2026-08-27": 3.69,
+  "2026-08-28": 3.74,
+  "2026-08-31": 3.78,
+  "2026-09-01": 3.78,
+  "2026-09-02": 3.78,
+  "2026-09-03": 3.75,
+  "2026-09-04": 3.77,
+  "2026-09-08": 3.8,
+  "2026-09-09": 3.81,
+  "2026-09-10": 3.86,
+  "2026-09-11": 3.92,
+  "2026-09-14": 3.97,
+  "2026-09-15": 3.97,
+  "2026-09-16": 3.99,
+  "2026-09-17": 3.97,
+  "2026-09-18": 3.99,
+  "2026-09-21": 4.02,
+  "2026-09-22": 4.01,
+  "2026-09-23": 4.04,
+  "2026-09-24": 4.08,
 };
