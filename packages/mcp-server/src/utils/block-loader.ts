@@ -936,11 +936,11 @@ function calendarDateRange(dates: Date[]): { start: string; end: string } {
 /**
  * Import a CSV file into the blocks directory
  *
- * Requires local filesystem access. The MCP server must be running locally
- * (via npx tradeblocks-mcp) to access files.
+ * The source path must be readable by this server: locally in stdio mode,
+ * or inside the server's mounted data directory in Docker/HTTP mode.
  *
  * @param baseDir - Base directory for blocks
- * @param options - Import options: csvPath, blockName, csvType
+ * @param options - Import options, including csvPath, blockName, csvType, plBasis and dailyLogPath
  * @returns Import result with block info
  */
 export async function importCsv(

@@ -713,7 +713,7 @@ GROUP BY block_id
 ORDER BY block_id`,
     },
     {
-      description: "Filter and paginate trades (replaces get_trades)",
+      description: "Filter and paginate trades",
       sql: `SELECT date_opened, time_opened, strategy, legs, pl, num_contracts
 FROM trades.trade_data
 WHERE block_id = 'my-block'

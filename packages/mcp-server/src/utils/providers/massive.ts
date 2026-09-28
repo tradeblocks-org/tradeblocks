@@ -505,9 +505,8 @@ export class MassiveProvider implements MarketDataProvider {
       }
     }
 
-    // Quote enrichment (bid/ask backfill + synthetic gap bars) is handled
-    // out-of-band by the pipeline-side `enrich_quotes` MCP tool /
-    // quote-minute-cache; reads here never trigger provider writes.
+    // Quote enrichment (bid/ask backfill + synthetic gap bars) happens in the
+    // quote-minute cache pipeline; reads here never trigger provider writes.
 
     return allRows;
   }

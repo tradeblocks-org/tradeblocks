@@ -5,10 +5,8 @@
  * Exposes portfolio statistics, strategy comparisons, and trade data
  * to Claude Desktop, Cowork, and other MCP clients.
  *
- * CLI Commands:
- *   install-skills    Install TradeBlocks skills to AI platform
- *   uninstall-skills  Remove TradeBlocks skills from AI platform
- *   check-skills      Check skill installation status
+ * CLI Commands: install-skills, uninstall-skills, and check-skills print
+ * the tradeblocks-skills plugin installation instructions and exit.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -103,19 +101,16 @@ Environment:
   TRADEBLOCKS_DATA_ROOT   Root directory for shared data (overrides default, overridden by --data-root)
   MARKET_DB_PATH      Path to market.duckdb (overrides default, overridden by --market-db)
 
-Commands:
-  install-skills    Install TradeBlocks skills to AI platform
-  uninstall-skills  Remove TradeBlocks skills from AI platform
-  check-skills      Check skill installation status
-Skill Command Options:
-  --platform <name>  Target platform: claude, codex, gemini (default: claude)
-  --force            Reinstall even if skills exist (install only)
+Commands (print tradeblocks-skills plugin installation instructions and exit):
+  install-skills    Show plugin installation instructions
+  uninstall-skills  Show plugin installation instructions
+  check-skills      Show plugin installation instructions
 
 Examples:
   tradeblocks-mcp ~/backtests
   tradeblocks-mcp --http ~/backtests
   tradeblocks-mcp --http --port 8080 ~/Trading/backtests
-  tradeblocks-mcp install-skills --platform codex
+  tradeblocks-mcp install-skills
 `);
 }
 

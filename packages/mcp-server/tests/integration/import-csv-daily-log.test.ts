@@ -280,7 +280,7 @@ describe("import_csv paired daily log", () => {
         expect(result.content[0].text).toBe(
           `Imported ${item.count} ${csvType} records to block "${item.type}"`,
         );
-        expect(result.structuredContent).toEqual({
+        expect(result.structuredContent).toMatchObject({
           blockId: item.type,
           name: item.type,
           csvType,
@@ -290,11 +290,6 @@ describe("import_csv paired daily log", () => {
           dateRange: { start: item.start, end: item.end },
           strategies: item.strategies,
           blockPath,
-          nextSteps: [
-            `Use get_block_details("${item.type}") to see full statistics`,
-            `Use get_trades("${item.type}") to examine individual trades`,
-            `Use run_analysis("${item.type}", "monte_carlo") for risk analysis`,
-          ],
         });
         expect(await fs.readdir(blockPath)).toEqual([item.file]);
         expect(await fs.readFile(path.join(blockPath, item.file), "utf-8")).toBe(item.stored);
@@ -331,6 +326,7 @@ describe.each(["UTC", "Pacific/Kiritimati", "America/Los_Angeles"])(
       });
       try {
         await client.connect(transport);
+        const registeredTools = new Set((await client.listTools()).tools.map((tool) => tool.name));
         for (const [csvType, contents] of Object.entries(csvFiles)) {
           const csvPath = await source(root, `${csvType}.csv`, contents);
           const result = await client.callTool({
@@ -342,6 +338,13 @@ describe.each(["UTC", "Pacific/Kiritimati", "America/Los_Angeles"])(
             csvType,
             { start: "2023-12-29", end: "2024-01-05" },
           ]);
+          const nextSteps = result.structuredContent?.nextSteps;
+          expect(Array.isArray(nextSteps)).toBe(true);
+          for (const step of nextSteps as string[]) {
+            const toolName = /^Use ([a-z_]+)(?:\s|\()/.exec(step)?.[1];
+            expect(toolName).toBeDefined();
+            expect(registeredTools.has(toolName!)).toBe(true);
+          }
         }
       } finally {
         await client.close();

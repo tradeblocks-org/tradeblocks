@@ -325,19 +325,22 @@ backtests/
 **tradelog.csv** - Trade records with these key columns:
 
 - Date Opened, Time Opened, Date Closed, Time Closed
-- P/L (gross profit/loss)
+- P/L (Option Omega exports already include fees; `import_csv` defaults to
+  `plBasis: "net_includes_fees"`. Use `"gross_before_fees"` only if fees still need deducting)
 - Strategy, Legs (or Symbol)
-- No. of Contracts, Premium (optional)
+- No. of Contracts, Premium (optional; decimal `2.50` is dollars, integer `250` is cents)
 
 **dailylog.csv** - Daily portfolio values:
 
 - Date
-- Net Liquidity (or Portfolio Value, Equity)
+- Net Liquidity
 - P/L, Drawdown % (optional)
 
 **Flexible Detection**: Files don't need standard names. The server detects CSV types by examining column headers (ISS-006).
 
 ## Available Tools
+
+These tables show common tools; [MCP Tools Reference](../../docs/mcp-tools.md) lists every registered tool.
 
 ### Core Tools
 
@@ -406,17 +409,20 @@ backtests/
 
 ### Import Tools
 
-| Tool         | Description                                                                     |
-| ------------ | ------------------------------------------------------------------------------- |
-| `import_csv` | Import a CSV file as a new block _(CLI only - not available in Claude Desktop)_ |
+| Tool         | Description                                              |
+| ------------ | -------------------------------------------------------- |
+| `import_csv` | Import a CSV file as a block from a server-readable path |
 
 `import_csv` accepts `csvPath`, `blockName`, optional `csvType` (default `tradelog`),
-and optional `dailyLogPath` for a daily log paired with a trade log. Both paths
-support absolute paths, `~`, or filename-only search using `searchPaths` (default:
-Downloads, Desktop, Documents). The pair creates one block with a stamped
-`tradelog.csv` and verbatim `dailylog.csv`. A bad daily log rejects the whole
-import without creating a block. The usual result fields describe the primary
-CSV; its `dateRange` holds the first and last calendar dates (`YYYY-MM-DD`).
+optional `dailyLogPath` for a paired daily log, and `plBasis` (default
+`net_includes_fees` for Option Omega exports; `gross_before_fees` when fee columns
+still need deducting). Both paths must be readable by the server: local for stdio,
+or inside its mounted data directory for Docker/HTTP. Paths can be absolute, use
+`~`, or use filename-only search via `searchPaths` (default: Downloads, Desktop, Documents).
+The pair creates one block with a stamped `tradelog.csv` and verbatim `dailylog.csv`.
+A bad daily log rejects the whole import without creating a block. The usual
+result fields describe the primary CSV; its `dateRange` holds the first and last
+calendar dates (`YYYY-MM-DD`).
 Paired results also include `dailyLog.recordCount` and `dailyLog.dateRange`
 in the same calendar-date form. Unfiltered `get_statistics` uses daily-log drawdown;
 strategy-filtered statistics use the trade log instead.

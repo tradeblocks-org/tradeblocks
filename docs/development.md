@@ -119,18 +119,22 @@ elsewhere in the computation remain instants.
 
 ## CSV Schema Reference
 
-### Trade Logs (required)
+### Trade Logs
 
-- Expected headers match OptionOmega exports (`packages/lib/models/trade.ts`). Key columns:
+- MCP `import_csv` requires `Date Opened` and `P/L` (`packages/mcp-server/src/utils/block-loader.ts`).
+  Other Option Omega headers provide additional trade context (`packages/lib/models/trade.ts`):
   - `Date Opened`, `Time Opened`, `Legs`, `P/L`, `Strategy`
-  - Option Omega `P/L` is already net of its commission and fee columns. CSV ingestion stamps `plBasis: "net_includes_fees"` so fees remain available for attribution without being deducted twice.
-  - `Opening Commissions + Fees`, `Closing Commissions + Fees`
+  - Option Omega `P/L` already includes commission and fees. MCP `import_csv` defaults
+    `plBasis` to `net_includes_fees`; use `gross_before_fees` only when the fee columns
+    still need deducting. The web CSV importer stamps OO imports as `net_includes_fees`.
+  - `Opening Commissions + Fees`, `Closing Commissions + Fees` (required for gross-before-fees imports)
+  - `Premium` decimal values such as `2.50` are dollars; integer values are interpreted as cents.
   - Ratio columns such as `Opening Short/Long Ratio` are optional but supported.
-- Aliases in `TRADE_COLUMN_ALIASES` normalize variants (e.g., `Opening comms & fees`).
 
 ### Daily Logs (optional)
 
-- `Date`, `Net Liquidity`, `P/L`, `P/L %`, `Drawdown %` are required (`packages/lib/models/daily-log.ts`).
+- MCP `import_csv` requires `Date` and `Net Liquidity` for a paired daily log
+  (`packages/mcp-server/src/utils/block-loader.ts`); `P/L`, `P/L %`, and `Drawdown %` are optional.
 - When absent, drawdown calculations fall back to trade-based equity curves.
 
 ## Testing

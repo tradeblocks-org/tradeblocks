@@ -2,7 +2,7 @@
  * Import Tools
  *
  * MCP tools for importing CSV files into the blocks directory.
- * Designed for local filesystem access (via npx tradeblocks-mcp).
+ * Paths must be readable by this server (locally in stdio, or mounted in Docker/HTTP).
  */
 
 import { z } from "zod";
@@ -77,10 +77,10 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
     "import_csv",
     {
       description:
-        "Import a CSV file from the local filesystem into the blocks directory. " +
+        "Import a CSV file from a path readable by this server into the blocks directory. " +
         "Creates a new block that can be analyzed with other TradeBlocks tools. " +
-        "Requires local filesystem access (run via npx tradeblocks-mcp). " +
-        "If only a filename is provided (not full path), searches common directories (Downloads, Desktop, Documents).",
+        "For stdio (npx tradeblocks-mcp), use a local filesystem path; for Docker/HTTP, use a path inside the server's mounted data directory. " +
+        "If only a filename is provided, searches common directories (Downloads, Desktop, Documents).",
       inputSchema: z.object({
         csvPath: z
           .string()
@@ -163,9 +163,9 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           blockPath: result.blockPath,
           ...(result.dailyLog ? { dailyLog: result.dailyLog } : {}),
           nextSteps: [
-            `Use get_block_details("${result.blockId}") to see full statistics`,
-            `Use get_trades("${result.blockId}") to examine individual trades`,
-            `Use run_analysis("${result.blockId}", "monte_carlo") for risk analysis`,
+            `Use get_block_info("${result.blockId}") to inspect the imported block`,
+            `Use run_sql to query trades.trade_data for block_id "${result.blockId}" and examine individual trades`,
+            `Use run_monte_carlo with blockId "${result.blockId}" for risk analysis`,
           ],
         };
 

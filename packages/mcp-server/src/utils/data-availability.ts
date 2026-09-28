@@ -90,9 +90,8 @@ export async function checkDataAvailability(
   if (!hasContextData) {
     warnings.push(
       `No VIX enriched data found. ` +
-        `Import VIX-family data with import_from_api (target_table: "date_context") ` +
-        `or import_market_csv for VIX/VIX9D/VIX3M daily rows, ` +
-        `then run enrich_market_data for IVR/IVP and date_context enrichment.`,
+        `Fetch VIX/VIX9D/VIX3M daily bars with fetch_bars or import them with import_market_csv, ` +
+        `then run enrich_market_data and compute_vix_context for VIX context.`,
     );
   }
 

@@ -9,7 +9,7 @@ TradeBlocks MCP server tools organized by category.
 | `list_blocks`             | List all portfolio blocks with summary statistics               |
 | `get_block_info`          | Detailed info for a specific block                              |
 | `get_statistics`          | Portfolio performance metrics (Sharpe, Sortino, drawdown, etc.) |
-| `get_trades`              | Individual trade records with optional filtering                |
+| `run_sql`                 | Query individual trades in `trades.trade_data`                  |
 | `get_strategy_comparison` | Compare strategies within a single block                        |
 | `compare_blocks`          | Side-by-side comparison across multiple blocks                  |
 | `block_diff`              | Diff statistics between two blocks                              |
@@ -38,6 +38,12 @@ TradeBlocks MCP server tools organized by category.
 
 All exit tools use cached bars from `market.intraday` — no Massive.com subscription required if bars are pre-loaded.
 
+## Greek Attribution
+
+| Tool                     | Description                                      |
+| ------------------------ | ------------------------------------------------ |
+| `get_greeks_attribution` | Decompose a block's P/L into Greek contributions |
+
 ## Live Options
 
 | Tool                  | Description                                                                                                                                            |
@@ -60,6 +66,15 @@ All exit tools use cached bars from `market.intraday` — no Massive.com subscri
 | `purge_market_table`   | Delete all data from a market table for re-import                                                  |
 
 See [Market Data Guide](market-data.md) for import examples, ticker formats, and enrichment details.
+
+## Underlying Registry
+
+| Tool                    | Description                                    |
+| ----------------------- | ---------------------------------------------- |
+| `register_underlying`   | Add or update an underlying-to-roots mapping   |
+| `unregister_underlying` | Remove a user-added underlying mapping         |
+| `list_underlyings`      | List bundled and user-added ticker mappings    |
+| `resolve_root`          | Explain how a symbol resolves to a ticker root |
 
 ## Market Analysis
 
@@ -93,17 +108,18 @@ See [Market Data Guide](market-data.md) for import examples, ticker formats, and
 
 ## Advanced Analysis
 
-| Tool                        | Description                                                  |
-| --------------------------- | ------------------------------------------------------------ |
-| `run_monte_carlo`           | Monte Carlo simulation with confidence intervals             |
-| `run_walk_forward`          | Walk-forward analysis to detect overfitting                  |
-| `get_correlation_matrix`    | Strategy correlation matrix (Kendall, Spearman, Pearson)     |
-| `get_tail_risk`             | Tail dependence and copula-based risk analysis               |
-| `get_position_sizing`       | Kelly criterion position sizing guidance                     |
-| `regime_allocation_advisor` | Regime-based allocation recommendations                      |
-| `stress_test`               | Stress test portfolio against historical scenarios           |
-| `marginal_contribution`     | Marginal contribution of a strategy to portfolio risk/return |
-| `what_if_scaling`           | What-if analysis for position sizing changes                 |
+| Tool                          | Description                                                  |
+| ----------------------------- | ------------------------------------------------------------ |
+| `run_monte_carlo`             | Monte Carlo simulation with confidence intervals             |
+| `run_walk_forward`            | Walk-forward analysis to detect overfitting                  |
+| `get_correlation_matrix`      | Strategy correlation matrix (Kendall, Spearman, Pearson)     |
+| `get_tail_risk`               | Tail dependence and copula-based risk analysis               |
+| `get_position_sizing`         | Kelly criterion position sizing guidance                     |
+| `regime_allocation_advisor`   | Regime-based allocation recommendations                      |
+| `stress_test`                 | Stress test portfolio against historical scenarios           |
+| `marginal_contribution`       | Marginal contribution of a strategy to portfolio risk/return |
+| `what_if_scaling`             | What-if analysis for position sizing changes                 |
+| `paired_bootstrap_comparison` | Paired bootstrap intervals for two strategy runs             |
 
 ## Edge Decay
 
@@ -153,15 +169,20 @@ these truncated windows as well as any windows skipped for insufficient trades.
 | `import_csv`        | Import a CSV as a new block; optionally pair trade + daily logs |
 | `get_backtest_help` | Help with backtest data formats and troubleshooting             |
 
-`import_csv` accepts `csvPath`, `blockName`, and optional `csvType` (`tradelog` by default).
-For a trade log, `dailyLogPath` optionally supplies a daily-log CSV in the same new block.
-Both paths accept absolute paths, `~`, or filename-only lookup in `searchPaths`
-(default: Downloads, Desktop, Documents). Invalid daily logs refuse the entire
-import without creating a block. The result's `recordCount` and `dateRange`
-describe the primary CSV; `dateRange` holds its first and last calendar dates
-(`YYYY-MM-DD`, or null when no row converts). Paired imports additionally return
-`dailyLog.recordCount` and `dailyLog.dateRange` in the same calendar-date form. Unfiltered `get_statistics` uses the daily-log portfolio
-drawdown; strategy-filtered statistics remain trade-based.
+`import_csv` accepts `csvPath`, `blockName`, optional `csvType` (`tradelog` by
+default), optional `dailyLogPath` for a paired daily log, and `plBasis`
+(`net_includes_fees` by default for Option Omega exports; `gross_before_fees`
+when P/L has not yet deducted commissions and fees). Both paths must be
+readable by the server: local paths for stdio, or paths inside the server's
+mounted data directory for Docker/HTTP. Paths accept absolute values, `~`,
+or filename-only lookup in `searchPaths` (default: Downloads, Desktop, Documents).
+Paired daily logs require `Date` and `Net Liquidity`; `P/L` and `Drawdown %` are optional.
+Invalid daily logs refuse the entire import without creating a block. The
+result's `recordCount` and `dateRange` describe the primary CSV. `dateRange`
+holds its first and last calendar dates (`YYYY-MM-DD`, or null when no row
+converts). Paired imports additionally return `dailyLog.recordCount` and
+`dailyLog.dateRange` in the same calendar-date form. Unfiltered `get_statistics`
+uses the daily-log portfolio drawdown; strategy-filtered statistics remain trade-based.
 
 ---
 

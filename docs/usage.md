@@ -49,6 +49,42 @@ For environment variables and Massive.com API key setup, see [Getting Started](g
 
 ---
 
+## Bring in an Option Omega Backtest
+
+Install and configure both the TradeBlocks MCP server and Option Omega's MCP server; Option Omega runs
+the backtest, while TradeBlocks analyzes imported results. TradeBlocks does not read OO backtests
+directly on the server.
+
+In Claude Code, install the [tradeblocks-skills plugin](https://github.com/tradeblocks-org/tradeblocks-skills):
+
+```text
+/plugin marketplace add tradeblocks-org/tradeblocks-skills
+/plugin install tradeblocks@tradeblocks-skills
+```
+
+Use `/tradeblocks:oo-capture` to capture a saved backtest or run from the OO MCP server,
+verify its complete trade log and, when available, marked daily equity curve, then import
+the verified CSVs into a TradeBlocks block. The registered TradeBlocks prompt
+`bring-in-oo-backtest` can guide this journey; it does not call OO on the server.
+
+In other MCP clients, export a trade-log CSV from OO, and optionally its daily-log CSV,
+then call `import_csv` on the TradeBlocks server:
+
+```text
+import_csv { "csvPath": "/data/tradelog.csv", "blockName": "My OO Backtest",
+             "dailyLogPath": "/data/dailylog.csv", "plBasis": "net_includes_fees" }
+```
+
+Omit `dailyLogPath` if there is no daily log. OO trade P/L already includes fees, so
+`net_includes_fees` is the default; use `gross_before_fees` only for CSVs whose P/L
+has not yet deducted commissions and fees. The CSV paths must be readable by the
+TradeBlocks server: local filesystem paths for stdio, or paths inside its mounted
+data directory for Docker/HTTP. Verify the block with `get_block_info` and
+`get_statistics`; keep OO's marked-account headline distinct from trade-realized
+statistics when no marked daily curve was imported.
+
+---
+
 ## Common Workflows
 
 ### Health Check a Strategy
@@ -155,25 +191,24 @@ GROUP BY prev_Vol_Regime ORDER BY prev_Vol_Regime
 
 Required columns:
 
-- Date Opened, Time Opened
-- Date Closed, Time Closed
-- P/L (gross profit/loss)
-- Strategy name
-- Symbol (or Legs)
+- Date Opened
+- P/L (Option Omega exports are already net of fees; `import_csv` defaults to
+  `plBasis: "net_includes_fees"`. Use `"gross_before_fees"` only if fees still need deducting)
 
 Optional columns:
 
+- Time Opened, Date Closed, Time Closed
+- Strategy, Symbol (or Legs)
 - No. of Contracts
-- Premium
-- Max Profit, Max Loss (for MFE/MAE analysis)
-- Opening/Closing Commissions + Fees
+- Premium (decimal dollars such as `2.50`; integer values are interpreted as cents)
+- Opening/Closing Commissions + Fees (both required for `gross_before_fees`)
 
 Example:
 
 ```csv
 Date Opened,Time Opened,Date Closed,Time Closed,P/L,Strategy,Legs,No. of Contracts,Premium
-2024-01-02,09:35:00,2024-01-02,15:30:00,200,Iron Condor,SPX 4800P/4750P,1,250
-2024-01-03,09:35:00,2024-01-03,15:45:00,250,Iron Condor,SPX 4820P/4770P,1,275
+2024-01-02,09:35:00,2024-01-02,15:30:00,200,Iron Condor,SPX 4800P/4750P,1,2.50
+2024-01-03,09:35:00,2024-01-03,15:45:00,250,Iron Condor,SPX 4820P/4770P,1,2.75
 ```
 
 ### Daily Log (dailylog.csv)
@@ -181,7 +216,7 @@ Date Opened,Time Opened,Date Closed,Time Closed,P/L,Strategy,Legs,No. of Contrac
 Required columns:
 
 - Date
-- Net Liquidity (or "Portfolio Value", "Value", "Equity")
+- Net Liquidity
 
 Optional columns:
 
@@ -202,10 +237,10 @@ Date,Net Liquidity,P/L,Drawdown %
 
 For backtest vs actual comparison. Required columns:
 
-- Date Opened
-- Strategy
-- P/L
-- No. of Contracts
+- Date Opened (or `date_opened`)
+- P/L (or `pl`)
+
+Strategy and No. of Contracts are optional for the OO reporting-log format.
 
 Example:
 
@@ -240,8 +275,8 @@ The date range or strategy filter may be too restrictive. Try without filters fi
 
 Ensure your CSV has the expected columns:
 
-- Trade log needs: P/L, Date Opened, Date Closed
-- Daily log needs: Date, Net Liquidity (or Portfolio Value)
+- Trade log needs: P/L, Date Opened
+- Daily log needs: Date, Net Liquidity
 
 ---
 
