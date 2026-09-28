@@ -39,6 +39,35 @@ async function findFile(filename: string, searchPaths: string[]): Promise<string
   return null;
 }
 
+async function resolveCsvPath(csvPath: string, searchPaths?: string[]): Promise<string> {
+  let resolvedPath = csvPath;
+  if (resolvedPath.startsWith("~")) {
+    resolvedPath = path.join(os.homedir(), resolvedPath.slice(1));
+  }
+  const isFilenameOnly = !resolvedPath.includes(path.sep) && !resolvedPath.includes("/");
+  if (isFilenameOnly) {
+    const dirsToSearch = searchPaths || DEFAULT_SEARCH_PATHS;
+    const foundPath = await findFile(resolvedPath, dirsToSearch);
+    if (!foundPath) {
+      const searchedDirs = dirsToSearch.join(", ");
+      throw new Error(
+        `File "${resolvedPath}" not found. Searched: ${searchedDirs}. ` +
+          `Please provide the full path to the file, or move it to one of these directories.`,
+      );
+    }
+    resolvedPath = foundPath;
+  }
+  try {
+    await fs.access(resolvedPath);
+  } catch {
+    throw new Error(
+      `File not found: ${resolvedPath}. ` +
+        `Please check the path is correct. If the file is in Downloads, try: ~/Downloads/${path.basename(csvPath)}`,
+    );
+  }
+  return resolvedPath;
+}
+
 /**
  * Register import-related MCP tools
  */
@@ -59,6 +88,12 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
             "Path to the CSV file. Can be: (1) absolute path like '/Users/me/data.csv', " +
               "(2) path with ~ like '~/Downloads/data.csv', or (3) just filename like 'data.csv' " +
               "(will search Downloads, Desktop, Documents)",
+          ),
+        dailyLogPath: z
+          .string()
+          .optional()
+          .describe(
+            "Optional daily log CSV path to import with a trade log. Supports absolute paths, ~, and filename search in searchPaths or the default directories.",
           ),
         blockName: z
           .string()
@@ -88,52 +123,32 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           ),
       }),
     },
-    async ({ csvPath, blockName, csvType, plBasis, searchPaths }) => {
+    async ({ csvPath, dailyLogPath, blockName, csvType, plBasis, searchPaths }) => {
       try {
-        let resolvedPath = csvPath;
-
-        // Expand ~ to home directory
-        if (resolvedPath.startsWith("~")) {
-          resolvedPath = path.join(os.homedir(), resolvedPath.slice(1));
-        }
-
-        // Check if it's just a filename (no directory separators)
-        const isFilenameOnly = !resolvedPath.includes(path.sep) && !resolvedPath.includes("/");
-
-        if (isFilenameOnly) {
-          // Search for the file in common directories
-          const dirsToSearch = searchPaths || DEFAULT_SEARCH_PATHS;
-          const foundPath = await findFile(resolvedPath, dirsToSearch);
-
-          if (!foundPath) {
-            const searchedDirs = dirsToSearch.join(", ");
-            throw new Error(
-              `File "${resolvedPath}" not found. Searched: ${searchedDirs}. ` +
-                `Please provide the full path to the file, or move it to one of these directories.`,
-            );
-          }
-          resolvedPath = foundPath;
-        }
-
-        // Verify file exists
-        try {
-          await fs.access(resolvedPath);
-        } catch {
+        if (dailyLogPath && csvType && csvType !== "tradelog") {
           throw new Error(
-            `File not found: ${resolvedPath}. ` +
-              `Please check the path is correct. If the file is in Downloads, try: ~/Downloads/${path.basename(csvPath)}`,
+            "A daily log can only be paired with a tradelog, not a reportinglog or dailylog",
           );
         }
-
+        const resolvedPath = dailyLogPath
+          ? await resolveCsvPath(csvPath, searchPaths).catch((error: Error) => {
+              throw new Error(`trade log: ${error.message}`);
+            })
+          : await resolveCsvPath(csvPath, searchPaths);
+        const resolvedDailyLogPath = dailyLogPath
+          ? await resolveCsvPath(dailyLogPath, searchPaths).catch((error: Error) => {
+              throw new Error(`daily log: ${error.message}`);
+            })
+          : undefined;
         const result = await importCsv(baseDir, {
           csvPath: resolvedPath,
+          dailyLogPath: resolvedDailyLogPath,
           blockName,
           csvType,
           plBasis,
         });
 
-        // Brief summary for user display (use result.csvType which reflects auto-detection)
-        const summary = `Imported ${result.recordCount} ${result.csvType} records to block "${result.blockId}"`;
+        const summary = `Imported ${result.recordCount} ${result.csvType} records to block "${result.blockId}"${result.dailyLog ? ` with ${result.dailyLog.recordCount} daily log records` : ""}`;
 
         // Build structured data for Claude reasoning
         const structuredData = {
@@ -146,6 +161,7 @@ export function registerImportTools(server: McpServer, baseDir: string): void {
           dateRange: result.dateRange,
           strategies: result.strategies,
           blockPath: result.blockPath,
+          ...(result.dailyLog ? { dailyLog: result.dailyLog } : {}),
           nextSteps: [
             `Use get_block_details("${result.blockId}") to see full statistics`,
             `Use get_trades("${result.blockId}") to examine individual trades`,

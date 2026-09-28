@@ -148,11 +148,19 @@ these truncated windows as well as any windows skipped for insufficient trades.
 
 ## Block Import
 
-| Tool                | Description                                                                     |
-| ------------------- | ------------------------------------------------------------------------------- |
-| `import_csv`        | Import a CSV file as a new block _(CLI only — not available in Claude Desktop)_ |
-| `get_backtest_help` | Help with backtest data formats and troubleshooting                             |
+| Tool                | Description                                                     |
+| ------------------- | --------------------------------------------------------------- |
+| `import_csv`        | Import a CSV as a new block; optionally pair trade + daily logs |
+| `get_backtest_help` | Help with backtest data formats and troubleshooting             |
 
+`import_csv` accepts `csvPath`, `blockName`, and optional `csvType` (`tradelog` by default).
+For a trade log, `dailyLogPath` optionally supplies a daily-log CSV in the same new block.
+Both paths accept absolute paths, `~`, or filename-only lookup in `searchPaths`
+(default: Downloads, Desktop, Documents). Invalid daily logs refuse the entire
+import without creating a block. The result's existing `recordCount` and `dateRange`
+describe the primary CSV; paired imports additionally return `dailyLog.recordCount`
+and `dailyLog.dateRange`. Unfiltered `get_statistics` uses the daily-log portfolio
+drawdown; strategy-filtered statistics remain trade-based.
 ---
 
 For usage examples and common workflows, see the [Usage Guide](usage.md).

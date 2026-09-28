@@ -780,6 +780,11 @@ export interface ImportCsvResult {
   blockPath: string;
   /** Declared P/L basis persisted for imported trade logs. */
   plBasis?: Trade["plBasis"];
+  /** Optional daily log imported alongside a trade log. */
+  dailyLog?: {
+    recordCount: number;
+    dateRange: { start: string | null; end: string | null };
+  };
 }
 
 /**
@@ -788,6 +793,8 @@ export interface ImportCsvResult {
 export interface ImportCsvOptions {
   /** Absolute path to the CSV file */
   csvPath: string;
+  /** Optional daily log CSV to import with a trade log. */
+  dailyLogPath?: string;
   /** Name for the block */
   blockName: string;
   /** Type of CSV data */
@@ -936,7 +943,7 @@ export async function importCsv(
   try {
     await fs.access(csvPath);
   } catch {
-    throw new Error(`CSV file not found: ${csvPath}`);
+    throw new Error(`${options.dailyLogPath ? "trade log: " : ""}CSV file not found: ${csvPath}`);
   }
 
   // Read and parse the CSV
@@ -951,11 +958,50 @@ export async function importCsv(
       csvType = "reportinglog";
     }
   }
+  if (options.dailyLogPath && csvType !== "tradelog") {
+    throw new Error(
+      "A daily log can only be paired with a tradelog, not a reportinglog or dailylog",
+    );
+  }
 
   // Validate CSV has required columns
   const validation = validateCsvColumns(records, csvType, plBasis);
   if (!validation.valid) {
-    throw new Error(validation.error);
+    throw new Error(options.dailyLogPath ? `trade log: ${validation.error}` : validation.error);
+  }
+  let dailyLog: ImportCsvResult["dailyLog"];
+  if (options.dailyLogPath) {
+    let dailyContent: string;
+    try {
+      dailyContent = await fs.readFile(options.dailyLogPath, "utf-8");
+    } catch {
+      throw new Error(`daily log: CSV file not found: ${options.dailyLogPath}`);
+    }
+    const dailyRecords = parseCSV(dailyContent);
+    const dailyValidation = validateCsvColumns(dailyRecords, "dailylog");
+    if (!dailyValidation.valid) {
+      throw new Error(`daily log: ${dailyValidation.error}`);
+    }
+    let firstDate = Infinity;
+    let lastDate = -Infinity;
+    for (const record of dailyRecords) {
+      const entry = convertToDailyLogEntry(record);
+      if (entry) {
+        const time = entry.date.getTime();
+        firstDate = Math.min(firstDate, time);
+        lastDate = Math.max(lastDate, time);
+      }
+    }
+    if (firstDate === Infinity) {
+      throw new Error("daily log: no rows could be converted to daily log entries");
+    }
+    dailyLog = {
+      recordCount: dailyRecords.length,
+      dateRange: {
+        start: new Date(firstDate).toISOString(),
+        end: new Date(lastDate).toISOString(),
+      },
+    };
   }
 
   // Convert blockName to kebab-case for blockId
@@ -980,28 +1026,34 @@ export async function importCsv(
     }
   }
 
-  // Create block directory
-  await fs.mkdir(blockPath, { recursive: true });
+  await fs.mkdir(blocksDir, { recursive: true });
+  // Create only this block directory; do not remove an existing block on failure.
+  await fs.mkdir(blockPath);
+  try {
+    const targetFilename =
+      csvType === "tradelog"
+        ? "tradelog.csv"
+        : csvType === "dailylog"
+          ? "dailylog.csv"
+          : "reportinglog.csv";
 
-  // Determine target filename
-  const targetFilename =
-    csvType === "tradelog"
-      ? "tradelog.csv"
-      : csvType === "dailylog"
-        ? "dailylog.csv"
-        : "reportinglog.csv";
-
-  // Persist the declared P/L basis in imported trade logs so later loads do
-  // not need to infer whether commission and fee columns are already included.
-  const targetPath = path.join(blockPath, targetFilename);
-  if (csvType === "tradelog") {
-    const recordsWithBasis = records.map((record) => ({
-      ...record,
-      "P/L Basis": plBasis,
-    }));
-    await fs.writeFile(targetPath, `${serializeCsv(recordsWithBasis)}\n`, "utf-8");
-  } else {
-    await fs.copyFile(csvPath, targetPath);
+    // Persist the declared P/L basis for trade logs; copy other CSVs verbatim.
+    const targetPath = path.join(blockPath, targetFilename);
+    if (csvType === "tradelog") {
+      const recordsWithBasis = records.map((record) => ({
+        ...record,
+        "P/L Basis": plBasis,
+      }));
+      await fs.writeFile(targetPath, `${serializeCsv(recordsWithBasis)}\n`, "utf-8");
+    } else {
+      await fs.copyFile(csvPath, targetPath);
+    }
+    if (options.dailyLogPath) {
+      await fs.copyFile(options.dailyLogPath, path.join(blockPath, "dailylog.csv"));
+    }
+  } catch (error) {
+    await fs.rm(blockPath, { recursive: true, force: true });
+    throw error;
   }
 
   // Extract metadata for return value based on CSV type
@@ -1069,5 +1121,6 @@ export async function importCsv(
     strategies,
     blockPath,
     ...(csvType === "tradelog" ? { plBasis } : {}),
+    ...(dailyLog ? { dailyLog } : {}),
   };
 }

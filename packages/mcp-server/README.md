@@ -402,6 +402,16 @@ backtests/
 | ------------ | ------------------------------------------------------------------------------- |
 | `import_csv` | Import a CSV file as a new block _(CLI only - not available in Claude Desktop)_ |
 
+`import_csv` accepts `csvPath`, `blockName`, optional `csvType` (default `tradelog`),
+and optional `dailyLogPath` for a daily log paired with a trade log. Both paths
+support absolute paths, `~`, or filename-only search using `searchPaths` (default:
+Downloads, Desktop, Documents). The pair creates one block with a stamped
+`tradelog.csv` and verbatim `dailylog.csv`. A bad daily log rejects the whole
+import without creating a block. The usual result fields describe the trade
+log; paired results also include `dailyLog.recordCount` and
+`dailyLog.dateRange`. Unfiltered `get_statistics` uses daily-log drawdown;
+strategy-filtered statistics use the trade log instead.
+
 ## Development
 
 ```bash
