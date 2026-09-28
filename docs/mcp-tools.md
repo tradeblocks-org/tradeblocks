@@ -159,18 +159,19 @@ For usage examples and common workflows, see the [Usage Guide](usage.md).
 
 ## Prompts
 
-The MCP server also lists three prompts in stdio and HTTP. In Claude Code,
-`/tradeblocks:bring-in-oo-backtest`, `/tradeblocks:is-this-optimum-real` and
-`/tradeblocks:stress-oo-portfolio` are commands when the server is configured
-under the name `tradeblocks`. Other MCP clients use `prompts/list` and
-`prompts/get`. These prompts guide analysis, not server-side calls to Option
-Omega. The OO server name is chosen by the user.
+The MCP server also lists three prompts in stdio and HTTP. In Claude Code, with
+the server configured under the name `tradeblocks`, the `/` menu lists them as
+`/tradeblocks:bring-in-oo-backtest (MCP)`, `/tradeblocks:is-this-optimum-real (MCP)`
+and `/tradeblocks:stress-oo-portfolio (MCP)`; typed, they run as
+`/mcp__tradeblocks__bring-in-oo-backtest` and so on. Other MCP clients use
+`prompts/list` and `prompts/get`. These prompts guide analysis, not server-side
+calls to Option Omega. The OO server name is chosen by the user.
 
-| Prompt | Workflow |
-| --- | --- |
-| `bring-in-oo-backtest` | Bring OO trades into a block; verify it with `get_block_info` and `get_statistics`. |
+| Prompt                 | Workflow                                                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `bring-in-oo-backtest` | Bring OO trades into a block; verify it with `get_block_info` and `get_statistics`.                                   |
 | `is-this-optimum-real` | Compare two OO scratch runs as separate blocks with walk-forward, Monte Carlo, edge-decay and paired bootstrap tools. |
-| `stress-oo-portfolio` | Analyze a portfolio's economic trades with portfolio risk tools. |
+| `stress-oo-portfolio`  | Analyze a portfolio's economic trades with portfolio risk tools.                                                      |
 
 The first two prompts use the `tradeblocks-skills` Claude Code plugin's
 `/tradeblocks:oo-capture` when installed. Without it, export a trade-log CSV
