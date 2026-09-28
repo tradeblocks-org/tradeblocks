@@ -89,8 +89,10 @@ never silently replace a refused paired test with zero. The tool does not
 report shared days: derive jointly held, best-only and centre-only days with
 TB run_sql over the block's trade open-to-close dates, check the per-arm
 counts equal observedDays, and report them.
-If winner equals centre, analyze the one verified run without claiming a
-best-minus-centre comparison.
+If winner equals centre, import that one verified capture's CSV with TB
+import_csv (plBasis: net_includes_fees), check its count and SUM(pl) against
+the verification, run the three single-arm tests on that block, and skip the
+paired test, saying why; claim no best-minus-centre comparison.
 
 Without the plugin, ask the user to export each scratch run's trade-log CSV
 to a path readable by the TB server (Docker/HTTP: inside its mounted data
