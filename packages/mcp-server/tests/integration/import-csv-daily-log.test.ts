@@ -191,7 +191,7 @@ describe("import_csv paired daily log", () => {
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent?.dailyLog).toEqual({
         recordCount: 2,
-        dateRange: { start: FIRST_DATE, end: SECOND_DATE },
+        dateRange: { start: "2024-01-02", end: "2024-01-03" },
       });
     });
   });
@@ -209,7 +209,7 @@ describe("import_csv paired daily log", () => {
       });
       expect(result.dailyLog).toEqual({
         recordCount: 2,
-        dateRange: { start: FIRST_DATE, end: SECOND_DATE },
+        dateRange: { start: "2024-01-02", end: "2024-01-03" },
       });
       expect(await fs.readdir(result.blockPath)).toEqual(["dailylog.csv", "tradelog.csv"]);
     } finally {

@@ -409,7 +409,7 @@ Downloads, Desktop, Documents). The pair creates one block with a stamped
 `tradelog.csv` and verbatim `dailylog.csv`. A bad daily log rejects the whole
 import without creating a block. The usual result fields describe the trade
 log; paired results also include `dailyLog.recordCount` and
-`dailyLog.dateRange`. Unfiltered `get_statistics` uses daily-log drawdown;
+`dailyLog.dateRange` (calendar dates, `YYYY-MM-DD`). Unfiltered `get_statistics` uses daily-log drawdown;
 strategy-filtered statistics use the trade log instead.
 
 ## Development

@@ -159,7 +159,7 @@ Both paths accept absolute paths, `~`, or filename-only lookup in `searchPaths`
 (default: Downloads, Desktop, Documents). Invalid daily logs refuse the entire
 import without creating a block. The result's existing `recordCount` and `dateRange`
 describe the primary CSV; paired imports additionally return `dailyLog.recordCount`
-and `dailyLog.dateRange`. Unfiltered `get_statistics` uses the daily-log portfolio
+and `dailyLog.dateRange` (calendar dates, `YYYY-MM-DD`). Unfiltered `get_statistics` uses the daily-log portfolio
 drawdown; strategy-filtered statistics remain trade-based.
 ---
 

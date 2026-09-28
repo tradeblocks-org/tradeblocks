@@ -19,6 +19,7 @@ import {
   REPORTING_TRADE_COLUMN_ALIASES,
   isTatFormat,
   convertTatRowToReportingTrade,
+  formatDateKey,
 } from "@tradeblocks/lib";
 import { getConnection } from "../db/connection.ts";
 import { isParquetMode } from "../db/parquet-writer.ts";
@@ -998,8 +999,8 @@ export async function importCsv(
     dailyLog = {
       recordCount: dailyRecords.length,
       dateRange: {
-        start: new Date(firstDate).toISOString(),
-        end: new Date(lastDate).toISOString(),
+        start: formatDateKey(new Date(firstDate)),
+        end: formatDateKey(new Date(lastDate)),
       },
     };
   }
