@@ -14,6 +14,16 @@ const packDir = join(fixtureRoot, "pack");
 const consumerDir = join(fixtureRoot, "consumer");
 mkdirSync(packDir);
 mkdirSync(consumerDir);
+// The stale-tail probe follows the bundled SOFR table rather than a pinned date, so a release
+// seed that extends the bundle keeps exercising the refusal one day past its real tail.
+const sofrDates = readFileSync(resolve(packageRoot, "../lib/data/sofr-rates.ts"), "utf8").match(
+  /"\d{4}-\d{2}-\d{2}"(?=\s*:)/g,
+);
+if (!sofrDates) throw new Error("Cannot read the bundled SOFR tail");
+const sofrTail = sofrDates.at(-1).slice(1, -1);
+const afterTail = new Date(`${sofrTail}T00:00:00Z`);
+afterTail.setUTCDate(afterTail.getUTCDate() + 1);
+const sofrAfterTail = afterTail.toISOString().slice(0, 10);
 
 try {
   const packed = JSON.parse(
@@ -95,10 +105,10 @@ try {
         throw new Error("canonical materialized rate API failed");
       }
       try {
-        await publishCanonicalRateSlice(store, "sofr_rates", "2026-07-21");
+        await publishCanonicalRateSlice(store, "sofr_rates", "${sofrAfterTail}");
         throw new Error("stale canonical rate tail was accepted");
       } catch (error) {
-        if (!String(error).includes("stale after 2026-07-20")) throw error;
+        if (!String(error).includes("stale after ${sofrTail}")) throw error;
       }
 
       const marketRoot = join(root, "market");

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { NoActiveBlock } from "@/components/no-active-block";
+import { usePublishedRates } from "@/components/published-rates-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,6 +43,8 @@ export default function AssistantPage() {
   });
   const isInitialized = useBlockStore((state) => state.isInitialized);
   const loadBlocks = useBlockStore((state) => state.loadBlocks);
+  // Sharpe and Sortino depend on the active risk-free rates; recompute when they change.
+  const { revision: ratesRevision } = usePublishedRates();
 
   // Local data state
   const [portfolioStats, setPortfolioStats] = useState<PortfolioStats | null>(null);
@@ -105,7 +108,7 @@ export default function AssistantPage() {
     };
 
     fetchData();
-  }, [activeBlock]);
+  }, [activeBlock, ratesRevision]);
 
   const toggleChart = (chartId: string) => {
     setSelectedCharts((prev) => {
