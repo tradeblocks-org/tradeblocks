@@ -31,29 +31,19 @@ const __dirname = path.dirname(__filename);
 
 const FIXTURES_DIR = path.join(__dirname, "fixtures");
 
+// listBlocks opens DuckDB files in the data root it is given. The suite lists a private
+// copy of the fixture blocks, so no two Jest workers share a database file and nothing
+// is written into the repository's fixtures directory. loadBlock only reads CSVs.
+let suiteRoot: string;
+
+beforeAll(async () => {
+  suiteRoot = await fs.mkdtemp(path.join(os.tmpdir(), "tb-tools-"));
+  await fs.cp(FIXTURES_DIR, suiteRoot, { recursive: true });
+});
+
 afterAll(async () => {
-  // Close DuckDB connection and clean up analytics files created in fixtures dir
   await closeConnection();
-  try {
-    await fs.unlink(path.join(FIXTURES_DIR, "analytics.duckdb"));
-  } catch {
-    /* ignore */
-  }
-  try {
-    await fs.unlink(path.join(FIXTURES_DIR, "analytics.duckdb.wal"));
-  } catch {
-    /* ignore */
-  }
-  try {
-    await fs.unlink(path.join(FIXTURES_DIR, "market.duckdb"));
-  } catch {
-    /* ignore */
-  }
-  try {
-    await fs.unlink(path.join(FIXTURES_DIR, "market.duckdb.wal"));
-  } catch {
-    /* ignore */
-  }
+  await fs.rm(suiteRoot, { recursive: true, force: true });
 });
 
 async function withNestedBlocksFixture<T>(fn: (dataRoot: string) => Promise<T>): Promise<T> {
@@ -81,7 +71,7 @@ async function withNestedBlocksFixture<T>(fn: (dataRoot: string) => Promise<T>):
 describe("block-loader", () => {
   describe("listBlocks", () => {
     it("should list blocks in directory", async () => {
-      const blocks = await listBlocks(FIXTURES_DIR);
+      const blocks = await listBlocks(suiteRoot);
 
       // Should find mock-block and nonstandard-name (unrecognized-csv should be skipped)
       expect(blocks.length).toBeGreaterThanOrEqual(1);
@@ -98,7 +88,7 @@ describe("block-loader", () => {
     });
 
     it("should handle directory with only unrecognized CSVs", async () => {
-      const blocks = await listBlocks(FIXTURES_DIR);
+      const blocks = await listBlocks(suiteRoot);
       // unrecognized-csv folder should NOT appear in results
       const unrecognizedBlock = blocks.find(
         (b: { blockId: string }) => b.blockId === "unrecognized-csv",
@@ -107,7 +97,7 @@ describe("block-loader", () => {
     });
 
     it("should discover non-standard CSV filenames", async () => {
-      const blocks = await listBlocks(FIXTURES_DIR);
+      const blocks = await listBlocks(suiteRoot);
       // nonstandard-name folder has my-custom-trades.csv
       const nonstandardBlock = blocks.find(
         (b: { blockId: string }) => b.blockId === "nonstandard-name",

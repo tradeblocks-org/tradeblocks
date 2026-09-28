@@ -39,4 +39,20 @@ export default {
   // --------------------------------------------------------------------------
   workerIdleMemoryLimit: "512MB",
   maxWorkers: "50%",
+  // --------------------------------------------------------------------------
+  // Test timeout: the suite is I/O-bound, not CPU-bound.
+  //
+  // Most suites use real DuckDB files, Parquet writes and the durable
+  // provenance stores in os.tmpdir(). The provenance stores fsync every
+  // directory they touch, so one suite can issue ~9,500 serialized fsyncs, and
+  // a CPU profile of the slowest test is ~90% idle waiting on them. A test's
+  // wall time follows the disk's flush latency, which grows with every other
+  // writer on the machine: other Jest workers, other checkouts, builds. On an
+  // idle 32-core box the slowest test takes ~8.5 s; under ordinary shared-host
+  // load, passing tests reached ~14 s, against Jest's 5 s default and the 15 s
+  // the provenance suites used to set. The tests are correct but I/O-bound, so
+  // they get a budget sized for a loaded host rather than an idle one.
+  // Measured with strace and --cpu-prof on the provenance suites.
+  // --------------------------------------------------------------------------
+  testTimeout: 60_000,
 };
