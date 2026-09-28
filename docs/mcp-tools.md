@@ -161,6 +161,7 @@ import without creating a block. The result's existing `recordCount` and `dateRa
 describe the primary CSV; paired imports additionally return `dailyLog.recordCount`
 and `dailyLog.dateRange` (calendar dates, `YYYY-MM-DD`). Unfiltered `get_statistics` uses the daily-log portfolio
 drawdown; strategy-filtered statistics remain trade-based.
+
 ---
 
 For usage examples and common workflows, see the [Usage Guide](usage.md).
