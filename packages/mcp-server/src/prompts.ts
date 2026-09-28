@@ -121,4 +121,50 @@ ${dataIntegrity}`,
       ],
     }),
   );
+
+  server.registerPrompt(
+    "live-vs-oo",
+    {
+      title: "Live vs OO",
+      description: "Compare live fills in a reporting log with an OO reference backtest",
+    },
+    () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Compare the user's live trades with an Option Omega reference backtest.
+The OO reference must be a TradeBlocks block of OO's trades. If it is not one
+yet, bring it in as the bring-in-oo-backtest prompt does (${captureSkill} or an
+OO trade-log CSV with import_csv). Use list_blocks and get_block_info to select
+and verify the block; ask if ambiguous. Name the OO reference as the capture
+recorded it: a scratch run by its runId; a saved backtest by its
+savedBacktestId and capture date, saying a saved backtest can be edited or
+re-run in OO, so it is not a pinned run. For a block imported from CSV, ask
+which OO backtest or run it came from and report that as the user's statement.
+TB compares trades only within one block. The user's reporting log (live
+trades CSV) must be in that block's own folder in the TB server's blocks
+directory, beside its trade log, ideally named reportinglog.csv (Docker/HTTP:
+inside the mounted data directory). Do not import_csv it: that makes a separate
+block no comparison tool can pair. Ask the user to place the file; never write,
+edit or re-type its rows. Confirm it with get_reporting_log_stats; with no
+reporting log, stop and say no live comparison was run. Trades match on date,
+exact strategy name and opening minute; OO trades with no strategy name take the
+block ID as their name. Compare the strategy names from get_block_info and
+get_reporting_log_stats; if they differ, tell the user which, and let them
+decide how to align them; never rename or edit files yourself. Then run
+compare_backtest_to_actual, analyze_discrepancies, analyze_slippage_trends and
+analyze_live_alignment on that block. Report the scaling used, matched and
+unmatched trade counts and the dates compared, and each tool's insufficient-data
+or error result by name. With no matched trades, give no slippage verdict.
+Slippage here is live P/L versus the reference's per-trade realized P/L, not
+OO's marked equity; matching within one minute is order-dependent. The tools
+use the block's recorded P/L basis: deduct no fees yourself.
+${dataIntegrity}`,
+          },
+        },
+      ],
+    }),
+  );
 }

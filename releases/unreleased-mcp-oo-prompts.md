@@ -1,9 +1,10 @@
 # Unreleased — MCP prompts for Option Omega workflows
 
-The MCP server now offers three prompts in stdio and HTTP. In Claude Code, with the server configured as `tradeblocks`, they appear in the `/` menu as `/tradeblocks:<prompt> (MCP)` and run when typed as `/mcp__tradeblocks__<prompt>`:
+The MCP server now offers four prompts in stdio and HTTP. In Claude Code, with the server configured as `tradeblocks`, they appear in the `/` menu as `/tradeblocks:<prompt> (MCP)` and run when typed as `/mcp__tradeblocks__<prompt>`:
 
 - `bring-in-oo-backtest`: bring a saved OO backtest's trades into a TradeBlocks block.
 - `is-this-optimum-real`: compare the optimizer's best cell with a stable-region candidate using two scratch backtests and TradeBlocks robustness tools.
 - `stress-oo-portfolio`: stress a portfolio's trade log as a block.
+- `live-vs-oo`: compare live trades from a reporting log with an OO reference backtest's block, using the existing `compare_backtest_to_actual`, `analyze_discrepancies`, `analyze_slippage_trends` and `analyze_live_alignment` tools. The reporting-log CSV goes in the same block folder as the OO trade log; the prompt names the OO reference (a scratch run's `runId`, or a saved backtest's ID and capture date).
 
 With the optional `tradeblocks-skills` plugin, the first two workflows use its capture skill. Otherwise, users export CSV from OO to a path readable by the TradeBlocks server and import it with `import_csv`. The prompts do not transcribe OO data through the model or call OO from TradeBlocks. Server instructions now explain the division of work and block/SQL discovery. MCP initialize reports the installed `tradeblocks-mcp` package version rather than a stale hard-coded version. Existing tools and package exports are unchanged; this note does not bump a version or publish a release.

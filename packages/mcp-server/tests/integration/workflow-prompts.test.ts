@@ -15,7 +15,7 @@ const expectedVersion =
     ? manifest.version
     : null;
 
-it("exposes version, instructions, three runnable OO prompts and all existing tools through MCP", async () => {
+it("exposes version, instructions, four runnable OO prompts and all existing tools through MCP", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "tb-prompts-"));
   const client = new Client({ name: "workflow-prompts-test", version: "1.0.0" });
   const transport = new StdioClientTransport({
@@ -41,6 +41,7 @@ it("exposes version, instructions, three runnable OO prompts and all existing to
       "bring-in-oo-backtest",
       "is-this-optimum-real",
       "stress-oo-portfolio",
+      "live-vs-oo",
     ]);
     for (const name of prompts.prompts.map((p) => p.name)) {
       const result = await client.getPrompt({ name });
@@ -59,7 +60,7 @@ it("exposes version, instructions, three runnable OO prompts and all existing to
         expect(text.text).toContain("get_optimization_results");
         expect(text.text).toContain("paired_bootstrap_comparison");
         expect(text.text).toMatch(/no\s+verdict from optimizer cells alone/);
-      } else {
+      } else if (name === "stress-oo-portfolio") {
         expect(text.text).toContain("get_portfolio_results");
         expect(text.text).toContain("stress_test");
         expect(text.text).toContain("get_saved_portfolio");

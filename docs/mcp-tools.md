@@ -169,19 +169,20 @@ For usage examples and common workflows, see the [Usage Guide](usage.md).
 
 ## Prompts
 
-The MCP server also lists three prompts in stdio and HTTP. In Claude Code, with
+The MCP server also lists four prompts in stdio and HTTP. In Claude Code, with
 the server configured under the name `tradeblocks`, the `/` menu lists them as
-`/tradeblocks:bring-in-oo-backtest (MCP)`, `/tradeblocks:is-this-optimum-real (MCP)`
-and `/tradeblocks:stress-oo-portfolio (MCP)`; typed, they run as
+`/tradeblocks:bring-in-oo-backtest (MCP)`, `/tradeblocks:is-this-optimum-real (MCP)`,
+`/tradeblocks:stress-oo-portfolio (MCP)` and `/tradeblocks:live-vs-oo (MCP)`; typed, they run as
 `/mcp__tradeblocks__bring-in-oo-backtest` and so on. Other MCP clients use
 `prompts/list` and `prompts/get`. These prompts guide analysis, not server-side
 calls to Option Omega. The OO server name is chosen by the user.
 
-| Prompt                 | Workflow                                                                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bring-in-oo-backtest` | Bring OO trades into a block; verify it with `get_block_info` and `get_statistics`.                                                              |
-| `is-this-optimum-real` | Run walk-forward, Monte Carlo, edge-decay and per-run bootstrap tests on two OO scratch runs as separate blocks, then compare them side by side. |
-| `stress-oo-portfolio`  | Analyze a portfolio's economic trades with portfolio risk tools.                                                                                 |
+| Prompt                 | Workflow                                                                                                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bring-in-oo-backtest` | Bring OO trades into a block; verify it with `get_block_info` and `get_statistics`.                                                                                                                |
+| `is-this-optimum-real` | Run walk-forward, Monte Carlo, edge-decay and per-run bootstrap tests on two OO scratch runs as separate blocks, then compare them side by side.                                                   |
+| `stress-oo-portfolio`  | Analyze a portfolio's economic trades with portfolio risk tools.                                                                                                                                   |
+| `live-vs-oo`           | Compare a reporting log's live trades with the OO reference block it sits in, using `compare_backtest_to_actual`, `analyze_discrepancies`, `analyze_slippage_trends` and `analyze_live_alignment`. |
 
 The first two prompts use the `tradeblocks-skills` Claude Code plugin's
 `/tradeblocks:oo-capture` when installed. Without it, export a trade-log CSV
@@ -192,6 +193,9 @@ re-typing OO's responses. Portfolio capture is not available through that
 skill; use an existing portfolio block or export its trade log. OO's
 marked-account headlines and TradeBlocks' realized-trade statistics must be
 labelled separately, especially drawdown; OO profit already includes fees.
+For `live-vs-oo`, save the reporting-log CSV inside the OO reference block's own
+folder, beside its trade log; `import_csv` would make a separate block that the
+comparison tools cannot pair.
 
 ## Developing MCP Tools
 

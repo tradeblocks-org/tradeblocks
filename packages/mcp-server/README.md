@@ -273,10 +273,10 @@ See the [tradeblocks-skills README](https://github.com/tradeblocks-org/tradebloc
 
 ## Prompts
 
-The same MCP server exposes three prompts in stdio and HTTP. In Claude Code, when
+The same MCP server exposes four prompts in stdio and HTTP. In Claude Code, when
 the server is named `tradeblocks`, pick them from the `/` menu, where they appear
-as `/tradeblocks:bring-in-oo-backtest (MCP)`, `/tradeblocks:is-this-optimum-real (MCP)`
-and `/tradeblocks:stress-oo-portfolio (MCP)`, or type
+as `/tradeblocks:bring-in-oo-backtest (MCP)`, `/tradeblocks:is-this-optimum-real (MCP)`,
+`/tradeblocks:stress-oo-portfolio (MCP)` and `/tradeblocks:live-vs-oo (MCP)`, or type
 `/mcp__tradeblocks__bring-in-oo-backtest` (likewise for the others). Other MCP
 clients can list and get these prompts through their prompt interface. The
 server name is chosen by the user; these are not Option Omega tool prefixes.
@@ -286,6 +286,7 @@ server name is chosen by the user; these are not Option Omega tool prefixes.
 | `bring-in-oo-backtest` | Capture a backtest's trade log as a block, or import an OO-exported trade CSV.                                        |
 | `is-this-optimum-real` | Compare the optimizer's best cell with a stable-region candidate using scratch runs and TradeBlocks robustness tests. |
 | `stress-oo-portfolio`  | Stress a portfolio's economic trades in an existing or imported block.                                                |
+| `live-vs-oo`           | Compare live trades in a reporting log with an OO reference backtest's block.                                         |
 
 TradeBlocks never calls Option Omega. With the `tradeblocks-skills` Claude Code
 plugin installed, the first two prompts can use its `/tradeblocks:oo-capture`
@@ -296,6 +297,8 @@ directory. If that path is unavailable, the prompts stop instead of rebuilding
 CSV from model responses. Portfolio capture is not supplied by that skill.
 OO's headline and marked-equity figures remain OO's; TradeBlocks' realized
 trade statistics are separate, not a replacement for marked-account drawdown.
+`live-vs-oo` reads the reporting log from the OO reference block's own folder
+(see below); put the CSV there instead of importing it as a separate block.
 
 ## Block Directory Structure
 
