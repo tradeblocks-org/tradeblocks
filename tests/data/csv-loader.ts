@@ -393,6 +393,7 @@ export class CsvTestDataLoader {
           openingPrice: parseRequiredNumber(read("Opening Price"), "Opening Price"),
           legs: read("Legs") ?? "",
           initialPremium: parseRequiredNumber(read("Initial Premium"), "Initial Premium"),
+          initialPremiumUnit: "quote", // OO Initial Premium is already a signed $/share quote.
           numContracts: parseRequiredNumber(read("No. of Contracts"), "No. of Contracts"),
           pl: parseRequiredNumber(read("P/L"), "P/L"),
           closingPrice: parseNumber(read("Closing Price")),
