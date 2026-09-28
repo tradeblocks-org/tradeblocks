@@ -14,6 +14,7 @@ import {
   type Sha256Address,
 } from "./canonical-json.ts";
 import { ContentObjectCollisionError, ContentObjectStore } from "./content-object-store.ts";
+import { DurableDirectories, syncDirectory } from "./durable-directory.ts";
 import {
   canonicalPartitionDataset,
   canonicalPartitionRelativePath,
@@ -698,6 +699,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
   readonly provenanceRootDir: string;
   private readonly staleLockMs: number;
   private readonly lockWaitMs: number;
+  private readonly directories = new DurableDirectories();
 
   constructor(marketRootDir: string, options: FilePartitionCommitStoreOptions = {}) {
     this.marketRootDir = marketRootDir;
@@ -785,11 +787,11 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       throw error;
     }
     const quarantineDir = path.join(this.provenanceRootDir, "rejected-prepared");
-    await this.ensureDurableDirectory(quarantineDir);
+    await this.directories.ensure(quarantineDir);
     const quarantinePath = path.join(quarantineDir, randomUUID());
     await fs.rename(claimedPath, quarantinePath);
-    await this.syncDirectory(path.dirname(claimedPath));
-    await this.syncDirectory(quarantineDir);
+    await syncDirectory(path.dirname(claimedPath));
+    await syncDirectory(quarantineDir);
   }
 
   private async restoreOrQuarantineClaim(claimedPath: string, preparedPath: string): Promise<void> {
@@ -803,50 +805,12 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       restored = true;
       await fs.unlink(claimedPath);
       claimedRemoved = true;
-      await this.syncDirectory(path.dirname(preparedPath));
+      await syncDirectory(path.dirname(preparedPath));
       return;
     } catch (error) {
       if (claimedRemoved) throw error;
       if (restored) await fs.unlink(preparedPath).catch(() => undefined);
       await this.quarantineClaim(claimedPath);
-    }
-  }
-
-  private async syncDirectory(directory: string): Promise<void> {
-    const handle = await fs.open(directory, "r");
-    try {
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-  }
-
-  private async ensureDurableDirectory(directory: string): Promise<void> {
-    const parent = path.dirname(directory);
-    if (parent !== directory) await this.ensureDurableDirectory(parent);
-    try {
-      const handle = await fs.open(directory, "r");
-      try {
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-      if (parent !== directory) await this.syncDirectory(parent);
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    if (parent === directory) throw new Error(`Cannot create provenance directory ${directory}`);
-    let created = false;
-    try {
-      await fs.mkdir(directory);
-      created = true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-    if (created) {
-      await this.syncDirectory(directory);
-      await this.syncDirectory(parent);
     }
   }
 
@@ -943,15 +907,15 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
     // moves only the exact observed token path, never a constant path that a
     // replacement owner could have acquired (the usual stale-lock ABA race).
     const quarantineDir = path.join(path.dirname(claimsDir), "quarantine");
-    await this.ensureDurableDirectory(quarantineDir);
+    await this.directories.ensure(quarantineDir);
     const quarantinePath = path.join(
       quarantineDir,
       `${token}-${claimStat.ino}-${Math.floor(claimStat.birthtimeMs)}`,
     );
     try {
       await fs.rename(claimPath, quarantinePath);
-      await this.syncDirectory(claimsDir);
-      await this.syncDirectory(quarantineDir);
+      await syncDirectory(claimsDir);
+      await syncDirectory(quarantineDir);
       return true;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
@@ -981,9 +945,9 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       } finally {
         await ownerHandle.close();
       }
-      await this.syncDirectory(publishingPath);
+      await syncDirectory(publishingPath);
       await fs.rename(publishingPath, claimPath);
-      await this.syncDirectory(claimsDir);
+      await syncDirectory(claimsDir);
       return claimPath;
     } catch (error) {
       await fs.rm(publishingPath, { recursive: true, force: true });
@@ -1014,7 +978,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
     } finally {
       await handle.close();
     }
-    await this.syncDirectory(claimPath);
+    await syncDirectory(claimPath);
     return ticket.number;
   }
 
@@ -1029,13 +993,13 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       );
     }
     const releasedDir = path.join(path.dirname(claimsDir), "released");
-    await this.ensureDurableDirectory(releasedDir);
+    await this.directories.ensure(releasedDir);
     const releasedPath = path.join(releasedDir, token);
     await fs.rename(claimPath, releasedPath);
-    await this.syncDirectory(claimsDir);
-    await this.syncDirectory(releasedDir);
+    await syncDirectory(claimsDir);
+    await syncDirectory(releasedDir);
     await fs.rm(releasedPath, { recursive: true });
-    await this.syncDirectory(releasedDir);
+    await syncDirectory(releasedDir);
   }
 
   private async withPartitionLock<T>(
@@ -1045,7 +1009,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
     validateIdentity(identity);
     const lockRoot = this.lockRoot(identity);
     const claimsDir = path.join(lockRoot, "claims");
-    await this.ensureDurableDirectory(claimsDir);
+    await this.directories.ensure(claimsDir);
     const token = randomUUID();
     const claimPath = await this.publishClaim(claimsDir, token);
     let ownTicket: number;
@@ -1242,7 +1206,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
 
   private async writeHead(identity: PartitionIdentity, tip: AuthorityTip): Promise<void> {
     const headPath = this.headPath(identity);
-    await this.ensureDurableDirectory(path.dirname(headPath));
+    await this.directories.ensure(path.dirname(headPath));
     const tempPath = `${headPath}.tmp-${randomUUID()}`;
     const head: PartitionHeadV1 = {
       kind: PARTITION_HEAD_KIND,
@@ -1260,7 +1224,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       await handle.close();
       handle = undefined;
       await fs.rename(tempPath, headPath);
-      await this.syncDirectory(path.dirname(headPath));
+      await syncDirectory(path.dirname(headPath));
     } catch (error) {
       await handle?.close();
       await fs.unlink(tempPath).catch(() => undefined);
@@ -1298,12 +1262,12 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
     };
     const stored = await this.objects.put(event);
     const indexDir = this.eventIndexDir(identity);
-    await this.ensureDurableDirectory(indexDir);
+    await this.directories.ensure(indexDir);
     const digest = parseCanonicalJsonAddress(stored.address);
     const eventPath = path.join(indexDir, `${digest}.json`);
     try {
       await fs.link(stored.path, eventPath);
-      await this.syncDirectory(indexDir);
+      await syncDirectory(indexDir);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const existing = await fs.readFile(eventPath);
@@ -1319,7 +1283,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       } finally {
         await handle.close();
       }
-      await this.syncDirectory(indexDir);
+      await syncDirectory(indexDir);
     }
     return stored.address;
   }
@@ -1356,7 +1320,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
       }
       const opened = await openRegularFileNoFollow(targetPath);
       const snapshotRoot = path.join(this.provenanceRootDir, "inspection-snapshots");
-      await this.ensureDurableDirectory(snapshotRoot);
+      await this.directories.ensure(snapshotRoot);
       const snapshotDir = await fs.mkdtemp(path.join(snapshotRoot, "adopt-"));
       const snapshotPath = path.join(snapshotDir, "partition.parquet");
       try {
@@ -1588,7 +1552,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
         // opened no-follow and pinned by file descriptor through install.
         await fs.rename(preparedPath, claimedPath);
         claimed = true;
-        await this.syncDirectory(targetDirectory);
+        await syncDirectory(targetDirectory);
         const opened = await openRegularFileNoFollow(claimedPath);
         claimedHandle = opened.handle;
         claimedStat = opened.stat;
@@ -1607,7 +1571,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
           throw new Error("Prepared partition bytes do not match the supplied fingerprint");
         }
         await claimedHandle.sync();
-        await this.syncDirectory(targetDirectory);
+        await syncDirectory(targetDirectory);
 
         const previous = await this.authorityWithRebuiltHead(captured);
         let stored: StoredPartitionCommit;
@@ -1665,7 +1629,7 @@ export class FilePartitionCommitStore implements PartitionCommitRecorder {
         await fs.rename(claimedPath, targetPath);
         claimed = false;
         targetTouched = true;
-        await this.syncDirectory(targetDirectory);
+        await syncDirectory(targetDirectory);
         await requireNamedRegularInode(targetPath, claimedStat);
         const afterInstall = await claimedHandle.stat();
         if (

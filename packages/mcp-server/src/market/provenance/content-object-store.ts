@@ -7,6 +7,7 @@ import {
   parseCanonicalJsonAddress,
   type CanonicalJsonAddress,
 } from "./canonical-json.ts";
+import { DurableDirectories, syncDirectory } from "./durable-directory.ts";
 
 export interface PutContentObjectResult<T> {
   address: CanonicalJsonAddress;
@@ -46,6 +47,7 @@ function deepFreeze<T>(value: T): T {
  */
 export class ContentObjectStore {
   readonly rootDir: string;
+  private readonly directories = new DurableDirectories();
 
   constructor(rootDir: string) {
     this.rootDir = rootDir;
@@ -56,48 +58,6 @@ export class ContentObjectStore {
     return path.join(this.rootDir, "objects", "sha256", digest.slice(0, 2), `${digest}.json`);
   }
 
-  private async syncDirectory(directory: string): Promise<void> {
-    const handle = await fs.open(directory, "r");
-    try {
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-  }
-
-  private async ensureDurableDirectory(directory: string): Promise<void> {
-    const parent = path.dirname(directory);
-    if (parent !== directory) await this.ensureDurableDirectory(parent);
-    try {
-      const handle = await fs.open(directory, "r");
-      try {
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-      if (parent !== directory) await this.syncDirectory(parent);
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-
-    if (parent === directory)
-      throw new Error(`Cannot create content-object directory ${directory}`);
-    let created = false;
-    try {
-      await fs.mkdir(directory);
-      created = true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-    if (created) {
-      // A directory entry is durable only after its parent is synced. Sync the
-      // new directory too before publishing any children into it.
-      await this.syncDirectory(directory);
-      await this.syncDirectory(parent);
-    }
-  }
-
   private async syncExistingObject(objectPath: string): Promise<void> {
     const handle = await fs.open(objectPath, "r");
     try {
@@ -105,7 +65,7 @@ export class ContentObjectStore {
     } finally {
       await handle.close();
     }
-    await this.syncDirectory(path.dirname(objectPath));
+    await syncDirectory(path.dirname(objectPath));
   }
 
   async put<T>(value: T): Promise<PutContentObjectResult<T>> {
@@ -116,7 +76,7 @@ export class ContentObjectStore {
     const materialized = deepFreeze(JSON.parse(bytes.toString("utf8")) as T);
     const objectPath = this.objectPath(address);
     const objectDir = path.dirname(objectPath);
-    await this.ensureDurableDirectory(objectDir);
+    await this.directories.ensure(objectDir);
     const tempPath = path.join(objectDir, `.${path.basename(objectPath)}.tmp-${randomUUID()}`);
 
     let handle: fs.FileHandle | undefined;
@@ -130,9 +90,9 @@ export class ContentObjectStore {
       await handle.close();
       handle = undefined;
       await fs.link(tempPath, objectPath);
-      await this.syncDirectory(objectDir);
+      await syncDirectory(objectDir);
       await fs.unlink(tempPath);
-      await this.syncDirectory(objectDir);
+      await syncDirectory(objectDir);
       return {
         address,
         value: materialized,
