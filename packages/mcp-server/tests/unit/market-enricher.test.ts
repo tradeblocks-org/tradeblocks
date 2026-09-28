@@ -1191,8 +1191,7 @@ describe("runEnrichment injected IO path", () => {
           dataDir: tmpDir,
           ticker,
           date,
-          selectQuery:
-            `SELECT * FROM market.enriched WHERE ticker = '${ticker}' AND date = '${date}'`,
+          selectQuery: `SELECT * FROM market.enriched WHERE ticker = '${ticker}' AND date = '${date}'`,
         });
       }
     }
