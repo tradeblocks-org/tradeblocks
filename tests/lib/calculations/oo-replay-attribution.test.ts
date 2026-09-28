@@ -28,7 +28,7 @@ const trade: ReplayTrade = {
 };
 
 describe("OO replay attribution public interface", () => {
-  it("uses the equity close minus one minute on an early session, retaining v1 marks", () => {
+  it("uses the equity close minus one minute on an early session by default", () => {
     const curve = [
       { date: "2025-07-02", netLiquidity: 1000 },
       { date: "2025-07-03", netLiquidity: 1020 },
@@ -47,7 +47,6 @@ describe("OO replay attribution public interface", () => {
       trades: [position],
       curve,
       quoteLookup,
-      method_id: "oo-replay-method/v2",
     });
     expect(v2.method_id).toBe("oo-replay-method/v2");
     expect(v2.method_parameters).toMatchObject({
@@ -55,10 +54,6 @@ describe("OO replay attribution public interface", () => {
       calendar_revision: "xnys-full-day-2022-2030-v1",
     });
     expect(times).toEqual(["2025-07-02 15:59", "2025-07-03 12:59", "2025-07-07 15:59"]);
-    times.length = 0;
-    const v1 = calculateOoReplayAttribution({ trades: [position], curve, quoteLookup });
-    expect(v1.method_id).toBe("oo-replay-method/v1");
-    expect(times).toEqual(["2025-07-02 15:59", "2025-07-03 15:59", "2025-07-07 15:59"]);
   });
   it("withholds a date outside the calendar revision instead of guessing 15:59", () => {
     const result = calculateOoReplayAttribution({
@@ -70,7 +65,6 @@ describe("OO replay attribution public interface", () => {
       quoteLookup: () => {
         throw new Error("No quote may be requested outside the calendar");
       },
-      method_id: "oo-replay-method/v2",
     });
     expect(result.stats.daily[0]).toMatchObject({
       date: "2031-01-02",
@@ -134,8 +128,8 @@ describe("OO replay attribution public interface", () => {
       ...trade,
       strategyId: "c",
       strategyName: "C",
-      dateOpened: "2026-06-13",
-      dateClosed: "2026-06-13",
+      dateOpened: "2026-06-15",
+      dateClosed: "2026-06-15",
       profit: 10,
     };
     const quoteLookup = (date: string, ticker: string) => {
@@ -157,7 +151,7 @@ describe("OO replay attribution public interface", () => {
         { date: "2026-06-10", netLiquidity: 982 },
         { date: "2026-06-11", netLiquidity: 982 },
         { date: "2026-06-12", netLiquidity: 982 },
-        { date: "2026-06-13", netLiquidity: 1002 },
+        { date: "2026-06-15", netLiquidity: 1002 },
       ],
       quoteLookup,
     });
@@ -205,11 +199,14 @@ describe("OO replay attribution public interface", () => {
       oo_drawdown: 88,
       contributions: { a: -40, "b:ignored": -48 },
     });
-    expect(result.quotes.observations).toContainEqual({
-      date: "2026-06-11",
-      ticker: "SPXW260612P05200000",
-      missing: true,
-    });
+    expect(result.quotes.observations).toContainEqual(
+      expect.objectContaining({
+        date: "2026-06-11",
+        ticker: "SPXW260612P05200000",
+        missing: true,
+        mark_time: "15:59",
+      }),
+    );
   });
 
   it("prefers an observed SPXW mark on third Friday and records attempted monthly fallback", () => {
@@ -308,12 +305,15 @@ describe("OO replay attribution public interface", () => {
         residual: null,
         reason: { code: "missing_quote", tickers: expect.arrayContaining(["SPXW260612P05000000"]) },
       });
-      expect(result.quotes.observations).toContainEqual({
-        date: "2026-06-09",
-        ticker: "SPXW260612P05000000",
-        missing: true,
-        reason,
-      });
+      expect(result.quotes.observations).toContainEqual(
+        expect.objectContaining({
+          date: "2026-06-09",
+          ticker: "SPXW260612P05000000",
+          missing: true,
+          mark_time: "15:59",
+          reason,
+        }),
+      );
       expect(result.method_parameters.quote_validity).toBe("positive-uncrossed-max10x-v1");
     },
   );

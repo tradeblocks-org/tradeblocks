@@ -1,5 +1,0 @@
-# Unreleased — replay attribution v2
-
-The public `@tradeblocks/lib/calculations` entrypoint adds the bounded XNYS session calendar (`xnys-full-day-2022-2030-v1`) and early-close detection, reused by market-data provenance and spot-session coverage. `calculateOoReplayAttribution` accepts `method_id: "oo-replay-method/v2"`: open positions are marked one minute before the equity session close (12:59 ET on an early close, 15:59 ET otherwise). The recorded method parameters include `mark_rule` and `calendar_revision`, and each quote observation cites its actual `mark_time`. Days outside the supported calendar range are unavailable rather than silently marked at 15:59. Existing callers default to the unchanged v1 method and can continue to select it explicitly.
-
-The private library owns the XNYS rules. `tools/generate-replay-calendar.mjs` emits bounded membership snapshots for the separately published MCP package, Node spot-session tool, and Python resident; regenerate and review them together when the calendar revision changes.
