@@ -721,6 +721,7 @@ async function setupParquetWorkingTables(
   conn: DuckDBConnection,
   dataDir: string,
   ticker: string,
+  includeSpxReturn: boolean,
 ): Promise<{ dailyTable: string; dateContextTable: string }> {
   const ts = Date.now();
   const dailyTable = `_enrich_daily_${ts}`;
@@ -736,7 +737,8 @@ async function setupParquetWorkingTables(
   if (existsSync(dailyPath)) {
     // Legacy single-file seed
     await conn.run(
-      `CREATE TEMP TABLE "${dailyTable}" AS SELECT * FROM read_parquet('${dailyPath}') WHERE ticker = '${ticker}'`,
+      `CREATE TEMP TABLE "${dailyTable}" AS SELECT * FROM read_parquet('${dailyPath}')
+       WHERE ticker = '${ticker}'${includeSpxReturn ? ` OR ticker = '${DEFAULT_MARKET_TICKER}'` : ""}`,
     );
     await alignDailyWorkingTableColumns(conn, dailyTable);
   } else if (hasEnrichedTickerFiles(enrichedDir, ticker)) {
@@ -766,6 +768,27 @@ async function setupParquetWorkingTables(
     for (const ohlcv of ["open", "high", "low", "close"]) {
       await conn.run(`ALTER TABLE "${dailyTable}" ADD COLUMN "${ohlcv}" DOUBLE`);
     }
+  }
+
+  // The exported no-spotStore path joins SPX's precomputed Return_20D to
+  // derive VIX Trend_Direction. Seed that one additional ticker only in this
+  // path; the canonical SpotStore path computes SPX returns from spot history.
+  if (
+    !existsSync(dailyPath) &&
+    includeSpxReturn &&
+    ticker !== DEFAULT_MARKET_TICKER &&
+    hasEnrichedTickerFiles(enrichedDir, DEFAULT_MARKET_TICKER)
+  ) {
+    const spxGlob = path.join(
+      enrichedDir,
+      `ticker=${DEFAULT_MARKET_TICKER}`,
+      "date=*",
+      "data.parquet",
+    );
+    await conn.run(
+      `INSERT INTO "${dailyTable}" BY NAME
+       SELECT * FROM read_parquet('${spxGlob}', hive_partitioning=true)`,
+    );
   }
 
   // ---- Date-context working table seed -------------------------------------
@@ -1347,7 +1370,7 @@ export async function runEnrichment(
   let workingTables: { dailyTable: string; dateContextTable: string } | null = null;
 
   if (parquetMode) {
-    workingTables = await setupParquetWorkingTables(conn, opts.dataDir!, ticker);
+    workingTables = await setupParquetWorkingTables(conn, opts.dataDir!, ticker, !io?.spotStore);
   }
 
   // Determine target table names (working tables in Parquet mode, schema-qualified in DuckDB mode)
@@ -1708,8 +1731,16 @@ export async function runEnrichment(
       : undefined;
     const tier2Result = await runTier2(conn, tier2Targets, io?.spotStore);
 
-    // 10. Tier 3 — intraday timing fields (routes through io.spotStore when provided)
-    const tier3Result = await runTier3(conn, ticker, dates, dailyTarget, io?.spotStore);
+    // Keep full daily history for detecting missing sessions, but read minute
+    // bars only for sessions that will be written.
+    const tier3Result = await runTier3(
+      conn,
+      ticker,
+      writeRows.map((index) => dates[index]),
+      dailyTarget,
+      io?.spotStore,
+      Boolean(watermark && unbounded),
+    );
 
     // 11. Publish bounded Parquet slices before advancing the watermark. A
     // failed ticker or context write must remain retryable under the old mark.
@@ -1902,7 +1933,9 @@ async function runTier3(
   dates: string[],
   dailyTarget: string = "market.enriched",
   spotStore?: SpotStore,
+  exactDates = false,
 ): Promise<TierStatus> {
+  if (dates.length === 0) return { status: "skipped", reason: "no sessions to enrich" };
   // Check if intraday data exists for this ticker
   // Routes through spotStore.getCoverage when provided
   const hasData = await hasTier3Data(conn, ticker, spotStore);
@@ -1927,9 +1960,18 @@ async function runTier3(
   let closeIdx: number;
 
   if (spotStore) {
-    const bars = await spotStore.readBars(ticker, dates[0], dates[dates.length - 1]);
-    // Shape into the same tuple-array format the existing math expects below
-    rows = bars.map((b) => [b.date, b.time, b.open, b.high, b.low, b.close]);
+    if (exactDates) {
+      rows = [];
+      for (const date of dates) {
+        const bars = await spotStore.readBars(ticker, date, date);
+        for (const bar of bars) {
+          rows.push([bar.date, bar.time, bar.open, bar.high, bar.low, bar.close]);
+        }
+      }
+    } else {
+      const bars = await spotStore.readBars(ticker, dates[0], dates[dates.length - 1]);
+      rows = bars.map((b) => [b.date, b.time, b.open, b.high, b.low, b.close]);
+    }
     dateIdx = 0;
     timeIdx = 1;
     openIdx = 2;
@@ -1942,16 +1984,19 @@ async function runTier3(
     // Defense-in-depth: filter out zero/null minute bars at the SQL layer so
     // Tier 3 timing fields (High_Time, Low_Time, Opening_Drive_Strength) are
     // never seeded with provider-gap timestamps.
+    const dateFilter = exactDates
+      ? `date IN (${dates.map((_, index) => `$${index + 2}`).join(", ")})`
+      : "date >= $2 AND date <= $3";
     const result = await conn.runAndReadAll(
       `SELECT date, time, open, high, low, close
        FROM market.spot
-       WHERE ticker = $1 AND date >= $2 AND date <= $3
+       WHERE ticker = $1 AND ${dateFilter}
          AND open  IS NOT NULL AND open  > 0
          AND high  IS NOT NULL AND high  > 0
          AND low   IS NOT NULL AND low   > 0
          AND close IS NOT NULL AND close > 0
        ORDER BY date, time`,
-      [ticker, dates[0], dates[dates.length - 1]],
+      exactDates ? [ticker, ...dates] : [ticker, dates[0], dates[dates.length - 1]],
     );
 
     rows = result.getRows();

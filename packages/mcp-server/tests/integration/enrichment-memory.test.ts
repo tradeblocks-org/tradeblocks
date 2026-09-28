@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "@jest/globals";
+import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { existsSync, linkSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
@@ -6,11 +6,13 @@ import { createMarketStores } from "../../src/test-exports.ts";
 import { createMarketParquetViews } from "../../src/db/market-views.ts";
 import { getEnrichedThrough } from "../../src/db/json-adapters.ts";
 import { isXnysSessionDate } from "../../src/market/provenance/xnys-session-calendar.ts";
+import { ParquetSpotStore } from "../../src/market/stores/parquet-spot-store.ts";
 
 describe("enrichment with unrelated published history", () => {
   let fixture: FixtureHandle | undefined;
 
   afterEach(() => {
+    jest.restoreAllMocks();
     fixture?.cleanup();
   });
 
@@ -87,6 +89,8 @@ describe("enrichment with unrelated published history", () => {
   it("recovers missing history before a bounded refresh watermark", async () => {
     fixture = await buildStoreFixture({ parquetMode: true });
     const { conn, dataDir } = fixture.ctx;
+    // The authority bundle snapshots prototype methods at construction time.
+    const readBars = jest.spyOn(ParquetSpotStore.prototype, "readBars");
     const stores = createMarketStores(fixture.ctx);
     // Two real sessions precede the refresh by more than the 200-day
     // incremental lookback, so re-reading only the watermark window misses them.
@@ -118,7 +122,12 @@ describe("enrichment with unrelated published history", () => {
     expect((await stores.enriched.getCoverage("XLC")).totalDates).toBe(1);
     unlinkSync(blocked);
 
+    readBars.mockClear();
     await stores.enriched.compute("XLC", "", "");
+    expect(readBars.mock.calls.filter(([ticker]) => ticker === "XLC")).toEqual([
+      ["XLC", sessions[0], sessions[0]],
+      ["XLC", sessions[1], sessions[1]],
+    ]);
     await createMarketParquetViews(conn, dataDir);
     const rows = await stores.enriched.read({ ticker: "XLC", from: sessions[0], to: through });
     expect(rows).toHaveLength(3);

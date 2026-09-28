@@ -41,6 +41,7 @@ import { DuckDBInstance } from "@duckdb/node-api";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { writeEnrichedTickerPartition } from "../../src/db/market-datasets.ts";
 
 /** Minimal shape for SpotStore fakes in IO-routing tests. */
 type FakeSpotStore = {
@@ -1176,6 +1177,39 @@ describe("runEnrichment injected IO path", () => {
       "data.parquet",
     );
     expect(existsSync(enrichedPath)).toBe(true);
+  });
+
+  test("Parquet fallback retains SPX return when deriving VIX trend without a spotStore", async () => {
+    const dates = ["2025-01-06", "2025-01-07", "2025-01-08"];
+    for (const ticker of ["VIX", "VIX9D", "VIX3M", "SPX"]) {
+      await seedDailyFixture(conn, ticker, dates);
+    }
+    await conn.run(`UPDATE market.enriched SET Return_20D = 2 WHERE ticker = 'SPX'`);
+    for (const ticker of ["VIX", "SPX"]) {
+      for (const date of dates) {
+        await writeEnrichedTickerPartition(conn, {
+          dataDir: tmpDir,
+          ticker,
+          date,
+          selectQuery:
+            `SELECT * FROM market.enriched WHERE ticker = '${ticker}' AND date = '${date}'`,
+        });
+      }
+    }
+
+    const result = await runEnrichment(conn, "VIX", { dataDir: tmpDir, parquetMode: true });
+    expect(result.tier2.status).toBe("complete");
+    const reader = await conn.runAndReadAll(
+      `SELECT Trend_Direction FROM read_parquet('${join(
+        tmpDir,
+        "market",
+        "enriched",
+        "context",
+        "date=2025-01-08",
+        "data.parquet",
+      )}')`,
+    );
+    expect(reader.getRows()[0]?.[0]).toBe("up");
   });
 });
 
