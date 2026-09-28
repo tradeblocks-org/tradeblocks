@@ -15,15 +15,13 @@ const consumerDir = join(fixtureRoot, "consumer");
 mkdirSync(packDir);
 mkdirSync(consumerDir);
 // The stale-tail probe follows the bundled SOFR table rather than a pinned date, so a release
-// seed that extends the bundle keeps exercising the refusal one day past its real tail.
+// seed that extends the bundle keeps exercising the refusal at the first XNYS session past its
+// real tail (the probe below advances over weekends and holidays with the packed calendar).
 const sofrDates = readFileSync(resolve(packageRoot, "../lib/data/sofr-rates.ts"), "utf8").match(
   /"\d{4}-\d{2}-\d{2}"(?=\s*:)/g,
 );
 if (!sofrDates) throw new Error("Cannot read the bundled SOFR tail");
 const sofrTail = sofrDates.at(-1).slice(1, -1);
-const afterTail = new Date(`${sofrTail}T00:00:00Z`);
-afterTail.setUTCDate(afterTail.getUTCDate() + 1);
-const sofrAfterTail = afterTail.toISOString().slice(0, 10);
 
 try {
   const packed = JSON.parse(
@@ -104,8 +102,11 @@ try {
       if (rate.value.annualRateBasisPoints !== 366 || rate.value.series !== "sofr") {
         throw new Error("canonical materialized rate API failed");
       }
+      const afterTail = new Date("${sofrTail}T00:00:00Z");
+      do afterTail.setUTCDate(afterTail.getUTCDate() + 1);
+      while (!isXnysSessionDate(afterTail.toISOString().slice(0, 10)));
       try {
-        await publishCanonicalRateSlice(store, "sofr_rates", "${sofrAfterTail}");
+        await publishCanonicalRateSlice(store, "sofr_rates", afterTail.toISOString().slice(0, 10));
         throw new Error("stale canonical rate tail was accepted");
       } catch (error) {
         if (!String(error).includes("stale after ${sofrTail}")) throw error;
