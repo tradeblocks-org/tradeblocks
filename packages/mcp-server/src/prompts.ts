@@ -72,10 +72,14 @@ export a CSV for each scratch run to a path the TB server can read and call
 import_csv for each. For Docker/HTTP the files must be inside the mounted server
 data directory. If either server-readable CSV is unavailable, stop: the
 robustness verdict cannot be reached. Verify each block with get_block_info and
-get_statistics. Compare them with TB run_walk_forward, run_monte_carlo,
-analyze_edge_decay and paired_bootstrap_comparison. Name each test's result,
-including insufficient-data outcomes, and explain what the paired evidence does
-or does not establish. An optimizer ranking is only a lead, never a finding; no
+get_statistics. Run TB run_walk_forward, run_monte_carlo, analyze_edge_decay
+and paired_bootstrap_comparison (strategyA only: that run versus zero) on each
+block, and set them side by side with compare_blocks. paired_bootstrap_comparison
+reads one block, so it cannot test one run minus the other across two blocks;
+never pass both arms from the same block as if they were the two runs. Name each
+test's result, including insufficient-data outcomes, state that no paired
+difference test between the runs was run, and explain what the evidence does or
+does not establish. An optimizer ranking is only a lead, never a finding; no
 verdict from optimizer cells alone.
 ${dataIntegrity}`,
           },

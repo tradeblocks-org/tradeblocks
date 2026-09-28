@@ -167,11 +167,11 @@ and `/tradeblocks:stress-oo-portfolio (MCP)`; typed, they run as
 `prompts/list` and `prompts/get`. These prompts guide analysis, not server-side
 calls to Option Omega. The OO server name is chosen by the user.
 
-| Prompt                 | Workflow                                                                                                              |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `bring-in-oo-backtest` | Bring OO trades into a block; verify it with `get_block_info` and `get_statistics`.                                   |
-| `is-this-optimum-real` | Compare two OO scratch runs as separate blocks with walk-forward, Monte Carlo, edge-decay and paired bootstrap tools. |
-| `stress-oo-portfolio`  | Analyze a portfolio's economic trades with portfolio risk tools.                                                      |
+| Prompt                 | Workflow                                                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bring-in-oo-backtest` | Bring OO trades into a block; verify it with `get_block_info` and `get_statistics`.                                                              |
+| `is-this-optimum-real` | Run walk-forward, Monte Carlo, edge-decay and per-run bootstrap tests on two OO scratch runs as separate blocks, then compare them side by side. |
+| `stress-oo-portfolio`  | Analyze a portfolio's economic trades with portfolio risk tools.                                                                                 |
 
 The first two prompts use the `tradeblocks-skills` Claude Code plugin's
 `/tradeblocks:oo-capture` when installed. Without it, export a trade-log CSV
