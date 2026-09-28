@@ -15,7 +15,7 @@ const expectedVersion =
     ? manifest.version
     : null;
 
-it("exposes five OO prompts and existing tools through MCP", async () => {
+it("exposes version, instructions, five runnable OO prompts and all existing tools through MCP", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "tb-prompts-"));
   const client = new Client({ name: "workflow-prompts-test", version: "1.0.0" });
   const transport = new StdioClientTransport({

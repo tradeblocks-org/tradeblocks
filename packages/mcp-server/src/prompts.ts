@@ -371,13 +371,12 @@ ${dataIntegrity}`,
     }),
   );
 
-  // SDK 1.30 rejects a missing arguments field when a prompt has argsSchema,
-  // even if every argument is optional. MCP allows prompts/get without it.
+  // MCP lets prompts/get omit arguments, but the SDK's own handler (1.30) then
+  // rejects any prompt with an argsSchema. This one replaces it so a call without
+  // arguments renders the prompt as before.
   server.server.setRequestHandler(GetPromptRequestSchema, ({ params }) => {
     const prompt = prompts.get(params.name);
-    if (!prompt) {
-      throw new McpError(ErrorCode.InvalidParams, `Prompt ${params.name} not found`);
-    }
+    if (!prompt) throw new McpError(ErrorCode.InvalidParams, `Prompt ${params.name} not found`);
     const args = prompt.args.safeParse(params.arguments ?? {});
     if (!args.success) {
       throw new McpError(

@@ -316,19 +316,17 @@ be readable by the TradeBlocks server; for Docker/HTTP, put it inside the
 mounted server data directory. If unavailable, stop instead of rebuilding
 CSV from model responses.
 
-The new allocation prompt uses `/tradeblocks:oo-capture` for a saved portfolio
-only in clients with that plugin; otherwise import OO's portfolio trade-log CSV
+`allocate-oo-portfolio` and the read-only `stress-oo-portfolio` use
+`/tradeblocks:oo-capture` for a saved portfolio only in clients with that plugin;
+otherwise they use an existing block, or import OO's portfolio trade-log CSV
 with `import_csv` and optionally its whole-book daily log with `dailyLogPath`.
-The read-only stress prompt can also use that capture, an existing block, or
-exported CSV. `allocate-oo-portfolio` takes optional `ooId` (saved portfolio
-ID or run ID) and `block` (block ID or import name); it also works
-without arguments. TradeBlocks' correlation, marginal, tail, what-if and health
-results are trade-derived counterfactual proposals, never OO marked equity or
-OO headline figures. The whole-book curve has no per-member marks. A candidate
-is OO-tested only after `get_portfolio_status` reports complete and
-`get_portfolio_results` is read; saving requires an explicit request and a
-new portfolio. OO's headline and marked-equity figures remain OO's;
-TradeBlocks' realized trade statistics do not replace marked-account drawdown.
+TradeBlocks' correlation, marginal, tail, what-if and health results are
+trade-derived counterfactual proposals, never OO marked equity or OO headline
+figures. The whole-book curve has no per-member marks. A candidate is OO-tested
+only after `get_portfolio_status` reports complete and `get_portfolio_results`
+is read; saving requires an explicit request and a new portfolio. OO's headline
+and marked-equity figures remain OO's; TradeBlocks' realized trade statistics
+do not replace marked-account drawdown.
 
 `live-vs-oo` reads the reporting log from the OO reference block's own folder
 (see below); put the CSV there instead of importing it as a separate block.
