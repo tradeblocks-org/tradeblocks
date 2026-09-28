@@ -9,6 +9,8 @@ import { z } from "zod";
 
 // Owned by the tradeblocks-skills plugin (#4167); the server does not install or invoke it.
 const captureSkill = "/tradeblocks:oo-capture";
+// Pinned older plugin installs have oo-capture without saved-portfolio capture.
+const portfolioCaptureCondition = `the running client's ${captureSkill} skill describes saved-portfolio capture (older plugin versions capture only saved backtests and runs)`;
 const optimumSkill = "/tradeblocks:is-this-optimum-real";
 
 const dataIntegrity = `Keep Option Omega (OO) and TradeBlocks (TB) evidence separate.
@@ -207,9 +209,10 @@ with get_saved_portfolio first, and treat it as a runId only if OO has no saved
 portfolio with that ID. Given a block, check it with get_block_info: use that
 block if it exists, otherwise use it as the imported block's name. Use an
 existing TradeBlocks block if it contains that portfolio's economic trades.
-Otherwise, in plugin-capable clients, ${captureSkill} can capture a saved
-portfolio as a strategy-labelled block with its whole-book daily curve.
-Without that plugin, ask the user for OO's portfolio trade-log CSV at a path
+Otherwise, when ${portfolioCaptureCondition}, that skill can capture a saved
+portfolio as a strategy-labelled block with its whole-book daily curve. Without
+the plugin, or with an older oo-capture, ask the user for OO's portfolio
+trade-log CSV at a path
 readable by the TB server (Docker/HTTP: inside the mounted data directory),
 and import_csv, including dailyLogPath if the daily-log CSV is available.
 If neither capture nor a server-readable CSV is available, stop without a
@@ -319,10 +322,10 @@ Ask the user when source, block or constraints are ambiguous.
 Use list_blocks and get_block_info to identify a TB block containing all of
 this portfolio's economic member trades under distinct, case-insensitively
 unique Strategy labels. Check the label-to-OO-member mapping; two members with
-the same name must not merge. When the running client has the tradeblocks-skills
-plugin, use its ${captureSkill} portfolio capture for a saved OO portfolio to
-obtain a strategy-labelled block and the whole-book marked daily curve.
-Otherwise ask for the portfolio's OO trade-log CSV export and optional
+the same name must not merge. When ${portfolioCaptureCondition}, use that
+skill for a saved OO portfolio to obtain a strategy-labelled block and the
+whole-book marked daily curve. Otherwise (no plugin, or an older oo-capture)
+ask for the portfolio's OO trade-log CSV export and optional
 daily-log CSV export at paths readable by the TB server (Docker/HTTP: inside
 the mounted data directory); call import_csv with csvPath, blockName and
 dailyLogPath when available. If the CSV is unavailable or member labels cannot

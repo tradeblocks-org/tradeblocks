@@ -96,6 +96,14 @@ it("exposes version, instructions, five runnable OO prompts and all existing too
     expect(content.text).toMatch(/trade-derived counterfactual/i);
     expect(content.text).toMatch(/whole-book[\s\S]*no per-member marks/i);
     expect(content.text).toContain("dailyLogPath");
+    // Pinned older plugin installs lack portfolio capture: both portfolio prompts
+    // must keep the CSV import path open for them, not only for plugin-less clients.
+    for (const name of ["allocate-oo-portfolio", "stress-oo-portfolio"]) {
+      const rendered = (await client.getPrompt({ name })).messages[0].content;
+      if (rendered.type !== "text") throw new Error("Expected text prompt");
+      expect(rendered.text).toMatch(/describes saved-portfolio capture/);
+      expect(rendered.text).toMatch(/older oo-capture[\s\S]*import_csv/);
+    }
 
     const tools = await client.listTools();
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual(EXISTING_TOOL_NAMES);

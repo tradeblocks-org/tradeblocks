@@ -317,8 +317,9 @@ mounted server data directory. If unavailable, stop instead of rebuilding
 CSV from model responses.
 
 `allocate-oo-portfolio` and the read-only `stress-oo-portfolio` use
-`/tradeblocks:oo-capture` for a saved portfolio only in clients with that plugin;
-otherwise they use an existing block, or import OO's portfolio trade-log CSV
+`/tradeblocks:oo-capture` for a saved portfolio only when the installed skill
+describes saved-portfolio capture (older plugin versions do not); otherwise
+they use an existing block, or import OO's portfolio trade-log CSV
 with `import_csv` and optionally its whole-book daily log with `dailyLogPath`.
 TradeBlocks' correlation, marginal, tail, what-if and health results are
 trade-derived counterfactual proposals, never OO marked equity or OO headline

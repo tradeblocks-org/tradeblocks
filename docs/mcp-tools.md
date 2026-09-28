@@ -253,16 +253,17 @@ to a path readable by the TradeBlocks server and import with `import_csv`.
 In Docker/HTTP the CSV must be inside the server's mounted data directory.
 If the server cannot read it, the workflow stops instead of re-typing OO's
 responses. The read-only `stress-oo-portfolio` prompt can use the plugin's
-saved-portfolio capture where available, or an existing portfolio block or
-OO's exported trade log elsewhere. OO's marked-account headlines and
+saved-portfolio capture when the installed `oo-capture` supports it, or an
+existing portfolio block or OO's exported trade log otherwise. OO's marked-account headlines and
 TradeBlocks' realized-trade statistics must be labelled separately, especially
 drawdown; OO profit already includes fees.
 
 The `allocate-oo-portfolio` prompt takes optional `ooId` (saved portfolio ID,
 or a scratch run ID) and `block` (block ID or import name) arguments; without
-arguments it resolves the source from the conversation. In plugin-capable
-clients, `/tradeblocks:oo-capture` captures a saved portfolio with distinct
-member strategy labels and its whole-book daily curve. Otherwise use an
+arguments it resolves the source from the conversation. When the installed
+`/tradeblocks:oo-capture` describes saved-portfolio capture, it captures a saved
+portfolio with distinct member strategy labels and its whole-book daily curve;
+older plugin versions capture only saved backtests and runs. Otherwise use an
 OO-exported portfolio trade-log CSV with `import_csv`, adding `dailyLogPath`
 when the daily-log export is available. Both files must be server-readable.
 TradeBlocks' correlation, marginal, tail, what-if and health analyses are
