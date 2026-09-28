@@ -57,7 +57,8 @@ export interface StrategyDayComparison {
   actual: {
     trades: ReportingTrade[];
     totalPl: number;
-    totalPremium: number;
+    /** Signed position premium dollars; null when any row's premium unit is unknown. */
+    totalPremium: number | null;
     totalContracts: number;
     /** Sum of all contracts - used for scaling (equals totalContracts) */
     unitContracts: number;
@@ -778,7 +779,9 @@ function aggregateActualTrades(trades: ReportingTrade[]) {
   return {
     trades,
     totalPl: trades.reduce((sum, t) => sum + t.pl, 0),
-    totalPremium: trades.reduce((sum, t) => sum + t.initialPremium * t.numContracts * 100, 0),
+    totalPremium: trades.every(hasReportingPremiumQuote)
+      ? trades.reduce((sum, t) => sum + t.initialPremium * t.numContracts * 100, 0)
+      : null,
     totalContracts,
     // unitContracts now equals totalContracts for accurate scaling with variable sizes
     unitContracts: totalContracts,

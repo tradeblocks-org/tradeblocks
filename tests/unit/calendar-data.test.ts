@@ -343,12 +343,43 @@ describe("Calendar Data Service", () => {
     it("aggregates signed quote premiums in dollars across position sizes", () => {
       const multiLot = createDayData({
         actualTrades: [
-          createActualTrade({ strategy: "Live Strategy", initialPremium: 4.2, numContracts: 3 }),
-          createActualTrade({ strategy: "Live Strategy", initialPremium: -2, numContracts: 2 }),
+          createActualTrade({
+            strategy: "Live Strategy",
+            initialPremium: 4.2,
+            numContracts: 3,
+            initialPremiumUnit: "quote",
+          }),
+          createActualTrade({
+            strategy: "Live Strategy",
+            initialPremium: -2,
+            numContracts: 2,
+            initialPremiumUnit: "quote",
+          }),
         ],
       });
       // 4.2 * 100 * 3 - 2 * 100 * 2 = $860 signed opening cash flow.
       expect(aggregateTradesByStrategy(multiLot, [])[0].actual?.totalPremium).toBeCloseTo(860);
+    });
+
+    it("leaves the strategy premium total unavailable when a row's unit is unknown", () => {
+      const mixed = createDayData({
+        actualTrades: [
+          createActualTrade({
+            strategy: "Live Strategy",
+            initialPremium: 4.2,
+            numContracts: 3,
+            initialPremiumUnit: "quote",
+          }),
+          // Legacy TAT row: dollars per spread, no unit stamp and no source provenance.
+          createActualTrade({
+            strategy: "Live Strategy",
+            initialPremium: -5310,
+            numContracts: 5,
+            initialPremiumUnit: undefined,
+          }),
+        ],
+      });
+      expect(aggregateTradesByStrategy(mixed, [])[0].actual?.totalPremium).toBeNull();
     });
 
     it("should include unmatched actual strategies separately", () => {
