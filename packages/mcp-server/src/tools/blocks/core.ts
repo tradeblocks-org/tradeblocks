@@ -45,10 +45,16 @@ export function rebuildSubsetEquity(
   dailyLogs?: DailyLogEntry[],
 ): Trade[] {
   const tradeCapital = resolveStartingCapital(allTrades);
+  const dailyCapital =
+    tradeCapital.source === "observed_trade_funds" && dailyLogs?.length
+      ? PortfolioStatsCalculator.calculateInitialCapital(allTrades, dailyLogs)
+      : undefined;
   const initialCapital =
     tradeCapital.source === "assumed_default"
       ? tradeCapital.amount
-      : resolveStartingCapital(allTrades, dailyLogs).amount;
+      : dailyCapital !== undefined && Number.isFinite(dailyCapital) && dailyCapital > 0
+        ? dailyCapital
+        : tradeCapital.amount;
   return tradeCapital.source === "assumed_default"
     ? rebuildMissingFundsEquity(trades, initialCapital)
     : rebuildEquityCurve(trades, { initialCapital, useNetPl: true });
@@ -478,19 +484,26 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
           // When a subset filter is applied, daily logs cannot be used because they
           // represent the full portfolio rather than the selected strategy/ticker.
           const effectiveDailyLogs = isSubsetFiltered ? undefined : filteredDailyLogs;
-          const capital = resolveStartingCapital(
-            isSubsetFiltered ? allTrades : trades,
-            effectiveDailyLogs,
-          );
+          const baseTrades = isSubsetFiltered ? allTrades : trades;
+          const tradeCapital = resolveStartingCapital(baseTrades);
+          const capitalDailyLogs = isSubsetFiltered ? dailyLogs : effectiveDailyLogs;
+          const dailyCapital =
+            tradeCapital.source === "observed_trade_funds" && capitalDailyLogs?.length
+              ? PortfolioStatsCalculator.calculateInitialCapital(baseTrades, capitalDailyLogs)
+              : undefined;
+          const capital =
+            tradeCapital.source === "observed_trade_funds"
+              ? dailyCapital !== undefined && Number.isFinite(dailyCapital) && dailyCapital > 0
+                ? { amount: dailyCapital, source: "daily_log" as const }
+                : tradeCapital
+              : resolveStartingCapital(baseTrades, effectiveDailyLogs);
           // The calculator uses fundsAtClose for trade drawdown and CAGR too.
           // Reconstruct absent balances before calculating, not only the reported start.
-          if (
-            !isSubsetFiltered &&
-            resolveStartingCapital(trades).source !== "observed_trade_funds"
-          ) {
+          if (!isSubsetFiltered && tradeCapital.source !== "observed_trade_funds") {
             trades = rebuildMissingFundsEquity(trades, capital.amount);
           }
-          const metricDailyLogs = capital.source === "daily_log" ? effectiveDailyLogs : undefined;
+          const metricDailyLogs =
+            !isSubsetFiltered && capital.source === "daily_log" ? effectiveDailyLogs : undefined;
           const requestCalculator = new PortfolioStatsCalculator({ riskFreeRateAnnualPct });
           const stats = requestCalculator.calculatePortfolioStats(
             trades,

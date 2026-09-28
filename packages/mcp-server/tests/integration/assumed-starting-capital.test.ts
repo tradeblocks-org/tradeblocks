@@ -44,6 +44,7 @@ const statistics = z.object({
   stats: z.object({
     initialCapital: z.number(),
     netPl: z.number(),
+    sharpeRatio: z.number().optional(),
     cagr: z.number().optional(),
     maxDrawdown: z.number(),
     calmarRatio: z.number().optional(),
@@ -72,7 +73,7 @@ async function importAndRead(
     ...(dailyContents ? { dailyLogPath } : {}),
   });
   expect(imported.isError).not.toBe(true);
-  const stats = await call("get_statistics", { blockId: "capital" });
+  const stats = await call("get_statistics", { blockId: "capital", riskFreeRateAnnualPct: 0 });
   const charts = await call("get_performance_charts", {
     blockId: "capital",
     charts: ["equity_curve", "drawdown"],
@@ -172,6 +173,51 @@ describe("import_csv starting capital across tools", () => {
       expect(charts.equityCurveCapitalSource).toBe("observed_trade_funds");
     });
   });
+  it("preserves funded statistics when a daily log has no P/L column", async () => {
+    const funded =
+      "Date Opened,Date Closed,Strategy,P/L,Legs,Funds at Close\n2024-01-02,2024-01-02,Alpha,200,SPY,10200\n2024-01-03,2024-01-03,Beta,-50,SPY,10150\n";
+    const dailyWithoutPl =
+      "Date,Net Liquidity,Drawdown %\n2024-01-02,10200,0\n2024-01-03,10000,2\n";
+    await withTools(async (root, call) => {
+      const { stats, charts } = await importAndRead(root, call, funded, dailyWithoutPl);
+      expect(stats.stats.initialCapital).toBe(10200);
+      expect(stats.stats.sharpeRatio).toBeUndefined();
+      expect(stats.stats.maxDrawdown).toBe(2);
+      expect(stats.stats.calmarRatio).toBeCloseTo(-49.96387920766545);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("daily_log");
+      expect(charts.equityCurve[0].equity).toBe(10000);
+      expect(charts.equityCurveCapitalSource).toBe("observed_trade_funds");
+      const subset = statistics.parse(
+        (
+          await call("get_statistics", {
+            blockId: "capital",
+            strategy: "Alpha",
+            riskFreeRateAnnualPct: 0,
+          })
+        ).structuredContent,
+      );
+      expect(subset.stats.initialCapital).toBe(10200);
+      expect(subset.calculationMethodology.initialCapital.source).toBe("daily_log");
+    });
+  });
+
+  it("uses observed trade funds when a funded daily start is impossible", async () => {
+    const funded =
+      "Date Opened,Date Closed,Strategy,P/L,Legs,Funds at Close\n2024-01-02,2024-01-02,Alpha,200,SPY,10200\n";
+    await withTools(async (root, call) => {
+      const { stats, charts } = await importAndRead(
+        root,
+        call,
+        funded,
+        "Date,Net Liquidity,P/L\n2024-01-02,0,200\n",
+      );
+      expect(stats.stats.initialCapital).toBe(10000);
+      expect(stats.calculationMethodology.initialCapital.source).toBe("observed_trade_funds");
+      expect(charts.equityCurve[0].equity).toBe(10000);
+      expect(charts.equityCurveCapitalSource).toBe("observed_trade_funds");
+    });
+  });
+
   it("does not treat a daily log without P/L or an impossible balance as observed", async () => {
     await withTools(async (root, call) => {
       const { stats, charts } = await importAndRead(
