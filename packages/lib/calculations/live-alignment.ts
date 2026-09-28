@@ -140,6 +140,8 @@ interface MatchedPair {
   scaledBtPl: number;
   scaledActualPl: number;
   slippage: number;
+  btPl: number;
+  actualPl: number;
   btContracts: number;
   actualContracts: number;
 }
@@ -182,6 +184,8 @@ function matchTradesWithScaledPl(
       scaledBtPl,
       scaledActualPl,
       slippage: scaledActualPl - scaledBtPl,
+      btPl: btTrade.pl,
+      actualPl: actualTrade.pl,
       btContracts: btTrade.numContracts,
       actualContracts: actualTrade.numContracts,
     };
@@ -405,15 +409,10 @@ export function analyzeLiveAlignment(
     for (const p of stratPairs) {
       stratActualTotal += p.scaledActualPl;
       stratBtTotal += p.scaledBtPl;
-      // For per-contract gap, always compute per-contract values
-      const perContractActual =
-        p.actualContracts > 0
-          ? p.scaledActualPl / (scaling === "perContract" ? 1 : p.actualContracts)
-          : 0;
-      const perContractBt =
-        p.btContracts > 0 ? p.scaledBtPl / (scaling === "perContract" ? 1 : p.btContracts) : 0;
-      stratActualPerContractSum += perContractActual;
-      stratBtPerContractSum += perContractBt;
+      // Per-contract figures come from each side's own P/L and contract count,
+      // so they are independent of the scaling mode and never scaled twice.
+      stratActualPerContractSum += p.actualContracts > 0 ? p.actualPl / p.actualContracts : 0;
+      stratBtPerContractSum += p.btContracts > 0 ? p.btPl / p.btContracts : 0;
     }
 
     totalScaledActual += stratActualTotal;

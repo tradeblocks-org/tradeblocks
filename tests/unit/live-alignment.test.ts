@@ -280,6 +280,22 @@ describe("analyzeLiveAlignment", () => {
         resultExplicit.executionEfficiency.totalBacktestPl,
       );
     });
+
+    // Hand-computed: backtest $1,000 on 10 contracts ($100/contract), actual
+    // $190 on 2 contracts ($95/contract). toReported scales the backtest to
+    // $200 for totals, but per-contract figures stay $100 and $95.
+    test.each(["raw", "perContract", "toReported"] as const)(
+      "19b. %s: per-contract figures are scaled exactly once",
+      (scaling) => {
+        const bt = [makeTrade({ pl: 1000, numContracts: 10 })];
+        const actual = [makeReportingTrade({ pl: 190, numContracts: 2 })];
+        const result = asResult(analyzeLiveAlignment(bt, actual, { scaling }));
+        const strat = result.executionEfficiency.byStrategy[0];
+        expect(strat.backtestPerContract).toBeCloseTo(100, 6);
+        expect(strat.actualPerContract).toBeCloseTo(95, 6);
+        expect(strat.perContractGap).toBeCloseTo(-5, 6);
+      },
+    );
   });
 
   // -----------------------------------------------------------------------

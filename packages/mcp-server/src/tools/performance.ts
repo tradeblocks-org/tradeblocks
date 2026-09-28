@@ -1135,7 +1135,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
     "compare_backtest_to_actual",
     {
       description:
-        "Compare backtest (tradelog.csv) results to actual reported trades (reportinglog.csv) with scaling options for fair comparison. Matches trades by date and strategy. When no dateRange is specified, comparison is auto-limited to the reporting log's date range overlap. By default, output includes matched and unmatched comparisons; set matchedOnly=true to include only matched rows. Supports trade-level detail, outlier detection, and flexible grouping. Limitation: Trade-level matching uses minute precision; if multiple trades share the same date+strategy+minute, matching is order-dependent.",
+        "Compare backtest (tradelog.csv) results to actual reported trades (reportinglog.csv) with scaling options for fair comparison. Matches trades by date and strategy. When no dateRange is specified, comparison is auto-limited to the reporting log's date range overlap. By default, output includes matched and unmatched comparisons; set matchedOnly=true to include only matched rows. Under toReported scaling, summary totals cover matched rows only, since an unmatched backtest row has no reported size to scale to; unmatched P/L is reported separately. Supports trade-level detail, outlier detection, and flexible grouping. Limitation: Trade-level matching uses minute precision; if multiple trades share the same date+strategy+minute, matching is order-dependent.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         strategy: z
@@ -1831,8 +1831,12 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
         }
 
         // Calculate summary statistics.
-        // matchedOnly=false includes unmatched rows in totals for backward compatibility.
-        const comparisonsForTotals = matchedOnly
+        // toReported scales only matched backtest rows (an unmatched backtest row has no
+        // reported size), so its totals cover matched rows alone and never mix scales.
+        // raw and perContract rows share one scale; with matchedOnly=false their totals
+        // include unmatched rows for backward compatibility.
+        const totalsMatchedOnly = matchedOnly || scaling === "toReported";
+        const comparisonsForTotals = totalsMatchedOnly
           ? outputComparisons.filter((c) => c.matched)
           : outputComparisons;
         const matchedForSummary = outputComparisons.filter((c) => c.matched);
@@ -1916,7 +1920,9 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
             outlierStats,
             note: matchedOnly
               ? "Summary stats are computed from matched rows only."
-              : "Summary stats include unmatched rows because matchedOnly=false. Unmatched trades are also reported in unmatchedSummary.",
+              : totalsMatchedOnly
+                ? "Summary totals and percentage are computed from matched rows only: toReported scales a backtest row to its matched reported trade's size, and an unmatched backtest row has none. Unmatched P/L is reported separately in unmatchedBacktestPl, unmatchedActualPl and unmatchedSummary, each row at its own contract size."
+                : "Summary stats include unmatched rows because matchedOnly=false. Unmatched trades are also reported in unmatchedSummary.",
           },
           unmatchedSummary: {
             backtest: unmatchedBacktestSummary,
