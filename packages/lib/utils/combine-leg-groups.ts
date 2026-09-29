@@ -245,6 +245,9 @@ export function combineLegGroup(trades: Trade[]): CombinedTrade {
     // Aggregated values
     pl: totalPL,
     plBasis: allBasesUndeclared ? undefined : PlBasis.NetIncludesFees,
+    // A singleton keeps the source's own P/L %; a multi-row group has no source value for the
+    // combined position, so enrichment computes it from the combined P/L and premium.
+    plPct: trades.length === 1 ? firstTrade.plPct : undefined,
     numContracts: totalContracts,
     fundsAtClose,
     marginReq: maxMargin,

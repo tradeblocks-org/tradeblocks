@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from "@jest/globals";
 import { Trade } from "../../packages/lib/models/trade";
+import { enrichTrades } from "../../packages/lib/calculations/enrich-trades";
 import {
   groupTradesByEntry,
   combineLegGroup,
@@ -194,6 +195,21 @@ describe("combine-leg-groups", () => {
 
       expect(combined.maxProfit).toBeUndefined();
       expect(combined.maxLoss).toBe(-7365);
+    });
+
+    it("keeps a singleton's source P/L % and computes a multi-row group's", () => {
+      // premium 300 × 1 contract, pl 296.44 → computed 98.81…%; the source says 12.5%.
+      const [single] = enrichTrades([combineLegGroup([createTrade({ plPct: 12.5 })])]);
+      expect(single.plPct).toBe(12.5);
+      expect(single.premiumEfficiency).toBe(12.5);
+
+      const [group] = enrichTrades([
+        combineLegGroup([
+          createTrade({ plPct: 12.5 }),
+          createTrade({ plPct: 40, legs: "Put spread" }),
+        ]),
+      ]);
+      expect(group.plPct).toBeCloseTo(((296.44 * 2) / 600) * 100, 6);
     });
 
     it("should throw error for empty array", () => {
