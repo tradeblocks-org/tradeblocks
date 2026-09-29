@@ -165,8 +165,9 @@ function enrichSingleTrade(
   // Return metrics
   const rom = trade.marginReq > 0 ? (trade.pl / trade.marginReq) * 100 : undefined;
   const totalPremium = computeTotalPremium(trade);
+  // The source's own P/L % (Option Omega's `P/L %` column) wins over the recomputation.
   const premiumEfficiency =
-    totalPremium !== undefined ? (trade.pl / totalPremium) * 100 : undefined;
+    trade.plPct ?? (totalPremium !== undefined ? (trade.pl / totalPremium) * 100 : undefined);
   const plPct = premiumEfficiency; // Alias for easier discovery
   const netPlPct = totalPremium !== undefined ? (netPl / totalPremium) * 100 : undefined;
 

@@ -397,6 +397,10 @@ export class TradeProcessor {
         return parsed;
       };
 
+      // P/L % is optional: a blank or unparseable cell leaves the trade on its computed value
+      // instead of rejecting a row whose required fields all loaded.
+      const reportedPlPct = parseNumber(rawData["P/L %"], "P/L %", NaN);
+
       const trade: Trade = {
         dateOpened,
         timeOpened: rawData["Time Opened"] || "00:00:00",
@@ -414,6 +418,7 @@ export class TradeProcessor {
         reasonForClose: rawData["Reason For Close"] || undefined,
         pl: parseNumber(rawData["P/L"], "P/L"),
         plBasis: PlBasis.NetIncludesFees,
+        plPct: Number.isFinite(reportedPlPct) ? reportedPlPct : undefined,
         numContracts: Math.round(parseNumber(rawData["No. of Contracts"], "No. of Contracts")),
         fundsAtClose: parseNumber(rawData["Funds at Close"], "Funds at Close"),
         marginReq: parseNumber(rawData["Margin Req."], "Margin Req."),

@@ -201,6 +201,9 @@ Optional columns:
 - Strategy, Symbol (or Legs)
 - No. of Contracts
 - Premium (dollars per contract; `250` and `250.00` both mean $250 per lot)
+- P/L % (Option Omega's P/L as a percent of premium, e.g. `97.9`; when present and numeric, report
+  tools use it as the trade's `plPct`. A missing column or a blank or unparseable cell falls back to
+  P/L ÷ |Premium × No. of Contracts| × 100 and never refuses the import)
 - Opening/Closing Commissions + Fees (both required for `gross_before_fees`)
 - Funds at Close (optional; if absent, `get_statistics` and the realized
   `get_performance_charts` equity curve use the first daily log's Net Liquidity

@@ -508,6 +508,7 @@ export class DataLoader {
         const rawPremiumValue = (row["Premium"] ?? "").replace(/[$,]/g, "").trim();
         const parsedPremium = rawPremiumValue ? parseFloat(rawPremiumValue) : NaN;
         const premium = Number.isFinite(parsedPremium) ? parsedPremium : 0;
+        const reportedPlPct = parseFloat((row["P/L %"] ?? "").replace(/[$,]/g, ""));
 
         const trade: Trade = {
           dateOpened: new Date(row["Date Opened"] || ""),
@@ -524,6 +525,7 @@ export class DataLoader {
           reasonForClose: row["Reason For Close"] || undefined,
           pl: parseFloat(row["P/L"] || "0"),
           plBasis: PlBasis.NetIncludesFees,
+          plPct: Number.isFinite(reportedPlPct) ? reportedPlPct : undefined,
           numContracts: parseInt(row["No. of Contracts"] || "1"),
           fundsAtClose: parseFloat(row["Funds at Close"] || "0"),
           marginReq: parseFloat(row["Margin Req."] || "0"),

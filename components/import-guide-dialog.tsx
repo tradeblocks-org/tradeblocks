@@ -63,6 +63,10 @@ const OPTIONAL_TRADE_FIELDS = [
   { name: "Time Closed", description: "Trade close time" },
   { name: "Avg. Closing Cost", description: "Average cost to close the position" },
   { name: "Reason For Close", description: "Why the trade was closed" },
+  {
+    name: "P/L %",
+    description: "P/L as % of premium (e.g., 97.9); used as P/L % when present, else calculated",
+  },
   { name: "Opening Commissions + Fees", description: "Commissions paid to open" },
   { name: "Closing Commissions + Fees", description: "Commissions paid to close" },
   { name: "Opening Short/Long Ratio", description: "Short/Long ratio at open" },

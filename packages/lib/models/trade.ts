@@ -34,6 +34,12 @@ export interface Trade {
    * that `pl` is gross and fees must be deducted once.
    */
   plBasis?: PlBasis;
+  /**
+   * P/L as a percent of total premium, as reported by the source CSV's `P/L %` column
+   * (Option Omega writes `97.9` for 97.9%). Absent when the column is missing or its cell is
+   * blank or unparseable; enrichment then computes `pl / |premium × contracts| × 100`.
+   */
+  plPct?: number;
   numContracts: number;
   fundsAtClose: number;
   /** False when the MCP trade CSV omitted or left Funds at Close blank. */
@@ -84,6 +90,7 @@ export interface RawTradeData {
   "Avg. Closing Cost"?: string;
   "Reason For Close"?: string;
   "P/L": string;
+  "P/L %"?: string;
   "No. of Contracts": string;
   "Funds at Close": string;
   "Margin Req.": string;
@@ -115,6 +122,7 @@ export const TRADE_COLUMN_MAPPING = {
   "Avg. Closing Cost": "avgClosingCost",
   "Reason For Close": "reasonForClose",
   "P/L": "pl",
+  "P/L %": "plPct",
   "No. of Contracts": "numContracts",
   "Funds at Close": "fundsAtClose",
   "Margin Req.": "marginReq",
@@ -139,7 +147,6 @@ export const TRADE_COLUMN_ALIASES = {
   "Opening Commissions & Fees": "Opening Commissions + Fees",
   "Closing comms & fees": "Closing Commissions + Fees",
   "Closing Commissions & Fees": "Closing Commissions + Fees",
-  "P/L %": "P/L %", // Recognized but ignored (we calculate our own plPct)
 } as const;
 
 /**

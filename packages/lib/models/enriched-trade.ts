@@ -21,7 +21,7 @@ export interface EnrichedTrade extends Trade {
 
   // Return metrics
   rom?: number; // Return on Margin (P/L / margin * 100)
-  premiumEfficiency?: number; // P/L / premium * 100
+  premiumEfficiency?: number; // Trade.plPct from the CSV when present, else P/L / premium * 100
   plPct?: number; // Alias for premiumEfficiency (P/L %)
   netPlPct?: number; // Net P/L / premium * 100 (after fees)
 

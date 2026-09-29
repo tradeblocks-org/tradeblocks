@@ -180,7 +180,10 @@ Before creating a block, `import_csv` refuses a trade or reporting row with an
 impossible opened/closed calendar date or a missing or unparseable P/L;
 gross-before-fees trade rows also need numeric commission fields. Paired daily
 logs require `Date` and a numeric `Net Liquidity` (or `Portfolio Value`,
-`Value`, `Equity`); `P/L` and `Drawdown %` are optional. Errors name the CSV
+`Value`, `Equity`); `P/L` and `Drawdown %` are optional. A trade log's `P/L %`
+column is optional too: a numeric cell becomes the trade's `plPct` in report
+tools, and a blank or unparseable cell falls back to the computed value without
+refusing the row. Errors name the CSV
 file line (the header is line 1). Any refused row, in either file, refuses the
 entire import without creating a block. The result's `recordCount` counts the
 rows actually loaded from the primary CSV, and its `strategies` use the block

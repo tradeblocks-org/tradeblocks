@@ -131,6 +131,10 @@ elsewhere in the computation remain instants.
   - `Opening Commissions + Fees`, `Closing Commissions + Fees` (MCP `import_csv` requires both
     with `gross_before_fees`)
   - `Premium` is dollars per contract (one lot): `250` and `250.00` both mean $250.
+  - `P/L %` is optional in both importers. A numeric cell becomes `Trade.plPct` (a percent: `97.9`
+    means 97.9%), and enrichment uses it as the trade's `plPct`/`premiumEfficiency` instead of
+    recomputing. A missing column or a blank or unparseable cell leaves `plPct` computed as
+    `pl / |premium × numContracts| × 100`. `netPlPct` is always computed.
   - Ratio columns such as `Opening Short/Long Ratio` are optional but supported.
 - Aliases in `TRADE_COLUMN_ALIASES` normalize variants (e.g., `Opening comms & fees`).
 

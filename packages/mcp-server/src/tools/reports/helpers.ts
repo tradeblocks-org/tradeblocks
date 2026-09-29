@@ -133,7 +133,9 @@ export function enrichTrades(trades: Trade[]): EnrichedTrade[] {
     // Return metrics
     const rom = trade.marginReq > 0 ? (trade.pl / trade.marginReq) * 100 : undefined;
     const totalPremium = computeTotalPremium(trade);
-    const plPct = totalPremium !== undefined ? (trade.pl / totalPremium) * 100 : undefined;
+    // The source's own P/L % (Option Omega's `P/L %` column) wins over the recomputation.
+    const plPct =
+      trade.plPct ?? (totalPremium !== undefined ? (trade.pl / totalPremium) * 100 : undefined);
     const netPlPct = totalPremium !== undefined ? (netPl / totalPremium) * 100 : undefined;
 
     // MFE/MAE approximation from maxProfit/maxLoss (if available in trade data)

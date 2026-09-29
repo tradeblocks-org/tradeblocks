@@ -356,6 +356,8 @@ backtests/
   `plBasis: "net_includes_fees"`. Use `"gross_before_fees"` only if fees still need deducting)
 - Strategy (optional; the block ID is used when missing), Legs (or Symbol)
 - No. of Contracts, Premium (optional; dollars per contract: `250` and `250.00` both mean $250)
+- P/L % (optional; when numeric, report tools use Option Omega's value as the trade's `plPct`;
+  otherwise `plPct` is P/L ÷ |Premium × No. of Contracts| × 100)
 
 **dailylog.csv** - Daily portfolio values:
 
