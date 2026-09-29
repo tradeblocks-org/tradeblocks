@@ -106,8 +106,23 @@ const REPORTING_SOURCE_CELLS: Record<string, string> = {
 };
 
 /**
+ * A day with an optional clock time and no time zone. A cell with `Z` or an offset was read as
+ * that instant, so its prefix is not necessarily the day the user saw.
+ */
+const ZONELESS_SOURCE_DAY = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?$/;
+
+/** The exact day a zone-less source cell names, or `null` (`2025-02-30` is no day). */
+function sourceCellDay(cell: unknown): string | null {
+  if (typeof cell !== "string") return null;
+  const day = ZONELESS_SOURCE_DAY.exec(cell.trim())?.[1];
+  if (!day) return null;
+  const parsed = new Date(`${day}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day ? day : null;
+}
+
+/**
  * Rewrite pre-v7 `Date` calendar days as `YYYY-MM-DD`. The day comes from the record's saved
- * source cell when it starts with one, else from `recoverCalendarDay`. A day neither can prove
+ * zone-less source cell when it has one, else from `recoverCalendarDay`. A day neither can prove
  * keeps the local day this browser shows and is returned in `unproven`. Strings are skipped, so a
  * repeated pass changes nothing.
  */
@@ -123,9 +138,7 @@ function storeCalendarDays(
     const value = record[field];
     if (!isDate(value)) continue;
     const cell = sourceCells[field] ? source?.[sourceCells[field]] : undefined;
-    const day =
-      (typeof cell === "string" && /^\d{4}-\d{2}-\d{2}/.exec(cell.trim())?.[0]) ||
-      recoverCalendarDay(value);
+    const day = sourceCellDay(cell) ?? recoverCalendarDay(value);
     if (day === null) unproven++;
     record[field] = day ?? encodeCalendarDay(value);
     changed = true;

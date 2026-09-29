@@ -147,7 +147,7 @@ describe.each([
       for (const [name, fields] of Object.entries(DATE_FIELDS)) {
         after[name].forEach((record, index) => {
           // Strategy-log rows with saved source cells have their own test below.
-          if (record.value.blockId === "oo-strategy") return;
+          if (String(record.value.blockId).startsWith("oo-")) return;
           for (const field of fields) {
             const legacy = before[name][index].value[field];
             expect([name, field, record.value[field]]).toEqual([
@@ -197,6 +197,19 @@ describe.each([
         { opened: "2025-06-03", hasSource: true },
       ]);
       expect(read.ooUnverified).toEqual({ reportingLogs: 2 });
+    });
+
+    it("ignores a saved cell with a time zone or an impossible day, keeping the instant rule", () => {
+      const stored = after.reportingLogs.filter((row) => row.value.blockId === "oo-zoned");
+      const legacy = before.reportingLogs.filter((row) => row.value.blockId === "oo-zoned");
+      expect(stored.map((row) => row.value.dateOpened)).toEqual([
+        "2025-05-30", // 02:00Z is before 10:00 UTC: its UTC date
+        "2025-05-31", // 20:00Z, not the cell's 2025-05-30
+        "2025-05-31", // 23:30-04:00 is 03:30Z on 31 May, not the cell's 2025-05-30
+        expectedDay(legacy[3].value.dateOpened, writeZone, readZone, provable),
+      ]);
+      expect(stored[3].value.dateOpened).not.toBe("2025-02-30");
+      expect(read.ooZonedUnverified).toEqual(provable ? null : { reportingLogs: 1 });
     });
 
     it("reads back the stored days in the current zone, including range queries and caches", () => {

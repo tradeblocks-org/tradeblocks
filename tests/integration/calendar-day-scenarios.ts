@@ -210,6 +210,7 @@ async function seedLegacy(version: 5 | 6): Promise<void> {
   blocks.put(blockRecord("legacy", localDay(DAYS[0]), localDay(DAYS.at(-1)!)));
   blocks.put(blockRecord("utc-parser", new Date("2024-01-05"), new Date("2024-01-05")));
   blocks.put(blockRecord("oo-strategy", localDay(DAYS[0]), localDay(DAYS[0])));
+  blocks.put(blockRecord("oo-zoned", localDay(DAYS[0]), localDay(DAYS[0])));
 
   const trades = tx.objectStore(STORES.TRADES);
   DAYS.forEach((day, index) =>
@@ -275,6 +276,22 @@ async function seedLegacy(version: 5 | 6): Promise<void> {
     sourceFields: { "Date Opened": "2025-06-03", "Date Closed": "" },
     blockId: "oo-strategy",
   });
+  // Cells with a zone were read as that instant, so their prefix is not the day the user saw;
+  // `2025-02-30` was rolled to 2 March by the importer's local `Date` constructor.
+  for (const cell of [
+    "2025-05-30T02:00:00Z",
+    "2025-05-30T20:00:00Z",
+    "2025-05-30T23:30:00-04:00",
+    "2025-02-30",
+  ]) {
+    reporting.put({
+      ...reportingTrade(DAYS[0]),
+      dateOpened: cell === "2025-02-30" ? new Date(2025, 1, 30) : new Date(cell),
+      dateClosed: undefined,
+      sourceFields: { "Date Opened": cell },
+      blockId: "oo-zoned",
+    });
+  }
 
   const calculations = tx.objectStore(STORES.CALCULATIONS);
   for (const [id, calculationType] of [
@@ -312,6 +329,7 @@ async function readLegacy(): Promise<Json> {
       hasSource: r.sourceFields !== undefined,
     })),
     ooUnverified: (await getBlock("oo-strategy"))?.unverifiedCalendarDays ?? null,
+    ooZonedUnverified: (await getBlock("oo-zoned"))?.unverifiedCalendarDays ?? null,
     combinedFromMigratedTrades: days(cached.map((t) => t.dateOpened)),
     tradeRange: days(
       (await getTradesByDateRange("legacy", localDay(DAYS[1]), localDay(DAYS[3]))).map(
