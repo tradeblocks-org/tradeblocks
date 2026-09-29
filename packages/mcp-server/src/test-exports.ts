@@ -879,3 +879,4 @@ export type { FieldType, FieldDiff, RowDiff } from "./utils/enrichment-verificat
 export { calibrateProviderFetch } from "./utils/calibration-probe.ts";
 // ============================================================================
 export { leaseToolHandlers } from "./tools/middleware/connection-lease.ts";
+export { refuseUnknownArguments } from "./tools/middleware/strict-arguments.ts";

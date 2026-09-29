@@ -2,6 +2,14 @@
 
 TradeBlocks MCP server tools organized by category.
 
+Every tool refuses an argument it does not declare. The call returns an error, for example
+`Input validation error: Invalid arguments for tool import_csv: Unrecognized key: "ooCurvePath"`,
+and the tool does not run. Each tool's `tools/list` input schema sets `additionalProperties: false`.
+A client that sends an option this server version does not support therefore sees the mismatch
+instead of a success with the option ignored. Only top-level arguments are checked this way;
+a nested value keeps its own rules, such as the free-form `keyMetrics` of `profile_strategy`.
+Prompts refuse an undeclared argument in the same way.
+
 ## Block Management
 
 | Tool                      | Description                                                     |
@@ -299,6 +307,15 @@ can express the conversion in SQL.
 When adding a statistic or chart to the web application, consider whether AI analysis also needs it.
 Summary metrics generally belong in `get_statistics`; time-series outputs generally belong in
 `get_performance_charts`.
+
+### Tool Inputs
+
+Register each tool with `server.registerTool` and a Zod object `inputSchema`. That includes
+tools added through a `TradeBlocksPlugin`. The server makes that object strict at
+registration, so no tool needs `.strict()` of its own. A tool registered with any other input
+schema, such as a raw shape, a union or no schema at all, is refused at startup with an error
+naming the tool. A schema replaced after registration, such as through the handle's
+`update({ paramsSchema })`, is not made strict.
 
 ### Verification
 

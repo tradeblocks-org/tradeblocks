@@ -38,7 +38,8 @@ export function registerWorkflowPrompts(server: McpServer): void {
   const prompts = new Map<string, { args: z.ZodObject<PromptArgs>; render: RenderPrompt }>();
   const register = (name: string, config: PromptConfig, render: RenderPrompt) => {
     server.registerPrompt(name, config, render);
-    prompts.set(name, { args: z.object(config.argsSchema), render });
+    // Strict: an argument the prompt does not declare is refused, not dropped (enterprise#4197).
+    prompts.set(name, { args: z.strictObject(config.argsSchema), render });
   };
 
   register(

@@ -47,6 +47,7 @@ import type { StoreContext, MarketStores } from "./market/stores/index.ts";
 import type { TradeBlocksPlugin, TradeBlocksPluginContext } from "./plugins.ts";
 import { shouldShutdownOnParentChange } from "./parent-watchdog.ts";
 import { leaseToolHandlers } from "./tools/middleware/connection-lease.ts";
+import { refuseUnknownArguments } from "./tools/middleware/strict-arguments.ts";
 import { registerWorkflowPrompts } from "./prompts.ts";
 
 // How often the stdio parent-death watchdog polls process.ppid. See the
@@ -356,10 +357,11 @@ export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = 
         instructions: serverInstructions,
       },
     );
-    // Bracket every tool call in a connection lease (#445), before anything
-    // registers, so core tools and plugin tools are both covered without a
-    // per-tool opt-in. See tools/middleware/connection-lease.ts.
-    const leasedServer = leaseToolHandlers(server);
+    // Bracket every tool call in a connection lease (#445) and refuse undeclared
+    // arguments (enterprise#4197), before anything registers, so core tools and
+    // plugin tools are both covered without a per-tool opt-in. See
+    // tools/middleware/connection-lease.ts and tools/middleware/strict-arguments.ts.
+    const leasedServer = leaseToolHandlers(refuseUnknownArguments(server));
     registerTradeBlocksCoreTools(leasedServer, pluginContext);
     registerWorkflowPrompts(server);
     for (const plugin of plugins) {
