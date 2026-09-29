@@ -10,7 +10,7 @@ import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
 import { rankPredictiveTradeFields } from "@tradeblocks/lib";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
-import { enrichTrades, getTradeFieldValue, percentile } from "./helpers.ts";
+import { enrichTrades, getTradeFieldValue, percentile, type EnrichedTrade } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";

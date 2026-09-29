@@ -261,7 +261,9 @@ Place tests with the matching test area (`tests/unit/` for shared library code a
 the compiled package in tests, expose it through `packages/mcp-server/src/test-exports.ts`.
 
 Test empty input, single-record input, and missing optional data where applicable. Run
-`npm run typecheck` before the final commit; `npm run verify` also runs lint and formatting checks.
+`npm run typecheck` before the final commit. It checks the app, `packages/lib` and
+`packages/mcp-server`, and the required `Frontend (Next.js)` check runs it. `npm run verify` also
+runs lint and formatting checks.
 
 ### UI and State Patterns
 

@@ -145,13 +145,13 @@ export function enrichTrades(trades: Trade[]): EnrichedTrade[] {
     let excursionRatio: number | undefined;
     let rMultiple: number | undefined;
 
-    if (trade.maxProfit !== undefined && totalPremium !== 0) {
+    if (trade.maxProfit !== undefined && totalPremium !== undefined) {
       mfePercent = (trade.maxProfit / Math.abs(totalPremium)) * 100;
     }
-    if (trade.maxLoss !== undefined && totalPremium !== 0) {
+    if (trade.maxLoss !== undefined && totalPremium !== undefined) {
       maePercent = (Math.abs(trade.maxLoss) / Math.abs(totalPremium)) * 100;
     }
-    if (mfePercent !== undefined && trade.maxProfit && trade.maxProfit > 0) {
+    if (trade.maxProfit !== undefined && trade.maxProfit > 0) {
       profitCapturePercent = (trade.pl / trade.maxProfit) * 100;
     }
     if (mfePercent !== undefined && maePercent !== undefined && maePercent > 0) {

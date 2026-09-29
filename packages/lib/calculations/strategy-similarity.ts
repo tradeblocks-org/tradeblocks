@@ -3,6 +3,21 @@ import { calculateCorrelationMatrix } from "./correlation.ts";
 import { performTailRiskAnalysis } from "./tail-risk-analysis.ts";
 import { formatDateKey } from "./trade-matching.ts";
 
+interface SimilarPair {
+  strategyA: string;
+  strategyB: string;
+  correlation: number | null;
+  tailDependence: number | null;
+  overlapScore: number;
+  compositeSimilarity: number | null;
+  sharedTradingDays: number;
+  flags: {
+    isHighCorrelation: boolean;
+    isHighTailDependence: boolean;
+    isRedundant: boolean;
+  };
+}
+
 /** Compose entry-day trade correlation, joint tails and overlap into similarity pairs. */
 export function buildRealizedStrategySimilarity(
   trades: Trade[],
@@ -51,21 +66,6 @@ export function buildRealizedStrategySimilarity(
   }
 
   // Build similarity pairs
-  interface SimilarPair {
-    strategyA: string;
-    strategyB: string;
-    correlation: number | null;
-    tailDependence: number | null;
-    overlapScore: number;
-    compositeSimilarity: number | null;
-    sharedTradingDays: number;
-    flags: {
-      isHighCorrelation: boolean;
-      isHighTailDependence: boolean;
-      isRedundant: boolean;
-    };
-  }
-
   const pairs: SimilarPair[] = [];
   let redundantPairs = 0;
   let highCorrelationPairs = 0;

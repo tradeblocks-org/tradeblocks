@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p packages/lib --noEmit && tsc -p packages/mcp-server --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "audit": "npm audit --audit-level=high",
