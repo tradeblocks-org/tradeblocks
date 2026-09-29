@@ -64,35 +64,6 @@ interface PerformanceStore {
   reset: () => void;
 }
 
-function ensureRomDetails(chartData: SnapshotChartData, trades: Trade[]): SnapshotChartData {
-  if (chartData.returnDistributionDetails && chartData.returnDistributionDetails.length > 0) {
-    return chartData;
-  }
-
-  const romTrades = trades
-    .map((trade, index) => {
-      const marginReq =
-        typeof trade.marginReq === "number" && isFinite(trade.marginReq) ? trade.marginReq : 0;
-      const rom = marginReq > 0 ? (trade.pl / marginReq) * 100 : undefined;
-      return rom !== undefined
-        ? {
-            tradeNumber: index + 1,
-            date: new Date(trade.dateOpened).toISOString(),
-            pl: trade.pl,
-            marginReq,
-            strategy: trade.strategy,
-            rom,
-          }
-        : null;
-    })
-    .filter((t): t is NonNullable<typeof t> => Boolean(t));
-
-  return {
-    ...chartData,
-    returnDistributionDetails: romTrades,
-  };
-}
-
 const initialDateRange: DateRange = {
   from: undefined,
   to: undefined,
@@ -212,11 +183,6 @@ export const usePerformanceStore = create<PerformanceStore>((set, get) => ({
           const rawTrades = await getTradesByBlock(blockId);
           const groupedLegOutcomes = deriveGroupedLegOutcomes(rawTrades);
 
-          const chartDataWithRom = ensureRomDetails(
-            cachedSnapshot.chartData,
-            cachedSnapshot.filteredTrades,
-          );
-
           // Try to get cached enriched trades, fall back to computing them
           // Note: Static datasets aren't cached - always compute fresh to pick up new datasets
           // Also recompute if we have equity curve data (for exposureOnOpen field)
@@ -242,7 +208,7 @@ export const usePerformanceStore = create<PerformanceStore>((set, get) => ({
               portfolioStats: cachedSnapshot.portfolioStats,
               groupedLegOutcomes,
               enrichedTrades: enrichedTradesData,
-              ...chartDataWithRom,
+              ...cachedSnapshot.chartData,
             },
             isLoading: false,
           });
@@ -266,8 +232,6 @@ export const usePerformanceStore = create<PerformanceStore>((set, get) => ({
         normalizeTo1Lot: state.normalizeTo1Lot,
       });
 
-      const chartDataWithRom = ensureRomDetails(snapshot.chartData, snapshot.filteredTrades);
-
       const filteredRawTrades = filterTradesForSnapshot(rawTrades, updatedFilters);
       const groupedLegOutcomes = deriveGroupedLegOutcomes(filteredRawTrades);
 
@@ -288,7 +252,7 @@ export const usePerformanceStore = create<PerformanceStore>((set, get) => ({
           portfolioStats: snapshot.portfolioStats,
           groupedLegOutcomes,
           enrichedTrades: enrichedTradesData,
-          ...chartDataWithRom,
+          ...snapshot.chartData,
         },
         isLoading: false,
       });

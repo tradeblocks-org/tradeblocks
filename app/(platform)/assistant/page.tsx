@@ -23,6 +23,7 @@ import {
   getChartExportsByTab,
   getMultipleChartsJson,
   TAB_ORDER,
+  formatDateKey,
 } from "@tradeblocks/lib";
 import type { PortfolioStats, StrategyStats, SnapshotChartData, Trade } from "@tradeblocks/lib";
 import { useBlockStore } from "@tradeblocks/lib/stores";
@@ -184,7 +185,7 @@ export default function AssistantPage() {
           // Expose per-trade margin + P/L so GPT exports always carry ROM inputs
           trades: trades.map((t, idx) => ({
             tradeNumber: idx + 1,
-            dateOpened: t.dateOpened instanceof Date ? t.dateOpened.toISOString() : t.dateOpened,
+            dateOpened: formatDateKey(t.dateOpened),
             pl: t.pl,
             marginReq: t.marginReq,
             numContracts: t.numContracts,

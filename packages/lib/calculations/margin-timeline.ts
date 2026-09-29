@@ -4,9 +4,10 @@
 
 import type { Trade } from "../models/trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
+import { formatDateKey } from "./trade-matching.ts";
 
 export interface MarginTimeline {
-  dates: string[]; // ISO date strings
+  dates: string[]; // Calendar days, YYYY-MM-DD
   portfolioPct: number[]; // Portfolio margin % of capital
   strategyPct: Map<string, number[]>; // Per-strategy margin % of capital
   netLiq: Map<string, number>; // Net liquidation value by date
@@ -25,18 +26,11 @@ function getNetLiqFromDailyLog(
   if (!dailyLog) return null;
 
   const entry = dailyLog.find((e) => {
-    const entryDate = e.date instanceof Date ? toDateString(e.date) : String(e.date);
+    const entryDate = e.date instanceof Date ? formatDateKey(e.date) : String(e.date);
     return entryDate === dateStr;
   });
 
   return entry?.netLiquidity ?? null;
-}
-
-/**
- * Convert a Date object to YYYY-MM-DD string
- */
-function toDateString(date: Date): string {
-  return date.toISOString().split("T")[0];
 }
 
 /**
@@ -73,7 +67,7 @@ function buildDateToNetLiq(
       if (Number.isNaN(closeDate.getTime())) continue;
 
       // Compare date strings (YYYY-MM-DD) to avoid timezone issues
-      const closeDateStr = toDateString(closeDate);
+      const closeDateStr = formatDateKey(closeDate);
 
       // If trade closed on or before current date, add its P&L
       if (closeDateStr <= dateKey) {
@@ -133,7 +127,7 @@ export function buildMarginTimeline(
     // Add margin for each day the trade was open
     let currentDate = startDate;
     while (currentDate <= endDate) {
-      const dateKey = currentDate.toISOString().split("T")[0];
+      const dateKey = formatDateKey(currentDate);
 
       if (!marginTotals.has(dateKey)) {
         marginTotals.set(dateKey, {

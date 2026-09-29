@@ -18,6 +18,7 @@ import {
   PortfolioStatsCalculator,
   markedCagrFromDailyLogs,
 } from "../calculations/portfolio-stats.ts";
+import { formatDateKey } from "../calculations/trade-matching.ts";
 import { getNetPl } from "../utils/equity-curve.ts";
 import { getRiskFreeRate } from "../utils/risk-free-rate.ts";
 import { computeTotalPremium } from "../metrics/trade-efficiency.ts";
@@ -1012,13 +1013,6 @@ function getISOWeekNumber(date: Date): number {
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-}
-
-/**
- * Format date to YYYY-MM-DD key
- */
-function formatDateKey(date: Date): string {
-  return date.toISOString().split("T")[0];
 }
 
 /**

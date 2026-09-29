@@ -114,9 +114,8 @@ function transformToChartData(
     const utilizationPct = (entry.marginReq / denominator) * 100;
     const bucketLabel = getBucketLabel(utilizationPct, bucketSize, maxThreshold);
 
-    const date = new Date(entry.date);
-    // Use sortable key for ordering
-    const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+    // Calendar day YYYY-MM-DD; its YYYY-MM prefix is a sortable month key
+    const monthKey = entry.date.slice(0, 7);
 
     allMonths.add(monthKey);
 

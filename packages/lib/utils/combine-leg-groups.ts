@@ -9,6 +9,7 @@
  */
 
 import { PlBasis, type Trade } from "../models/trade.ts";
+import { formatDateKey } from "../calculations/trade-matching.ts";
 import { hasReportingPremiumQuote, type ReportingTrade } from "../models/reporting-trade.ts";
 import { yieldToMain, checkCancelled } from "./async-helpers.ts";
 import { getNetPl } from "./equity-curve.ts";
@@ -56,7 +57,7 @@ export function isCombinedReportingTrade(trade: ReportingTrade): trade is Combin
  * Generate a unique key for grouping trades by entry timestamp
  */
 function generateGroupKey(trade: Trade): string {
-  const dateStr = trade.dateOpened.toISOString().split("T")[0];
+  const dateStr = formatDateKey(trade.dateOpened);
   return `${dateStr}|${trade.timeOpened}|${trade.strategy}`;
 }
 
@@ -405,7 +406,7 @@ export function analyzeLegGroups(trades: Trade[]): {
  * Generate a unique key for grouping ReportingTrades by entry timestamp
  */
 function generateReportingGroupKey(trade: ReportingTrade): string {
-  const dateStr = trade.dateOpened.toISOString().split("T")[0];
+  const dateStr = formatDateKey(trade.dateOpened);
   const timeStr = trade.timeOpened ?? "00:00:00";
   return `${dateStr}|${timeStr}|${trade.strategy}`;
 }

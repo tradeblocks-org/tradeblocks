@@ -4,6 +4,7 @@
  */
 
 import type { SnapshotChartData } from "../services/performance-snapshot.ts";
+import { formatDateKey } from "../calculations/trade-matching.ts";
 import { toCsvRow } from "./export-helpers.ts";
 
 export const TAB_ORDER = [
@@ -487,7 +488,7 @@ export const CHART_EXPORTS: ChartExportConfig[] = [
         lines.push(
           toCsvRow([
             point.tradeNumber,
-            point.date instanceof Date ? point.date.toISOString() : String(point.date),
+            formatDateKey(point.date),
             point.pl.toFixed(2),
             point.mfe.toFixed(2),
             point.mae.toFixed(2),
@@ -643,7 +644,7 @@ export function getChartJsonData(
       chartName: "MFE/MAE Analysis",
       data: d.mfeMaeData.map((point) => ({
         ...point,
-        date: point.date instanceof Date ? point.date.toISOString() : point.date,
+        date: formatDateKey(point.date),
       })),
       stats: d.mfeMaeStats,
       distribution: d.mfeMaeDistribution,

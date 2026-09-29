@@ -6,6 +6,7 @@
  */
 
 import { PlBasis, type Trade } from "../models/trade.ts";
+import { formatDateKey } from "./trade-matching.ts";
 
 /**
  * Parameters for Monte Carlo simulation
@@ -782,8 +783,7 @@ export function calculateDailyReturns(
   const dailyPLMap = new Map<string, number>();
 
   for (const trade of trades) {
-    // Use ISO date string as key (YYYY-MM-DD)
-    const dateKey = trade.dateOpened.toISOString().split("T")[0];
+    const dateKey = formatDateKey(trade.dateOpened);
     const currentPL = dailyPLMap.get(dateKey) || 0;
     const pl = normalizeTo1Lot ? scaleTradeToOneLot(trade) : trade.pl;
     dailyPLMap.set(dateKey, currentPL + pl);

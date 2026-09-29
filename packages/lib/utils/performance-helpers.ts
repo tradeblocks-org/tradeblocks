@@ -1,10 +1,12 @@
 import type { Trade } from "../models/trade.ts";
+import { formatDateKey } from "../calculations/trade-matching.ts";
 import { groupTradesByEntry } from "./combine-leg-groups.ts";
 
 export type GroupedOutcome = "all_losses" | "all_wins" | "mixed" | "neutral";
 
 export interface GroupedLegEntry {
   id: string;
+  /** Calendar day, YYYY-MM-DD */
   dateOpened: string;
   timeOpened: string;
   strategy: string;
@@ -73,7 +75,7 @@ export function deriveGroupedLegOutcomes(rawTrades: Trade[]): GroupedLegOutcomes
 
     const entry: GroupedLegEntry = {
       id: key,
-      dateOpened: sorted[0].dateOpened.toISOString(),
+      dateOpened: formatDateKey(sorted[0].dateOpened),
       timeOpened: sorted[0].timeOpened,
       strategy: sorted[0].strategy,
       legCount: group.length,

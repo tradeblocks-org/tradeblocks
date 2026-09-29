@@ -94,15 +94,15 @@ describe("Monte Carlo Simulation", () => {
     it("should aggregate trades by date", () => {
       const trades = [
         createMockTrade({
-          dateOpened: new Date("2024-01-01"),
+          dateOpened: new Date(2024, 0, 1),
           pl: 100,
         }),
         createMockTrade({
-          dateOpened: new Date("2024-01-01"),
+          dateOpened: new Date(2024, 0, 1),
           pl: 200,
         }),
         createMockTrade({
-          dateOpened: new Date("2024-01-02"),
+          dateOpened: new Date(2024, 0, 2),
           pl: 300,
         }),
       ];
@@ -118,15 +118,15 @@ describe("Monte Carlo Simulation", () => {
     it("should sort daily returns by date", () => {
       const trades = [
         createMockTrade({
-          dateOpened: new Date("2024-01-03"),
+          dateOpened: new Date(2024, 0, 3),
           pl: 100,
         }),
         createMockTrade({
-          dateOpened: new Date("2024-01-01"),
+          dateOpened: new Date(2024, 0, 1),
           pl: 200,
         }),
         createMockTrade({
-          dateOpened: new Date("2024-01-02"),
+          dateOpened: new Date(2024, 0, 2),
           pl: 300,
         }),
       ];

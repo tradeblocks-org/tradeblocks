@@ -97,9 +97,9 @@ describe("getTradeResamplePool (still returns trades)", () => {
 describe("calculateDailyReturns with normalization", () => {
   it("should aggregate trades by day without normalization", () => {
     const trades = [
-      createMockTrade(100, 5, new Date("2024-01-01")),
-      createMockTrade(200, 5, new Date("2024-01-01")),
-      createMockTrade(300, 5, new Date("2024-01-02")),
+      createMockTrade(100, 5, new Date(2024, 0, 1)),
+      createMockTrade(200, 5, new Date(2024, 0, 1)),
+      createMockTrade(300, 5, new Date(2024, 0, 2)),
     ];
     const dailyReturns = calculateDailyReturns(trades, false);
     expect(dailyReturns).toEqual([
@@ -110,9 +110,9 @@ describe("calculateDailyReturns with normalization", () => {
 
   it("should aggregate trades by day with normalization", () => {
     const trades = [
-      createMockTrade(100, 5, new Date("2024-01-01")),
-      createMockTrade(200, 5, new Date("2024-01-01")),
-      createMockTrade(300, 5, new Date("2024-01-02")),
+      createMockTrade(100, 5, new Date(2024, 0, 1)),
+      createMockTrade(200, 5, new Date(2024, 0, 1)),
+      createMockTrade(300, 5, new Date(2024, 0, 2)),
     ];
     const dailyReturns = calculateDailyReturns(trades, true);
     expect(dailyReturns).toEqual([
@@ -123,8 +123,8 @@ describe("calculateDailyReturns with normalization", () => {
 
   it("should handle mixed contract sizes with normalization", () => {
     const trades = [
-      createMockTrade(500, 10, new Date("2024-01-01")),
-      createMockTrade(100, 2, new Date("2024-01-01")),
+      createMockTrade(500, 10, new Date(2024, 0, 1)),
+      createMockTrade(100, 2, new Date(2024, 0, 1)),
     ];
     const dailyReturns = calculateDailyReturns(trades, true);
     expect(dailyReturns).toEqual([

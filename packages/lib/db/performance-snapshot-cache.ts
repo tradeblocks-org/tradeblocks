@@ -16,7 +16,7 @@ import { getEffectiveRateDate } from "../utils/risk-free-rate.ts";
  * Cache entry for performance snapshot
  */
 interface PerformanceSnapshotCache {
-  id: string; // Format: `performance_snapshot_v3_${blockId}`
+  id: string; // Format: `performance_snapshot_v4_${blockId}`
   blockId: string;
   calculationType: "performance_snapshot";
   portfolioStats: PortfolioStats;
@@ -42,7 +42,7 @@ export interface CachedPerformanceSnapshot {
  * Generate the cache ID for a block
  */
 function getCacheId(blockId: string): string {
-  return `performance_snapshot_v3_${blockId}`;
+  return `performance_snapshot_v4_${blockId}`;
 }
 
 /**
@@ -99,17 +99,6 @@ function restoreDailyLogDates(logs: DailyLogEntry[]): DailyLogEntry[] {
 }
 
 /**
- * Restore Date objects in chart data
- */
-function restoreChartDataDates(chartData: SnapshotChartData): SnapshotChartData {
-  return {
-    ...chartData,
-    // Most chart data uses ISO string dates, which is fine
-    // Only restore where Date objects are expected
-  };
-}
-
-/**
  * Get cached performance snapshot for a block
  * Returns null if cache doesn't exist
  */
@@ -131,7 +120,7 @@ export async function getPerformanceSnapshotCache(
     // Restore Date objects that were serialized
     return {
       portfolioStats: cache.portfolioStats,
-      chartData: restoreChartDataDates(cache.chartData),
+      chartData: cache.chartData,
       filteredTrades: restoreDates(cache.filteredTrades) as Trade[],
       filteredDailyLogs: restoreDailyLogDates(cache.filteredDailyLogs),
       calculatedAt: new Date(cache.calculatedAt),

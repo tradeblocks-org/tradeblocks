@@ -1032,9 +1032,8 @@ describe("calculateExposureAtTradeOpen", () => {
 });
 
 describe("exposure keyed from the web performance snapshot's equity curve", () => {
-  // The snapshot stamps each equity point as an ISO instant of the local-midnight day (plus
-  // a second offset), unlike the calendar-day strings the MCP tools pass. Both producers'
-  // days must join to the same exposure day in every timezone.
+  // The snapshot dates its opening balance on the day before the first close and each later
+  // point on its close day. Each exposure day must join to that day's equity in every timezone.
   const trades = [
     createTrade({
       dateOpened: etDate("2024-01-02"),

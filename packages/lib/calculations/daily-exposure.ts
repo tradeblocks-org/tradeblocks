@@ -39,6 +39,7 @@ export interface PeakExposure {
  * Equity curve point for percentage calculations
  */
 export interface EquityCurvePoint {
+  /** Calendar day, YYYY-MM-DD; several points may share a day, and the last one wins */
   date: string;
   equity: number;
 }
@@ -60,18 +61,6 @@ function getFiniteNumber(value: unknown): number | undefined {
     return value;
   }
   return undefined;
-}
-
-/**
- * Calendar day (YYYY-MM-DD) an equity curve point belongs to.
- *
- * Two producers feed this: the MCP tools pass calendar days already, while the web
- * performance snapshot passes ISO instants of a local-midnight day (plus a few seconds to
- * keep points unique), which are read back in the local zone that wrote them. Slicing the
- * instant's UTC text would name the previous day east of UTC.
- */
-function equityDayKey(date: string): string {
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : formatDateKey(new Date(date));
 }
 
 /**
@@ -139,8 +128,7 @@ export function calculateDailyExposure(
   // Build a map of equity by date for percentage calculations
   const equityByDate = new Map<string, number>();
   for (const point of equityCurve) {
-    const dateKey = equityDayKey(point.date);
-    equityByDate.set(dateKey, point.equity);
+    equityByDate.set(point.date, point.equity);
   }
 
   // Build timed events for each trade
@@ -343,8 +331,7 @@ export function calculateExposureAtTradeOpen(
   // Build equity lookup by date
   const equityByDate = new Map<string, number>();
   for (const point of equityCurve) {
-    const dateKey = equityDayKey(point.date);
-    equityByDate.set(dateKey, point.equity);
+    equityByDate.set(point.date, point.equity);
   }
 
   // Create timestamped events for all trades

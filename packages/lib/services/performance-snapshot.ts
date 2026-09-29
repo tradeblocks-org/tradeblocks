@@ -17,6 +17,7 @@ import {
   type NormalizationBasis,
 } from "../calculations/mfe-mae.ts";
 import { calculateDailyExposure as calculateDailyExposureShared } from "../calculations/daily-exposure.ts";
+import { formatDateKey } from "../calculations/trade-matching.ts";
 import { normalizeTradesToOneLot } from "../utils/trade-normalization.ts";
 import { yieldToMain, checkCancelled } from "../utils/async-helpers.ts";
 import { calculateRunsTest } from "../calculations/streak-analysis.ts";
@@ -45,6 +46,10 @@ interface SnapshotOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * Every `date`, `dateOpened` and `dateClosed` string below is a calendar day, `YYYY-MM-DD`.
+ * Equity curve points are dated by close day, so trades closing on one day share a date.
+ */
 export interface SnapshotChartData {
   equityCurve: Array<{ date: string; equity: number; highWaterMark: number; tradeNumber: number }>;
   drawdownData: Array<{ date: string; drawdownPct: number }>;
@@ -302,7 +307,7 @@ export async function processChartData(
 
       return {
         tradeNumber: index + 1,
-        date: new Date(trade.dateOpened).toISOString(),
+        date: formatDateKey(new Date(trade.dateOpened)),
         pl: trade.pl,
         marginReq,
         strategy: trade.strategy,
@@ -347,7 +352,7 @@ export async function processChartData(
       pl: trade.pl,
       rom: marginReq > 0 ? (trade.pl / marginReq) * 100 : 0,
       marginReq,
-      date: new Date(trade.dateOpened).toISOString(),
+      date: formatDateKey(new Date(trade.dateOpened)),
     };
   });
 
@@ -359,7 +364,7 @@ export async function processChartData(
   const romTimeline = trades
     .filter((trade) => trade.marginReq && trade.marginReq > 0)
     .map((trade) => ({
-      date: new Date(trade.dateOpened).toISOString(),
+      date: formatDateKey(new Date(trade.dateOpened)),
       rom: (trade.pl / trade.marginReq!) * 100,
     }));
 
@@ -490,10 +495,9 @@ function calculateDailyDrawdownFromEquityCurve(
     : equityCurve[0].equity;
 
   equityCurve.forEach((point) => {
-    const dayKey = point.date.slice(0, 10); // YYYY-MM-DD
     const lastPoint = dailyPoints[dailyPoints.length - 1];
 
-    if (lastPoint && lastPoint.date.slice(0, 10) === dayKey) {
+    if (lastPoint && lastPoint.date === point.date) {
       // Overwrite with the latest equity for that day (end-of-day)
       dailyPoints[dailyPoints.length - 1] = { date: point.date, equity: point.equity };
     } else {
@@ -568,17 +572,17 @@ function buildEquityAndDrawdownFromDailyLogs(trades: Trade[], dailyLogs: DailyLo
           ? ((equity - highWaterMark) / highWaterMark) * 100
           : 0;
 
-    const isoDate = entryDate.toISOString();
+    const day = formatDateKey(entryDate);
 
     equityCurve.push({
-      date: isoDate,
+      date: day,
       equity,
       highWaterMark,
       tradeNumber: closedTradeCount,
     });
 
     drawdownData.push({
-      date: isoDate,
+      date: day,
       drawdownPct,
     });
   });
@@ -614,10 +618,9 @@ function calculateEquityCurveFromTrades(trades: Trade[], useFundsAtClose: boolea
     );
 
     if (fallbackTrades.length === 0) {
-      const now = new Date().toISOString();
       return [
         {
-          date: now,
+          date: formatDateKey(new Date()),
           equity: 0,
           highWaterMark: 0,
           tradeNumber: 0,
@@ -633,11 +636,9 @@ function calculateEquityCurveFromTrades(trades: Trade[], useFundsAtClose: boolea
     let runningEquity = initialCapital;
     let highWaterMark = runningEquity;
 
-    const initialDate = new Date(fallbackTrades[0].dateOpened);
-
     const curve: SnapshotChartData["equityCurve"] = [
       {
-        date: initialDate.toISOString(),
+        date: formatDateKey(new Date(fallbackTrades[0].dateOpened)),
         equity: runningEquity,
         highWaterMark,
         tradeNumber: 0,
@@ -648,11 +649,8 @@ function calculateEquityCurveFromTrades(trades: Trade[], useFundsAtClose: boolea
       runningEquity += trade.pl;
       highWaterMark = Math.max(highWaterMark, runningEquity);
 
-      const baseDate = new Date(trade.dateOpened);
-      const uniqueDate = new Date(baseDate.getTime() + (index + 1) * 1000);
-
       curve.push({
-        date: uniqueDate.toISOString(),
+        date: formatDateKey(new Date(trade.dateOpened)),
         equity: runningEquity,
         highWaterMark,
         tradeNumber: index + 1,
@@ -671,11 +669,11 @@ function calculateEquityCurveFromTrades(trades: Trade[], useFundsAtClose: boolea
   let highWaterMark = runningEquity;
 
   const firstCloseDate = new Date(closedTrades[0].dateClosed ?? closedTrades[0].dateOpened);
-  const initialDate = new Date(firstCloseDate.getTime() - 1000);
 
+  // The opening balance is dated one second before the first close: the previous day.
   const curve: SnapshotChartData["equityCurve"] = [
     {
-      date: initialDate.toISOString(),
+      date: formatDateKey(new Date(firstCloseDate.getTime() - 1000)),
       equity: runningEquity,
       highWaterMark,
       tradeNumber: 0,
@@ -691,11 +689,8 @@ function calculateEquityCurveFromTrades(trades: Trade[], useFundsAtClose: boolea
     runningEquity = equity;
     highWaterMark = Math.max(highWaterMark, runningEquity);
 
-    const closeDate = new Date(trade.dateClosed ?? trade.dateOpened);
-    const uniqueDate = new Date(closeDate.getTime() + (index + 1) * 1000);
-
     curve.push({
-      date: uniqueDate.toISOString(),
+      date: formatDateKey(new Date(trade.dateClosed ?? trade.dateOpened)),
       equity: runningEquity,
       highWaterMark,
       tradeNumber: index + 1,
@@ -1100,7 +1095,7 @@ async function calculateRollingMetrics(trades: Trade[], signal?: AbortSignal) {
     const plSignalToNoise = volatility > 0 ? avgReturn / volatility : 0;
 
     metrics.push({
-      date: new Date(trades[i].dateOpened).toISOString(),
+      date: formatDateKey(new Date(trades[i].dateOpened)),
       winRate: winRate * 100,
       plSignalToNoise,
       sharpeRatio: plSignalToNoise,
@@ -1156,7 +1151,7 @@ function calculateVolatilityRegimes(trades: Trade[]) {
       trade.marginReq && trade.marginReq !== 0 ? (trade.pl / trade.marginReq) * 100 : undefined;
 
     regimes.push({
-      date: new Date(trade.dateOpened).toISOString(),
+      date: formatDateKey(new Date(trade.dateOpened)),
       openingVix,
       closingVix,
       pl: trade.pl,
@@ -1187,7 +1182,7 @@ function calculatePremiumEfficiency(trades: Trade[]) {
 
     efficiency.push({
       tradeNumber: index + 1,
-      date: new Date(trade.dateOpened).toISOString(),
+      date: formatDateKey(new Date(trade.dateOpened)),
       pl: trade.pl,
       premium,
       avgClosingCost,
@@ -1218,9 +1213,8 @@ function calculateMarginUtilization(
 ) {
   const utilization: SnapshotChartData["marginUtilization"] = [];
 
-  // Build equity lookup by trade number if curve provided
-  // This is more reliable than date-based lookup since equity curve points are
-  // keyed by close date and may have offset timestamps for uniqueness
+  // Build equity lookup by trade number if curve provided.
+  // Equity curve points are keyed by close day, and several trades can share one day.
   const equityByTradeNumber = new Map<number, number>();
   if (equityCurve) {
     for (const point of equityCurve) {
@@ -1248,7 +1242,7 @@ function calculateMarginUtilization(
     }
 
     utilization.push({
-      date: new Date(trade.dateOpened).toISOString(),
+      date: formatDateKey(new Date(trade.dateOpened)),
       marginReq,
       fundsAtClose,
       numContracts,
@@ -1318,8 +1312,8 @@ function calculateHoldingPeriods(trades: Trade[]) {
 
     periods.push({
       tradeNumber: index + 1,
-      dateOpened: openDate.toISOString(),
-      dateClosed: closeDate ? closeDate.toISOString() : undefined,
+      dateOpened: formatDateKey(openDate),
+      dateClosed: closeDate ? formatDateKey(closeDate) : undefined,
       durationHours,
       pl: trade.pl,
       strategy: trade.strategy || "Unknown",

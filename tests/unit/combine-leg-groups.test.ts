@@ -18,7 +18,7 @@ import {
 describe("combine-leg-groups", () => {
   // Helper to create a test trade
   const createTrade = (overrides: Partial<Trade>): Trade => ({
-    dateOpened: new Date("2025-10-07"),
+    dateOpened: new Date(2025, 9, 7),
     timeOpened: "10:15:00",
     openingPrice: 6742.78,
     legs: "1 Oct 7 6755 C STO 3.15 | 1 Oct 7 6835 C BTO 0.05",
@@ -31,7 +31,7 @@ describe("combine-leg-groups", () => {
     openingCommissionsFees: 3.56,
     closingCommissionsFees: 0,
     openingShortLongRatio: 63,
-    dateClosed: new Date("2025-10-07"),
+    dateClosed: new Date(2025, 9, 7),
     timeClosed: "16:00:00",
     reasonForClose: "Expired",
     closingPrice: 6714.59,
@@ -49,7 +49,7 @@ describe("combine-leg-groups", () => {
       const trade1 = createTrade({ premium: 300, legs: "Call spread" });
       const trade2 = createTrade({ premium: 325, legs: "Put spread" });
       const trade3 = createTrade({
-        dateOpened: new Date("2025-10-07"),
+        dateOpened: new Date(2025, 9, 7),
         timeOpened: "09:32:00",
         premium: 335,
         legs: "Different time",
@@ -96,7 +96,7 @@ describe("combine-leg-groups", () => {
         premium: 300,
         pl: 296.44,
         legs: "1 Oct 7 6755 C STO 3.15 | 1 Oct 7 6835 C BTO 0.05",
-        dateClosed: new Date("2025-10-07"),
+        dateClosed: new Date(2025, 9, 7),
         timeClosed: "16:00:00",
         openingCommissionsFees: 3.56,
         closingCommissionsFees: 0,
@@ -107,7 +107,7 @@ describe("combine-leg-groups", () => {
         premium: 325,
         pl: -355.12,
         legs: "1 Oct 7 6730 P STO 3.65 | 1 Oct 7 6650 P BTO 0.30",
-        dateClosed: new Date("2025-10-07"),
+        dateClosed: new Date(2025, 9, 7),
         timeClosed: "10:36:00", // Earlier close time
         openingCommissionsFees: 3.56,
         closingCommissionsFees: 1.56,
@@ -221,13 +221,13 @@ describe("combine-leg-groups", () => {
     it("should combine multiple groups and preserve chronological order", () => {
       // Group 1: 10:15:00
       const g1t1 = createTrade({
-        dateOpened: new Date("2025-10-07"),
+        dateOpened: new Date(2025, 9, 7),
         timeOpened: "10:15:00",
         premium: 300,
         legs: "Calls",
       });
       const g1t2 = createTrade({
-        dateOpened: new Date("2025-10-07"),
+        dateOpened: new Date(2025, 9, 7),
         timeOpened: "10:15:00",
         premium: 325,
         legs: "Puts",
@@ -235,13 +235,13 @@ describe("combine-leg-groups", () => {
 
       // Group 2: 09:32:00 (earlier)
       const g2t1 = createTrade({
-        dateOpened: new Date("2025-10-07"),
+        dateOpened: new Date(2025, 9, 7),
         timeOpened: "09:32:00",
         premium: 335,
         legs: "Calls 2",
       });
       const g2t2 = createTrade({
-        dateOpened: new Date("2025-10-07"),
+        dateOpened: new Date(2025, 9, 7),
         timeOpened: "09:32:00",
         premium: 310,
         legs: "Puts 2",
@@ -260,17 +260,17 @@ describe("combine-leg-groups", () => {
 
     it("should handle single trades mixed with grouped trades", () => {
       const grouped1 = createTrade({
-        dateOpened: new Date("2025-10-07"),
+        dateOpened: new Date(2025, 9, 7),
         timeOpened: "10:15:00",
         premium: 300,
       });
       const grouped2 = createTrade({
-        dateOpened: new Date("2025-10-07"),
+        dateOpened: new Date(2025, 9, 7),
         timeOpened: "10:15:00",
         premium: 325,
       });
       const single = createTrade({
-        dateOpened: new Date("2025-10-08"),
+        dateOpened: new Date(2025, 9, 8),
         timeOpened: "10:15:00",
         premium: 400,
       });
@@ -335,13 +335,13 @@ describe("combine-leg-groups", () => {
     it("should correctly combine MEIC iron condor legs", () => {
       // Based on actual MEIC test data: 2025-10-07 10:15:00
       const callSpread = createTrade({
-        dateOpened: new Date("2025-10-07"),
+        dateOpened: new Date(2025, 9, 7),
         timeOpened: "10:15:00",
         openingPrice: 6742.78,
         legs: "1 Oct 7 6755 C STO 3.15 | 1 Oct 7 6835 C BTO 0.05",
         premium: 300,
         closingPrice: 6714.59,
-        dateClosed: new Date("2025-10-07"),
+        dateClosed: new Date(2025, 9, 7),
         timeClosed: "16:00:00",
         avgClosingCost: 0,
         reasonForClose: "Expired",
@@ -357,13 +357,13 @@ describe("combine-leg-groups", () => {
       });
 
       const putSpread = createTrade({
-        dateOpened: new Date("2025-10-07"),
+        dateOpened: new Date(2025, 9, 7),
         timeOpened: "10:15:00",
         openingPrice: 6742.78, // Same opening price
         legs: "1 Oct 7 6730 P STO 3.65 | 1 Oct 7 6650 P BTO 0.30",
         premium: 325,
         closingPrice: 6733.95,
-        dateClosed: new Date("2025-10-07"),
+        dateClosed: new Date(2025, 9, 7),
         timeClosed: "10:36:00", // Different close time (stop loss)
         avgClosingCost: 675,
         reasonForClose: "Stop Loss",
@@ -382,7 +382,7 @@ describe("combine-leg-groups", () => {
 
       // Verify combined trade properties
       expect(combined.originalTradeCount).toBe(2);
-      expect(combined.dateOpened).toEqual(new Date("2025-10-07"));
+      expect(combined.dateOpened).toEqual(new Date(2025, 9, 7));
       expect(combined.timeOpened).toBe("10:15:00");
       expect(combined.strategy).toBe("MEIC");
 
@@ -395,7 +395,7 @@ describe("combine-leg-groups", () => {
 
       // Should use last close time (16:00:00 is after 10:36:00)
       expect(combined.timeClosed).toBe("16:00:00");
-      expect(combined.dateClosed).toEqual(new Date("2025-10-07"));
+      expect(combined.dateClosed).toEqual(new Date(2025, 9, 7));
 
       // Combined legs should include both spreads
       expect(combined.legs).toContain("6755 C STO");

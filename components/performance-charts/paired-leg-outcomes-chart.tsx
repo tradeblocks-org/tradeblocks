@@ -1,7 +1,7 @@
 "use client";
 
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import type { Layout, PlotData } from "plotly.js";
 import { useMemo } from "react";
 import { ChartWrapper } from "./chart-wrapper";
@@ -38,9 +38,7 @@ export function GroupedLegOutcomesChart({ className }: GroupedLegOutcomesChartPr
     const entries = data.groupedLegOutcomes.entries;
     // Sort chronologically for the scatter plot line (if we wanted lines, but markers are better here)
     // The store already sorts them, but let's be safe for the axis.
-    const sortedEntries = [...entries].sort(
-      (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
-    );
+    const sortedEntries = [...entries].sort((a, b) => a.dateOpened.localeCompare(b.dateOpened));
 
     const recentEntries =
       sortedEntries.length > MAX_POINTS ? sortedEntries.slice(-MAX_POINTS) : sortedEntries;
@@ -49,7 +47,7 @@ export function GroupedLegOutcomesChart({ className }: GroupedLegOutcomesChartPr
     const xValues = recentEntries.map((entry) => {
       // Combine date and time if available for precise plotting
       if (entry.timeOpened) {
-        return `${entry.dateOpened.split("T")[0]}T${entry.timeOpened}`;
+        return `${entry.dateOpened}T${entry.timeOpened}`;
       }
       return entry.dateOpened;
     });
@@ -59,7 +57,8 @@ export function GroupedLegOutcomesChart({ className }: GroupedLegOutcomesChartPr
 
     // Prepare detailed custom data for tooltip
     const custom = recentEntries.map((entry) => {
-      const dateLabel = format(new Date(entry.dateOpened), "MMM d, yyyy");
+      // parseISO reads a YYYY-MM-DD day as local midnight, so the label keeps that day.
+      const dateLabel = format(parseISO(entry.dateOpened), "MMM d, yyyy");
       const timeLabel = entry.timeOpened ? ` at ${entry.timeOpened}` : "";
       return [
         OUTCOME_LABELS[entry.outcome] ?? entry.outcome, // 0: Outcome Label

@@ -358,15 +358,13 @@ export class PortfolioStatsCalculator {
 
       runningEquity = equity;
 
-      const closeDate = new Date(trade.dateClosed as Date);
-      const isoDate = closeDate.toISOString();
-      const dayKey = isoDate.slice(0, 10);
+      const dayKey = formatDateToKey(new Date(trade.dateClosed as Date));
 
       const lastPoint = dailyEquity[dailyEquity.length - 1];
-      if (lastPoint && lastPoint.date.slice(0, 10) === dayKey) {
-        dailyEquity[dailyEquity.length - 1] = { date: isoDate, equity };
+      if (lastPoint && lastPoint.date === dayKey) {
+        dailyEquity[dailyEquity.length - 1] = { date: dayKey, equity };
       } else {
-        dailyEquity.push({ date: isoDate, equity });
+        dailyEquity.push({ date: dayKey, equity });
       }
     });
 
@@ -407,7 +405,7 @@ export class PortfolioStatsCalculator {
       try {
         const date = new Date(trade.dateClosed ?? trade.dateOpened);
         if (!isNaN(date.getTime())) {
-          const dateKey = date.toISOString().split("T")[0];
+          const dateKey = formatDateToKey(date);
           const currentPl = dailyPl.get(dateKey) || 0;
           dailyPl.set(dateKey, currentPl + trade.pl);
         }

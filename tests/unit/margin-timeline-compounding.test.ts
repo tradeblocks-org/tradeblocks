@@ -2,7 +2,7 @@ import { buildMarginTimeline, Trade } from "@tradeblocks/lib";
 
 function createTrade(overrides: Partial<Trade> = {}): Trade {
   return {
-    dateOpened: new Date("2023-01-01"),
+    dateOpened: new Date(2023, 0, 1),
     timeOpened: "09:30:00",
     openingPrice: 0,
     legs: "Test",
@@ -24,11 +24,11 @@ describe("buildMarginTimeline - compounding mode", () => {
     const trades: Trade[] = [
       createTrade({
         pl: 500,
-        dateClosed: new Date("2023-01-01"),
+        dateClosed: new Date(2023, 0, 1),
       }),
       createTrade({
-        dateOpened: new Date("2023-01-02"),
-        dateClosed: new Date("2023-01-02"),
+        dateOpened: new Date(2023, 0, 2),
+        dateClosed: new Date(2023, 0, 2),
         pl: 700,
       }),
     ];
