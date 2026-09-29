@@ -12,7 +12,9 @@
  * The supported registration is `registerTool(name, { inputSchema: z.object(...) }, handler)`.
  * Any other input schema (a raw shape, a union, none at all) cannot be made strict,
  * so its registration is refused, naming the tool, rather than accepted with the
- * silent drop this exists to remove.
+ * silent drop this exists to remove. The SDK's legacy `tool()` registration is refused
+ * for the same reason. A schema replaced later through the returned handle's
+ * `update({ paramsSchema })` is not made strict.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -20,12 +22,20 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 /**
  * Wrap an McpServer so every tool registered on it refuses undeclared arguments.
  *
- * Returns a proxy. Only `registerTool` is intercepted; every other property and
- * method passes through to the real server untouched.
+ * Returns a proxy. Only `registerTool` and the legacy `tool` are intercepted; every
+ * other property and method passes through to the real server untouched.
  */
 export function refuseUnknownArguments(server: McpServer): McpServer {
   return new Proxy(server, {
     get(target, prop, receiver) {
+      if (prop === "tool") {
+        return function refuseLegacyTool(name: unknown): never {
+          throw new Error(
+            `Tool "${String(name)}" cannot be registered with server.tool(): use registerTool ` +
+              `with a Zod object inputSchema so undeclared arguments are refused rather than ignored.`,
+          );
+        };
+      }
       if (prop !== "registerTool") {
         return Reflect.get(target, prop, receiver);
       }

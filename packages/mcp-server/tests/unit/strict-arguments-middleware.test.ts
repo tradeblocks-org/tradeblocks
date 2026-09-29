@@ -22,4 +22,11 @@ describe("refuseUnknownArguments", () => {
       /Tool "plugin_tool" cannot be registered: its inputSchema must be a Zod object/,
     );
   });
+
+  it("refuses a tool registered through the legacy tool()", () => {
+    const server = refuseUnknownArguments(new McpServer({ name: "t", version: "0" }));
+    expect(() =>
+      server.tool("legacy_tool", { topic: z.string() }, async () => ({ content: [] })),
+    ).toThrow(/Tool "legacy_tool" cannot be registered with server.tool\(\)/);
+  });
 });

@@ -4,6 +4,6 @@
 
 Callers that send only declared arguments are unaffected. A client or script that used to send extra keys, even harmless ones, now gets this error and should send only the arguments in the running server's schema. The main aim is to make version skew visible, for example a newer `tradeblocks-skills` plugin sending an option to an older server. This protects only servers that include this change. An older server still drops unknown arguments, so the plugin keeps checking the running server's schema before it relies on an option such as `dailyLogPath`.
 
-Only top-level arguments are checked. A nested value keeps its own rules, such as the free-form `keyMetrics` of `profile_strategy`. A `TradeBlocksPlugin` tool must be registered with `registerTool` and a Zod object `inputSchema`, which the server makes strict. A plugin tool registered with a raw shape, a union or no schema is refused at startup, naming the tool.
+Only top-level arguments are checked. A nested value keeps its own rules, such as the free-form `keyMetrics` of `profile_strategy`. A `TradeBlocksPlugin` tool must be registered with `registerTool` and a Zod object `inputSchema`, which the server makes strict. A plugin tool registered with a raw shape, a union or no schema is refused at startup, naming the tool. So is one registered through the SDK's legacy `server.tool()`. A schema replaced later through the handle's `update({ paramsSchema })` is not made strict.
 
 This note does not bump a version or publish a release.

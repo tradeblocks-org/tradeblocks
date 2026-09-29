@@ -1,8 +1,9 @@
 /**
  * Undeclared arguments are refused, not silently dropped (enterprise#4197).
  *
- * Runs the real stdio server, so the refusal is proven through the same registration
- * path and SDK validation a client reaches, for every tool family and every prompt.
+ * Runs the production stdio server, hosting one TradeBlocksPlugin tool, so the refusal is
+ * proven through the registration path and SDK validation a client reaches, for every
+ * core tool family, a plugin tool and every prompt.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -22,7 +23,11 @@ it("refuses undeclared tool and prompt arguments by name and runs nothing", asyn
   const client = new Client({ name: "unknown-arguments-test", version: "1.0.0" });
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ["--experimental-strip-types", join(packageDir, "src/index.ts"), dataDir],
+    args: [
+      "--experimental-strip-types",
+      join(packageDir, "tests/fixtures/plugin-probe-server.ts"),
+      dataDir,
+    ],
     cwd: resolve(packageDir, "../.."),
     stderr: "pipe",
   });
@@ -32,7 +37,7 @@ it("refuses undeclared tool and prompt arguments by name and runs nothing", asyn
     // Every tool advertises a closed input object and refuses two undeclared keys,
     // naming the tool and both keys.
     const { tools } = await client.listTools();
-    expect(tools.length).toBeGreaterThan(0);
+    expect(tools.map((tool) => tool.name)).toContain("plugin_probe");
     for (const tool of tools) {
       expect([tool.name, tool.inputSchema.additionalProperties]).toEqual([tool.name, false]);
       const refused = await client.callTool({
@@ -45,6 +50,10 @@ it("refuses undeclared tool and prompt arguments by name and runs nothing", asyn
       expect(message).toContain('"unexpectedAlpha"');
       expect(message).toContain('"unexpectedBeta"');
     }
+
+    // The plugin tool itself still runs with its declared argument.
+    const probed = await client.callTool({ name: "plugin_probe", arguments: { value: "x" } });
+    expect(text(probed)).toBe("ran x");
 
     // A call that is otherwise valid still refuses, and the handler never runs:
     // an import with an option this server lacks creates no block.

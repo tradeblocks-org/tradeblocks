@@ -314,8 +314,9 @@ Register each tool with `server.registerTool` and a Zod object `inputSchema`. Th
 tools added through a `TradeBlocksPlugin`. The server makes that object strict at
 registration, so no tool needs `.strict()` of its own. A tool registered with any other input
 schema, such as a raw shape, a union or no schema at all, is refused at startup with an error
-naming the tool. A schema replaced after registration, such as through the handle's
-`update({ paramsSchema })`, is not made strict.
+naming the tool. So is a tool registered through the SDK's legacy `server.tool()`. A schema
+replaced after registration, such as through the handle's `update({ paramsSchema })`, is not
+made strict.
 
 ### Verification
 
