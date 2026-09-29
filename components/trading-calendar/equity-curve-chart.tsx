@@ -2,7 +2,7 @@
 
 import { ChartWrapper, createLineChartLayout } from "@/components/performance-charts/chart-wrapper";
 import { Badge } from "@/components/ui/badge";
-import { Trade } from "@tradeblocks/lib";
+import { formatDateKey, Trade } from "@tradeblocks/lib";
 import { ReportingTrade } from "@tradeblocks/lib";
 import {
   useTradingCalendarStore,
@@ -143,7 +143,7 @@ function buildEquityCurve(
     const date = trade.dateClosed || trade.dateOpened;
 
     curve.push({
-      date: date.toISOString(),
+      date: formatDateKey(date),
       tradeNumber: index + 1,
       equity: cumulativeEquity,
     });
