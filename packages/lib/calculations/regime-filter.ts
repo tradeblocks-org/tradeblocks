@@ -34,10 +34,10 @@ export interface DerivedTradeFields {
  * Compute derived fields from a trade
  */
 export function computeDerivedFields(trade: Trade): DerivedTradeFields {
-  // The date in the CSV is stored as Eastern Time date, parsed as UTC midnight
-  // Use getUTCDay() to get the correct day without timezone shift
+  // Trade dates are calendar days held at local midnight (parseDatePreservingCalendarDay, and the
+  // IndexedDB decoder), so the weekday comes from local calendar parts.
   const dateOpened = new Date(trade.dateOpened);
-  const dayOfWeek = dateOpened.getUTCDay();
+  const dayOfWeek = dateOpened.getDay();
 
   // Parse time from HH:mm:ss format
   let timeMinutes = 0;

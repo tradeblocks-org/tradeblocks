@@ -7,7 +7,7 @@
  */
 
 import { ChartWrapper } from "@/components/performance-charts/chart-wrapper";
-import { EnrichedTrade, getEnrichedTradeValue } from "@tradeblocks/lib";
+import { EnrichedTrade, formatDateKey, getEnrichedTradeValue } from "@tradeblocks/lib";
 import { ChartAxisConfig, ChartType, getFieldInfo } from "@tradeblocks/lib";
 import {
   formatMinutesToTime,
@@ -82,11 +82,11 @@ function formatValueForHover(value: number, field: string): string {
 
 /**
  * Convert a numeric value to a Plotly-compatible format
- * For date fields, converts timestamp to ISO string for proper axis handling
+ * For date fields, converts the local-midnight timestamp to its YYYY-MM-DD calendar day
  */
 function toPlotlyValue(value: number, field: string): number | string {
   if (isDateField(field)) {
-    return new Date(value).toISOString();
+    return formatDateKey(new Date(value));
   }
   return value;
 }

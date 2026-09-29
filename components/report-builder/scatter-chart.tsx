@@ -14,7 +14,7 @@
 import { useMemo, useState, useCallback } from "react";
 import type { Layout, PlotData, Shape } from "plotly.js";
 import { ChartWrapper } from "@/components/performance-charts/chart-wrapper";
-import { EnrichedTrade, getEnrichedTradeValue } from "@tradeblocks/lib";
+import { EnrichedTrade, formatDateKey, getEnrichedTradeValue } from "@tradeblocks/lib";
 import { ChartAxisConfig, getFieldInfo, ThresholdMetric } from "@tradeblocks/lib";
 import { formatMinutesToTime, generateTimeAxisTicksFromData } from "@tradeblocks/lib";
 import { WhatIfExplorer2D, YAxisConfig, YAxisRange } from "./what-if-explorer-2d";
@@ -65,7 +65,7 @@ function formatValueForHover(value: number, field: string): string {
 
 function toPlotlyValue(value: number, field: string): number | string {
   if (isDateField(field)) {
-    return new Date(value).toISOString();
+    return formatDateKey(new Date(value));
   }
   return value;
 }
