@@ -37,6 +37,8 @@ export function refuseUnknownArguments(server: McpServer): McpServer {
             ? config.inputSchema
             : undefined;
         if (
+          !config ||
+          typeof config !== "object" ||
           !inputSchema ||
           typeof inputSchema !== "object" ||
           !("strict" in inputSchema) ||
