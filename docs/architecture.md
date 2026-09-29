@@ -114,16 +114,18 @@ and modified times are instants and remain `Date` values.
 Database version 7 converts older browsers' stored `Date` values once, field by field. A
 reporting-log (strategy-log) row whose saved source cell (`sourceFields["Date Opened"]` or
 `["Date Closed"]`, kept since v3.2.0) has no time zone — a real `YYYY-MM-DD` day, optionally
-followed by `T` or a space and a clock time, with no `Z` or `±hh:mm` offset — takes that day as
-exact. Option Omega strategy logs write these cells with a time (`2025-05-30T10:15:40.546199`), so
-their stored instants are off the grid. A cell with a zone was read as that instant, so its prefix
-is not necessarily the day the user saw; it and every other value are recovered from the stored
-instant alone (`recoverCalendarDay()`). Earlier versions stored local midnight in the importing
-zone, or UTC midnight from older parsers. Every real offset lies between −12h and +14h on a
-quarter-hour grid, so an instant with zero seconds on that grid is a day's midnight: before 10:00
-UTC it is that UTC date (imported at or west of UTC), after 12:00 UTC it is the next UTC date (east
-of UTC). From 10:00 to 12:00 UTC the offsets
-−10…−12h and +12…+14h collide (for example, 2 January in Honolulu and 3 January in Kiritimati are
+followed by `T` or a space and a clock time from 00 to 23 hours, with no `Z` or `±hh:mm` offset —
+takes that day as exact. Option Omega strategy logs write these cells with a time
+(`2025-05-30T10:15:40.546199`), so their stored instants are off the grid. A saved cell that
+carried a time but is not of that form (a `Z` or offset suffix, or `T24:00`) was read as a
+different instant, which is known not to be a midnight: that field is always unproven. A saved
+whole-day cell that names no real day (`2025-02-30`) and every other value are recovered from
+the stored instant alone (`recoverCalendarDay()`). Earlier versions stored local midnight in the
+importing zone, or UTC midnight from older parsers. Every real offset lies between −12h and +14h
+on a quarter-hour grid, so an instant with zero seconds on that grid is a day's midnight: before
+10:00 UTC it is that UTC date (imported at or west of UTC), after 12:00 UTC it is the next UTC
+date (east of UTC). From 10:00 to 12:00 UTC the offsets −10…−12h and +12…+14h collide (for
+example, 2 January in Honolulu and 3 January in Kiritimati are
 both `2024-01-02T10:00Z`), and an instant off the grid came from a timestamp; timestamped
 strategy-log rows imported before v3.2.0 have no saved cells and fall here. Those dates are
 unprovable: they keep the day the upgrading browser shows, and the block records how many there

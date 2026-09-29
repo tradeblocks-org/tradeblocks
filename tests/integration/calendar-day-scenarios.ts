@@ -277,11 +277,13 @@ async function seedLegacy(version: 5 | 6): Promise<void> {
     blockId: "oo-strategy",
   });
   // Cells with a zone were read as that instant, so their prefix is not the day the user saw;
-  // `2025-02-30` was rolled to 2 March by the importer's local `Date` constructor.
+  // `T24:00` was read as the next day's midnight; `2025-02-30` (a whole day) was rolled to
+  // 2 March by the importer's local `Date` constructor.
   for (const cell of [
     "2025-05-30T02:00:00Z",
     "2025-05-30T20:00:00Z",
     "2025-05-30T23:30:00-04:00",
+    "2025-05-30T24:00",
     "2025-02-30",
   ]) {
     reporting.put({

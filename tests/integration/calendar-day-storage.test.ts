@@ -199,17 +199,20 @@ describe.each([
       expect(read.ooUnverified).toEqual({ reportingLogs: 2 });
     });
 
-    it("ignores a saved cell with a time zone or an impossible day, keeping the instant rule", () => {
+    it("flags a saved cell that carried a time it cannot use, and recovers an impossible whole day", () => {
       const stored = after.reportingLogs.filter((row) => row.value.blockId === "oo-zoned");
       const legacy = before.reportingLogs.filter((row) => row.value.blockId === "oo-zoned");
+      const shown = (index: number) => shownIn(readZone, legacy[index].value.dateOpened as string);
+      // Zoned cells and `T24:00` keep the displayed day, whatever `recoverCalendarDay` would say.
       expect(stored.map((row) => row.value.dateOpened)).toEqual([
-        "2025-05-30", // 02:00Z is before 10:00 UTC: its UTC date
-        "2025-05-31", // 20:00Z, not the cell's 2025-05-30
-        "2025-05-31", // 23:30-04:00 is 03:30Z on 31 May, not the cell's 2025-05-30
-        expectedDay(legacy[3].value.dateOpened, writeZone, readZone, provable),
+        shown(0),
+        shown(1),
+        shown(2),
+        shown(3),
+        expectedDay(legacy[4].value.dateOpened, writeZone, readZone, provable),
       ]);
-      expect(stored[3].value.dateOpened).not.toBe("2025-02-30");
-      expect(read.ooZonedUnverified).toEqual(provable ? null : { reportingLogs: 1 });
+      expect(stored[4].value.dateOpened).not.toBe("2025-02-30");
+      expect(read.ooZonedUnverified).toEqual({ reportingLogs: provable ? 4 : 5 });
     });
 
     it("reads back the stored days in the current zone, including range queries and caches", () => {

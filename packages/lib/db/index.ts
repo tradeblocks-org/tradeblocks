@@ -106,25 +106,39 @@ const REPORTING_SOURCE_CELLS: Record<string, string> = {
 };
 
 /**
- * A day with an optional clock time and no time zone. A cell with `Z` or an offset was read as
- * that instant, so its prefix is not necessarily the day the user saw.
+ * A day with an optional clock time (hours 00-23) and no time zone. A cell with `Z` or an offset
+ * was read as that instant, so its prefix is not necessarily the day the user saw; `T24:00` was
+ * read as the next day's midnight.
  */
-const ZONELESS_SOURCE_DAY = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?$/;
+const ZONELESS_SOURCE_DAY =
+  /^(\d{4}-\d{2}-\d{2})(?:[T ](?:[01]?\d|2[0-3]):\d{2}(?::\d{2}(?:\.\d+)?)?)?$/;
 
-/** The exact day a zone-less source cell names, or `null` (`2025-02-30` is no day). */
-function sourceCellDay(cell: unknown): string | null {
-  if (typeof cell !== "string") return null;
-  const day = ZONELESS_SOURCE_DAY.exec(cell.trim())?.[1];
-  if (!day) return null;
-  const parsed = new Date(`${day}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day ? day : null;
+/** A cell with a time after its day, or any clock time: the instant parsed from it is no midnight. */
+const TIMED_SOURCE_CELL = /^\d{4}-\d{2}-\d{2}[T ]|\d:\d{2}/;
+
+/**
+ * What a saved source cell proves about its day: the exact day of a zone-less cell naming a real
+ * day (`2025-02-30` is none); `"timed"` for any other cell that carried a time, since its stored
+ * instant is known not to be a midnight; otherwise `undefined` (no cell, or a whole-day cell
+ * that names no real day).
+ */
+function sourceCellDay(cell: unknown): string | "timed" | undefined {
+  if (typeof cell !== "string") return undefined;
+  const text = cell.trim();
+  const day = ZONELESS_SOURCE_DAY.exec(text)?.[1];
+  const parsed = day ? new Date(`${day}T00:00:00Z`) : undefined;
+  if (day && parsed && !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(day)) {
+    return day;
+  }
+  return TIMED_SOURCE_CELL.test(text) ? "timed" : undefined;
 }
 
 /**
  * Rewrite pre-v7 `Date` calendar days as `YYYY-MM-DD`. The day comes from the record's saved
- * zone-less source cell when it has one, else from `recoverCalendarDay`. A day neither can prove
- * keeps the local day this browser shows and is returned in `unproven`. Strings are skipped, so a
- * repeated pass changes nothing.
+ * zone-less source cell when it has one; a saved cell that carried a time but proves no day leaves
+ * the day unproven; otherwise the day comes from `recoverCalendarDay`. An unproven day keeps the
+ * local day this browser shows and is returned in `unproven`. Strings are skipped, so a repeated
+ * pass changes nothing.
  */
 function storeCalendarDays(
   record: Record<string, unknown>,
@@ -137,8 +151,8 @@ function storeCalendarDays(
   for (const field of fields) {
     const value = record[field];
     if (!isDate(value)) continue;
-    const cell = sourceCells[field] ? source?.[sourceCells[field]] : undefined;
-    const day = sourceCellDay(cell) ?? recoverCalendarDay(value);
+    const fromCell = sourceCellDay(sourceCells[field] ? source?.[sourceCells[field]] : undefined);
+    const day = fromCell === "timed" ? null : (fromCell ?? recoverCalendarDay(value));
     if (day === null) unproven++;
     record[field] = day ?? encodeCalendarDay(value);
     changed = true;
