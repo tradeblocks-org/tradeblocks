@@ -1,8 +1,8 @@
 /**
  * Capital Calculator
  *
- * Calculates initial capital and portfolio values based on legacy logic.
- * Uses first trade or daily log data as appropriate.
+ * Calculates initial capital based on legacy logic, from the first trade or the
+ * first daily log entry.
  */
 
 import type { Trade } from "../models/trade.ts";
@@ -57,29 +57,4 @@ export function calculateInitialCapitalFromDailyLog(entries: DailyLogEntry[]): n
   // Initial capital = Net Liquidity - Daily P/L
   // This accounts for any P/L that occurred on the first day
   return firstEntry.netLiquidity - firstEntry.dailyPl;
-}
-
-/**
- * Calculate portfolio value at a specific date
- * Uses initial capital + cumulative P/L up to that date
- */
-export function calculatePortfolioValueAtDate(
-  trades: Trade[],
-  targetDate: Date,
-  initialCapital?: number,
-): number {
-  if (initialCapital === undefined) {
-    initialCapital = calculateInitialCapitalFromTrades(trades);
-  }
-
-  // Filter trades up to target date
-  const relevantTrades = trades.filter((trade) => {
-    const tradeDate = new Date(trade.dateOpened);
-    return tradeDate <= targetDate;
-  });
-
-  // Sum P/L of relevant trades
-  const totalPl = relevantTrades.reduce((sum, trade) => sum + trade.pl, 0);
-
-  return initialCapital + totalPl;
 }

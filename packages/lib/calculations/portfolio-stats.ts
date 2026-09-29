@@ -1030,27 +1030,6 @@ export class PortfolioStatsCalculator {
       firstTrade.plBasis === undefined ? firstTrade.pl : getMetricPl(firstTrade);
     return firstTrade.fundsAtClose - capitalBasisPl;
   }
-
-  /**
-   * Calculate portfolio value at any point in time
-   */
-  static calculatePortfolioValueAtDate(
-    trades: Trade[],
-    targetDate: Date,
-    initialCapital?: number,
-  ): number {
-    if (initialCapital === undefined) {
-      initialCapital = this.calculateInitialCapital(trades);
-    }
-
-    const relevantTrades = trades.filter((trade) => {
-      const tradeDate = new Date(trade.dateClosed ?? trade.dateOpened);
-      return tradeDate <= targetDate;
-    });
-
-    const totalPl = relevantTrades.reduce((sum, trade) => sum + getMetricPl(trade), 0);
-    return initialCapital + totalPl;
-  }
 }
 
 /**
