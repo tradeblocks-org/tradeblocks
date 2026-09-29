@@ -27,7 +27,6 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { calculationOrchestrator } from "@tradeblocks/lib";
 import { PortfolioStatsCalculator } from "@tradeblocks/lib";
 import {
   addDailyLogEntries,
@@ -1200,9 +1199,6 @@ export function BlockDialog({ open, onOpenChange, mode, block }: BlockDialogProp
             ...processedBlock?.analysisConfig,
             combineLegGroups,
           };
-          // Clear cache since combining affects calculations
-          calculationOrchestrator.clearCache(block.id);
-
           // Handle combined trades cache based on new setting
           const { getTradesByBlock, getDailyLogsByBlock } = await import("@tradeblocks/lib");
           const existingTrades = await getTradesByBlock(block.id);
@@ -1463,10 +1459,7 @@ export function BlockDialog({ open, onOpenChange, mode, block }: BlockDialogProp
 
         await updateBlock(block.id, updates);
 
-        // Clear calculation cache when any files are replaced or removed
         if (filesChanged) {
-          calculationOrchestrator.clearCache(block.id);
-
           // Rebuild performance snapshot cache with updated data
           // Skip if we already rebuilt due to combineLegGroups change
           if (combineLegGroups === currentCombineLegGroups) {

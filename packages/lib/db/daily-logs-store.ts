@@ -279,48 +279,6 @@ export async function getWeeklyPl(blockId: string): Promise<Record<string, numbe
 }
 
 /**
- * Export daily logs to CSV format
- */
-export async function exportDailyLogsToCSV(blockId: string): Promise<string> {
-  const entries = await getDailyLogsByBlock(blockId);
-
-  if (entries.length === 0) {
-    return "";
-  }
-
-  // CSV headers
-  const headers = [
-    "Date",
-    "Net Liquidity",
-    "Current Funds",
-    "Withdrawn",
-    "Trading Funds",
-    "P/L",
-    "P/L %",
-    "Drawdown %",
-  ];
-
-  // Convert entries to CSV rows
-  const rows = entries.map((entry) => [
-    entry.date instanceof Date ? entry.date.toISOString().split("T")[0] : entry.date,
-    entry.netLiquidity.toString(),
-    entry.currentFunds.toString(),
-    entry.withdrawn.toString(),
-    entry.tradingFunds.toString(),
-    entry.dailyPl.toString(),
-    entry.dailyPlPct.toString(),
-    entry.drawdownPct.toString(),
-  ]);
-
-  // Combine headers and rows
-  const csvContent = [headers, ...rows]
-    .map((row) => row.map((field) => `"${field}"`).join(","))
-    .join("\n");
-
-  return csvContent;
-}
-
-/**
  * Helper function to get week number
  */
 function getWeekNumber(date: Date): number {

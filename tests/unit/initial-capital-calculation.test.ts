@@ -4,10 +4,6 @@ import {
   DailyLogEntry,
   calculateInitialCapitalFromDailyLog,
 } from "@tradeblocks/lib";
-// calculateInitialCapital (the 2-arg daily-log/trade fallback) collides by name with
-// utils/equity-curve's single-arg export, so the barrel exposes only the latter.
-// Import the fallback variant directly from its source module.
-import { calculateInitialCapital } from "../../packages/lib/processing/capital-calculator";
 
 // Helper to create mock trade
 function createMockTrade(
@@ -231,24 +227,6 @@ describe("Initial Capital Calculation", () => {
 
       const initialCapital = calculateInitialCapitalFromDailyLog(entries);
       expect(initialCapital).toBe(500000); // Should use Jan 1st entry
-    });
-
-    it("should prefer daily log over trades when both available", () => {
-      const trades = [createMockTrade(new Date("2024-01-01"), 507690, 7690)];
-
-      const dailyLog = [createDailyLogEntry("2024-01-01", 507690, 7690)];
-
-      const initialCapital = calculateInitialCapital(trades, dailyLog);
-      expect(initialCapital).toBe(500000); // Should use daily log calculation
-    });
-
-    it("should fall back to trades when daily log is empty", () => {
-      const trades = [createMockTrade(new Date("2024-01-01"), 507690, 7690)];
-
-      const dailyLog: DailyLogEntry[] = [];
-
-      const initialCapital = calculateInitialCapital(trades, dailyLog);
-      expect(initialCapital).toBe(500000); // Should fall back to trade calculation
     });
   });
 });

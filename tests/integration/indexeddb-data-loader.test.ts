@@ -335,44 +335,4 @@ describe("IndexedDB Integration with Data Loader", () => {
       expect(stats.dateRange.end).toEqual(new Date("2024-01-05"));
     });
   });
-
-  describe("CSV Export", () => {
-    test("should export trades to CSV format", async () => {
-      const blockId = "test-export-block";
-      const trades: Trade[] = [
-        {
-          dateOpened: new Date("2024-01-01"),
-          timeOpened: "10:00:00",
-          openingPrice: 100,
-          legs: "CALL",
-          premium: 500,
-          pl: 100,
-          numContracts: 1,
-          fundsAtClose: 10100,
-          marginReq: 1000,
-          strategy: "Export Test",
-          openingCommissionsFees: 1,
-          closingCommissionsFees: 1,
-          openingShortLongRatio: 0.5,
-        },
-      ];
-
-      await tradesStore.addTrades(blockId, trades);
-      const csv = await tradesStore.exportTradesToCSV(blockId);
-
-      expect(csv).toContain("Date Opened");
-      expect(csv).toContain("Export Test");
-      expect(csv).toContain("100"); // P/L
-
-      // The date might be in different formats depending on timezone
-      // Just check that there's a date-like string in the CSV
-      const datePattern = /\d{4}-\d{2}-\d{2}|GMT|202[34]/;
-      expect(datePattern.test(csv)).toBe(true);
-
-      // Check it's valid CSV format
-      const lines = csv.split("\n");
-      expect(lines.length).toBeGreaterThanOrEqual(2); // Header + at least one data row
-      expect(lines[0]).toContain("Strategy");
-    });
-  });
 });

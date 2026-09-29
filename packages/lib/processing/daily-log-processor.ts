@@ -395,45 +395,4 @@ export class DailyLogProcessor {
     const file = new File([blob], "test-daily.csv", { type: "text/csv" });
     return this.processFile(file, blockId);
   }
-
-  /**
-   * Validate daily log data consistency
-   */
-  static validateDataConsistency(entries: DailyLogEntry[]): string[] {
-    const warnings: string[] = [];
-
-    if (entries.length === 0) return warnings;
-
-    // Sort by date for chronological validation
-    const sortedEntries = [...entries].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
-
-    // Check for gaps in dates (more than 7 days)
-    for (let i = 1; i < sortedEntries.length; i++) {
-      const prevDate = new Date(sortedEntries[i - 1].date);
-      const currentDate = new Date(sortedEntries[i].date);
-      const daysDiff = (currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-
-      if (daysDiff > 7) {
-        warnings.push(
-          `Large date gap detected: ${daysDiff.toFixed(0)} days between ${prevDate.toISOString().split("T")[0]} and ${currentDate.toISOString().split("T")[0]}`,
-        );
-      }
-    }
-
-    // Check for negative net liquidity
-    const negativeEntries = sortedEntries.filter((entry) => entry.netLiquidity < 0);
-    if (negativeEntries.length > 0) {
-      warnings.push(`${negativeEntries.length} entries have negative net liquidity`);
-    }
-
-    // Check for extreme drawdowns (> 50%)
-    const extremeDrawdowns = sortedEntries.filter((entry) => entry.drawdownPct < -0.5);
-    if (extremeDrawdowns.length > 0) {
-      warnings.push(`${extremeDrawdowns.length} entries have extreme drawdowns (> 50%)`);
-    }
-
-    return warnings;
-  }
 }

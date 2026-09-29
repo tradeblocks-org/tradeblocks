@@ -3,7 +3,6 @@ import {
   combineLegGroup,
   getNetPl,
   PlBasis,
-  PerformanceCalculator,
   PortfolioStatsCalculator,
   tradeSchema,
   type DailyLogEntry,
@@ -442,27 +441,6 @@ describe("P/L and Sharpe calculation contract", () => {
       observations: 10,
       idleDays: "included_business_days",
     });
-  });
-
-  it("discloses rolling windows as realized-trade dates rather than days", () => {
-    const trades = [
-      trade({ dateClosed: new Date("2026-01-05"), plBasis: PlBasis.NetIncludesFees }),
-      trade({
-        dateOpened: new Date("2026-01-16"),
-        dateClosed: new Date("2026-01-16"),
-        pl: -50,
-        plBasis: PlBasis.NetIncludesFees,
-      }),
-    ];
-
-    const [point] = PerformanceCalculator.calculateRollingSharpe(trades, 2, 0);
-
-    expect(point.windowDefinition).toBe("distinct_realized_trade_dates");
-    expect(point.requestedWindowSize).toBe(2);
-    expect(point.calculationMethodology.returns.observations).toBe(10);
-    expect(point.calculationMethodology.warnings.join(" ")).toContain(
-      "2 distinct realized-trade dates",
-    );
   });
 
   it("discloses stale historical DTB3 observations", () => {

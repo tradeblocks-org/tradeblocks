@@ -11,8 +11,6 @@ export * from "./reporting-trade-processor.ts";
 export * from "./tat-adapter.ts";
 export * from "./static-dataset-processor.ts";
 export * from "./data-loader.ts";
-// Note: capital-calculator exports calculateInitialCapital which conflicts with utils/equity-curve
-// Use explicit imports: import { calculateInitialCapitalFromDailyLog, calculateInitialCapitalFromTrades } from '@tradeblocks/lib/processing/capital-calculator'
 export {
   calculateInitialCapitalFromDailyLog,
   calculateInitialCapitalFromTrades,
