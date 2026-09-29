@@ -12,6 +12,9 @@ import {
   buildPerformanceSnapshot,
   initializeDatabase,
   closeDatabase,
+  promisifyRequest,
+  STORES,
+  withWriteTransaction,
 } from "@tradeblocks/lib";
 
 // Helper to create mock trades
@@ -135,6 +138,28 @@ describe("Performance Snapshot Cache", () => {
       expect(cached!.portfolioStats.totalTrades).toBe(3);
       // netPl accounts for commissions: (100 - 30 + 50) - (2 * 3 trades) = 114
       expect(cached!.portfolioStats.netPl).toBeCloseTo(114, 2);
+    });
+  });
+
+  describe("snapshots cached before exposure days became calendar days", () => {
+    it("is not served, so exposure is recalculated with the current day keys", async () => {
+      const blockId = "test-block-pre-calendar-exposure";
+      const snapshot = await buildPerformanceSnapshot({
+        trades: [createMockTrade()],
+        normalizeTo1Lot: false,
+      });
+      await storePerformanceSnapshotCache(blockId, snapshot);
+      // Move the fresh entry to the key a previous release wrote it under.
+      await withWriteTransaction(STORES.CALCULATIONS, async (transaction) => {
+        const store = transaction.objectStore(STORES.CALCULATIONS);
+        const [entry] = (await promisifyRequest(store.getAll())).filter(
+          (record) => record.blockId === blockId,
+        );
+        await promisifyRequest(store.delete(entry.id));
+        await promisifyRequest(store.put({ ...entry, id: `performance_snapshot_v2_${blockId}` }));
+      });
+
+      expect(await getPerformanceSnapshotCache(blockId)).toBeNull();
     });
   });
 

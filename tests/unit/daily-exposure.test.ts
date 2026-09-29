@@ -12,18 +12,17 @@
 
 import {
   calculateDailyExposure,
+  buildPerformanceSnapshot,
   calculateExposureAtTradeOpen,
   DailyExposurePoint,
   EquityCurvePoint,
   Trade,
 } from "@tradeblocks/lib";
 
-// Helper to create a date at noon Eastern Time (avoids timezone boundary issues)
-// The algorithm converts to UTC via toISOString(), so we need dates that won't shift
-// Noon ET = 17:00 UTC (EST) or 16:00 UTC (EDT), both safely in the same calendar day
+// Trade dates are calendar days held at local midnight, as the CSV loader produces them.
 function etDate(dateStr: string): Date {
-  // Parse as noon Eastern by using a time that's definitely during the target date in ET
-  return new Date(dateStr + "T17:00:00.000Z"); // 12:00 PM EST (worst case)
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 // Helper to create a minimal valid trade
@@ -52,11 +51,6 @@ function createTrade(overrides: Partial<Trade>): Trade {
 // Helper to create equity curve point
 function createEquityPoint(date: string, equity: number): EquityCurvePoint {
   return { date, equity };
-}
-
-// Helper to extract date string from ISO format
-function dateKey(isoString: string): string {
-  return isoString.slice(0, 10);
 }
 
 describe("calculateDailyExposure", () => {
@@ -114,7 +108,7 @@ describe("calculateDailyExposure", () => {
 
       // Find exposure by date
       const exposureByDate = new Map<string, DailyExposurePoint>();
-      result.dailyExposure.forEach((p) => exposureByDate.set(dateKey(p.date), p));
+      result.dailyExposure.forEach((p) => exposureByDate.set(p.date, p));
 
       // 01-01: Trade 1 open (1000)
       expect(exposureByDate.get("2024-01-01")?.exposure).toBe(1000);
@@ -149,7 +143,7 @@ describe("calculateDailyExposure", () => {
 
       // Should have exactly one day of exposure
       expect(result.dailyExposure.length).toBe(1);
-      expect(dateKey(result.dailyExposure[0].date)).toBe("2024-01-01");
+      expect(result.dailyExposure[0].date).toBe("2024-01-01");
       expect(result.dailyExposure[0].exposure).toBe(1000);
       expect(result.dailyExposure[0].openPositions).toBe(1);
     });
@@ -354,15 +348,15 @@ describe("calculateDailyExposure", () => {
       ];
 
       const equityCurve = [
-        createEquityPoint("2024-01-01T00:00:00.000Z", 10000),
-        createEquityPoint("2024-01-02T00:00:00.000Z", 10100),
+        createEquityPoint("2024-01-01", 10000),
+        createEquityPoint("2024-01-02", 10100),
       ];
 
       const result = calculateDailyExposure(trades, equityCurve);
 
       // Find exposure by date
       const exposureByDate = new Map<string, DailyExposurePoint>();
-      result.dailyExposure.forEach((p) => exposureByDate.set(dateKey(p.date), p));
+      result.dailyExposure.forEach((p) => exposureByDate.set(p.date, p));
 
       // 01-01: 1000 / 10000 = 10%
       expect(exposureByDate.get("2024-01-01")?.exposurePercent).toBeCloseTo(10, 5);
@@ -384,14 +378,14 @@ describe("calculateDailyExposure", () => {
 
       // Only have equity for 01-01 and 01-03
       const equityCurve = [
-        createEquityPoint("2024-01-01T00:00:00.000Z", 10000),
-        createEquityPoint("2024-01-03T00:00:00.000Z", 11000),
+        createEquityPoint("2024-01-01", 10000),
+        createEquityPoint("2024-01-03", 11000),
       ];
 
       const result = calculateDailyExposure(trades, equityCurve);
 
       const exposureByDate = new Map<string, DailyExposurePoint>();
-      result.dailyExposure.forEach((p) => exposureByDate.set(dateKey(p.date), p));
+      result.dailyExposure.forEach((p) => exposureByDate.set(p.date, p));
 
       // 01-01: has equity data (10000) → 10%
       expect(exposureByDate.get("2024-01-01")?.exposurePercent).toBeCloseTo(10, 5);
@@ -450,7 +444,7 @@ describe("calculateDailyExposure", () => {
       // Peak should be on 01-02 or 01-03 when both trades overlap (3000)
       expect(result.peakDailyExposure).not.toBeNull();
       expect(result.peakDailyExposure?.exposure).toBe(3000);
-      expect(["2024-01-02", "2024-01-03"]).toContain(dateKey(result.peakDailyExposure!.date));
+      expect(["2024-01-02", "2024-01-03"]).toContain(result.peakDailyExposure!.date);
     });
 
     it("should track peak exposure by percentage", () => {
@@ -466,9 +460,9 @@ describe("calculateDailyExposure", () => {
 
       // Equity decreases over time, so percentage increases
       const equityCurve = [
-        createEquityPoint("2024-01-01T00:00:00.000Z", 10000), // 10%
-        createEquityPoint("2024-01-02T00:00:00.000Z", 5000), // 20%
-        createEquityPoint("2024-01-03T00:00:00.000Z", 8000), // 12.5%
+        createEquityPoint("2024-01-01", 10000), // 10%
+        createEquityPoint("2024-01-02", 5000), // 20%
+        createEquityPoint("2024-01-03", 8000), // 12.5%
       ];
 
       const result = calculateDailyExposure(trades, equityCurve);
@@ -476,7 +470,7 @@ describe("calculateDailyExposure", () => {
       // Peak percentage should be on 01-02 (20%)
       expect(result.peakDailyExposurePercent).not.toBeNull();
       expect(result.peakDailyExposurePercent?.exposurePercent).toBeCloseTo(20, 5);
-      expect(dateKey(result.peakDailyExposurePercent!.date)).toBe("2024-01-02");
+      expect(result.peakDailyExposurePercent!.date).toBe("2024-01-02");
     });
 
     it("should handle case where peak dollar and peak percent are on different dates", () => {
@@ -498,10 +492,10 @@ describe("calculateDailyExposure", () => {
       ];
 
       const equityCurve = [
-        createEquityPoint("2024-01-01T00:00:00.000Z", 100000), // 5%
-        createEquityPoint("2024-01-02T00:00:00.000Z", 100000), // 5%
-        createEquityPoint("2024-01-03T00:00:00.000Z", 5000), // 40%
-        createEquityPoint("2024-01-04T00:00:00.000Z", 5000), // 40%
+        createEquityPoint("2024-01-01", 100000), // 5%
+        createEquityPoint("2024-01-02", 100000), // 5%
+        createEquityPoint("2024-01-03", 5000), // 40%
+        createEquityPoint("2024-01-04", 5000), // 40%
       ];
 
       const result = calculateDailyExposure(trades, equityCurve);
@@ -571,7 +565,7 @@ describe("calculateDailyExposure", () => {
       // With no close date, we only have the open event
       // The date range is just the open date
       expect(result.dailyExposure.length).toBe(1);
-      expect(dateKey(result.dailyExposure[0].date)).toBe("2024-01-01");
+      expect(result.dailyExposure[0].date).toBe("2024-01-01");
       expect(result.dailyExposure[0].exposure).toBe(1000);
       expect(result.dailyExposure[0].openPositions).toBe(1);
     });
@@ -707,7 +701,7 @@ describe("calculateDailyExposure", () => {
       const result = calculateDailyExposure(trades, []);
 
       const exposureByDate = new Map<string, DailyExposurePoint>();
-      result.dailyExposure.forEach((p) => exposureByDate.set(dateKey(p.date), p));
+      result.dailyExposure.forEach((p) => exposureByDate.set(p.date, p));
 
       // 01-01: All three trades open at same time (1000 + 500 + 200 = 1700)
       expect(exposureByDate.get("2024-01-01")?.exposure).toBe(1700);
@@ -751,7 +745,7 @@ describe("calculateDailyExposure", () => {
       const result = calculateDailyExposure(trades, []);
 
       // Extract dates and verify they're in order
-      const dates = result.dailyExposure.map((p) => dateKey(p.date));
+      const dates = result.dailyExposure.map((p) => p.date);
 
       for (let i = 1; i < dates.length; i++) {
         expect(dates[i] >= dates[i - 1]).toBe(true);
@@ -805,7 +799,7 @@ describe("calculateDailyExposure", () => {
 
       const result = calculateDailyExposure(trades, []);
       const exposureByDate = new Map<string, DailyExposurePoint>();
-      result.dailyExposure.forEach((p) => exposureByDate.set(dateKey(p.date), p));
+      result.dailyExposure.forEach((p) => exposureByDate.set(p.date, p));
 
       // 01-01: Only trade 1 (1000)
       expect(exposureByDate.get("2024-01-01")?.exposure).toBe(1000);
@@ -1034,5 +1028,38 @@ describe("calculateExposureAtTradeOpen", () => {
       expect(exp2!.exposureBefore).toBe(5000);
       expect(exp2!.exposureAfter).toBe(8000);
     });
+  });
+});
+
+describe("exposure keyed from the web performance snapshot's equity curve", () => {
+  // The snapshot stamps each equity point as an ISO instant of the local-midnight day (plus
+  // a second offset), unlike the calendar-day strings the MCP tools pass. Both producers'
+  // days must join to the same exposure day in every timezone.
+  const trades = [
+    createTrade({
+      dateOpened: etDate("2024-01-02"),
+      dateClosed: etDate("2024-01-03"),
+      marginReq: 1000,
+      pl: 500,
+      fundsAtClose: 10500,
+    }),
+  ];
+
+  it("divides each exposure day by that day's equity", async () => {
+    const snapshot = await buildPerformanceSnapshot({ trades, normalizeTo1Lot: false });
+    const result = calculateDailyExposure(trades, snapshot.chartData.equityCurve);
+
+    // Equity is 10000 before the first close and 10500 after it.
+    expect(result.dailyExposure.map((p) => [p.date, p.exposurePercent.toFixed(4)])).toEqual([
+      ["2024-01-02", "10.0000"],
+      ["2024-01-03", "9.5238"],
+    ]);
+  });
+
+  it("gives exposure at open the equity of the open day", async () => {
+    const snapshot = await buildPerformanceSnapshot({ trades, normalizeTo1Lot: false });
+    const atOpen = calculateExposureAtTradeOpen(trades, snapshot.chartData.equityCurve);
+
+    expect(atOpen.get(0)?.exposurePercentAfter.toFixed(4)).toBe("10.0000");
   });
 });

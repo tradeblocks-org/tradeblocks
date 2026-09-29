@@ -154,6 +154,28 @@ describe.each(["UTC", "Pacific/Kiritimati", "America/Los_Angeles"])(
           percent: ((PEAK_MARGIN / peakDayFunds) * 100).toFixed(6),
         });
 
+        const charts = await call("get_performance_charts", {
+          blockId: "calendar",
+          charts: ["daily_exposure"],
+          maxDataPoints: 2000,
+        });
+        const exposure = charts.dailyExposure as {
+          timeSeries: Array<{ date: string }>;
+          peakByDollars: Structured;
+          peakByPercent: Structured;
+        };
+        expect({
+          days: exposure.timeSeries.map((point) => point.date),
+          byDollars: exposure.peakByDollars.date,
+          byPercent: exposure.peakByPercent.date,
+          percent: (exposure.peakByPercent.exposurePercent as number).toFixed(6),
+        }).toEqual({
+          days: weekdays(FIRST_DAY, LAST_DAY),
+          byDollars: PEAK_MARGIN_DAY,
+          byPercent: PEAK_MARGIN_DAY,
+          percent: (peak.byPercent.exposurePercent as number).toFixed(6),
+        });
+
         const tailRisk = await call("get_tail_risk", { blockId: "calendar" });
         expect(tailRisk.dateRange).toEqual(tradeRange);
 

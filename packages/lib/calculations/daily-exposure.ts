@@ -10,11 +10,13 @@
  */
 
 import type { Trade } from "../models/trade.ts";
+import { formatDateKey } from "./trade-matching.ts";
 
 /**
  * Daily exposure data point
  */
 export interface DailyExposurePoint {
+  /** Calendar day, YYYY-MM-DD */
   date: string;
   exposure: number;
   exposurePercent: number;
@@ -27,6 +29,7 @@ export interface DailyExposurePoint {
  * Peak exposure data
  */
 export interface PeakExposure {
+  /** Calendar day, YYYY-MM-DD */
   date: string;
   exposure: number;
   exposurePercent: number;
@@ -60,16 +63,15 @@ function getFiniteNumber(value: unknown): number | undefined {
 }
 
 /**
- * Format a date to YYYY-MM-DD string using local time
+ * Calendar day (YYYY-MM-DD) an equity curve point belongs to.
  *
- * Trade dates in TradeBlocks are Eastern Time and parsed at local midnight.
- * Using local time methods (not toISOString/UTC) ensures dates match correctly.
+ * Two producers feed this: the MCP tools pass calendar days already, while the web
+ * performance snapshot passes ISO instants of a local-midnight day (plus a few seconds to
+ * keep points unique), which are read back in the local zone that wrote them. Slicing the
+ * instant's UTC text would name the previous day east of UTC.
  */
-function formatDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+function equityDayKey(date: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : formatDateKey(new Date(date));
 }
 
 /**
@@ -137,7 +139,7 @@ export function calculateDailyExposure(
   // Build a map of equity by date for percentage calculations
   const equityByDate = new Map<string, number>();
   for (const point of equityCurve) {
-    const dateKey = point.date.slice(0, 10);
+    const dateKey = equityDayKey(point.date);
     equityByDate.set(dateKey, point.equity);
   }
 
@@ -268,7 +270,7 @@ export function calculateDailyExposure(
     // Only include days with exposure
     if (dayPeakExposure > 0) {
       const point: DailyExposurePoint = {
-        date: currentDate.toISOString(),
+        date: dateKey,
         exposure: dayPeakExposure,
         exposurePercent,
         openPositions: dayPeakPositions,
@@ -279,7 +281,7 @@ export function calculateDailyExposure(
       // Track overall peak exposure (by dollar amount)
       if (!peakDailyExposure || dayPeakExposure > peakDailyExposure.exposure) {
         peakDailyExposure = {
-          date: currentDate.toISOString(),
+          date: dateKey,
           exposure: dayPeakExposure,
           exposurePercent,
         };
@@ -288,7 +290,7 @@ export function calculateDailyExposure(
       // Track overall peak exposure (by percentage)
       if (!peakDailyExposurePercent || exposurePercent > peakDailyExposurePercent.exposurePercent) {
         peakDailyExposurePercent = {
-          date: currentDate.toISOString(),
+          date: dateKey,
           exposure: dayPeakExposure,
           exposurePercent,
         };
@@ -341,7 +343,7 @@ export function calculateExposureAtTradeOpen(
   // Build equity lookup by date
   const equityByDate = new Map<string, number>();
   for (const point of equityCurve) {
-    const dateKey = point.date.slice(0, 10);
+    const dateKey = equityDayKey(point.date);
     equityByDate.set(dateKey, point.equity);
   }
 

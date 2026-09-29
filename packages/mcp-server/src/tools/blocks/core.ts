@@ -91,13 +91,9 @@ export function calculatePeakExposure(
 
   // Use shared calculation
   const result = calculateDailyExposure(trades, equityCurve);
-  // The shared calculation stamps each local-midnight day as an ISO instant.
-  const calendarDay = (peak: PeakExposure | null): PeakExposure | null =>
-    peak && { ...peak, date: formatDateKey(new Date(peak.date)) };
-
   return {
-    peakByDollars: calendarDay(result.peakDailyExposure),
-    peakByPercent: calendarDay(result.peakDailyExposurePercent),
+    peakByDollars: result.peakDailyExposure,
+    peakByPercent: result.peakDailyExposurePercent,
   };
 }
 

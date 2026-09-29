@@ -16,7 +16,7 @@ import { getEffectiveRateDate } from "../utils/risk-free-rate.ts";
  * Cache entry for performance snapshot
  */
 interface PerformanceSnapshotCache {
-  id: string; // Format: `performance_snapshot_${blockId}`
+  id: string; // Format: `performance_snapshot_v3_${blockId}`
   blockId: string;
   calculationType: "performance_snapshot";
   portfolioStats: PortfolioStats;
@@ -42,7 +42,7 @@ export interface CachedPerformanceSnapshot {
  * Generate the cache ID for a block
  */
 function getCacheId(blockId: string): string {
-  return `performance_snapshot_v2_${blockId}`;
+  return `performance_snapshot_v3_${blockId}`;
 }
 
 /**

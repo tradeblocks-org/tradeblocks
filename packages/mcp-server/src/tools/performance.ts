@@ -496,61 +496,6 @@ function buildVolatilityRegimes(trades: Trade[]): Array<{
 // of recalculating based on cumulative scaled P&L.
 
 /**
- * Daily exposure data point
- */
-interface DailyExposurePoint {
-  date: string;
-  exposure: number;
-  exposurePercent: number;
-  openPositions: number;
-}
-
-/**
- * Peak exposure data
- */
-interface PeakExposure {
-  date: string;
-  exposure: number;
-  exposurePercent: number;
-}
-
-/**
- * Wrapper around the shared daily exposure calculation.
- * Maps the result to the local interface format (date as string vs ISO string).
- */
-function buildDailyExposure(
-  trades: Trade[],
-  equityCurve: Array<{ date: string; equity: number }>,
-): {
-  dailyExposure: DailyExposurePoint[];
-  peakDailyExposure: PeakExposure | null;
-  peakDailyExposurePercent: PeakExposure | null;
-} {
-  // Use the shared calculation from lib/calculations/daily-exposure.ts
-  const result = calculateDailyExposureShared(trades, equityCurve);
-
-  // Map the result to local format (convert ISO dates to YYYY-MM-DD format)
-  return {
-    dailyExposure: result.dailyExposure.map((d) => ({
-      ...d,
-      date: formatDateKey(new Date(d.date)),
-    })),
-    peakDailyExposure: result.peakDailyExposure
-      ? {
-          ...result.peakDailyExposure,
-          date: formatDateKey(new Date(result.peakDailyExposure.date)),
-        }
-      : null,
-    peakDailyExposurePercent: result.peakDailyExposurePercent
-      ? {
-          ...result.peakDailyExposurePercent,
-          date: formatDateKey(new Date(result.peakDailyExposurePercent.date)),
-        }
-      : null,
-  };
-}
-
-/**
  * Register all performance MCP tools
  */
 export function registerPerformanceTools(server: McpServer, baseDir: string): void {
@@ -913,7 +858,7 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
               highWaterMark: number;
             }>) || buildEquityCurve(trades, capital.amount);
 
-          const exposureData = buildDailyExposure(trades, equityCurve);
+          const exposureData = calculateDailyExposureShared(trades, equityCurve);
 
           // When filtering by strategy, percentage values may be misleading because
           // margin values are absolute (sized for full portfolio) but divided by
