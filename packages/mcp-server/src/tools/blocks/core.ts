@@ -17,6 +17,7 @@ import {
 import {
   PortfolioStatsCalculator,
   calculateDailyExposure,
+  formatDateKey,
   rebuildEquityCurve,
   getNetPl,
 } from "@tradeblocks/lib";
@@ -83,17 +84,20 @@ export function calculatePeakExposure(
   for (const trade of sortedByClose) {
     runningEquity += getNetPl(trade);
     equityCurve.push({
-      date: new Date(trade.dateClosed!).toISOString(),
+      date: formatDateKey(trade.dateClosed!),
       equity: runningEquity,
     });
   }
 
   // Use shared calculation
   const result = calculateDailyExposure(trades, equityCurve);
+  // The shared calculation stamps each local-midnight day as an ISO instant.
+  const calendarDay = (peak: PeakExposure | null): PeakExposure | null =>
+    peak && { ...peak, date: formatDateKey(new Date(peak.date)) };
 
   return {
-    peakByDollars: result.peakDailyExposure,
-    peakByPercent: result.peakDailyExposurePercent,
+    peakByDollars: calendarDay(result.peakDailyExposure),
+    peakByPercent: calendarDay(result.peakDailyExposurePercent),
   };
 }
 
@@ -174,11 +178,8 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
                 return (a.tradeCount - b.tradeCount) * multiplier;
               case "netPl":
                 return ((a.netPl ?? 0) - (b.netPl ?? 0)) * multiplier;
-              case "dateRange": {
-                const aTime = a.dateRange.end?.getTime() ?? 0;
-                const bTime = b.dateRange.end?.getTime() ?? 0;
-                return (aTime - bTime) * multiplier;
-              }
+              case "dateRange":
+                return (a.dateRange.end ?? "").localeCompare(b.dateRange.end ?? "") * multiplier;
               case "name":
               default:
                 return a.name.localeCompare(b.name) * multiplier;
@@ -214,10 +215,7 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
               id: b.blockId,
               name: b.name,
               tradeCount: b.tradeCount,
-              dateRange: {
-                start: b.dateRange.start?.toISOString() ?? null,
-                end: b.dateRange.end?.toISOString() ?? null,
-              },
+              dateRange: b.dateRange,
               strategies: b.strategies,
               totalPl: b.totalPl,
               netPl: b.netPl,
@@ -270,10 +268,10 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
         const dailyLogs = block.dailyLogs;
 
         const strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
-        const dates = trades.map((t) => new Date(t.dateOpened).getTime());
+        const openDays = trades.map((t) => formatDateKey(t.dateOpened)).sort();
         const dateRange = {
-          start: dates.length > 0 ? new Date(Math.min(...dates)) : null,
-          end: dates.length > 0 ? new Date(Math.max(...dates)) : null,
+          start: openDays[0] ?? null,
+          end: openDays.at(-1) ?? null,
         };
 
         // Brief summary for user display
@@ -285,10 +283,7 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
           tradeCount: trades.length,
           dailyLogCount: dailyLogs?.length ?? 0,
           strategies,
-          dateRange: {
-            start: dateRange.start?.toISOString() ?? null,
-            end: dateRange.end?.toISOString() ?? null,
-          },
+          dateRange,
         };
 
         return createToolOutput(summary, structuredData);
@@ -373,11 +368,8 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
         }
 
         const totalPL = trades.reduce((sum, t) => sum + t.pl, 0);
-        const dates = trades.map((t) => new Date(t.dateOpened).getTime());
-        const dateRange = {
-          start: dates.length > 0 ? new Date(Math.min(...dates)).toISOString() : null,
-          end: dates.length > 0 ? new Date(Math.max(...dates)).toISOString() : null,
-        };
+        const openDays = trades.map((t) => formatDateKey(t.dateOpened)).sort();
+        const dateRange = { start: openDays[0], end: openDays[openDays.length - 1] };
         const strategies = Array.from(strategyTrades.keys()).sort();
 
         // Brief summary for user display

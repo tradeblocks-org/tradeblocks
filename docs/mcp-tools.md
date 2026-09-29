@@ -14,6 +14,12 @@ TradeBlocks MCP server tools organized by category.
 | `compare_blocks`          | Side-by-side comparison across multiple blocks                  |
 | `block_diff`              | Diff statistics between two blocks                              |
 
+Trade-calendar dates in tool output are calendar days in `YYYY-MM-DD` form and name
+the same day on every server timezone. That covers a trade's opened or closed day, a
+daily-log day, and any range or window built from them, such as `dateRange`,
+walk-forward windows, `peakExposure` dates, and `run_sql` DATE columns. Real instants,
+such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO timestamps.
+
 ## Performance Analysis
 
 | Tool                         | Description                                                     |
@@ -138,8 +144,7 @@ OOS end exceeds that date is not evaluated; when this occurs, the tools return
 `skippedWindows` alongside `periods` with the planned `inSampleStart`, `inSampleEnd`,
 `outOfSampleStart`, `outOfSampleEnd`, `reason: "truncated_oos_window"`, and
 `detail` naming the last trade date. Degradation entries also include
-`periodIndex`. The run tool's skipped dates retain its legacy
-`YYYY-MM-DDT00:00:00.000Z` format; degradation dates are `YYYY-MM-DD`.
+`periodIndex`. Both tools report every window date as `YYYY-MM-DD`.
 The existing `stats.skippedPeriods` or `dataQuality.skippedPeriods` includes
 these truncated windows as well as any windows skipped for insufficient trades.
 

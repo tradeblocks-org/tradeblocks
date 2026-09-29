@@ -49,9 +49,10 @@ export interface BlockInfo {
   tradeCount: number;
   hasDailyLog: boolean;
   hasReportingLog: boolean;
+  /** First and last trade opened days (`YYYY-MM-DD`), or null before the block syncs. */
   dateRange: {
-    start: Date | null;
-    end: Date | null;
+    start: string | null;
+    end: string | null;
   };
   strategies: string[];
   totalPl: number;
@@ -461,32 +462,6 @@ export async function loadBlock(baseDir: string, blockId: string): Promise<Loade
 }
 
 /**
- * Helper to convert a DuckDB date value to a JS Date.
- * DuckDB may return Date objects, strings, or numeric day offsets.
- */
-function toDuckDbDate(val: unknown): Date | null {
-  if (val == null) return null;
-  if (val instanceof Date) return val;
-  // DuckDB node-api returns DATE as {days: N} object (days since epoch)
-  if (typeof val === "object" && val !== null && "days" in val) {
-    return new Date((val as { days: number }).days * 86400000);
-  }
-  if (typeof val === "number") {
-    // DuckDB DATE type returns days since epoch as a number
-    return new Date(val * 86400000);
-  }
-  if (typeof val === "string") {
-    // Try calendar-date parse first (YYYY-MM-DD)
-    const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-      return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
-    }
-    return new Date(val);
-  }
-  return null;
-}
-
-/**
  * List all valid blocks in the base directory.
  * Stats are computed from DuckDB (data synced by middleware before tool calls).
  * Also scans filesystem to include unsynced block folders.
@@ -507,8 +482,8 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
       SELECT
         t.block_id,
         COUNT(*) as trade_count,
-        MIN(t.date_opened) as min_date,
-        MAX(t.date_opened) as max_date,
+        MIN(t.date_opened)::VARCHAR as min_date,
+        MAX(t.date_opened)::VARCHAR as max_date,
         SUM(COALESCE(t.reported_pl, t.pl)) as total_pl,
         SUM(t.pl) as net_pl
       FROM trades.trade_data t
@@ -535,8 +510,8 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
       {
         tradeCount: number;
         strategies: string[];
-        minDate: Date | null;
-        maxDate: Date | null;
+        minDate: string | null;
+        maxDate: string | null;
         totalPl: number;
         netPl: number;
       }
@@ -545,8 +520,8 @@ export async function listBlocks(baseDir: string): Promise<BlockInfo[]> {
     for (const row of tradeStatsReader.getRows()) {
       const blockId = row[0] as string;
       const tradeCount = Number(row[1]);
-      const minDate = toDuckDbDate(row[2]);
-      const maxDate = toDuckDbDate(row[3]);
+      const minDate = row[2] as string | null;
+      const maxDate = row[3] as string | null;
       const totalPl = Number(row[4]) || 0;
       const netPl = Number(row[5]) || 0;
       const strategies = strategiesByBlock.get(blockId) ?? [];

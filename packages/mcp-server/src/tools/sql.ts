@@ -26,7 +26,7 @@
 import * as path from "path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DuckDBConnection } from "@duckdb/node-api";
+import { DuckDBDateValue, type DuckDBConnection } from "@duckdb/node-api";
 import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
 import { getDataRoot } from "../db/data-root.ts";
 import { withFullSync } from "./middleware/sync-middleware.ts";
@@ -317,8 +317,13 @@ async function executeWithTimeout(
       const obj: Record<string, unknown> = {};
       for (let i = 0; i < columnCount; i++) {
         const value = row[i];
-        // Convert BigInt to Number for JSON serialization
-        obj[columns[i].name] = typeof value === "bigint" ? Number(value) : value;
+        // Convert BigInt to Number for JSON serialization; DATE values are calendar days.
+        obj[columns[i].name] =
+          typeof value === "bigint"
+            ? Number(value)
+            : value instanceof DuckDBDateValue
+              ? value.toString()
+              : value;
       }
       rows.push(obj);
     }

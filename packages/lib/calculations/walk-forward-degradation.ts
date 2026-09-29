@@ -111,8 +111,6 @@ export interface WFDResult {
 // Constants
 // ---------------------------------------------------------------------------
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 const EFFICIENCY_EPSILON: Record<string, number> = {
   sharpe: 0.01,
   profitFactor: 0.01,
@@ -162,6 +160,11 @@ function floorToLocalDate(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+/** Step whole calendar days; fixed 24-hour steps land on the wrong day across DST changes. */
+function addLocalDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
 /**
  * Build progressive sliding windows across the trade history.
  */
@@ -172,17 +175,14 @@ function buildDegradationWindows(
   skippedWindows: WFDSkippedWindow[],
 ): WFDWindow[] {
   const windows: WFDWindow[] = [];
-  const firstMs = floorToLocalDate(firstTradeDate).getTime();
-  const lastMs = floorToLocalDate(lastTradeDate).getTime();
   const lastKey = formatLocalDate(lastTradeDate);
-  let cursor = firstMs;
+  let isStart = floorToLocalDate(firstTradeDate);
   let periodIndex = 0;
 
-  while (cursor < lastMs) {
-    const isStart = new Date(cursor);
-    const isEnd = new Date(cursor + (config.inSampleDays - 1) * DAY_MS);
-    const oosStart = new Date(isEnd.getTime() + DAY_MS);
-    const oosEnd = new Date(oosStart.getTime() + (config.outOfSampleDays - 1) * DAY_MS);
+  while (formatLocalDate(isStart) < lastKey) {
+    const isEnd = addLocalDays(isStart, config.inSampleDays - 1);
+    const oosStart = addLocalDays(isEnd, 1);
+    const oosEnd = addLocalDays(oosStart, config.outOfSampleDays - 1);
 
     if (formatLocalDate(oosEnd) > lastKey) {
       if (formatLocalDate(oosStart) <= lastKey) {
@@ -209,7 +209,7 @@ function buildDegradationWindows(
       outOfSampleTradeCount: 0,
     });
 
-    cursor += config.stepSizeDays * DAY_MS;
+    isStart = addLocalDays(isStart, config.stepSizeDays);
     periodIndex++;
   }
 

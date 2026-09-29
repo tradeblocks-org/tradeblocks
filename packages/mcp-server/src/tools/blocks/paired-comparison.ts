@@ -12,6 +12,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput, formatCurrency } from "../../utils/output-formatter.ts";
 import {
+  formatDateKey,
   pairedBlockBootstrap,
   holdingPeriodBlockDays,
   type DaySeries,
@@ -100,20 +101,6 @@ type PairedComparisonInput = z.infer<typeof pairedComparisonInputSchema>;
 // ---------------------------------------------------------------------------
 
 /**
- * Calendar date (YYYY-MM-DD) for a trade timestamp.
- *
- * Calendar dates are derived in UTC from the stored trade timestamps; the grid,
- * the lib tests, and the displayed overlap windows all share this convention,
- * so the result is independent of the host machine's timezone.
- */
-function toCalendarDateStr(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-/**
  * The block's trading-day grid: the sorted, unique union of every trade's open
  * and close calendar dates. Days strictly between an open and a close that are
  * not themselves any trade's open/close are unknown to be trading days and are
@@ -122,8 +109,8 @@ function toCalendarDateStr(date: Date): string {
 export function buildBlockTradingDayIndex(trades: Trade[]): string[] {
   const days = new Set<string>();
   for (const t of trades) {
-    days.add(toCalendarDateStr(t.dateOpened));
-    days.add(toCalendarDateStr(t.dateClosed ?? t.dateOpened));
+    days.add(formatDateKey(t.dateOpened));
+    days.add(formatDateKey(t.dateClosed ?? t.dateOpened));
   }
   return Array.from(days).sort();
 }
@@ -148,8 +135,8 @@ function gridSpan(grid: string[], openStr: string, closeStr: string): [number, n
  */
 export function armHoldingPeriods(armTrades: Trade[], grid: string[]): number[] {
   return armTrades.map((t) => {
-    const openStr = toCalendarDateStr(t.dateOpened);
-    const closeStr = toCalendarDateStr(t.dateClosed ?? t.dateOpened);
+    const openStr = formatDateKey(t.dateOpened);
+    const closeStr = formatDateKey(t.dateClosed ?? t.dateOpened);
     const [lo, hi] = gridSpan(grid, openStr, closeStr);
     return Math.max(1, hi - lo + 1);
   });
@@ -166,8 +153,8 @@ export function buildArmDaySeries(armTrades: Trade[], grid: string[]): DaySeries
   const observedMask = new Array<boolean>(grid.length).fill(false);
 
   for (const t of armTrades) {
-    const openStr = toCalendarDateStr(t.dateOpened);
-    const closeStr = toCalendarDateStr(t.dateClosed ?? t.dateOpened);
+    const openStr = formatDateKey(t.dateOpened);
+    const closeStr = formatDateKey(t.dateClosed ?? t.dateOpened);
     const [lo, hi] = gridSpan(grid, openStr, closeStr);
     if (hi < lo) continue;
     const span = hi - lo + 1;

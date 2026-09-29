@@ -106,10 +106,9 @@ custom fields); missing/non-numeric values are excluded pairwise.
 sweeps using `WalkForwardAnalyzer` over one realized trade tape. It is not a
 marked-account or multi-tape portfolio simulation.
 
-The lib's walk-forward period endpoints are calendar-day keys. The MCP response
-retains its older `YYYY-MM-DDT00:00:00.000Z` string shape for compatibility;
-its date part is the calendar day, not a market instant. Runtime timestamps
-elsewhere in the computation remain instants.
+The lib's walk-forward period endpoints are calendar-day keys, and the MCP
+response reports them unchanged as `YYYY-MM-DD`. Runtime timestamps elsewhere
+in the computation remain instants.
 
 ### UI Components
 

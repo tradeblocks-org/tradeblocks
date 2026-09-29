@@ -23,6 +23,7 @@ import {
   performTailRiskAnalysis,
   calculateKellyMetrics,
   calculateStrategyKellyMetrics,
+  formatDateKey,
 } from "@tradeblocks/lib";
 import type { Trade, MonteCarloParams } from "@tradeblocks/lib";
 import { filterByDateRange } from "./shared/filters.ts";
@@ -34,12 +35,6 @@ import { resolveTradeTicker } from "../utils/ticker.ts";
 function filterByStrategy(trades: Trade[], strategy?: string): Trade[] {
   if (!strategy) return trades;
   return trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
-}
-
-// Preserve the MCP's timestamp-shaped strings without serializing a
-// local-midnight calendar value as an instant (which shifts east-of-UTC days).
-function legacyWindowTimestamp(calendarKey: string): string {
-  return `${calendarKey}T00:00:00.000Z`;
 }
 
 /**
@@ -412,24 +407,8 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             title: verdict.title,
           },
           recommendedParameters: recommended.params,
-          periods: periods.map((period) => ({
-            ...period,
-            inSampleStart: legacyWindowTimestamp(period.inSampleStart),
-            inSampleEnd: legacyWindowTimestamp(period.inSampleEnd),
-            outOfSampleStart: legacyWindowTimestamp(period.outOfSampleStart),
-            outOfSampleEnd: legacyWindowTimestamp(period.outOfSampleEnd),
-          })),
-          ...(skippedWindows.length > 0
-            ? {
-                skippedWindows: skippedWindows.map((window) => ({
-                  ...window,
-                  inSampleStart: legacyWindowTimestamp(window.inSampleStart),
-                  inSampleEnd: legacyWindowTimestamp(window.inSampleEnd),
-                  outOfSampleStart: legacyWindowTimestamp(window.outOfSampleStart),
-                  outOfSampleEnd: legacyWindowTimestamp(window.outOfSampleEnd),
-                })),
-              }
-            : {}),
+          periods,
+          ...(skippedWindows.length > 0 ? { skippedWindows } : {}),
         };
 
         return createToolOutput(summary, structuredData);
@@ -1094,8 +1073,8 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           strategies: result.strategies,
           tradingDaysUsed: result.tradingDaysUsed,
           dateRange: {
-            start: result.dateRange.start.toISOString(),
-            end: result.dateRange.end.toISOString(),
+            start: formatDateKey(result.dateRange.start),
+            end: formatDateKey(result.dateRange.end),
           },
           tailThreshold: result.tailThreshold,
           varianceThreshold: result.varianceThreshold,

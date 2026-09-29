@@ -381,6 +381,12 @@ These tables show common tools; [MCP Tools Reference](../../docs/mcp-tools.md) l
 | `get_strategy_comparison` | Compare strategies within a block                     |
 | `compare_blocks`          | Compare statistics across multiple blocks             |
 
+Trade-calendar dates in tool output are calendar days in `YYYY-MM-DD` form and name
+the same day on every server timezone. That covers a trade's opened or closed day, a
+daily-log day, and any range or window built from them, such as `dateRange`,
+walk-forward windows, `peakExposure` dates, and `run_sql` DATE columns. Real instants,
+such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO timestamps.
+
 ### Analysis Tools
 
 | Tool                     | Description                                              |

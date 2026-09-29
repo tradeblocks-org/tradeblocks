@@ -786,7 +786,7 @@ export class PortfolioStatsCalculator {
     // Group trades by date
     for (const trade of sortedTrades) {
       const tradeDate = new Date(trade.dateClosed ?? trade.dateOpened);
-      const dateKey = tradeDate.toISOString().split("T")[0];
+      const dateKey = formatDateToKey(tradeDate);
       if (!tradesByDate.has(dateKey)) {
         tradesByDate.set(dateKey, { date: tradeDate, trades: [] });
       }

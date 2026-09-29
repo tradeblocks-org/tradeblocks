@@ -17,6 +17,7 @@ import type {
   TailRiskAnalytics,
 } from "../models/tail-risk.ts";
 import type { Trade } from "../models/trade.ts";
+import { formatDateKey } from "./trade-matching.ts";
 import {
   kendallTau,
   kendallTauToPearson,
@@ -172,8 +173,8 @@ export function performTailRiskAnalysis(
     strategies: aligned.strategies,
     tradingDaysUsed: aligned.dates.length,
     dateRange: {
-      start: new Date(aligned.dates[0]),
-      end: new Date(aligned.dates[aligned.dates.length - 1]),
+      start: calendarDay(aligned.dates[0]),
+      end: calendarDay(aligned.dates[aligned.dates.length - 1]),
     },
     tailThreshold,
     varianceThreshold,
@@ -189,6 +190,12 @@ export function performTailRiskAnalysis(
     computedAt: new Date(),
     computationTimeMs: endTime - startTime,
   };
+}
+
+/** Local-midnight Date for a YYYY-MM-DD key, matching how trade dates are held. */
+function calendarDay(key: string): Date {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 /**
@@ -220,7 +227,7 @@ function aggregateAndAlignReturns(
       continue;
     }
 
-    const dateKey = date.toISOString().split("T")[0];
+    const dateKey = formatDateKey(date);
     const normalizedReturn = normalizeReturn(trade, normalization);
 
     if (normalizedReturn === null) {
@@ -713,9 +720,11 @@ function createEmptyResult(
     strategies: aligned.strategies,
     tradingDaysUsed: aligned.dates.length,
     dateRange: {
-      start: aligned.dates.length > 0 ? new Date(aligned.dates[0]) : new Date(),
+      start: aligned.dates.length > 0 ? calendarDay(aligned.dates[0]) : new Date(),
       end:
-        aligned.dates.length > 0 ? new Date(aligned.dates[aligned.dates.length - 1]) : new Date(),
+        aligned.dates.length > 0
+          ? calendarDay(aligned.dates[aligned.dates.length - 1])
+          : new Date(),
     },
     tailThreshold,
     varianceThreshold,
