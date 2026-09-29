@@ -162,7 +162,8 @@ const KNOWN_TRADE_COLUMNS = new Set([
   "Avg. Closing Cost",
   "Reason For Close",
   "P/L",
-  "P/L %",
+  // "P/L %" is deliberately absent: it also stays in customFields, so existing `custom.P/L %`
+  // report queries keep working alongside the typed `plPct`.
   "P/L Basis",
   "No. of Contracts",
   "Funds at Close",

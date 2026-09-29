@@ -111,7 +111,14 @@ describe("import_csv trade-log P/L %", () => {
         -21.82857142857143,
         97.62666666666668,
       ]);
-      expect(trades.every((trade) => trade.customFields?.["P/L %"] === undefined)).toBe(true);
+      // Existing `custom.P/L %` report queries keep reading the raw column.
+      expect(trades.map((trade) => trade.customFields?.["P/L %"])).toEqual([
+        12.5,
+        undefined,
+        "abc",
+        -21.82857142857143,
+        97.62666666666668,
+      ]);
       const enriched = enrichTrades(trades);
       expect(enriched[0].plPct).toBe(12.5);
       expect(enriched[0].netPlPct).toBeCloseTo(COMPUTED[0], 10);
