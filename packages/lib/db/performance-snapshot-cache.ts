@@ -9,8 +9,17 @@ import type { PortfolioStats } from "../models/portfolio-stats.ts";
 import type { Trade } from "../models/trade.ts";
 import type { DailyLogEntry } from "../models/daily-log.ts";
 import type { SnapshotChartData } from "../services/performance-snapshot.ts";
+import type { MFEMAEDataPoint } from "../calculations/mfe-mae.ts";
 import { promisifyRequest, STORES, withReadTransaction, withWriteTransaction } from "./index.ts";
 import { getEffectiveRateDate } from "../utils/risk-free-rate.ts";
+import {
+  DATED_ROW_DAY_FIELDS,
+  decodeCalendarDays,
+  encodeCalendarDays,
+  type StoredCalendarDays,
+  TRADE_DAY_FIELDS,
+  type TradeDayField,
+} from "./calendar-days.ts";
 
 /**
  * Cache entry for performance snapshot
@@ -20,9 +29,11 @@ interface PerformanceSnapshotCache {
   blockId: string;
   calculationType: "performance_snapshot";
   portfolioStats: PortfolioStats;
-  chartData: SnapshotChartData;
-  filteredTrades: Trade[];
-  filteredDailyLogs: DailyLogEntry[];
+  chartData: Omit<SnapshotChartData, "mfeMaeData"> & {
+    mfeMaeData: StoredCalendarDays<MFEMAEDataPoint, "date">[];
+  };
+  filteredTrades: StoredCalendarDays<Trade, TradeDayField>[];
+  filteredDailyLogs: StoredCalendarDays<DailyLogEntry, "date">[];
   calculatedAt: Date;
   riskFreeRatesThrough: string;
 }
@@ -62,9 +73,18 @@ export async function storePerformanceSnapshotCache(
     blockId,
     calculationType: "performance_snapshot",
     portfolioStats: snapshot.portfolioStats,
-    chartData: snapshot.chartData,
-    filteredTrades: snapshot.filteredTrades,
-    filteredDailyLogs: snapshot.filteredDailyLogs,
+    chartData: {
+      ...snapshot.chartData,
+      mfeMaeData: snapshot.chartData.mfeMaeData.map((point) =>
+        encodeCalendarDays(point, DATED_ROW_DAY_FIELDS),
+      ),
+    },
+    filteredTrades: snapshot.filteredTrades.map((trade) =>
+      encodeCalendarDays(trade, TRADE_DAY_FIELDS),
+    ),
+    filteredDailyLogs: snapshot.filteredDailyLogs.map((log) =>
+      encodeCalendarDays(log, DATED_ROW_DAY_FIELDS),
+    ),
     calculatedAt: new Date(),
     riskFreeRatesThrough: getEffectiveRateDate("DTB3"),
   };
@@ -73,29 +93,6 @@ export async function storePerformanceSnapshotCache(
     const store = transaction.objectStore(STORES.CALCULATIONS);
     await promisifyRequest(store.put(cacheEntry));
   });
-}
-
-/**
- * Restore Date objects from serialized cache data
- */
-function restoreDates<T extends { dateOpened?: Date | string; dateClosed?: Date | string | null }>(
-  items: T[],
-): T[] {
-  return items.map((item) => ({
-    ...item,
-    dateOpened: item.dateOpened ? new Date(item.dateOpened) : undefined,
-    dateClosed: item.dateClosed ? new Date(item.dateClosed) : undefined,
-  }));
-}
-
-/**
- * Restore Date objects in daily logs
- */
-function restoreDailyLogDates(logs: DailyLogEntry[]): DailyLogEntry[] {
-  return logs.map((log) => ({
-    ...log,
-    date: new Date(log.date),
-  }));
 }
 
 /**
@@ -117,12 +114,20 @@ export async function getPerformanceSnapshotCache(
     const cache = result as PerformanceSnapshotCache;
     if (cache.riskFreeRatesThrough !== getEffectiveRateDate("DTB3")) return null;
 
-    // Restore Date objects that were serialized
     return {
       portfolioStats: cache.portfolioStats,
-      chartData: cache.chartData,
-      filteredTrades: restoreDates(cache.filteredTrades) as Trade[],
-      filteredDailyLogs: restoreDailyLogDates(cache.filteredDailyLogs),
+      chartData: {
+        ...cache.chartData,
+        mfeMaeData: cache.chartData.mfeMaeData.map((point) =>
+          decodeCalendarDays<MFEMAEDataPoint, "date">(point, DATED_ROW_DAY_FIELDS),
+        ),
+      },
+      filteredTrades: cache.filteredTrades.map((trade) =>
+        decodeCalendarDays<Trade, TradeDayField>(trade, TRADE_DAY_FIELDS),
+      ),
+      filteredDailyLogs: cache.filteredDailyLogs.map((log) =>
+        decodeCalendarDays<DailyLogEntry, "date">(log, DATED_ROW_DAY_FIELDS),
+      ),
       calculatedAt: new Date(cache.calculatedAt),
     };
   });

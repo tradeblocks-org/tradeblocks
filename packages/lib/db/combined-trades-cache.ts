@@ -13,6 +13,13 @@ import {
   withReadTransaction,
   withWriteTransaction,
 } from "./index.ts";
+import {
+  decodeCalendarDays,
+  encodeCalendarDays,
+  type StoredCalendarDays,
+  TRADE_DAY_FIELDS,
+  type TradeDayField,
+} from "./calendar-days.ts";
 
 /**
  * Cache entry for combined trades
@@ -21,7 +28,7 @@ interface CombinedTradesCache {
   id: string; // Format: `combined_trades_${blockId}`
   blockId: string;
   calculationType: "combined_trades";
-  trades: CombinedTrade[];
+  trades: StoredCalendarDays<CombinedTrade, TradeDayField>[];
   tradeCount: number;
   calculatedAt: Date;
 }
@@ -44,7 +51,7 @@ export async function storeCombinedTradesCache(
     id: getCacheId(blockId),
     blockId,
     calculationType: "combined_trades",
-    trades: combinedTrades,
+    trades: combinedTrades.map((trade) => encodeCalendarDays(trade, TRADE_DAY_FIELDS)),
     tradeCount: combinedTrades.length,
     calculatedAt: new Date(),
   };
@@ -71,12 +78,9 @@ export async function getCombinedTradesCache(blockId: string): Promise<CombinedT
 
     const cache = result as CombinedTradesCache;
 
-    // Restore Date objects that were serialized
-    return cache.trades.map((trade) => ({
-      ...trade,
-      dateOpened: new Date(trade.dateOpened),
-      dateClosed: trade.dateClosed ? new Date(trade.dateClosed) : undefined,
-    }));
+    return cache.trades.map((trade) =>
+      decodeCalendarDays<CombinedTrade, TradeDayField>(trade, TRADE_DAY_FIELDS),
+    );
   });
 }
 

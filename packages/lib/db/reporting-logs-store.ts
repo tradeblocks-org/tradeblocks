@@ -10,21 +10,30 @@ import {
   withWriteTransaction,
   promisifyRequest,
 } from "./index.ts";
+import { clearUnverifiedCalendarDays } from "./blocks-store.ts";
+import {
+  decodeCalendarDays,
+  encodeCalendarDays,
+  type StoredCalendarDays,
+  TRADE_DAY_FIELDS,
+  type TradeDayField,
+} from "./calendar-days.ts";
 
 export interface StoredReportingTrade extends ReportingTrade {
   blockId: string;
   id?: number;
 }
 
+type PersistedReportingTrade = StoredCalendarDays<StoredReportingTrade, TradeDayField>;
+
 export async function addReportingTrades(blockId: string, trades: ReportingTrade[]): Promise<void> {
   if (trades.length === 0) return;
 
   await withWriteTransaction(STORES.REPORTING_LOGS, async (transaction) => {
     const store = transaction.objectStore(STORES.REPORTING_LOGS);
-    const promises = trades.map((trade) => {
-      const storedTrade: StoredReportingTrade = { ...trade, blockId };
-      return promisifyRequest(store.add(storedTrade));
-    });
+    const promises = trades.map((trade) =>
+      promisifyRequest(store.add(encodeCalendarDays({ ...trade, blockId }, TRADE_DAY_FIELDS))),
+    );
 
     await Promise.all(promises);
   });
@@ -34,10 +43,12 @@ export async function getReportingTradesByBlock(blockId: string): Promise<Stored
   return withReadTransaction(STORES.REPORTING_LOGS, async (transaction) => {
     const store = transaction.objectStore(STORES.REPORTING_LOGS);
     const index = store.index(INDEXES.REPORTING_LOGS_BY_BLOCK);
-    const result = await promisifyRequest(index.getAll(blockId));
+    const result: PersistedReportingTrade[] = await promisifyRequest(index.getAll(blockId));
 
-    return result.sort(
-      (a, b) => new Date(a.dateOpened).getTime() - new Date(b.dateOpened).getTime(),
+    // Chronological order: `YYYY-MM-DD` days sort as text.
+    result.sort((a, b) => (a.dateOpened < b.dateOpened ? -1 : a.dateOpened > b.dateOpened ? 1 : 0));
+    return result.map((trade) =>
+      decodeCalendarDays<StoredReportingTrade, TradeDayField>(trade, TRADE_DAY_FIELDS),
     );
   });
 }
@@ -57,7 +68,7 @@ export async function getReportingStrategiesByBlock(blockId: string): Promise<st
 }
 
 export async function deleteReportingTradesByBlock(blockId: string): Promise<void> {
-  await withWriteTransaction(STORES.REPORTING_LOGS, async (transaction) => {
+  await withWriteTransaction([STORES.REPORTING_LOGS, STORES.BLOCKS], async (transaction) => {
     const store = transaction.objectStore(STORES.REPORTING_LOGS);
     const index = store.index(INDEXES.REPORTING_LOGS_BY_BLOCK);
     const request = index.openCursor(IDBKeyRange.only(blockId));
@@ -74,6 +85,7 @@ export async function deleteReportingTradesByBlock(blockId: string): Promise<voi
       };
       request.onerror = () => reject(request.error);
     });
+    await clearUnverifiedCalendarDays(transaction, blockId, STORES.REPORTING_LOGS);
   });
 }
 
@@ -81,7 +93,7 @@ export async function updateReportingTradesForBlock(
   blockId: string,
   trades: ReportingTrade[],
 ): Promise<void> {
-  await withWriteTransaction(STORES.REPORTING_LOGS, async (transaction) => {
+  await withWriteTransaction([STORES.REPORTING_LOGS, STORES.BLOCKS], async (transaction) => {
     const store = transaction.objectStore(STORES.REPORTING_LOGS);
     const index = store.index(INDEXES.REPORTING_LOGS_BY_BLOCK);
     const deleteRequest = index.openCursor(IDBKeyRange.only(blockId));
@@ -99,11 +111,11 @@ export async function updateReportingTradesForBlock(
       deleteRequest.onerror = () => reject(deleteRequest.error);
     });
 
-    const promises = trades.map((trade) => {
-      const storedTrade: StoredReportingTrade = { ...trade, blockId };
-      return promisifyRequest(store.add(storedTrade));
-    });
+    const promises = trades.map((trade) =>
+      promisifyRequest(store.add(encodeCalendarDays({ ...trade, blockId }, TRADE_DAY_FIELDS))),
+    );
 
     await Promise.all(promises);
+    await clearUnverifiedCalendarDays(transaction, blockId, STORES.REPORTING_LOGS);
   });
 }

@@ -47,6 +47,17 @@ export interface ProcessedBlock {
     end: Date;
   };
 
+  /**
+   * Rows per collection whose calendar day the v7 storage upgrade could not prove (see
+   * `recoverCalendarDay`). They keep the day the upgrading browser showed and may be off by one
+   * day until that collection's file is imported again, which clears its count.
+   */
+  unverifiedCalendarDays?: {
+    trades?: number;
+    dailyLogs?: number;
+    reportingLogs?: number;
+  };
+
   // Processing status
   processingStatus: "pending" | "processing" | "completed" | "error";
   processingError?: string;

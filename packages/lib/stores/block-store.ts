@@ -44,6 +44,7 @@ export interface Block {
     start: Date;
     end: Date;
   };
+  unverifiedCalendarDays?: ProcessedBlock["unverifiedCalendarDays"];
   stats: {
     totalPnL: number;
     winRate: number;
@@ -123,12 +124,8 @@ function convertProcessedBlockToBlock(
           updatedAt: new Date(processedBlock.strategyAlignment.updatedAt),
         }
       : undefined,
-    dateRange: processedBlock.dateRange
-      ? {
-          start: new Date(processedBlock.dateRange.start),
-          end: new Date(processedBlock.dateRange.end),
-        }
-      : undefined,
+    dateRange: processedBlock.dateRange,
+    unverifiedCalendarDays: processedBlock.unverifiedCalendarDays,
     stats: {
       totalPnL: 0, // Will be calculated from trades
       winRate: 0,

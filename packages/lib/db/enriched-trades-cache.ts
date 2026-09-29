@@ -10,6 +10,13 @@
 
 import type { EnrichedTrade } from "../models/enriched-trade.ts";
 import { promisifyRequest, STORES, withReadTransaction, withWriteTransaction } from "./index.ts";
+import {
+  decodeCalendarDays,
+  encodeCalendarDays,
+  type StoredCalendarDays,
+  TRADE_DAY_FIELDS,
+  type TradeDayField,
+} from "./calendar-days.ts";
 
 /**
  * Cache entry for enriched trades
@@ -18,7 +25,7 @@ interface EnrichedTradesCache {
   id: string; // Format: `enriched_trades_${blockId}`
   blockId: string;
   calculationType: "enriched_trades";
-  trades: EnrichedTrade[];
+  trades: StoredCalendarDays<EnrichedTrade, TradeDayField>[];
   tradeCount: number;
   calculatedAt: Date;
 }
@@ -41,7 +48,7 @@ export async function storeEnrichedTradesCache(
     id: getCacheId(blockId),
     blockId,
     calculationType: "enriched_trades",
-    trades: enrichedTrades,
+    trades: enrichedTrades.map((trade) => encodeCalendarDays(trade, TRADE_DAY_FIELDS)),
     tradeCount: enrichedTrades.length,
     calculatedAt: new Date(),
   };
@@ -68,12 +75,14 @@ export async function getEnrichedTradesCache(blockId: string): Promise<EnrichedT
 
     const cache = result as EnrichedTradesCache;
 
-    // Restore Date objects that were serialized
-    return cache.trades.map((trade) => ({
-      ...trade,
-      dateOpened: new Date(trade.dateOpened),
-      dateClosed: trade.dateClosed ? new Date(trade.dateClosed) : undefined,
-    }));
+    return cache.trades.map((stored) => {
+      const trade = decodeCalendarDays<EnrichedTrade, TradeDayField>(stored, TRADE_DAY_FIELDS);
+      // The chart timestamp is the opening day's local midnight, so it follows the current zone.
+      if (trade.dateOpenedTimestamp !== undefined) {
+        trade.dateOpenedTimestamp = trade.dateOpened.getTime();
+      }
+      return trade;
+    });
   });
 }
 

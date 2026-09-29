@@ -5,15 +5,18 @@
  * Uses a versioned schema with migration support.
  */
 
-// Types imported for reference (commented out to avoid unused warnings)
-// import { ProcessedBlock } from '../models/block.ts'
-// import { Trade } from '../models/trade.ts'
-// import { DailyLogEntry } from '../models/daily-log.ts'
-// import { PortfolioStats, StrategyStats, PerformanceMetrics } from '../models/portfolio-stats.ts'
+import type { ProcessedBlock } from "../models/block.ts";
+import {
+  DATED_ROW_DAY_FIELDS,
+  encodeCalendarDay,
+  isDate,
+  recoverCalendarDay,
+  TRADE_DAY_FIELDS,
+} from "./calendar-days.ts";
 
 // Database configuration
 export const DB_NAME = "TradeBlocksDB";
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 // Object store names
 export const STORES = {
@@ -47,6 +50,149 @@ export const INDEXES = {
  * Database instance singleton
  */
 let dbInstance: IDBDatabase | null = null;
+
+type UnverifiedCalendarDays = NonNullable<ProcessedBlock["unverifiedCalendarDays"]>;
+
+/** Calculation caches whose rows carry calendar days; rebuilt from the upgraded records. */
+const DATED_CALCULATION_TYPES: Record<string, true> = {
+  combined_trades: true,
+  enriched_trades: true,
+  performance_snapshot: true,
+};
+
+/**
+ * v5 divided "cents"-tagged premiums by 100, then applied its option-multiplier heuristic to
+ * every record. Rescale each premium so existing blocks keep the totals v5 displayed.
+ */
+function rescaleLegacyPremium(trade: Record<string, unknown>): boolean {
+  let changed = Object.hasOwn(trade, "premiumPrecision");
+  if (typeof trade.premium === "number" && isFinite(trade.premium)) {
+    const cents = trade.premiumPrecision === "cents";
+    const count =
+      typeof trade.numContracts === "number" && isFinite(trade.numContracts)
+        ? Math.abs(trade.numContracts)
+        : 0;
+    const contracts = count > 0 ? count : 1;
+    const total = (Math.abs(trade.premium) / (cents ? 100 : 1)) * contracts;
+    const margin =
+      typeof trade.marginReq === "number" && isFinite(trade.marginReq)
+        ? Math.abs(trade.marginReq)
+        : 0;
+    const multiplied =
+      isFinite(total) &&
+      total > 0 &&
+      (margin > 0 ? total / margin > 0 && total / margin < 0.5 : total < 5000);
+    if (cents && !multiplied) {
+      trade.premium /= 100;
+      changed = true;
+    } else if (!cents && multiplied) {
+      trade.premium *= 100;
+      changed = true;
+    }
+  }
+  if (changed) delete trade.premiumPrecision;
+  return changed;
+}
+
+/**
+ * Rewrite pre-v7 `Date` calendar days as `YYYY-MM-DD`. A day `recoverCalendarDay` cannot prove
+ * keeps the local day this browser shows and is returned in `unproven`. Strings are skipped, so a
+ * repeated pass changes nothing.
+ */
+function storeCalendarDays(
+  record: Record<string, unknown>,
+  fields: readonly string[],
+): { changed: boolean; unproven: number } {
+  let changed = false;
+  let unproven = 0;
+  for (const field of fields) {
+    const value = record[field];
+    if (!isDate(value)) continue;
+    const day = recoverCalendarDay(value);
+    if (day === null) unproven++;
+    record[field] = day ?? encodeCalendarDay(value);
+    changed = true;
+  }
+  return { changed, unproven };
+}
+
+/**
+ * Upgrade existing records in the version-change transaction: one cursor pass per store, since two
+ * cursors updating the same record would overwrite each other. Blocks are visited after the data
+ * stores so they can record their unverified-day counts. Any failure aborts the transaction, which
+ * leaves the database at its previous version.
+ */
+function upgradeStoredRecords(transaction: IDBTransaction, oldVersion: number): void {
+  const unverified = new Map<string, UnverifiedCalendarDays>();
+
+  const eachRecord = (
+    storeName: string,
+    visit: (cursor: IDBCursorWithValue) => void,
+    done?: () => void,
+  ) => {
+    const request = transaction.objectStore(storeName).openCursor();
+    request.onsuccess = () => {
+      try {
+        const cursor = request.result;
+        if (!cursor) {
+          done?.();
+          return;
+        }
+        visit(cursor);
+        cursor.continue();
+      } catch (error) {
+        console.error(`IndexedDB upgrade of ${storeName} failed:`, error);
+        transaction.abort();
+      }
+    };
+  };
+
+  const migrateCollection = (
+    storeName: typeof STORES.TRADES | typeof STORES.DAILY_LOGS | typeof STORES.REPORTING_LOGS,
+    fields: readonly string[],
+    done: () => void,
+  ) =>
+    eachRecord(
+      storeName,
+      (cursor) => {
+        const record = cursor.value;
+        const premiumChanged =
+          storeName === STORES.TRADES && oldVersion < 6 && rescaleLegacyPremium(record);
+        const days = storeCalendarDays(record, fields);
+        if (days.unproven > 0) {
+          const blockId = String(record.blockId);
+          const counts = unverified.get(blockId) ?? {};
+          counts[storeName] = (counts[storeName] ?? 0) + days.unproven;
+          unverified.set(blockId, counts);
+        }
+        if (premiumChanged || days.changed) cursor.update(record);
+      },
+      done,
+    );
+
+  let pendingCollections = 3;
+  const collectionDone = () => {
+    pendingCollections--;
+    if (pendingCollections > 0) return;
+    eachRecord(STORES.BLOCKS, (cursor) => {
+      const block = cursor.value;
+      // The block's date range copies its trades' dates; it adds no count of its own.
+      const changed = block.dateRange
+        ? storeCalendarDays(block.dateRange, ["start", "end"]).changed
+        : false;
+      const counts = unverified.get(block.id);
+      if (counts) block.unverifiedCalendarDays = counts;
+      if (changed || counts) cursor.update(block);
+    });
+  };
+  migrateCollection(STORES.TRADES, TRADE_DAY_FIELDS, collectionDone);
+  migrateCollection(STORES.DAILY_LOGS, DATED_ROW_DAY_FIELDS, collectionDone);
+  migrateCollection(STORES.REPORTING_LOGS, TRADE_DAY_FIELDS, collectionDone);
+
+  eachRecord(STORES.CALCULATIONS, (cursor) => {
+    if (Object.hasOwn(DATED_CALCULATION_TYPES, cursor.value.calculationType)) cursor.delete();
+  });
+}
 
 /**
  * Initialize the IndexedDB database
@@ -192,56 +338,8 @@ export async function initializeDatabase(): Promise<IDBDatabase> {
         db.createObjectStore(STORES.PUBLISHED_RATES);
       }
 
-      if (event.oldVersion < 6) {
-        const trades = transaction.objectStore(STORES.TRADES);
-        const tradeCursor = trades.openCursor();
-        tradeCursor.onsuccess = () => {
-          const cursor = tradeCursor.result;
-          if (!cursor) return;
-          const trade = cursor.value;
-          let changed = Object.hasOwn(trade, "premiumPrecision");
-          // v5 divided "cents"-tagged premiums by 100, then applied its option-multiplier heuristic
-          // to every record. Rescale each premium so existing blocks keep the totals v5 displayed.
-          if (typeof trade.premium === "number" && isFinite(trade.premium)) {
-            const cents = trade.premiumPrecision === "cents";
-            const count =
-              typeof trade.numContracts === "number" && isFinite(trade.numContracts)
-                ? Math.abs(trade.numContracts)
-                : 0;
-            const contracts = count > 0 ? count : 1;
-            const total = (Math.abs(trade.premium) / (cents ? 100 : 1)) * contracts;
-            const margin =
-              typeof trade.marginReq === "number" && isFinite(trade.marginReq)
-                ? Math.abs(trade.marginReq)
-                : 0;
-            const multiplied =
-              isFinite(total) &&
-              total > 0 &&
-              (margin > 0 ? total / margin > 0 && total / margin < 0.5 : total < 5000);
-            if (cents && !multiplied) {
-              trade.premium /= 100;
-              changed = true;
-            } else if (!cents && multiplied) {
-              trade.premium *= 100;
-              changed = true;
-            }
-          }
-          if (changed) {
-            delete trade.premiumPrecision;
-            cursor.update(trade);
-          }
-          cursor.continue();
-        };
-
-        // Enriched trades contain derived efficiencies and must be rebuilt from migrated trades.
-        const calculations = transaction.objectStore(STORES.CALCULATIONS);
-        const cacheCursor = calculations.openCursor();
-        cacheCursor.onsuccess = () => {
-          const cursor = cacheCursor.result;
-          if (!cursor) return;
-          if (cursor.value.calculationType === "enriched_trades") cursor.delete();
-          cursor.continue();
-        };
+      if (event.oldVersion < 7) {
+        upgradeStoredRecords(transaction, event.oldVersion);
       }
 
       transaction.oncomplete = () => {

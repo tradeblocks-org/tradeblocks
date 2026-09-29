@@ -42,6 +42,7 @@ import type { SnapshotProgress } from "@tradeblocks/lib";
 import { waitForRender } from "@tradeblocks/lib";
 import { useProgressDialog } from "@/hooks/use-progress-dialog";
 import { ImportGuideDialog } from "@/components/import-guide-dialog";
+import { UnverifiedCalendarDaysAlert } from "@/components/unverified-calendar-days-alert";
 
 function BlockCard({ block, onEdit }: { block: Block; onEdit: (block: Block) => void }) {
   const setActiveBlock = useBlockStore((state) => state.setActiveBlock);
@@ -133,6 +134,8 @@ function BlockCard({ block, onEdit }: { block: Block; onEdit: (block: Block) => 
             </Badge>
           )}
         </div>
+
+        <UnverifiedCalendarDaysAlert block={block} />
 
         {/* Date Range & Last Modified */}
         <div className="text-xs text-muted-foreground border-t pt-3 space-y-1">
@@ -242,85 +245,88 @@ function BlockRow({ block, onEdit }: { block: Block; onEdit: (block: Block) => v
   };
 
   return (
-    <div
-      className={`flex items-center gap-4 p-4 rounded-lg border transition-all hover:shadow-md ${
-        block.isActive ? "ring-2 ring-primary bg-primary/5" : "bg-card"
-      }`}
-    >
-      {/* Name and Description */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold truncate">{block.name}</h3>
-          {block.isActive && (
-            <Badge variant="default" className="text-xs">
-              ACTIVE
+    <div className="space-y-2">
+      <div
+        className={`flex items-center gap-4 p-4 rounded-lg border transition-all hover:shadow-md ${
+          block.isActive ? "ring-2 ring-primary bg-primary/5" : "bg-card"
+        }`}
+      >
+        {/* Name and Description */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold truncate">{block.name}</h3>
+            {block.isActive && (
+              <Badge variant="default" className="text-xs">
+                ACTIVE
+              </Badge>
+            )}
+          </div>
+          {block.description && (
+            <p className="text-sm text-muted-foreground truncate mt-0.5">{block.description}</p>
+          )}
+        </div>
+
+        {/* File Indicators */}
+        <div className="hidden md:flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs whitespace-nowrap">
+            <Activity className="w-3 h-3 mr-1" />
+            {block.tradeLog.rowCount}
+          </Badge>
+          {block.dailyLog && (
+            <Badge variant="outline" className="text-xs whitespace-nowrap">
+              <Calendar className="w-3 h-3 mr-1" />
+              {block.dailyLog.rowCount}
+            </Badge>
+          )}
+          {block.reportingLog && (
+            <Badge variant="outline" className="text-xs whitespace-nowrap">
+              <List className="w-3 h-3 mr-1" />
+              {block.reportingLog.rowCount}
             </Badge>
           )}
         </div>
-        {block.description && (
-          <p className="text-sm text-muted-foreground truncate mt-0.5">{block.description}</p>
-        )}
-      </div>
 
-      {/* File Indicators */}
-      <div className="hidden md:flex items-center gap-2">
-        <Badge variant="secondary" className="text-xs whitespace-nowrap">
-          <Activity className="w-3 h-3 mr-1" />
-          {block.tradeLog.rowCount}
-        </Badge>
-        {block.dailyLog && (
-          <Badge variant="outline" className="text-xs whitespace-nowrap">
-            <Calendar className="w-3 h-3 mr-1" />
-            {block.dailyLog.rowCount}
-          </Badge>
-        )}
-        {block.reportingLog && (
-          <Badge variant="outline" className="text-xs whitespace-nowrap">
-            <List className="w-3 h-3 mr-1" />
-            {block.reportingLog.rowCount}
-          </Badge>
-        )}
-      </div>
+        {/* Date Range & Last Modified */}
+        <div className="hidden lg:flex flex-col text-sm text-muted-foreground whitespace-nowrap">
+          {block.dateRange && (
+            <span className="text-xs">
+              {formatDate(block.dateRange.start)} – {formatDate(block.dateRange.end)}
+            </span>
+          )}
+          <span className="text-xs">{formatDate(block.lastModified)}</span>
+        </div>
 
-      {/* Date Range & Last Modified */}
-      <div className="hidden lg:flex flex-col text-sm text-muted-foreground whitespace-nowrap">
-        {block.dateRange && (
-          <span className="text-xs">
-            {formatDate(block.dateRange.start)} – {formatDate(block.dateRange.end)}
-          </span>
-        )}
-        <span className="text-xs">{formatDate(block.lastModified)}</span>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2 ml-auto">
-        {!block.isActive && (
-          <Button size="sm" onClick={() => setActiveBlock(block.id)}>
-            Activate
+        {/* Actions */}
+        <div className="flex items-center gap-2 ml-auto">
+          {!block.isActive && (
+            <Button size="sm" onClick={() => setActiveBlock(block.id)}>
+              Activate
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={() => onEdit(block)}>
+            Edit
           </Button>
-        )}
-        <Button size="sm" variant="outline" onClick={() => onEdit(block)}>
-          Edit
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleRecalculate}
-          disabled={isRecalculating}
-          title="Recalculate statistics and charts"
-        >
-          <RotateCcw className={`h-4 w-4 ${isRecalculating ? "animate-spin" : ""}`} />
-        </Button>
-      </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleRecalculate}
+            disabled={isRecalculating}
+            title="Recalculate statistics and charts"
+          >
+            <RotateCcw className={`h-4 w-4 ${isRecalculating ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
 
-      {/* Progress dialog for recalculation */}
-      <ProgressDialog
-        open={progress.state?.open ?? false}
-        title="Recalculating Statistics"
-        step={progress.state?.step ?? ""}
-        percent={progress.state?.percent ?? 0}
-        onCancel={handleCancelCalculation}
-      />
+        {/* Progress dialog for recalculation */}
+        <ProgressDialog
+          open={progress.state?.open ?? false}
+          title="Recalculating Statistics"
+          step={progress.state?.step ?? ""}
+          percent={progress.state?.percent ?? 0}
+          onCancel={handleCancelCalculation}
+        />
+      </div>
+      <UnverifiedCalendarDaysAlert block={block} />
     </div>
   );
 }

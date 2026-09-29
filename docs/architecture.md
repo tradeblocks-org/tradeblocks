@@ -99,6 +99,34 @@ Market-feed timestamps are real instants. Convert those timestamps to `America/N
 the trading date. The recurring error is to apply that conversion to a local-midnight calendar
 value, which can turn it into the previous Eastern day on a UTC host.
 
+The web app's IndexedDB holds calendar days as `YYYY-MM-DD` strings, never as `Date` values, so
+a stored block shows the same days in any browser timezone. This covers `trades.dateOpened` and
+`dateClosed`, `dailyLogs.date`, `reportingLogs.dateOpened` and `dateClosed`, a block's
+`dateRange`, and the dated rows inside the combined-trades, enriched-trades and
+performance-snapshot caches (the enriched `dateOpenedTimestamp` is recomputed from the decoded
+day). The store modules in `packages/lib/db` encode a value from its local calendar parts on write
+and decode it to local midnight in the current zone on read (`packages/lib/db/calendar-days.ts`),
+so `Trade`, `DailyLogEntry` and `ReportingTrade` keep their in-memory `Date` fields. Date-range
+queries on the `dateOpened`/`date` indexes use the same strings, inclusive at both ends.
+Walk-forward windows (UTC-normalized), static-dataset timestamps and created, uploaded, calculated
+and modified times are instants and remain `Date` values.
+
+Database version 7 converts older browsers' stored `Date` values once, field by field, from the
+stored instant alone (`recoverCalendarDay()`). Earlier versions stored local midnight in the
+importing zone, or UTC midnight from older parsers. Every real offset lies between −12h and +14h
+on a quarter-hour grid, so an instant with zero seconds on that grid is a day's midnight: before
+10:00 UTC it is that UTC date (imported at or west of UTC), after 12:00 UTC it is the next UTC
+date (east of UTC). From 10:00 to 12:00 UTC the offsets −10…−12h and +12…+14h collide (for example,
+2 January in Honolulu and 3 January in Kiritimati are both `2024-01-02T10:00Z`), and an instant
+off the grid came from a timestamp. Those dates are unprovable: they keep the day the upgrading
+browser shows, and the block records how many there were per collection in
+`ProcessedBlock.unverifiedCalendarDays`, which the web app shows as a re-import prompt. Replacing
+or deleting a collection's rows clears its count; new imports never set one. A date cell that
+carried a time of day which happens to land on the grid cannot be told apart from a midnight and
+is converted as one. The upgrade makes one cursor pass per store in the version-change
+transaction (together with the v6 premium rescale), skips values that are already strings,
+clears the dated calculation caches, and aborts the version change on any failure.
+
 `import_csv` checks every trade/reporting opened and populated closed date as a
 calendar day before creating a block; impossible days are refused, not rolled
 forward by the local `Date` constructor. A CSV date with a time or zone suffix

@@ -11,6 +11,50 @@ import {
   promisifyRequest,
   DatabaseError,
 } from "./index.ts";
+import {
+  decodeCalendarDays,
+  encodeCalendarDays,
+  type StoredCalendarDays,
+} from "./calendar-days.ts";
+
+type DateRange = NonNullable<ProcessedBlock["dateRange"]>;
+type PersistedBlock = Omit<ProcessedBlock, "dateRange"> & {
+  dateRange?: StoredCalendarDays<DateRange, keyof DateRange>;
+};
+
+/** The block's date range holds calendar days (its trades' first and last opening days). */
+const RANGE_DAY_FIELDS = ["start", "end"] as const;
+
+function toPersisted(block: ProcessedBlock | PersistedBlock): PersistedBlock {
+  if (!block.dateRange) return block as PersistedBlock;
+  return { ...block, dateRange: encodeCalendarDays(block.dateRange, RANGE_DAY_FIELDS) };
+}
+
+function fromPersisted(block: PersistedBlock): ProcessedBlock {
+  if (!block.dateRange) return block as ProcessedBlock;
+  return {
+    ...block,
+    dateRange: decodeCalendarDays<DateRange, keyof DateRange>(block.dateRange, RANGE_DAY_FIELDS),
+  };
+}
+
+/**
+ * Clear a collection's unverified-day count after its rows are replaced or deleted, inside the
+ * transaction that changes them.
+ */
+export async function clearUnverifiedCalendarDays(
+  transaction: IDBTransaction,
+  blockId: string,
+  collection: keyof NonNullable<ProcessedBlock["unverifiedCalendarDays"]>,
+): Promise<void> {
+  const store = transaction.objectStore(STORES.BLOCKS);
+  const block: PersistedBlock | undefined = await promisifyRequest(store.get(blockId));
+  const counts = block?.unverifiedCalendarDays;
+  if (!block || !counts || !(collection in counts)) return;
+  delete counts[collection];
+  if (Object.keys(counts).length === 0) delete block.unverifiedCalendarDays;
+  await promisifyRequest(store.put(block));
+}
 
 /**
  * Create a new block
@@ -27,7 +71,7 @@ export async function createBlock(
 
   await withWriteTransaction(STORES.BLOCKS, async (transaction) => {
     const store = transaction.objectStore(STORES.BLOCKS);
-    await promisifyRequest(store.add(block));
+    await promisifyRequest(store.add(toPersisted(block)));
   });
 
   return block;
@@ -39,8 +83,8 @@ export async function createBlock(
 export async function getBlock(blockId: string): Promise<ProcessedBlock | null> {
   return withReadTransaction(STORES.BLOCKS, async (transaction) => {
     const store = transaction.objectStore(STORES.BLOCKS);
-    const result = await promisifyRequest(store.get(blockId));
-    return result || null;
+    const result: PersistedBlock | undefined = await promisifyRequest(store.get(blockId));
+    return result ? fromPersisted(result) : null;
   });
 }
 
@@ -50,12 +94,12 @@ export async function getBlock(blockId: string): Promise<ProcessedBlock | null> 
 export async function getAllBlocks(): Promise<ProcessedBlock[]> {
   return withReadTransaction(STORES.BLOCKS, async (transaction) => {
     const store = transaction.objectStore(STORES.BLOCKS);
-    const result = await promisifyRequest(store.getAll());
+    const result: PersistedBlock[] = await promisifyRequest(store.getAll());
 
     // Sort by last modified (newest first)
-    return result.sort(
-      (a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime(),
-    );
+    return result
+      .sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime())
+      .map(fromPersisted);
   });
 }
 
@@ -66,8 +110,10 @@ export async function getActiveBlock(): Promise<ProcessedBlock | null> {
   return withReadTransaction(STORES.BLOCKS, async (transaction) => {
     const store = transaction.objectStore(STORES.BLOCKS);
     const index = store.index("isActive");
-    const result = await promisifyRequest(index.get(true as unknown as IDBValidKey));
-    return result || null;
+    const result: PersistedBlock | undefined = await promisifyRequest(
+      index.get(true as unknown as IDBValidKey),
+    );
+    return result ? fromPersisted(result) : null;
   });
 }
 
@@ -82,20 +128,20 @@ export async function updateBlock(
     const store = transaction.objectStore(STORES.BLOCKS);
 
     // Get existing block
-    const existing = await promisifyRequest(store.get(blockId));
+    const existing: PersistedBlock | undefined = await promisifyRequest(store.get(blockId));
     if (!existing) {
       throw new DatabaseError(`Block not found: ${blockId}`, "update", STORES.BLOCKS);
     }
 
     // Merge updates with lastModified timestamp
-    const updatedBlock: ProcessedBlock = {
+    const updatedBlock = toPersisted({
       ...existing,
-      ...updates,
+      ...(updates as Partial<PersistedBlock>),
       lastModified: new Date(),
-    };
+    });
 
     await promisifyRequest(store.put(updatedBlock));
-    return updatedBlock;
+    return fromPersisted(updatedBlock);
   });
 }
 

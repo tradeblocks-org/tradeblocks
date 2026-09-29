@@ -26,41 +26,26 @@ it("preserves displayed premiums while upgrading browser trades from v5", async 
   });
   const oldTransaction = oldDatabase.transaction([STORES.TRADES, STORES.CALCULATIONS], "readwrite");
   const trades = oldTransaction.objectStore(STORES.TRADES);
-  trades.put({
-    blockId: "legacy",
-    premium: 2.5,
-    premiumPrecision: "dollars",
-    numContracts: 1,
-    marginReq: 1000,
-  });
-  trades.put({
-    blockId: "legacy",
-    premium: 420,
-    premiumPrecision: "cents",
-    numContracts: 3,
-    marginReq: 43740,
-  });
-  trades.put({
-    blockId: "legacy",
-    premium: -6000,
-    premiumPrecision: "dollars",
-    numContracts: 0,
-    marginReq: 1000,
-  });
-  trades.put({ blockId: "legacy", premium: -2.5, premiumPrecision: "dollars", numContracts: 2 });
+  // v5 parsers stored the opening day as UTC midnight; the v7 upgrade recovers it in one pass.
+  let order = 0;
+  const put = (record: Record<string, unknown>) =>
+    trades.put({
+      blockId: "legacy",
+      dateOpened: new Date("2024-01-02T00:00:00Z"),
+      timeOpened: `10:0${order++}:00`,
+      ...record,
+    });
+  put({ premium: 2.5, premiumPrecision: "dollars", numContracts: 1, marginReq: 1000 });
+  put({ premium: 420, premiumPrecision: "cents", numContracts: 3, marginReq: 43740 });
+  put({ premium: -6000, premiumPrecision: "dollars", numContracts: 0, marginReq: 1000 });
+  put({ premium: -2.5, premiumPrecision: "dollars", numContracts: 2 });
   // Untagged records predate premiumPrecision; v5 read them exactly like "dollars".
-  trades.put({ blockId: "legacy", premium: 2.5, numContracts: 1, marginReq: 1000 });
-  trades.put({ blockId: "legacy", premium: 420, numContracts: 3, marginReq: 1000 });
+  put({ premium: 2.5, numContracts: 1, marginReq: 1000 });
+  put({ premium: 420, numContracts: 3, marginReq: 1000 });
   // v5 required a positive ratio; an underflowed ratio was never scaled.
-  trades.put({ blockId: "legacy", premium: Number.MIN_VALUE, marginReq: Number.MAX_VALUE });
+  put({ premium: Number.MIN_VALUE, marginReq: Number.MAX_VALUE });
   // v5 showed this cents record as $500: 50000 / 100, with the ratio at 0.5 so no ×100.
-  trades.put({
-    blockId: "legacy",
-    premium: 50000,
-    premiumPrecision: "cents",
-    numContracts: 1,
-    marginReq: 1000,
-  });
+  put({ premium: 50000, premiumPrecision: "cents", numContracts: 1, marginReq: 1000 });
   oldTransaction.objectStore(STORES.CALCULATIONS).put({
     id: "enriched_trades_legacy",
     blockId: "legacy",
@@ -77,8 +62,7 @@ it("preserves displayed premiums while upgrading browser trades from v5", async 
 
   try {
     const db = await initializeDatabase();
-    expect(DB_VERSION).toBe(6);
-    expect(db.version).toBe(6);
+    expect(db.version).toBe(DB_VERSION);
     const upgraded = await getTradesByBlock("legacy");
     expect(upgraded.map((trade) => computeTotalPremium(trade))).toEqual([
       250,
@@ -101,6 +85,7 @@ it("preserves displayed premiums while upgrading browser trades from v5", async 
       500,
     ]);
     expect(upgraded.every((trade) => !Object.hasOwn(trade, "premiumPrecision"))).toBe(true);
+    expect(upgraded.map((trade) => trade.dateOpened)).toEqual(Array(8).fill(new Date(2024, 0, 2)));
     expect(await getEnrichedTradesCache("legacy")).toBeNull();
   } finally {
     closeDatabase();

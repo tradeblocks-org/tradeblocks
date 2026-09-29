@@ -276,7 +276,7 @@ describe("IndexedDB Integration with Data Loader", () => {
       const blockId = "test-stats-block";
       const trades: Trade[] = [
         {
-          dateOpened: new Date("2024-01-01"),
+          dateOpened: new Date(2024, 0, 1),
           timeOpened: "10:00:00",
           openingPrice: 100,
           legs: "CALL",
@@ -291,7 +291,7 @@ describe("IndexedDB Integration with Data Loader", () => {
           openingShortLongRatio: 0.5,
         },
         {
-          dateOpened: new Date("2024-01-05"),
+          dateOpened: new Date(2024, 0, 5),
           timeOpened: "11:00:00",
           openingPrice: 105,
           legs: "PUT",
@@ -306,7 +306,7 @@ describe("IndexedDB Integration with Data Loader", () => {
           openingShortLongRatio: 0.6,
         },
         {
-          dateOpened: new Date("2024-01-03"),
+          dateOpened: new Date(2024, 0, 3),
           timeOpened: "14:00:00",
           openingPrice: 102,
           legs: "SPREAD",
@@ -331,8 +331,8 @@ describe("IndexedDB Integration with Data Loader", () => {
       expect(stats.losingTrades).toBe(1);
       expect(stats.totalCommissions).toBe(44); // 5+5+10+10+7+7
       expect(stats.strategies).toEqual(["Strategy A", "Strategy B"]);
-      expect(stats.dateRange.start).toEqual(new Date("2024-01-01"));
-      expect(stats.dateRange.end).toEqual(new Date("2024-01-05"));
+      expect(stats.dateRange.start).toEqual(new Date(2024, 0, 1));
+      expect(stats.dateRange.end).toEqual(new Date(2024, 0, 5));
     });
   });
 });
