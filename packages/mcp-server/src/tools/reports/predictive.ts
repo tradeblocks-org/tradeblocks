@@ -469,3 +469,5 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
     ),
   );
 }
+
+export const deliberateTypeError4266: number = "not a number";
