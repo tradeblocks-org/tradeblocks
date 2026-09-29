@@ -95,20 +95,37 @@ function rescaleLegacyPremium(trade: Record<string, unknown>): boolean {
 }
 
 /**
- * Rewrite pre-v7 `Date` calendar days as `YYYY-MM-DD`. A day `recoverCalendarDay` cannot prove
+ * The CSV cell each reporting-log day was parsed from. Option Omega strategy logs write
+ * `Date Opened` with a time (`2025-05-30T10:15:40.546199`); the importer parsed that as an
+ * instant, but the cell's `YYYY-MM-DD` prefix is the exact day. Rows imported since v3.2.0 keep
+ * their cells in `sourceFields`.
+ */
+const REPORTING_SOURCE_CELLS: Record<string, string> = {
+  dateOpened: "Date Opened",
+  dateClosed: "Date Closed",
+};
+
+/**
+ * Rewrite pre-v7 `Date` calendar days as `YYYY-MM-DD`. The day comes from the record's saved
+ * source cell when it starts with one, else from `recoverCalendarDay`. A day neither can prove
  * keeps the local day this browser shows and is returned in `unproven`. Strings are skipped, so a
  * repeated pass changes nothing.
  */
 function storeCalendarDays(
   record: Record<string, unknown>,
   fields: readonly string[],
+  sourceCells: Record<string, string> = {},
 ): { changed: boolean; unproven: number } {
+  const source = record.sourceFields as Record<string, unknown> | undefined;
   let changed = false;
   let unproven = 0;
   for (const field of fields) {
     const value = record[field];
     if (!isDate(value)) continue;
-    const day = recoverCalendarDay(value);
+    const cell = sourceCells[field] ? source?.[sourceCells[field]] : undefined;
+    const day =
+      (typeof cell === "string" && /^\d{4}-\d{2}-\d{2}/.exec(cell.trim())?.[0]) ||
+      recoverCalendarDay(value);
     if (day === null) unproven++;
     record[field] = day ?? encodeCalendarDay(value);
     changed = true;
@@ -158,7 +175,11 @@ function upgradeStoredRecords(transaction: IDBTransaction, oldVersion: number): 
         const record = cursor.value;
         const premiumChanged =
           storeName === STORES.TRADES && oldVersion < 6 && rescaleLegacyPremium(record);
-        const days = storeCalendarDays(record, fields);
+        const days = storeCalendarDays(
+          record,
+          fields,
+          storeName === STORES.REPORTING_LOGS ? REPORTING_SOURCE_CELLS : undefined,
+        );
         if (days.unproven > 0) {
           const blockId = String(record.blockId);
           const counts = unverified.get(blockId) ?? {};

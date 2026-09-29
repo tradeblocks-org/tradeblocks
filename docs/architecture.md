@@ -111,21 +111,27 @@ queries on the `dateOpened`/`date` indexes use the same strings, inclusive at bo
 Walk-forward windows (UTC-normalized), static-dataset timestamps and created, uploaded, calculated
 and modified times are instants and remain `Date` values.
 
-Database version 7 converts older browsers' stored `Date` values once, field by field, from the
-stored instant alone (`recoverCalendarDay()`). Earlier versions stored local midnight in the
-importing zone, or UTC midnight from older parsers. Every real offset lies between −12h and +14h
-on a quarter-hour grid, so an instant with zero seconds on that grid is a day's midnight: before
-10:00 UTC it is that UTC date (imported at or west of UTC), after 12:00 UTC it is the next UTC
-date (east of UTC). From 10:00 to 12:00 UTC the offsets −10…−12h and +12…+14h collide (for example,
-2 January in Honolulu and 3 January in Kiritimati are both `2024-01-02T10:00Z`), and an instant
-off the grid came from a timestamp. Those dates are unprovable: they keep the day the upgrading
-browser shows, and the block records how many there were per collection in
-`ProcessedBlock.unverifiedCalendarDays`, which the web app shows as a re-import prompt. Replacing
-or deleting a collection's rows clears its count; new imports never set one. A date cell that
-carried a time of day which happens to land on the grid cannot be told apart from a midnight and
-is converted as one. The upgrade makes one cursor pass per store in the version-change
-transaction (together with the v6 premium rescale), skips values that are already strings,
-clears the dated calculation caches, and aborts the version change on any failure.
+Database version 7 converts older browsers' stored `Date` values once, field by field. A
+reporting-log (strategy-log) row whose saved source cell (`sourceFields["Date Opened"]` or
+`["Date Closed"]`, kept since v3.2.0) begins with `YYYY-MM-DD` takes that prefix as its exact day,
+as the CSV rule below does for a date with a time or zone suffix; Option Omega strategy logs write
+these cells with a time (`2025-05-30T10:15:40.546199`), so their stored instants are off the grid.
+Every other value is recovered from the stored instant alone (`recoverCalendarDay()`). Earlier
+versions stored local midnight in the importing zone, or UTC midnight from older parsers. Every
+real offset lies between −12h and +14h on a quarter-hour grid, so an instant with zero seconds on
+that grid is a day's midnight: before 10:00 UTC it is that UTC date (imported at or west of UTC),
+after 12:00 UTC it is the next UTC date (east of UTC). From 10:00 to 12:00 UTC the offsets
+−10…−12h and +12…+14h collide (for example, 2 January in Honolulu and 3 January in Kiritimati are
+both `2024-01-02T10:00Z`), and an instant off the grid came from a timestamp; timestamped
+strategy-log rows imported before v3.2.0 have no saved cells and fall here. Those dates are
+unprovable: they keep the day the upgrading browser shows, and the block records how many there
+were per collection in `ProcessedBlock.unverifiedCalendarDays`, which the web app shows as a
+re-import prompt. Replacing or deleting a collection's rows clears its count; new imports never set
+one. A date cell that carried a time of day which happens to land on the grid (and has no saved
+source cell) cannot be told apart from a midnight and is converted as one. The upgrade makes one
+cursor pass per store in the version-change transaction (together with the v6 premium rescale),
+skips values that are already strings, clears the dated calculation caches, and aborts the version
+change on any failure.
 
 `import_csv` checks every trade/reporting opened and populated closed date as a
 calendar day before creating a block; impossible days are refused, not rolled

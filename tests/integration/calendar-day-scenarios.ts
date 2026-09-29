@@ -209,6 +209,7 @@ async function seedLegacy(version: 5 | 6): Promise<void> {
   const blocks = tx.objectStore(STORES.BLOCKS);
   blocks.put(blockRecord("legacy", localDay(DAYS[0]), localDay(DAYS.at(-1)!)));
   blocks.put(blockRecord("utc-parser", new Date("2024-01-05"), new Date("2024-01-05")));
+  blocks.put(blockRecord("oo-strategy", localDay(DAYS[0]), localDay(DAYS[0])));
 
   const trades = tx.objectStore(STORES.TRADES);
   DAYS.forEach((day, index) =>
@@ -250,6 +251,30 @@ async function seedLegacy(version: 5 | 6): Promise<void> {
   DAYS.forEach((day) => dailyLogs.put({ ...dailyLog(day), blockId: "legacy" }));
   const reporting = tx.objectStore(STORES.REPORTING_LOGS);
   DAYS.forEach((day) => reporting.put({ ...reportingTrade(day), blockId: "legacy" }));
+  // Option Omega strategy logs write days with a time; the importer's `new Date(cell)` stored a
+  // local instant off the quarter-hour grid. Since v3.2.0 each row also keeps its source cells.
+  const opened = " 2025-05-30T10:15:40.546199";
+  const closed = "2025-06-02T15:45:12.1";
+  reporting.put({
+    ...reportingTrade(DAYS[0]),
+    dateOpened: new Date(opened.trim()),
+    dateClosed: new Date(closed),
+    sourceFields: { "Date Opened": opened, "Date Closed": closed, Strategy: "OO" },
+    blockId: "oo-strategy",
+  });
+  reporting.put({
+    ...reportingTrade(DAYS[0]),
+    dateOpened: new Date(opened.trim()),
+    dateClosed: new Date(closed),
+    blockId: "oo-strategy",
+  });
+  // A whole-day cell is exact even in the zones `recoverCalendarDay` cannot prove.
+  reporting.put({
+    ...reportingTrade("2025-06-03"),
+    dateClosed: undefined,
+    sourceFields: { "Date Opened": "2025-06-03", "Date Closed": "" },
+    blockId: "oo-strategy",
+  });
 
   const calculations = tx.objectStore(STORES.CALCULATIONS);
   for (const [id, calculationType] of [
@@ -281,6 +306,12 @@ async function readLegacy(): Promise<Json> {
     dateRange: legacy?.dateRange && days([legacy.dateRange.start, legacy.dateRange.end]),
     unverified: legacy?.unverifiedCalendarDays ?? null,
     utcParserUnverified: (await getBlock("utc-parser"))?.unverifiedCalendarDays ?? null,
+    ooReporting: (await getReportingTradesByBlock("oo-strategy")).map((r) => ({
+      opened: formatDateKey(r.dateOpened),
+      closed: r.dateClosed && formatDateKey(r.dateClosed),
+      hasSource: r.sourceFields !== undefined,
+    })),
+    ooUnverified: (await getBlock("oo-strategy"))?.unverifiedCalendarDays ?? null,
     combinedFromMigratedTrades: days(cached.map((t) => t.dateOpened)),
     tradeRange: days(
       (await getTradesByDateRange("legacy", localDay(DAYS[1]), localDay(DAYS[3]))).map(

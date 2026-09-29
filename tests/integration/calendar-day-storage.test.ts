@@ -146,6 +146,8 @@ describe.each([
     it("stores each day it can prove and keeps the displayed day of the rest", () => {
       for (const [name, fields] of Object.entries(DATE_FIELDS)) {
         after[name].forEach((record, index) => {
+          // Strategy-log rows with saved source cells have their own test below.
+          if (record.value.blockId === "oo-strategy") return;
           for (const field of fields) {
             const legacy = before[name][index].value[field];
             expect([name, field, record.value[field]]).toEqual([
@@ -176,6 +178,25 @@ describe.each([
         : { trades: 15, dailyLogs: 5, reportingLogs: 10 };
       expect(read.unverified).toEqual(expected);
       expect(read.utcParserUnverified).toBeNull();
+    });
+
+    it("recovers OO strategy-log days from their saved source cells, and flags them without", () => {
+      const stored = after.reportingLogs.filter((row) => row.value.blockId === "oo-strategy");
+      const legacy = before.reportingLogs.filter((row) => row.value.blockId === "oo-strategy");
+      expect(stored.map((row) => [row.value.dateOpened, row.value.dateClosed])).toEqual([
+        ["2025-05-30", "2025-06-02"],
+        [
+          shownIn(readZone, legacy[1].value.dateOpened as string),
+          shownIn(readZone, legacy[1].value.dateClosed as string),
+        ],
+        ["2025-06-03", undefined],
+      ]);
+      const rows = read.ooReporting as { opened: string; closed?: string; hasSource: boolean }[];
+      expect(rows.filter((row) => row.hasSource)).toEqual([
+        { opened: "2025-05-30", closed: "2025-06-02", hasSource: true },
+        { opened: "2025-06-03", hasSource: true },
+      ]);
+      expect(read.ooUnverified).toEqual({ reportingLogs: 2 });
     });
 
     it("reads back the stored days in the current zone, including range queries and caches", () => {
