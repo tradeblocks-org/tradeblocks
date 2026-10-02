@@ -56,10 +56,10 @@ export class DuckdbSpotStore extends SpotStore {
     return { rowCount: Number(result.rowsChanged) };
   }
 
-  async readBars(ticker: string, from: string, to: string): Promise<BarRow[]> {
+  async readBars(ticker: string, from: string, to: string, upperEt?: string): Promise<BarRow[]> {
     // Builders inline values as SQL literals; the unbound runAndReadAll(sql)
     // path bypasses extract_statements (see spot-sql.ts header).
-    const { sql } = buildReadBarsSQL(ticker, from, to);
+    const { sql } = buildReadBarsSQL(ticker, from, to, upperEt);
     const reader = await this.ctx.conn.runAndReadAll(sql);
     return reader.getRows().map((r) => ({
       ticker: String(r[0]),

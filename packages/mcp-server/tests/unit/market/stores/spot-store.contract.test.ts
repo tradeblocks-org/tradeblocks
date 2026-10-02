@@ -15,7 +15,7 @@
  *   - getCoverage on populated ticker
  *   - getCoverage on missing ticker returns empty report
  */
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { describe, it, expect, jest, beforeEach, afterEach } from "@jest/globals";
 import { mkdirSync, renameSync, rmSync } from "node:fs";
 import * as path from "node:path";
 import {
@@ -87,6 +87,47 @@ describe.each([
     expect(read[0].date).toBe("2025-01-06");
     expect(read[0].open).toBe(100);
   });
+
+  it("bounds the final day inclusively before rows materialize, leaving previous days and unbounded reads intact", async () => {
+    for (const date of ["2025-01-06", "2025-01-08"]) {
+      await store.writeBars("SPX", date, makeBars("SPX", date));
+    }
+    await refreshViews(fixture);
+    const unbounded = await store.readBars("SPX", "2025-01-06", "2025-01-08");
+    const read = fixture.ctx.conn.runAndReadAll.bind(fixture.ctx.conn);
+    const guard = jest
+      .spyOn(fixture.ctx.conn, "runAndReadAll")
+      .mockImplementation(async (...args) => {
+        const reader = await read(...args);
+        expect(reader.getRows().map((row) => [String(row[1]), String(row[2])])).not.toContainEqual([
+          "2025-01-08",
+          "15:45",
+        ]);
+        return reader;
+      });
+    try {
+      const bounded = await store.readBars("SPX", "2025-01-06", "2025-01-08", "2025-01-08T10:30");
+      expect(bounded.map((row) => [row.date, row.time])).toEqual([
+        ["2025-01-06", "09:30"],
+        ["2025-01-06", "10:30"],
+        ["2025-01-06", "15:45"],
+        ["2025-01-08", "09:30"],
+        ["2025-01-08", "10:30"],
+      ]);
+    } finally {
+      guard.mockRestore();
+    }
+    expect(await store.readBars("SPX", "2025-01-06", "2025-01-08")).toEqual(unbounded);
+  });
+
+  it.each(["2025-01-07T10:30", "2025-01-08T24:00", "2025-01-08T10:60", "2025-01-08T10:30Z", ""])(
+    "refuses an invalid last-day ET bound %j even without data",
+    async (upperEt) => {
+      await expect(store.readBars("SPX", "2025-01-06", "2025-01-08", upperEt)).rejects.toThrow(
+        "upperEt must be YYYY-MM-DDTHH:mm ET on the read's final date",
+      );
+    },
+  );
 
   it("writeBars with empty array is a no-op", async () => {
     await store.writeBars("SPX", "2025-01-06", []);

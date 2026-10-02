@@ -41,15 +41,33 @@ function lit(value: string): string {
   return `'${escapeSqlLiteral(value)}'`;
 }
 
+/** Inclusive minute-grained ET bound; earlier days remain complete. */
+export function buildLastDayUpperEtClause(to: string, upperEt?: string): string {
+  if (upperEt === undefined) return "";
+  if (
+    typeof upperEt !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/.test(upperEt) ||
+    upperEt.slice(0, 10) !== to
+  ) {
+    throw new Error("upperEt must be YYYY-MM-DDTHH:mm ET on the read's final date");
+  }
+  return ` AND (date < ${lit(to)} OR (date = ${lit(to)} AND time <= ${lit(upperEt.slice(11))}))`;
+}
+
 /**
  * Read raw minute bars from `market.spot` for a ticker over a date range.
  * Results are ordered by (date, time) so callers receive a deterministic stream.
  */
-export function buildReadBarsSQL(ticker: string, from: string, to: string): BuiltSQL {
+export function buildReadBarsSQL(
+  ticker: string,
+  from: string,
+  to: string,
+  upperEt?: string,
+): BuiltSQL {
   return {
     sql: `SELECT ticker, date, time, open, high, low, close, bid, ask
           FROM market.spot
-          WHERE ticker = ${lit(ticker)} AND date >= ${lit(from)} AND date <= ${lit(to)}
+          WHERE ticker = ${lit(ticker)} AND date >= ${lit(from)} AND date <= ${lit(to)}${buildLastDayUpperEtClause(to, upperEt)}
           ORDER BY date, time`,
   };
 }
