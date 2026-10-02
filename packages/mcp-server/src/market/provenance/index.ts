@@ -46,6 +46,7 @@ export {
   XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
   XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
   isXnysSessionDate,
+  isEarlyCloseSession,
   enumerateXnysSessions,
 } from "./xnys-session-calendar.ts";
 export {
