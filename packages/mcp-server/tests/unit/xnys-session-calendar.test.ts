@@ -6,6 +6,7 @@ import {
   enumerateXnysSessions,
   isXnysSessionDate,
 } from "../../src/test-exports.ts";
+import { isEarlyCloseSession as publicIsEarlyCloseSession } from "../../src/market/provenance/index.ts";
 
 describe("bounded XNYS session calendar", () => {
   it("publishes versioned, whole-year support bounds", () => {
@@ -85,5 +86,13 @@ describe("bounded XNYS session calendar", () => {
     expect(() => enumerateXnysSessions("2025-01-10", "2025-01-09")).toThrow(RangeError);
     expect(() => enumerateXnysSessions("2021-12-31", "2022-01-03")).toThrow(RangeError);
     expect(() => enumerateXnysSessions("2030-12-31", "2031-01-01")).toThrow(RangeError);
+  });
+
+  it("tells consumers of the public provenance entry which sessions close early", () => {
+    expect(publicIsEarlyCloseSession("2024-11-29")).toBe(true); // day after Thanksgiving
+    expect(publicIsEarlyCloseSession("2024-11-27")).toBe(false); // full session
+    expect(publicIsEarlyCloseSession("2024-11-28")).toBe(false); // Thanksgiving: closed, not early
+    expect(publicIsEarlyCloseSession("2024-11-30")).toBe(false); // weekend
+    expect(() => publicIsEarlyCloseSession("2021-12-31")).toThrow(RangeError);
   });
 });

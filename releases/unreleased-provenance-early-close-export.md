@@ -1,0 +1,3 @@
+# Unreleased — the provenance entry exports early-close sessions
+
+**Additive programmatic API.** `tradeblocks-mcp/market/provenance` now also exports `isEarlyCloseSession(date)`, beside `isXnysSessionDate` and `enumerateXnysSessions`. It answers `true` for an XNYS session that closes early (13:00 ET) and `false` for a full session or a non-session day. The caller passes an Eastern calendar date as `YYYY-MM-DD`. A date outside the calendar's supported range (`XNYS_SESSION_CALENDAR_SUPPORTED_FROM` through `XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH`) throws `RangeError`, the same as the other calendar functions. Existing exports and behaviour are unchanged.
