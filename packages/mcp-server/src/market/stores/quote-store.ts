@@ -22,6 +22,7 @@ import type {
   CoverageReport,
   ReadWindowParams,
   WindowQuoteRow,
+  GreekColumn,
 } from "./types.ts";
 import { extractRoot } from "../tickers/resolver.ts";
 
@@ -67,11 +68,15 @@ export abstract class QuoteStore {
    * `extractRoot(...)` + `ctx.tickers.resolve(...)` (validated by the concrete
    * implementation per D-07). Returns a Map keyed by OCC ticker; values are
    * timestamp-sorted arrays of QuoteRow for that contract across the range.
+   * Optional `neededGreeks` selects a subset; omitted reads all Greeks.
+   * An empty list reads no Greek, IV or Greek/rate provenance columns.
+   * Unselected fields return null.
    */
   abstract readQuotes(
     occTickers: string[],
     from: string,
     to: string,
+    neededGreeks?: ReadonlyArray<GreekColumn>,
   ): Promise<Map<string, QuoteRow[]>>;
 
   /**
@@ -117,11 +122,13 @@ export abstract class QuoteStore {
    * OCC ticker whose values contain quotes for that ticker across every date
    * in which it was requested; callers filter by (ticker, date) against the
    * input map if they need date-specific isolation.
+   * `neededGreeks` follows the same projection contract as `readQuotes`.
    */
   async readQuotesBulk(
     tickersByDate: Map<string, Set<string>>,
     timeStart: string,
     timeEnd: string,
+    neededGreeks?: ReadonlyArray<GreekColumn>,
   ): Promise<Map<string, QuoteRow[]>> {
     const out = new Map<string, QuoteRow[]>();
     if (tickersByDate.size === 0) return out;
@@ -129,7 +136,7 @@ export abstract class QuoteStore {
     for (const [, perDate] of this.groupTickersByUnderlying(tickersByDate)) {
       for (const [date, occs] of perDate) {
         if (occs.size === 0) continue;
-        const quotesByOcc = await this.readQuotes([...occs], date, date);
+        const quotesByOcc = await this.readQuotes([...occs], date, date, neededGreeks);
         for (const [occ, quotes] of quotesByOcc) {
           let arr = out.get(occ);
           if (!arr) {

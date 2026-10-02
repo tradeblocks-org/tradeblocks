@@ -397,6 +397,30 @@ Examples:
 | `import_from_api { target_table: "intraday", ticker: "SPX", timespan: "1m", from, to }` | `fetch_bars { tickers: ["SPX"], timespan: "1m", from, to }`                                                                |
 | `import_from_api { target_table: "date_context", from, to }`                            | `fetch_bars { tickers: ["VIX","VIX9D","VIX3M"], timespan: "1d", from, to }` followed by `compute_vix_context { from, to }` |
 
+## Quote-store read projections
+
+Quote-price-only consumers can skip Greek columns entirely. The exported
+`QuoteStore.readQuotesBulk(tickersByDate, timeStart, timeEnd, neededGreeks?)`
+and `QuoteStore.readQuotes(occTickers, from, to, neededGreeks?)` accept an
+optional fourth argument of type `ReadonlyArray<GreekColumn>`, where
+`GreekColumn` is `"delta" | "gamma" | "theta" | "vega" | "iv"`.
+Import the store factory from `tradeblocks-mcp/market/stores` and the type from
+`tradeblocks-mcp/market/stores/types`.
+
+Omitting the argument preserves the full existing projection and returned
+fields. Pass `[]` to avoid selecting any Greek, IV, or Greek/rate provenance
+column from storage: `delta`, `gamma`, `theta`, `vega`, `iv`, `greeks_source`,
+`greeks_revision`, `rate_type`, `rate_value`, and `gamma_source` return `null`.
+SQL uses typed NULL placeholders to preserve canonical row positions.
+Pass a nonempty subset such as `["delta", "iv"]` to read only those Greeks;
+the other Greeks return `null`, while provenance is still read. Unknown
+Greek names throw.
+
+Non-Greek quote fields, exact date/ticker matching, inclusive time bounds,
+ordering, and compatibility with older or mixed DATE/VARCHAR partitions are
+unchanged. A projected `null` means the field was not requested, not that
+the underlying stored value is missing.
+
 ## Computed option-Greeks method
 
 `greeks_source = 'computed'` identifies local model outputs, not provider-native

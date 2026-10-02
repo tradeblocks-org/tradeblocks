@@ -17,7 +17,13 @@
 import { existsSync } from "fs";
 import * as path from "path";
 import { QuoteStore } from "./quote-store.ts";
-import type { QuoteRow, CoverageReport, ReadWindowParams, WindowQuoteRow } from "./types.ts";
+import type {
+  QuoteRow,
+  CoverageReport,
+  ReadWindowParams,
+  WindowQuoteRow,
+  GreekColumn,
+} from "./types.ts";
 import { listXnysSessionPartitionValues } from "./coverage.ts";
 import { resolveMarketDir, writeQuoteMinutesPartition } from "../../db/market-datasets.ts";
 import { extractRoot } from "../tickers/resolver.ts";
@@ -160,6 +166,7 @@ export class ParquetQuoteStore extends QuoteStore {
     occTickers: string[],
     from: string,
     to: string,
+    neededGreeks?: ReadonlyArray<GreekColumn>,
   ): Promise<Map<string, QuoteRow[]>> {
     if (occTickers.length === 0) return new Map();
     // D-07: validate all tickers resolve to the same underlying BEFORE any SQL
@@ -189,7 +196,7 @@ export class ParquetQuoteStore extends QuoteStore {
 
     const source = readParquetFilesSql(files);
     const columns = await describeReadParquetColumns(this.ctx.conn, source);
-    const projection = quoteParquetCanonicalProjection(columns, "q");
+    const projection = quoteParquetCanonicalProjection(columns, "q", neededGreeks);
     // Inline every value as a SQL literal and call the unbound
     // runAndReadAll(sql) form — the bound (sql, values) path routes through
     // node_bindings.extract_statements, which leaks a non-destroyable handle
@@ -224,6 +231,7 @@ export class ParquetQuoteStore extends QuoteStore {
     tickersByDate: Map<string, Set<string>>,
     timeStart: string,
     timeEnd: string,
+    neededGreeks?: ReadonlyArray<GreekColumn>,
   ): Promise<Map<string, QuoteRow[]>> {
     const out = new Map<string, QuoteRow[]>();
     if (tickersByDate.size === 0) return out;
@@ -257,7 +265,7 @@ export class ParquetQuoteStore extends QuoteStore {
 
       const source = readParquetFilesSql(filePaths);
       const columns = await describeReadParquetColumns(this.ctx.conn, source);
-      const projection = quoteParquetCanonicalProjection(columns, "q");
+      const projection = quoteParquetCanonicalProjection(columns, "q", neededGreeks);
       // Time bounds inlined as SQL literals so the call takes the unbound
       // runAndReadAll(sql) path (the (date, ticker) VALUES are already inlined
       // above). The bound form leaks an extract_statements handle per call —

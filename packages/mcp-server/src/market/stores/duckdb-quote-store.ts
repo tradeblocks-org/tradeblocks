@@ -11,7 +11,13 @@
  * D-02 reminder: no method body inspects `ctx.parquetMode`.
  */
 import { QuoteStore } from "./quote-store.ts";
-import type { QuoteRow, CoverageReport, ReadWindowParams, WindowQuoteRow } from "./types.ts";
+import type {
+  QuoteRow,
+  CoverageReport,
+  ReadWindowParams,
+  WindowQuoteRow,
+  GreekColumn,
+} from "./types.ts";
 import { extractRoot } from "../tickers/resolver.ts";
 import {
   describeQueryColumns,
@@ -147,6 +153,7 @@ export class DuckdbQuoteStore extends QuoteStore {
     occTickers: string[],
     from: string,
     to: string,
+    neededGreeks?: ReadonlyArray<GreekColumn>,
   ): Promise<Map<string, QuoteRow[]>> {
     if (occTickers.length === 0) return new Map();
     const firstUnderlying = this.ctx.tickers.resolve(extractRoot(occTickers[0]));
@@ -161,7 +168,7 @@ export class DuckdbQuoteStore extends QuoteStore {
       }
     }
     const columns = await this.getQuoteTableColumns();
-    const projection = quoteParquetCanonicalProjection(columns, "q");
+    const projection = quoteParquetCanonicalProjection(columns, "q", neededGreeks);
     // Inline every value as a SQL literal and call the unbound
     // runAndReadAll(sql) form — the bound (sql, values) path routes through
     // node_bindings.extract_statements, which leaks a non-destroyable handle
@@ -198,6 +205,7 @@ export class DuckdbQuoteStore extends QuoteStore {
     tickersByDate: Map<string, Set<string>>,
     timeStart: string,
     timeEnd: string,
+    neededGreeks?: ReadonlyArray<GreekColumn>,
   ): Promise<Map<string, QuoteRow[]>> {
     const out = new Map<string, QuoteRow[]>();
     if (tickersByDate.size === 0) return out;
@@ -219,7 +227,7 @@ export class DuckdbQuoteStore extends QuoteStore {
       if (wantedPairs.length === 0) continue;
 
       const columns = await this.getQuoteTableColumns();
-      const projection = quoteParquetCanonicalProjection(columns, "q");
+      const projection = quoteParquetCanonicalProjection(columns, "q", neededGreeks);
       // Underlying + time bounds inlined as SQL literals so the call takes the
       // unbound runAndReadAll(sql) path (the (date, ticker) VALUES are already
       // inlined above). The bound form leaks an extract_statements handle per
