@@ -42,6 +42,10 @@ such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO times
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `replay_trade` | Replay trades with minute-level P&L path, MFE/MAE, and per-leg greeks. Uses cached bars from `market.intraday`; fetches from Massive.com on cache miss. Quote sanity: opening-rotation quotes (before 09:32 ET) and quotes with a zero or missing bid or ask are dropped and the previous mark is carried forward; the path starts at the trade's entry time (`time_opened`, or `open_time` in hypothetical mode). Three output formats: `full`, `sampled` (default), `summary`. |
 
+For `replay_trade`'s computed model and units, see the
+[computed option-Greeks method](market-data.md#computed-option-greeks-method).
+Replay calculations are not themselves a stored quote's revision/provenance.
+
 ## Exit Trigger Analysis
 
 | Tool                    | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -52,17 +56,29 @@ such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO times
 
 All exit tools use cached bars from `market.intraday` — no Massive.com subscription required if bars are pre-loaded.
 
+`decompose_greeks` uses the pricing models and volatility units described in the
+[computed option-Greeks method](market-data.md#computed-option-greeks-method);
+its attribution is distinct from cached quote-Greek provenance.
+
 ## Greek Attribution
 
 | Tool                     | Description                                      |
 | ------------------------ | ------------------------------------------------ |
 | `get_greeks_attribution` | Decompose a block's P/L into Greek contributions |
 
+For model conventions and the distinction between computed and provider-native
+Greeks, see the [computed option-Greeks method](market-data.md#computed-option-greeks-method).
+
 ## Live Options
 
 | Tool                  | Description                                                                                                                                            |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `get_option_snapshot` | Live option chain with greeks, IV, and open interest from Massive.com. BS greeks fallback for contracts with empty greeks. Requires `MASSIVE_API_KEY`. |
+
+For `get_option_snapshot`, provider-native values and computed fallbacks must
+be distinguished; see the
+[computed option-Greeks method](market-data.md#computed-option-greeks-method).
+Live fallback values do not imply that a revision-bearing quote was persisted.
 
 ## Market Data Import
 
@@ -80,6 +96,9 @@ All exit tools use cached bars from `market.intraday` — no Massive.com subscri
 | `purge_market_table`   | Delete all data from a market table for re-import                                                  |
 
 See [Market Data Guide](market-data.md) for import examples, ticker formats, and enrichment details.
+
+For stored Greeks populated by `fetch_quotes`, see the
+[computed option-Greeks method](market-data.md#computed-option-greeks-method).
 
 ## Underlying Registry
 
