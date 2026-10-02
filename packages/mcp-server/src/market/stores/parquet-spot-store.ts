@@ -132,8 +132,13 @@ export class ParquetSpotStore extends SpotStore {
     return { rowCount };
   }
 
-  async readBars(ticker: string, from: string, to: string): Promise<BarRow[]> {
-    const direct = this.buildDirectParquetReadBarsSQL(ticker, from, to);
+  async readBars(ticker: string, from: string, to: string, upperEt?: string): Promise<BarRow[]> {
+    const direct = this.buildDirectParquetReadBarsSQL(
+      ticker,
+      from,
+      to,
+      upperEt === undefined ? undefined : { upperEt },
+    );
     // Canonical Parquet reads must never fall back to the global view glob:
     // that glob can include a weekday holiday partition which is outside the
     // XNYS manifest authority. No eligible file means no canonical rows.

@@ -11,6 +11,7 @@ import * as path from "path";
 import type { StoreContext, BarRow, CoverageReport } from "./types.ts";
 import { resolveMarketDir } from "../../db/market-datasets.ts";
 import { listExcludedXnysPartitionValues, listXnysSessionPartitionValues } from "./coverage.ts";
+import { buildLastDayUpperEtClause } from "./spot-sql.ts";
 
 function escapeSqlLiteral(value: string): string {
   return value.replace(/'/g, "''");
@@ -81,8 +82,12 @@ export abstract class SpotStore {
     ticker: string,
     from: string,
     to: string,
-    opts?: { rthOnly?: boolean; dailyAgg?: boolean },
+    opts?: { rthOnly?: boolean; dailyAgg?: boolean; upperEt?: string },
   ): { sql: string } | null {
+    const upperClause = buildLastDayUpperEtClause(to, opts?.upperEt);
+    if (opts?.dailyAgg && opts.upperEt !== undefined) {
+      throw new Error("Time-bounded spot reads cannot be daily aggregates");
+    }
     const tickerDir = path.join(resolveMarketDir(this.ctx.dataDir), "spot", `ticker=${ticker}`);
     if (!existsSync(tickerDir)) {
       if (hasGlobalSpotData(this.ctx.dataDir, from, to)) {
@@ -144,7 +149,7 @@ export abstract class SpotStore {
     return {
       sql: `SELECT ${tickerLit} AS ticker, date, time, open, high, low, close, bid, ask
             FROM read_parquet([${fileList}], hive_partitioning=true)
-            WHERE 1=1 ${rthClause}
+            WHERE 1=1 ${rthClause}${upperClause}
             ORDER BY date, time`,
     };
   }
@@ -185,7 +190,8 @@ export abstract class SpotStore {
     selectSql: string,
   ): Promise<{ rowCount: number }>;
 
-  abstract readBars(ticker: string, from: string, to: string): Promise<BarRow[]>;
+  /** Optional inclusive YYYY-MM-DDTHH:mm ET bound on `to`; no bound preserves full days. */
+  abstract readBars(ticker: string, from: string, to: string, upperEt?: string): Promise<BarRow[]>;
   abstract readDailyBars(ticker: string, from: string, to: string): Promise<BarRow[]>;
   abstract getCoverage(ticker: string, from: string, to: string): Promise<CoverageReport>;
 }

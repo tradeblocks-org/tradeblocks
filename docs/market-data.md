@@ -126,6 +126,18 @@ To add a new data provider:
 - Handle pagination, rate limits, and auth errors inside the adapter
 - Use Zod schemas to validate API responses before mapping to `BarRow`
 
+## Point-in-time spot store reads
+
+`SpotStore.readBars(ticker, from, to, upperEt?)` accepts an optional inclusive, minute-grained upper bound on the final calendar day. Both the canonical Parquet and DuckDB implementations apply it in the SQL read before rows reach the caller:
+
+```typescript
+await stores.spot.readBars("SPX", "2025-01-06", "2025-01-08", "2025-01-08T10:30");
+```
+
+This reads complete earlier days and the final day's observations through `10:30`, including that minute but excluding later rows. `upperEt` must be an Eastern wall-clock `YYYY-MM-DDTHH:mm` string whose date equals `to`; UTC suffixes, offsets, invalid clock values and mismatched dates refuse, including when the store has no data. Do not convert a market calendar date through a UTC `Date` to construct it.
+
+Existing three-argument calls still return complete days unchanged. Daily aggregation remains a separate full-session read; this optional bound is for raw spot observations and also applies to VIX or other tickers stored through the same interface.
+
 ## CSV Import
 
 ### import_market_csv
