@@ -120,6 +120,7 @@ export function quoteParquetGreekProjection(
   alias = "q",
   needed: readonly GreekColumn[] = ALL_GREEKS,
 ): string {
+  assertKnownGreeks(needed);
   // When `needed` excludes a greek, project NULL with the same DuckDB type that
   // quoteParquetColumnExpr would have used. Downstream row parsing reads each
   // column position-wise, so the projection must emit a value at every
@@ -129,17 +130,18 @@ export function quoteParquetGreekProjection(
     wantSet.has(name)
       ? `${quoteParquetColumnExpr(columns, alias, name, "DOUBLE")} AS ${name}`
       : `NULL::DOUBLE AS ${name}`;
+  const provenanceColumns = needed.length === 0 ? new Set<string>() : columns;
   return [
     projectGreek("delta"),
     projectGreek("gamma"),
     projectGreek("theta"),
     projectGreek("vega"),
     projectGreek("iv"),
-    `${quoteParquetColumnExpr(columns, alias, "greeks_source", "VARCHAR")} AS greeks_source`,
-    `${quoteParquetColumnExpr(columns, alias, "greeks_revision", "INTEGER")} AS greeks_revision`,
-    `${quoteParquetColumnExpr(columns, alias, "rate_type", "VARCHAR")} AS rate_type`,
-    `${quoteParquetColumnExpr(columns, alias, "rate_value", "DOUBLE")} AS rate_value`,
-    `${quoteParquetColumnExpr(columns, alias, "gamma_source", "VARCHAR")} AS gamma_source`,
+    `${quoteParquetColumnExpr(provenanceColumns, alias, "greeks_source", "VARCHAR")} AS greeks_source`,
+    `${quoteParquetColumnExpr(provenanceColumns, alias, "greeks_revision", "INTEGER")} AS greeks_revision`,
+    `${quoteParquetColumnExpr(provenanceColumns, alias, "rate_type", "VARCHAR")} AS rate_type`,
+    `${quoteParquetColumnExpr(provenanceColumns, alias, "rate_value", "DOUBLE")} AS rate_value`,
+    `${quoteParquetColumnExpr(provenanceColumns, alias, "gamma_source", "VARCHAR")} AS gamma_source`,
   ].join(",\n              ");
 }
 
@@ -171,7 +173,11 @@ export function quoteParquetGreekWriteProjection(columns: ParquetColumnSet, alia
   ].join(",\n              ");
 }
 
-export function quoteParquetCanonicalProjection(columns: ParquetColumnSet, alias = "q"): string {
+export function quoteParquetCanonicalProjection(
+  columns: ParquetColumnSet,
+  alias = "q",
+  neededGreeks?: readonly GreekColumn[],
+): string {
   return [
     `${quoteParquetColumnExpr(columns, alias, "underlying", "VARCHAR")} AS underlying`,
     `${quoteParquetColumnExpr(columns, alias, "date", "VARCHAR")} AS date`,
@@ -182,7 +188,7 @@ export function quoteParquetCanonicalProjection(columns: ParquetColumnSet, alias
     `${quoteParquetMidExpr(columns, alias)} AS mid`,
     `${quoteParquetColumnExpr(columns, alias, "last_updated_ns", "BIGINT")} AS last_updated_ns`,
     `${quoteParquetColumnExpr(columns, alias, "source", "VARCHAR")} AS source`,
-    quoteParquetGreekProjection(columns, alias),
+    quoteParquetGreekProjection(columns, alias, neededGreeks),
   ].join(",\n              ");
 }
 
