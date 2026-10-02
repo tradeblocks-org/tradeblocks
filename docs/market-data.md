@@ -442,12 +442,14 @@ zero side is allowed if the midpoint is positive).
 These computation rules are distinct from replay's quote-sanity filtering.
 
 Use the matching chain row (same underlying, quote date and option ticker) for
-strike, expiration and call/put type. Use the underlying's stored **spot-bar
-open at the same Eastern calendar date and `HH:MM` minute**, not its close,
-daily close, or a later minute. The historical lookup key
-`buildUnderlyingPriceKey(date, time)` is `date + '|' + time.slice(0, 5)`;
-the current single-date ingestor uses the equivalent minute-only map and
-retains the first positive open for a repeated minute. Preserve the original
+strike, expiration and call/put type. For the generic writer (revisions 1–3),
+the underlying input is the stored **spot-bar open at the same Eastern calendar
+date and `HH:MM` minute**, not its close, daily close, or a later minute. The
+historical lookup key `buildUnderlyingPriceKey(date, time)` is
+`date + '|' + time.slice(0, 5)`; the current single-date ingestor uses the
+equivalent minute-only map and retains the first positive open for a repeated
+minute. The revision-5/6 writer takes the underlying price from its caller and
+does not itself fix which spot series or minute is used. Preserve the original
 input datasets if they are subsequently repaired; a quote row does not embed
 the spot price or contract metadata.
 
@@ -467,6 +469,8 @@ transitions do not add/subtract an hour. Seconds are discarded. This assumes
 16:00 ET expiry for every contract: it does **not** distinguish AM settlement
 from PM settlement, trading-session duration, or holiday/early-close times.
 After 16:00 the fractional term is zero; past expirations are clamped to zero.
+At `dte = 0` the revision-5/6 writer emits no row; the generic writer attempts
+the solve, which returns null IV at `T = 0`, so it also stores no computed row.
 
 The model is recovered exactly for these writers from stored quote date/time
 and the matching chain expiration: calculate that DTE and apply

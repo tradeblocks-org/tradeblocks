@@ -77,4 +77,14 @@ describe("documented computed-Greeks recipe on stored revision-3 rows", () => {
       );
     }
   });
+
+  // The documented model rule: dte < 0.1 → Bachelier, dte >= 0.1 → Black-Scholes.
+  it.each([
+    { time: "13:36", dte: 0.1, model: "bs" },
+    { time: "13:37", dte: 143 / 1440, model: "bachelier" },
+  ])("selects $model at same-day $time", ({ time, dte, model }) => {
+    const actualDte = computeFractionalDte("2026-03-19", time, "2026-03-19");
+    expect(actualDte).toBe(dte);
+    expect(computeLegGreeks(0.825, 246.59, 246, actualDte, "C", 0.0362, 0).model).toBe(model);
+  });
 });
