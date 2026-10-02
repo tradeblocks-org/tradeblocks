@@ -399,7 +399,7 @@ Examples:
 
 ## Quote-store read projections
 
-Holodeck consumer needs a quote read without Greek columns. The exported
+Quote-price-only consumers can skip Greek columns entirely. The exported
 `QuoteStore.readQuotesBulk(tickersByDate, timeStart, timeEnd, neededGreeks?)`
 and `QuoteStore.readQuotes(occTickers, from, to, neededGreeks?)` accept an
 optional fourth argument of type `ReadonlyArray<GreekColumn>`, where
