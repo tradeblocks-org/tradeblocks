@@ -397,6 +397,148 @@ Examples:
 | `import_from_api { target_table: "intraday", ticker: "SPX", timespan: "1m", from, to }` | `fetch_bars { tickers: ["SPX"], timespan: "1m", from, to }`                                                                |
 | `import_from_api { target_table: "date_context", from, to }`                            | `fetch_bars { tickers: ["VIX","VIX9D","VIX3M"], timespan: "1d", from, to }` followed by `compute_vix_context { from, to }` |
 
+## Computed option-Greeks method
+
+`greeks_source = 'computed'` identifies local model outputs, not provider-native
+Greeks. Interpret it together with `greeks_revision`, `rate_type`, `rate_value`,
+and `gamma_source`; a revision number alone is not proof of a method when a
+store has been modified by another writer. `greeks_source = 'massive'` or
+`'thetadata'` remains provider-native even when an independently computed gamma
+has `gamma_source = 'computed_sofr_q0'`.
+
+### Revisions written by TradeBlocks
+
+| Revision | Rate `r` (annual decimal)              | Dividend yield `q` | Provenance and differences                                                                                                                                                  |
+| -------- | -------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1        | Fixed `0.045`                          | `0.015`            | Legacy writer; no rate/gamma provenance fields.                                                                                                                             |
+| 2        | Quote-date SOFR percent divided by 100 | `0`                | Rate-convention change; still no rate/gamma provenance fields.                                                                                                              |
+| 3        | Stored `rate_value`                    | `0`                | `rate_type = 'sofr'`, `gamma_source = 'computed_sofr_q0'`; otherwise revision 2's calculation.                                                                              |
+| 5        | Stored `rate_value`                    | `0`                | ThetaData quote-mid writer; `rate_type = 'sofr'`, `gamma_source = 'computed_thetadata_quote_mid_sofr_q0'`. **Stored vega incorrectly equals the calculation's vega × 100.** |
+| 6        | Stored `rate_value`                    | `0`                | Same ThetaData method as 5, but stored vega is corrected to the calculation's vega, without × 100.                                                                          |
+
+Revision 4 has no writer in the public TradeBlocks history. Do not assign it
+revision 3's or 5's recipe. Revision 5 was introduced in commit `c43e02ea`;
+`0780c1e6` changed that writer to revision 6 and corrected its vega scaling.
+The current generic quote ingestor writes revision 3.
+
+Revisions 1–2 never wrote the provenance triple. A complete computed row with
+a null revision is promoted on read to 3 **only** when `rate_type = 'sofr'`,
+`rate_value` is finite, and `gamma_source = 'computed_sofr_q0'`.
+Bare null-revision rows remain ambiguous between 1 and 2 and are not reported
+as revision 3. Missing provenance cannot be reconstructed merely by reading
+the current rate table.
+
+### Inputs and model recovery
+
+The generic quote writer uses option price `(bid + ask) / 2`, through its
+`getMid` callback; it does not use last trade or prefer the stored `mid`.
+A zero on one side is included in that arithmetic, not replaced by the other
+side. Both zero gives a nonpositive price and no computed result. This callback
+expects numeric sides and has no missing-side fallback: `undefined`/NaN makes
+the midpoint NaN; JavaScript `null` would coerce to zero if supplied outside
+that interface. The ThetaData revision-5/6 writer explicitly rejects null,
+missing and non-finite bid/ask, and also uses their arithmetic midpoint (one
+zero side is allowed if the midpoint is positive).
+These computation rules are distinct from replay's quote-sanity filtering.
+
+Use the matching chain row (same underlying, quote date and option ticker) for
+strike, expiration and call/put type. For the generic writer (revisions 1–3),
+the underlying input is the stored **spot-bar open at the same Eastern calendar
+date and `HH:MM` minute**, not its close, daily close, or a later minute. The
+historical lookup key `buildUnderlyingPriceKey(date, time)` is
+`date + '|' + time.slice(0, 5)`; the current single-date ingestor uses the
+equivalent minute-only map and retains the first positive open for a repeated
+minute. The revision-5/6 writer takes the underlying price from its caller and
+does not itself fix which spot series or minute is used. Preserve the original
+input datasets if they are subsequently repaired; a quote row does not embed
+the spot price or contract metadata.
+
+All the revisions above use
+[`computeFractionalDte`](../packages/mcp-server/src/utils/option-time.ts):
+
+```text
+dayDiff = round((UTC_midnight(expiration) - UTC_midnight(quote_date)) / 86400000)
+remainingMinutes = max(960 - (60 * hour + minute), 0)
+dte = max(dayDiff + remainingMinutes / 1440, 0)
+T = dte / 365
+```
+
+Dates and clock minutes are **US Eastern calendar keys**, not instants to
+convert from UTC. UTC midnights only count calendar days; daylight-saving
+transitions do not add/subtract an hour. Seconds are discarded. This assumes
+16:00 ET expiry for every contract: it does **not** distinguish AM settlement
+from PM settlement, trading-session duration, or holiday/early-close times.
+After 16:00 the fractional term is zero; past expirations are clamped to zero.
+At `dte = 0` the revision-5/6 writer emits no row; the generic writer attempts
+the solve, which returns null IV at `T = 0`, so it also stores no computed row.
+
+The model is recovered exactly for these writers from stored quote date/time
+and the matching chain expiration: calculate that DTE and apply
+`BACHELIER_DTE_THRESHOLD = 0.1` days. **`dte < 0.1` uses Bachelier;
+`dte >= 0.1` uses Black-Scholes**, including exactly 0.1. “0DTE” alone
+does not identify the model. At minute precision, same-day 13:36 gives 0.1
+(Black-Scholes), while 13:37 gives 143/1440 (Bachelier). No model column is
+needed. An unknown writer, absent matching chain row, or changed original
+inputs does not inherit this recoverability guarantee.
+
+SOFR is the New York Fed overnight series distributed via FRED `SOFR`.
+`getSofrRateByKey(quote_date)` returns annual **percent** for the exact
+observation date when present, otherwise the latest prior observation;
+before/after the available range it clamps to the earliest/latest observation.
+There is no additional publication-day lag in this calculation.
+`getEffectiveRateDate('SOFR')` is the **latest date of the active series**,
+not the selected observation date for a historical row; the generic writer
+uses it to invalidate its rate memoization when the published tail changes.
+The input is percent / 100, stored as an annual **decimal** in `rate_value`
+(e.g. 3.62% becomes `0.0362`). For replaying a provenance-bearing row, pass
+its stored value directly: do not divide it by 100 again or replace it with
+today's lookup. Revision 2 did not retain the actual rate; exact reproduction
+requires the rate series available to that writer, especially at a stale tail.
+
+### Calculation, solve and units
+
+The executable recipe is
+[`computeLegGreeks`](../packages/mcp-server/src/utils/black-scholes.ts)
+`(optionPrice, underlyingOpen, strike, dte, 'C' or 'P', r, q)`.
+It solves IV first, then evaluates that model's delta/gamma/theta/vega at
+the solved IV. Both are European models with continuous rates/dividend yield;
+the Bachelier forward is `S * exp((r - q) * T)` with discount `exp(-r * T)`.
+Use the linked implementation's formulas and its Abramowitz–Stegun 26.2.17
+normal-CDF approximation, rather than a different library's solver/CDF, for
+storage-precision agreement.
+
+- **Black-Scholes `solveIV`:** Newton–Raphson, initial sigma `0.3`,
+  initial bisection bounds `[0.001, 5]`. Raw vega below `1e-10` triggers
+  bisection (this branch calculates the midpoint before updating its bounds).
+  A Newton candidate `<= 0` or `> 10` triggers bound update then bisection;
+  otherwise it is accepted. Bounds are fallback state, not hard clipping.
+- **Bachelier `solveNormalIV`:** Newton–Raphson, initial normal sigma
+  `max(optionPrice / sqrt(T / (2 * pi)), 1)`, initial bisection bounds
+  `[0.01, 50000]`. Raw vega below `1e-10`, or a Newton candidate `<= 0`
+  or `> 100000`, triggers bound update then bisection.
+- Both use at most **100 iterations**, accepting absolute model-price error
+  **strictly below `1e-6`**. Nonpositive option price or `T` returns null IV;
+  iteration exhaustion also returns null. There is no automatic retry in the
+  other model. Failed IV yields all five outputs null; writers do not label
+  an incomplete/non-finite result as a successful computed row.
+
+Delta is per underlying-price unit; gamma is delta change per price unit.
+Theta is option-price decay **per calendar day** (annual formula / 365).
+Black-Scholes IV is annualized lognormal decimal volatility (`0.20` = 20%);
+vega is price change for **0.01 absolute volatility** (one percentage point).
+Bachelier IV is annualized **normal dollar volatility**, not lognormal percent.
+Its vega is raw normal-vol sensitivity / 100: price change for **0.01 absolute
+normal dollar-vol units**, not a relative 1% change in its IV. Revision 5's
+stored vega is 100 times these values. Stored Greeks do not include contract
+quantity or the option's ×100 contract multiplier.
+
+The committed
+[stored-row fixture](../packages/mcp-server/tests/unit/computed-greeks-stored-fixture.test.ts)
+recomputes revision-3 Black-Scholes and Bachelier rows from stored inputs.
+It allows relative error `2^-23` per Greek: the original Parquet Greek
+columns are IEEE-754 binary32 `FLOAT` (rounding error at most `2^-24`
+for these normal nonzero values), with one extra rounding margin.
+
 ## Trade Replay
 
 ### replay_trade
@@ -414,7 +556,7 @@ Replay historical trades using minute-level option bars for P&L analysis with gr
 
 - Minute-by-minute P&L path (three formats: `full`, `sampled` default ~25 points, `summary`)
 - MFE (max favorable excursion) and MAE (max adverse excursion)
-- Per-leg greeks: delta, gamma, theta, vega, IV (Black-Scholes or Bachelier for 0DTE)
+- Per-leg greeks: delta, gamma, theta, vega, IV (Bachelier when fractional DTE < 0.1 days, otherwise Black-Scholes; see [computed option-Greeks method](#computed-option-greeks-method) for the model convention and stored-row provenance)
 - Net position greeks: quantity-weighted sums
 - Optional IVP from VIX data
 - `close_at: "expiry"` to analyze holding through expiration
