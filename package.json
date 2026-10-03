@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit && tsc -p packages/lib --noEmit && tsc -p packages/mcp-server --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "audit": "npm audit --audit-level=high",
+    "audit": "node scripts/audit.mjs",
     "verify": "npm run typecheck && npm run lint && npm run format:check",
     "test": "jest && npm run test:market-tools",
     "test:market-tools": "NODE_OPTIONS=--experimental-vm-modules jest --config tools/jest.config.cjs",
