@@ -1,6 +1,6 @@
 # Unreleased — dependency security fixes
 
-**Security fixes, no interface change.** `npm audit` reports no vulnerabilities on this tree. Before, it reported one critical, two high, one moderate and one low advisory:
+**Security fixes, no interface change.** The earlier dependency repair cleared the following advisories:
 
 - **Critical — `next` 16.3.3 → 16.3.8.** Remote code execution in `next/og` `ImageResponse` ([GHSA-vcvr-r3jv-pc5j](https://github.com/advisories/GHSA-vcvr-r3jv-pc5j)). The web app pins `next`, so the pin moves to `16.3.8`. `eslint-config-next` moves with it from `16.3.4` to `16.3.8`.
 - **High — `@grpc/grpc-js` 1.14.4 → 1.14.5** (transitive): unauthorized certificates reported as authorized ([GHSA-m9gg-hp2v-232j](https://github.com/advisories/GHSA-m9gg-hp2v-232j)) and handler error messages sent to clients ([GHSA-f596-whhp-79r4](https://github.com/advisories/GHSA-f596-whhp-79r4)).
@@ -11,3 +11,34 @@
 The web app, the MCP server's tools, inputs and outputs, and the library exports are unchanged. Installed MCP packages and Docker images stay on the vulnerable versions until the next release.
 
 This note does not bump a version or publish a release.
+
+## Required audit repair for the next release
+
+The next release includes these additional changes; no package version is bumped here.
+
+- **High — `probe-image-size` 7.2.3 → 7.4.0** (transitive through unchanged
+  `plotly.js` 3.7.0): patched SVG-parser quadratic-time denial of service
+  ([GHSA-gjj5-9665-rwrc](https://github.com/advisories/GHSA-gjj5-9665-rwrc)).
+- **Temporary dev-only exception — `braces` 3.0.3,
+  [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).**
+  No patched version is available. Removing the Next lint plugin would remove
+  existing recommended/core-web-vitals rules, and would still leave the separate
+  `repomix` context-packing path. The exception covers only this advisory and its
+  propagated audit rows, only when every affected locked node is dev-only.
+  `npm run audit` still audits development dependencies and fails on every other
+  high/critical advisory, any production `braces` node, or an unreadable audit
+  report. The required **Dependency audit** context is unchanged.
+
+The reason is bounded local development use: Next's glob settings come from
+the repository's lint configuration, not application user input. The separate,
+manually invoked `gpt:context` command also consumes developer-controlled
+Repomix configuration and Git-local exclusions, which are not necessarily
+repository files. Do not feed untrusted or remote glob patterns to these tools.
+The exception does not claim that dev-only installation makes arbitrary
+Repomix inputs safe.
+
+**Expiry: remove when a patched `braces` is published.** The exact advisory,
+reason and expiry are printed by the check. Update the locked dependency,
+remove the exception from `scripts/audit.mjs`, and retain the high/critical
+gate. Installed packages and images receive the production fix only at the
+next release.

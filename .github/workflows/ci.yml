@@ -49,6 +49,8 @@ jobs:
       # gated here (pre-existing transitive debt; Dependabot tracks those).
       # The `hono` high (transitive via the repomix devDependency) is held at
       # a patched version by the `overrides` pin in package.json.
+      # scripts/audit.mjs prints the exact temporary dev-only braces exception
+      # and its patch-based expiry; other high/critical advisories still fail.
       - name: Audit (high+)
         run: npm run audit
 
