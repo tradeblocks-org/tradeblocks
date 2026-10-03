@@ -460,10 +460,10 @@ rows. The following was observed on 2026-10-03 in one such store (SPX quote
 minutes, 2022-01-03 to 2024-07-09). It is a numerical reproduction, **not a
 method declaration**:
 
-| `gamma_source`                              | `greeks_revision` seen | Gamma reproduces as                                                 |
-| ------------------------------------------- | ---------------------- | ------------------------------------------------------------------- |
-| `computed_thetadata_quote_mid_tbill_3mo`    | 4, 6                   | `computeLegGreeks` on solved quote-mid IV, stored rate, `q = 0.015` |
-| `computed_thetadata_quote_mid_tbill_3mo_q0` | 3, 6                   | `computeLegGreeks` on solved quote-mid IV, stored rate, `q = 0`     |
+| `gamma_source`                              | `greeks_revision` seen | Gamma reproduces as                                                                                     |
+| ------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------- |
+| `computed_thetadata_quote_mid_tbill_3mo`    | 4, 6                   | `computeLegGreeks` on solved quote-mid IV, stored rate, `q = 0.015`                                     |
+| `computed_thetadata_quote_mid_tbill_3mo_q0` | 3, 6                   | `computeLegGreeks` on solved quote-mid IV, stored rate, `q = 0`, except the revision-6 09:45 tail below |
 
 - These rows carry `greeks_source = 'thetadata'` and `rate_type = 'sofr'`,
   but every sampled `rate_value` equals the bundled FRED **DTB3** observation
@@ -475,13 +475,19 @@ method declaration**:
   section: quote midpoint, same-minute spot open, the 0.1-day
   Bachelier/Black-Scholes switch. Gamma does **not** reproduce from the
   provider's stored IV, or from today's SOFR lookup with `q = 0`.
-- Their revision numbers do not mean the table above. They are neither
-  revision 1, which used a fixed rate, nor revisions 3 and 6. The `_q0`
-  revision-6 rows include a 09:45 tail on some late-2023 and 2024 dates that
-  matches none of the tested recipes. Treat its method as **unknown**.
-- The `thetadata` label does not certify the other Greeks either. Sampled
-  delta, theta and vega differ from current ThetaData responses, and local
-  tools outside TradeBlocks have rescaled vega on provider-labelled rows.
+- A revision stamp on these rows does not establish the method or rate source
+  of the "Revisions written by TradeBlocks" table; it is not proof of method. The `_q0` revision-3 rows match
+  revision 3's calculation numerically, but with a DTB3 rate and a different
+  `gamma_source`. The non-`_q0` rows are not revision 1, which used a fixed
+  rate. The `_q0` revision-6 rows include a 09:45 tail on some late-2023 and
+  2024 dates that matches none of the tested recipes. Treat its method as
+  **unknown**.
+- For these rows, the `thetadata` label does not certify the other Greeks,
+  which qualifies the provider-native statement at the top of this section.
+  Sampled delta, theta and vega mostly differ from current ThetaData
+  responses. That comparison is with today's provider output, so it does not
+  show what the provider originally returned. Separately, local tools outside
+  TradeBlocks have rescaled vega on provider-labelled rows.
 
 A store holding these rows should correct `rate_type` the next time the
 affected partitions are rewritten for another reason. Until then, a consumer
