@@ -452,6 +452,42 @@ Bare null-revision rows remain ambiguous between 1 and 2 and are not reported
 as revision 3. Missing provenance cannot be reconstructed merely by reading
 the current rate table.
 
+### `tbill_3mo` gamma labels not written by TradeBlocks
+
+No TradeBlocks writer has ever produced a `gamma_source` containing
+`tbill_3mo`, but a store maintained by other local writers can contain such
+rows. The following was observed on 2026-10-03 in one such store (SPX quote
+minutes, 2022-01-03 to 2024-07-09). It is a numerical reproduction, **not a
+method declaration**:
+
+| `gamma_source`                              | `greeks_revision` seen | Gamma reproduces as                                                 |
+| ------------------------------------------- | ---------------------- | ------------------------------------------------------------------- |
+| `computed_thetadata_quote_mid_tbill_3mo`    | 4, 6                   | `computeLegGreeks` on solved quote-mid IV, stored rate, `q = 0.015` |
+| `computed_thetadata_quote_mid_tbill_3mo_q0` | 3, 6                   | `computeLegGreeks` on solved quote-mid IV, stored rate, `q = 0`     |
+
+- These rows carry `greeks_source = 'thetadata'` and `rate_type = 'sofr'`,
+  but every sampled `rate_value` equals the bundled FRED **DTB3** observation
+  ([`treasury-rates.ts`](../packages/lib/data/treasury-rates.ts), percent / 100,
+  exact date or latest prior). None equals SOFR. Treat **`rate_type` as wrong**
+  on these rows; the `tbill_3mo` in `gamma_source` is the accurate label.
+- The match was checked on a stratified sample at the `2^-23` relative
+  tolerance below, using the inputs and model switch described in the next
+  section: quote midpoint, same-minute spot open, the 0.1-day
+  Bachelier/Black-Scholes switch. Gamma does **not** reproduce from the
+  provider's stored IV, or from today's SOFR lookup with `q = 0`.
+- Their revision numbers do not mean the table above. They are neither
+  revision 1, which used a fixed rate, nor revisions 3 and 6. The `_q0`
+  revision-6 rows include a 09:45 tail on some late-2023 and 2024 dates that
+  matches none of the tested recipes. Treat its method as **unknown**.
+- The `thetadata` label does not certify the other Greeks either. Sampled
+  delta, theta and vega differ from current ThetaData responses, and local
+  tools outside TradeBlocks have rescaled vega on provider-labelled rows.
+
+A store holding these rows should correct `rate_type` the next time the
+affected partitions are rewritten for another reason. Until then, a consumer
+that needs SOFR, `q = 0` gamma for these dates must recompute it, not read the
+stored value.
+
 ### Inputs and model recovery
 
 The generic quote writer uses option price `(bid + ask) / 2`, through its
