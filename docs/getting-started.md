@@ -8,6 +8,71 @@ TradeBlocks has two components: an **MCP server** for AI-assisted portfolio anal
 
 The MCP server provides 60+ tools for portfolio analysis, trade replay, exit trigger testing, and market data management. Connect it to Claude, ChatGPT, Gemini, or any MCP-compatible AI client.
 
+### Prerequisites: no Node installed yet?
+
+Before any `npx` command, open a terminal (PowerShell on Windows) and check:
+
+```bash
+node --version
+npm --version
+npx --version
+```
+
+The packaged MCP server requires Node 18+, and **Node 24 LTS** is recommended
+for the server and current CLI clients. If a command is missing:
+
+- **macOS:** install Node with npm using the [official macOS installer](https://nodejs.org/en/download),
+  or `brew install node` if Homebrew is already installed.
+- **Windows:** use the [official Windows installer](https://nodejs.org/en/download),
+  or run `winget install OpenJS.NodeJS.LTS`.
+- **Linux:** use the [official Linux instructions](https://nodejs.org/en/download)
+  for your distribution or version manager, selecting Node 24 with npm.
+
+Close and reopen your terminal, then repeat the checks. Install your AI client
+separately: [Claude Desktop](https://claude.ai/download),
+[Claude Code](https://code.claude.com/docs/en/setup),
+[Codex CLI](https://developers.openai.com/codex/cli/) (`npm install -g @openai/codex`),
+or [Gemini CLI](https://geminicli.com/docs/get-started/installation/)
+(`npm install -g @google/gemini-cli`). Desktop must have been opened at least
+once with its configuration directory present. No OO or market-data credentials
+are required for local setup or CSV import.
+
+### Guided local setup (unreleased)
+
+The source build now includes:
+
+```bash
+# People: pick a client/folder, see the preview, explicitly consent
+npx tradeblocks-mcp setup
+
+# Agents: preview without writing (non-zero consent_required result)
+npx tradeblocks-mcp setup --client claude-code --folder "/path/to/backtests" --json
+
+# Apply after reviewing the preview
+npx tradeblocks-mcp setup --client claude-code --folder "/path/to/backtests" --yes --json
+```
+
+**Not yet published in 3.11.0:** until release, [build from source](../packages/mcp-server/README.md#option-2-from-source)
+and use `node packages/mcp-server/server/index.js setup` instead of
+`npx tradeblocks-mcp setup`. The configured server launch is still
+`npx -y tradeblocks-mcp <absolute-folder>`.
+
+Choose `claude-desktop`, `claude-code`, `codex`, or `gemini`. Setup never installs
+software or prompts in JSON/non-TTY mode. It preserves other servers/settings,
+refuses malformed configuration, and requires separate `--replace` plus `--yes`
+to replace a conflicting entry while preserving its environment secrets.
+`--json` returns one final object on stdout with the planned/applied changes,
+verification, client action and next steps; the redacted preview goes to stderr
+before any write. A successful exit proves the configured server
+answered MCP initialization and tool discovery, **not that your client connected**:
+restart/reopen Desktop or start a new CLI-client session to load it.
+
+See the [guided setup details](../packages/mcp-server/README.md#guided-local-setup)
+for backups, supported config paths, GUI PATH handling and verification failures.
+The separate `tradeblocks-skills` plugin is optional for Claude Code only;
+setup does not install it, and core CSV analysis needs neither the plugin nor OO.
+Manual setup remains supported:
+
 ### Quick Start
 
 ```bash

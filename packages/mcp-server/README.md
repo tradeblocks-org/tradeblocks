@@ -14,6 +14,96 @@ Model Context Protocol (MCP) server for options trading analysis. Works with Cla
 
 ## Installation
 
+### Prerequisites (before using npm or npx)
+
+Open a terminal (PowerShell on Windows) and run `node --version`, `npm --version`,
+and `npx --version`. TradeBlocks' packaged server requires Node **18 or newer**;
+Node **24 LTS** is recommended (and used for development). Your chosen client
+may require a newer Node version, so Node 24 is the easiest shared choice.
+
+If any command is missing, install Node **with npm**, then close and reopen the terminal:
+
+| Platform | Install Node/npm                                                                                                                                                                           |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| macOS    | Use the macOS installer from [nodejs.org](https://nodejs.org/en/download), or `brew install node` if you already use Homebrew.                                                             |
+| Windows  | Use the Windows installer from [nodejs.org](https://nodejs.org/en/download), or `winget install OpenJS.NodeJS.LTS`. Reopen PowerShell afterward.                                           |
+| Linux    | Follow the Linux instructions at [nodejs.org](https://nodejs.org/en/download) for your distribution or version manager; choose Node 24 with npm rather than an older distribution package. |
+
+Then repeat the three version checks. Install/open your chosen client separately:
+[Claude Desktop](https://claude.ai/download),
+[Claude Code](https://code.claude.com/docs/en/setup),
+[Codex CLI](https://developers.openai.com/codex/cli/) (`npm install -g @openai/codex`),
+or [Gemini CLI](https://geminicli.com/docs/get-started/installation/)
+(`npm install -g @google/gemini-cli`). Setup does not install any of these.
+Desktop's configuration directory must already exist; on Linux follow your Desktop
+distribution's instructions. Local setup does not need OO, a provider key, or a skills plugin.
+
+### Guided local setup
+
+**Unreleased:** this guided command is available in the source build containing
+this change; it is not yet in the published 3.11.0 package. Until a release
+includes it, build from source (Option 2 below) and replace `npx tradeblocks-mcp`
+in these setup examples with `node packages/mcp-server/server/index.js`.
+The registered launch remains `npx -y tradeblocks-mcp <absolute-folder>`; its
+server version can therefore differ from the source setup version until release.
+
+```bash
+# Interactive: select a client and folder, review changes, explicitly approve
+npx tradeblocks-mcp setup
+
+# Agent/non-interactive: preview only (non-zero consent_required result)
+npx tradeblocks-mcp setup --client codex --folder "/path/to/backtests" --json
+
+# Apply the reviewed preview and verify
+npx tradeblocks-mcp setup --client codex --folder "/path/to/backtests" --yes --json
+```
+
+Client choices are `claude-desktop`, `claude-code`, `codex`, and `gemini`.
+Folder paths are resolved to absolute paths, including paths with spaces. Setup
+previews the exact file, entry and official user-scope registration command.
+It can create a missing data folder only under the same consent. Without a TTY,
+setup never prompts and requires `--client`, `--folder`, and `--yes` to write.
+`--json` emits exactly one final result object on stdout; a redacted preview goes
+to stderr before any write, even with `--yes`. Inspect `plannedChange` in a
+preview run before approving it with `--yes`. Exit 0 means both registration
+(or an equivalent existing entry) **and** MCP verification succeeded.
+
+A differing `tradeblocks` entry needs separate replacement permission:
+interactive setup asks separately, or agents add **both** `--replace` and
+`--yes`. Replacement preserves existing `env` keys **and their values**, removes
+other TradeBlocks-specific launch settings, and keeps unrelated settings/servers.
+Previews show differing field names and environment key names, never existing
+values or client diagnostics. Desktop updates use a same-directory temporary
+file and atomic rename, keeping a backup of an existing file at the previewed
+path. Claude Code replacement also keeps a backup and restores it if its
+remove/add registration fails. Backups may contain secrets; protect them like
+the original file and remove them when you no longer need them.
+
+Setup refuses unreadable or malformed configuration without rewriting it. This
+includes Gemini settings with comments: repair/export strict JSON yourself
+before using guided setup; manual configuration remains available below.
+CLI registration uses `claude mcp add -s user`, `codex mcp add`, or
+`gemini mcp add -s user`, not project-scope edits. Desktop uses the per-OS paths
+below. The registered command uses the absolute `npx` found on your PATH.
+For Desktop, setup also supplies Node/npm's directory in the server's `PATH`
+when no existing server `PATH` is present, because a GUI may not inherit an
+nvm shell's PATH. Moving/upgrading that Node installation can require setup
+again; an existing server `PATH` is preserved, not overridden.
+
+Verification starts the **read-back configured server subprocess**, performs MCP
+`initialize` and `tools/list` with a 30-second timeout, and reports server
+name/version and tool count. It does **not** prove that the AI client itself
+connected. Restart/reopen Desktop or start a new CLI-client session afterward.
+If verification fails, registration may already have succeeded: inspect the
+result's `appliedChange`, fix the indicated prerequisites, and rerun.
+The server's first npx launch may need network access to download TradeBlocks;
+setup does not install clients, Node/npm, or change system settings.
+
+For **Claude Code only**, the separate
+[tradeblocks-skills plugin](https://github.com/tradeblocks-org/tradeblocks-skills)
+is optional and is not installed by setup. Manual CSV import and core analysis
+remain available without the plugin, OO, or market-data credentials.
+
 ### Option 1: npx (All Platforms)
 
 Run directly without installation:
