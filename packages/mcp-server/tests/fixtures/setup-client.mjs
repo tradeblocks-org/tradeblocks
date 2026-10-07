@@ -50,7 +50,12 @@ if (args[1] === "get") {
     JSON.stringify({
       name: "tradeblocks",
       enabled: true,
-      transport: { type: "stdio", ...servers.tradeblocks },
+      disabled_reason: null,
+      enabled_tools: servers.tradeblocks.enabled_tools ?? null,
+      disabled_tools: null,
+      startup_timeout_sec: null,
+      tool_timeout_sec: null,
+      transport: { type: "stdio", env_vars: [], cwd: null, ...servers.tradeblocks },
     }),
   );
   process.exit(0);
@@ -70,7 +75,7 @@ if (args[1] === "remove") {
     rest.shift();
     const item = rest.shift();
     const split = item.indexOf("=");
-    env[item.slice(0, split)] = item.slice(split + 1);
+    env[item.slice(0, split)] = client === "gemini" ? item.split("=")[1] : item.slice(split + 1);
   }
   if (client !== "gemini") {
     if (rest.shift() !== "--") process.exit(2);

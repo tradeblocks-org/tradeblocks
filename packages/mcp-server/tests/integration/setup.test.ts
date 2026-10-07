@@ -122,6 +122,8 @@ it("requires explicit consent in JSON and piped human modes before creating eith
   const no = setup();
   expect(no.code).toBe(1);
   expect(no.result.status).toBe("consent_required");
+  expect(no.result.clientActionNeeded).toBeNull();
+  expect(no.result.nextSteps.join(" ")).not.toContain("subprocess");
   expect(no.result.plannedChange.createFolder).toBe(true);
   const preview = JSON.parse(no.stderr.slice(no.stderr.indexOf("{")));
   expect(preview.file).toBe(file);
@@ -173,6 +175,8 @@ it("requires distinct replacement consent, preserves secrets and unrelated setti
     const denied = setup(flags);
     expect(denied.code).toBe(1);
     expect(["conflict", "consent_required"]).toContain(denied.result.status);
+    expect(denied.result.clientActionNeeded).toBeNull();
+    expect(denied.result.nextSteps.join(" ")).not.toContain("subprocess");
     expect(denied.output).not.toContain("do-not-expose");
     expect(await readFile(file, "utf8")).toBe(original);
   }
@@ -203,6 +207,8 @@ it.each(["claude-desktop", "claude-code", "codex", "gemini"])(
     const denied = setup(["--yes", "--replace"], client);
     expect(denied.code).toBe(1);
     expect(denied.result.status).toBe("config_error");
+    expect(denied.result.clientActionNeeded).toBeNull();
+    expect(denied.result.nextSteps.join(" ")).not.toContain("subprocess");
     expect(denied.output).toContain(target);
     expect(denied.output).not.toContain("do-not-expose-secret");
     expect(await readFile(target, "utf8")).toBe('{ invalid: "do-not-expose-secret"');
@@ -232,6 +238,7 @@ it.each(["claude-code", "codex", "gemini"])(
     expect(first.code).toBe(0);
     expect(first.result.verification.initialized).toBe(true);
     expect(first.result.verification.toolCount).toBeGreaterThan(50);
+    expect(await readFile(first.result.appliedChange.backup, "utf8")).toBe(initial);
     const registered = await readFile(target, "utf8");
     expect(registered).toContain("keep-command");
     expect(registered).toContain(client === "codex" ? "keep-model" : "keep-theme");
@@ -268,10 +275,125 @@ it.each(["claude-code", "codex", "gemini"])(
   90_000,
 );
 
+it.each([
+  ["claude-desktop", "url", "https://do-not-expose.invalid"],
+  ["claude-code", "unknown", true],
+  ["gemini", "httpUrl", "https://do-not-expose.invalid"],
+  ["codex", "enabled_tools", ["restricted"]],
+])("treats extra %s field %s as a conflict despite matching argv", async (client, key, value) => {
+  const target =
+    client === "claude-desktop"
+      ? file
+      : client === "claude-code"
+        ? join(env.CLAUDE_CONFIG_DIR!, ".claude.json")
+        : client === "codex"
+          ? join(env.CODEX_HOME!, "config.toml")
+          : join(home, ".gemini/settings.json");
+  await mkdir(resolve(target, ".."), { recursive: true });
+  const entry = {
+    command: join(home, "bin", process.platform === "win32" ? "npx.cmd" : "npx"),
+    args: ["-y", "tradeblocks-mcp", join(home, "data with spaces")],
+    [key]: value,
+  };
+  const original =
+    client === "codex"
+      ? "[mcp_servers.tradeblocks]\n" +
+        Object.entries(entry)
+          .map(([k, v]) => `${k} = ${JSON.stringify(v)}\n`)
+          .join("")
+      : JSON.stringify({ mcpServers: { tradeblocks: entry } });
+  await writeFile(target, original);
+  const denied = setup(["--yes"], client);
+  expect(denied.code).toBe(1);
+  expect(denied.result.status).toBe("conflict");
+  expect(denied.result.plannedChange.conflict.differingFields).toContain(key);
+  expect(denied.result.clientActionNeeded).toBeNull();
+  expect(denied.output).not.toContain("do-not-expose");
+  expect(await readFile(target, "utf8")).toBe(original);
+});
+
+it.each(["claude-code", "codex", "gemini"])(
+  "never corrupts %s replacement env containing equals",
+  async (client) => {
+    const target =
+      client === "claude-code"
+        ? join(env.CLAUDE_CONFIG_DIR!, ".claude.json")
+        : client === "codex"
+          ? join(env.CODEX_HOME!, "config.toml")
+          : join(home, ".gemini/settings.json");
+    await mkdir(resolve(target, ".."), { recursive: true });
+    const original =
+      client === "codex"
+        ? '[mcp_servers.tradeblocks]\ncommand = "old"\nargs = []\n[mcp_servers.tradeblocks.env]\nSECRET = "do-not-expose=a=b"\n'
+        : JSON.stringify({
+            mcpServers: {
+              tradeblocks: { command: "old", args: [], env: { SECRET: "do-not-expose=a=b" } },
+            },
+          });
+    await writeFile(target, original);
+    const changed = setup(["--yes", "--replace"], client);
+    expect(changed.output).not.toContain("do-not-expose");
+    if (client === "gemini") {
+      expect(changed.code).toBe(1);
+      expect(changed.result.status).toBe("config_error");
+      expect(changed.result.clientActionNeeded).toBeNull();
+      expect(changed.result.appliedChange).toBeNull();
+      expect(changed.result.nextSteps.join(" ")).toContain("manually");
+      expect(await readFile(target, "utf8")).toBe(original);
+      await expect(access(join(home, "data with spaces"))).rejects.toThrow();
+    } else {
+      expect(changed.code).toBe(0);
+      expect(changed.result.verification.initialized).toBe(true);
+      expect(await readFile(target, "utf8")).toContain("do-not-expose=a=b");
+    }
+  },
+  90_000,
+);
+
+it.each(["claude-code", "codex", "gemini"])(
+  "restores %s original bytes on mismatched read-back",
+  async (client) => {
+    const target =
+      client === "claude-code"
+        ? join(env.CLAUDE_CONFIG_DIR!, ".claude.json")
+        : client === "codex"
+          ? join(env.CODEX_HOME!, "config.toml")
+          : join(home, ".gemini/settings.json");
+    await mkdir(resolve(target, ".."), { recursive: true });
+    const original =
+      client === "codex" ? 'model = "untouched"\n' : '{ "unrelated": "untouched" }\n';
+    await writeFile(target, original);
+    const command = client === "claude-code" ? "claude" : client;
+    await writeExecutable(
+      command,
+      `
+    const add = process.argv[3] === 'add';
+    process.argv.splice(2,0,${JSON.stringify(command)});
+    import(require('node:url').pathToFileURL(${JSON.stringify(join(packageDir, "tests/fixtures/setup-client.mjs"))}).href).then(() => {
+      if(add) {
+        const fs=require('node:fs');
+        const file=${JSON.stringify(target)};
+        fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace('data with spaces','wrong folder'));
+      }
+    });`,
+    );
+    const failed = setup(["--yes"], client);
+    expect(failed.code).toBe(1);
+    expect(failed.result.status).toBe("client_error");
+    expect(failed.result.verification.skipped).toBe(true);
+    expect(failed.result.clientActionNeeded).toBeNull();
+    expect(failed.result.appliedChange).toBeNull();
+    expect(await readFile(target, "utf8")).toBe(original);
+    expect(await readFile(failed.result.plannedChange.backup, "utf8")).toBe(original);
+  },
+);
+
 it("reports absent prerequisites without writes", async () => {
   await rm(join(home, "bin", process.platform === "win32" ? "npx.cmd" : "npx"));
   const missingNpx = setup(["--yes"]);
   expect(missingNpx.result.status).toBe("prerequisite_missing");
+  expect(missingNpx.result.clientActionNeeded).toBeNull();
+  expect(missingNpx.result.nextSteps.join(" ")).not.toContain("subprocess");
   expect(missingNpx.result.nextSteps.join(" ")).toContain("nodejs.org");
   expect(missingNpx.code).toBe(1);
   await expect(access(file)).rejects.toThrow();

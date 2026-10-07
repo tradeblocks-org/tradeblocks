@@ -37,7 +37,7 @@ npx tradeblocks-mcp ~/Trading/backtests
 
 # Or from source
 npm run build -w packages/mcp-server
-node packages/mcp-server/server/index.js ~/Trading/backtests
+node packages/mcp-server/server/cli.js ~/Trading/backtests
 ```
 
 ### Testing

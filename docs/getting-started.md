@@ -58,9 +58,12 @@ and use `node packages/mcp-server/server/cli.js setup` instead of
 `npx -y tradeblocks-mcp <absolute-folder>`.
 
 Choose `claude-desktop`, `claude-code`, `codex`, or `gemini`. Setup never installs
-software or prompts in JSON/non-TTY mode. It preserves other servers/settings,
-refuses malformed configuration, and requires separate `--replace` plus `--yes`
-to replace a conflicting entry while preserving its environment secrets.
+software or prompts in JSON/non-TTY mode. Desktop writes preserve other settings;
+CLI registration uses the vendor's writer, which can rewrite unrelated settings.
+Setup backs up existing configs and restores failed or mismatched registration.
+It refuses malformed configuration and requires separate `--replace` plus `--yes`
+to replace conflicts while preserving environment secrets. Gemini values containing
+`=` require a manual launch update because its registration command truncates them.
 `--json` returns one final object on stdout with the planned/applied changes,
 verification, client action and next steps; the redacted preview goes to stderr
 before any write. A successful exit proves the configured server

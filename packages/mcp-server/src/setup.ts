@@ -193,7 +193,8 @@ async function codexEntry(cli: string, file: string): Promise<unknown> {
       "client_error",
       `Cannot read the existing Codex tradeblocks entry in ${file}.`,
     );
-  return { ...server.transport, disabled: server.enabled === false };
+  const { transport, ...settings } = server;
+  return { ...settings, ...transport };
 }
 
 function environment(entry: unknown, file: string): Record<string, string> {
@@ -207,18 +208,36 @@ function environment(entry: unknown, file: string): Record<string, string> {
   return entry.env as Record<string, string>;
 }
 
-function equivalent(existing: unknown, desired: Entry): boolean {
-  return (
-    object(existing) &&
-    existing.command === desired.command &&
-    Array.isArray(existing.args) &&
-    JSON.stringify(existing.args) === JSON.stringify(desired.args) &&
-    (existing.type === undefined || existing.type === "stdio") &&
-    existing.disabled !== true &&
-    (existing.cwd === undefined || existing.cwd === null) &&
-    (existing.env_vars === undefined ||
-      (Array.isArray(existing.env_vars) && existing.env_vars.length === 0))
-  );
+function differingFields(existing: unknown, desired: Entry, client: string): string[] {
+  if (!object(existing)) return ["entry"];
+  const defaults: ObjectValue =
+    client === "codex"
+      ? {
+          name: "tradeblocks",
+          enabled: true,
+          disabled_reason: null,
+          enabled_tools: null,
+          disabled_tools: null,
+          startup_timeout_sec: null,
+          tool_timeout_sec: null,
+          cwd: null,
+          env_vars: [],
+        }
+      : {};
+  return [...new Set([...Object.keys(existing), "command", "args"])].filter((key) => {
+    if (key === "env") return false; // Preserved separately, including read-back validation.
+    if (key === "type") return existing.type !== undefined && existing.type !== "stdio";
+    if (key === "command" || key === "args")
+      return JSON.stringify(existing[key]) !== JSON.stringify(desired[key]);
+    return (
+      !Object.hasOwn(defaults, key) ||
+      JSON.stringify(existing[key]) !== JSON.stringify(defaults[key])
+    );
+  });
+}
+
+function equivalent(existing: unknown, desired: Entry, client: string): boolean {
+  return object(existing) && differingFields(existing, desired, client).length === 0;
 }
 
 // Clients do not launch servers from the directory setup runs in. Starting from the
@@ -370,7 +389,7 @@ export async function runSetup(args: string[]): Promise<number> {
     }
     if (!folder && prompt)
       folder = await prompt.question("Data folder (absolute or relative path): ");
-    if (!clients.includes(client as ClientName) || !folder?.trim())
+    if (!client || !clients.includes(client as ClientName) || !folder?.trim())
       throw new SetupError(
         "invalid_arguments",
         "Provide a supported --client and --folder. Non-interactive setup never prompts.",
@@ -384,13 +403,7 @@ export async function runSetup(args: string[]): Promise<number> {
     );
     result.client = client;
     result.folder = folder;
-    result.clientActionNeeded =
-      client === "claude-desktop"
-        ? "Restart/reopen Claude Desktop to load the registration."
-        : "Start a new client session to load the registration.";
-    const nextSteps = [
-      "Verification checks the configured server subprocess, not a connection from your AI client. No OO or provider credentials are required.",
-    ];
+    const nextSteps: string[] = [];
     if (client === "claude-code")
       nextSteps.push(
         "Optional, separate tradeblocks-skills plugin: https://github.com/tradeblocks-org/tradeblocks-skills (not installed by setup).",
@@ -429,13 +442,17 @@ export async function runSetup(args: string[]): Promise<number> {
       args: ["-y", "tradeblocks-mcp", folder],
       ...(Object.keys(env).length ? { env } : {}),
     };
-    if (client === "claude-desktop" && env.PATH === undefined && !equivalent(existing, entry)) {
+    if (
+      client === "claude-desktop" &&
+      env.PATH === undefined &&
+      !equivalent(existing, entry, client)
+    ) {
       env.PATH = [path.dirname(process.execPath), path.dirname(npx), process.env.PATH || ""].join(
         path.delimiter,
       );
       entry.env = env;
     }
-    const already = equivalent(existing, entry);
+    const already = equivalent(existing, entry, client);
     const conflict = existing !== undefined && !already;
     let createFolder = false;
     try {
@@ -445,12 +462,12 @@ export async function runSetup(args: string[]): Promise<number> {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") createFolder = true;
       else throw error;
     }
-    const backup =
-      before !== null &&
-      !already &&
-      (client === "claude-desktop" || (client === "claude-code" && conflict))
-        ? `${file}.backup-${randomUUID()}`
-        : null;
+    const backup = before !== null && !already ? `${file}.backup-${randomUUID()}` : null;
+    if (client === "gemini" && !already && Object.values(env).some((value) => value.includes("=")))
+      throw new SetupError(
+        "config_error",
+        `Gemini CLI truncates env values containing '='. No changes made to ${file}. Update the tradeblocks launch manually in that file, preserving its env values, then rerun setup.`,
+      );
     const envArgs = Object.entries(env).flatMap(([key, value]) => [
       client === "codex" ? "--env" : "-e",
       `${key}=${value}`,
@@ -506,17 +523,10 @@ export async function runSetup(args: string[]): Promise<number> {
       alreadyConfigured: already,
       conflict: conflict
         ? {
-            differingFields: object(existing)
-              ? Object.keys(existing).filter(
-                  (key) =>
-                    key !== "env" &&
-                    JSON.stringify(existing[key]) !==
-                      JSON.stringify((entry as unknown as ObjectValue)[key]),
-                )
-              : ["entry"],
+            differingFields: differingFields(existing, entry, client),
             envKeys: Object.keys(env),
             behavior:
-              "Replace launch settings; preserve every existing env key and value. Other tradeblocks-specific settings are removed. Unrelated settings remain unchanged.",
+              "Replace launch settings; preserve every existing env key and value. Other tradeblocks-specific settings are removed. Vendor CLI commands may rewrite unrelated settings; the original file is backed up.",
           }
         : null,
     };
@@ -585,28 +595,28 @@ export async function runSetup(args: string[]): Promise<number> {
         `Configuration changed during setup: ${file}. Nothing written; rerun to review the new preview.`,
       );
     if (createFolder) await fs.mkdir(folder, { recursive: true });
-    if (!already) {
-      if (client === "claude-desktop") {
-        const mode = before !== null ? (await fs.stat(file)).mode & 0o777 : 0o600;
-        const updated = {
-          ...config,
-          mcpServers: { ...(config!.mcpServers as ObjectValue), tradeblocks: entry },
-        };
-        const indentation = before?.match(/\n([\t ]+)"/)?.[1] || "  ";
-        const temp = `${file}.tmp-${randomUUID()}`;
-        try {
+    try {
+      if (!already) {
+        if (client === "claude-desktop") {
+          const mode = before !== null ? (await fs.stat(file)).mode & 0o777 : 0o600;
+          const updated = {
+            ...config,
+            mcpServers: { ...(config!.mcpServers as ObjectValue), tradeblocks: entry },
+          };
+          const indentation = before?.match(/\n([\t ]+)"/)?.[1] || "  ";
+          const temp = `${file}.tmp-${randomUUID()}`;
+          try {
+            if (backup) await fs.copyFile(file, backup, constants.COPYFILE_EXCL);
+            await fs.writeFile(temp, JSON.stringify(updated, null, indentation) + "\n", {
+              flag: "wx",
+              mode,
+            });
+            await fs.rename(temp, file);
+          } finally {
+            await fs.rm(temp, { force: true });
+          }
+        } else {
           if (backup) await fs.copyFile(file, backup, constants.COPYFILE_EXCL);
-          await fs.writeFile(temp, JSON.stringify(updated, null, indentation) + "\n", {
-            flag: "wx",
-            mode,
-          });
-          await fs.rename(temp, file);
-        } finally {
-          await fs.rm(temp, { force: true });
-        }
-      } else {
-        if (backup) await fs.copyFile(file, backup, constants.COPYFILE_EXCL);
-        try {
           if (client === "claude-code" && conflict) {
             if ((await runCommand(cli!, ["mcp", "remove", "-s", "user", "tradeblocks"])).code !== 0)
               throw new SetupError(
@@ -619,54 +629,66 @@ export async function runSetup(args: string[]): Promise<number> {
               "client_error",
               `Client registration failed for ${file}; inspect its settings before retrying. Client diagnostics are withheld to protect secrets.`,
             );
-        } catch (error) {
-          if (backup) {
-            const temp = `${file}.restore-${randomUUID()}`;
-            try {
-              await fs.copyFile(backup, temp, constants.COPYFILE_EXCL);
-              await fs.rename(temp, file);
-            } finally {
-              await fs.rm(temp, { force: true });
-            }
-          }
-          throw error;
         }
-      }
-      result.appliedChange = { file, backup, createdFolder: createFolder, registered: true };
-    } else if (createFolder) result.appliedChange = { createdFolder: true };
-    const readback =
-      client === "codex"
-        ? await codexEntry(cli!, file)
-        : (jsonConfig(await contents(file), file).mcpServers as ObjectValue | undefined)
-            ?.tradeblocks;
-    const readbackEnv = environment(readback, file);
-    if (
-      !equivalent(readback, entry) ||
-      Object.keys(readbackEnv).length !== Object.keys(env).length ||
-      Object.keys(env).some((key) => readbackEnv[key] !== env[key])
-    )
-      throw new SetupError(
-        "client_error",
-        `Registration read-back did not match the preview in ${file}; inspect settings before retrying.`,
+      } else if (createFolder) result.appliedChange = { createdFolder: true };
+      const readback =
+        client === "codex"
+          ? await codexEntry(cli!, file)
+          : (jsonConfig(await contents(file), file).mcpServers as ObjectValue | undefined)
+              ?.tradeblocks;
+      const readbackEnv = environment(readback, file);
+      if (
+        !equivalent(readback, entry, client) ||
+        Object.keys(readbackEnv).length !== Object.keys(env).length ||
+        Object.keys(env).some((key) => readbackEnv[key] !== env[key])
+      )
+        throw new SetupError(
+          "client_error",
+          `Registration read-back did not match the preview in ${file}; inspect settings before retrying.`,
+        );
+      if (!already)
+        result.appliedChange = { file, backup, createdFolder: createFolder, registered: true };
+      result.clientActionNeeded =
+        client === "claude-desktop"
+          ? "Restart/reopen Claude Desktop to load the registration."
+          : "Start a new client session to load the registration.";
+      nextSteps.unshift(
+        "Verification checks the configured server subprocess, not a connection from your AI client. No OO or provider credentials are required.",
       );
-    console.error(
-      "Verifying the configured server (up to 120 seconds); the first npx run may download TradeBlocks and native DuckDB binaries.",
-    );
-    result.verification = await verify(
-      {
-        command: (readback as Entry).command,
-        args: (readback as Entry).args,
-        env: environment(readback, file),
-      },
-      folder,
-    );
-    result.status = (result.verification as ObjectValue).initialized
-      ? already
-        ? "already_configured"
-        : "configured"
-      : "verification_failed";
-    emit();
-    return (result.verification as ObjectValue).initialized ? 0 : 1;
+      console.error(
+        "Verifying the configured server (up to 120 seconds); the first npx run may download TradeBlocks and native DuckDB binaries.",
+      );
+      result.verification = await verify(
+        {
+          command: (readback as Entry).command,
+          args: (readback as Entry).args,
+          env: environment(readback, file),
+        },
+        folder,
+      );
+      result.status = (result.verification as ObjectValue).initialized
+        ? already
+          ? "already_configured"
+          : "configured"
+        : "verification_failed";
+      emit();
+      return (result.verification as ObjectValue).initialized ? 0 : 1;
+    } catch (error) {
+      if (backup) {
+        const temp = `${file}.restore-${randomUUID()}`;
+        try {
+          await fs.copyFile(backup, temp, constants.COPYFILE_EXCL);
+          await fs.rename(temp, file);
+        } finally {
+          await fs.rm(temp, { force: true });
+        }
+        result.appliedChange = null;
+      } else if (!already && before === null) {
+        await fs.rm(file, { force: true });
+        result.appliedChange = null;
+      }
+      throw error;
+    }
   } catch (error) {
     result.status = error instanceof SetupError ? error.status : "setup_error";
     // Unexpected filesystem/client errors can include secret data. Do not echo them.

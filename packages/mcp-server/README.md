@@ -74,14 +74,20 @@ preview run before approving it with `--yes`. Exit 0 means both registration
 
 A differing `tradeblocks` entry needs separate replacement permission:
 interactive setup asks separately, or agents add **both** `--replace` and
-`--yes`. Replacement preserves existing `env` keys **and their values**, removes
-other TradeBlocks-specific launch settings, and keeps unrelated settings/servers.
+`--yes`. Replacement preserves existing `env` keys **and their values** and removes
+other TradeBlocks-specific launch settings. Unknown entry fields (including URLs)
+are conflicts, not equivalent stdio registrations. Gemini replacement refuses
+environment values containing `=` before writing: its CLI truncates those values;
+update the launch manually in its settings file while retaining the environment.
 Previews show differing field names and environment key names, never existing
-values or client diagnostics. Desktop updates use a same-directory temporary
-file and atomic rename, keeping a backup of an existing file at the previewed
-path. Claude Code replacement also keeps a backup and restores it if its
-remove/add registration fails. Backups may contain secrets; protect them like
-the original file and remove them when you no longer need them.
+values or client diagnostics. Desktop updates preserve unrelated settings/servers,
+use a same-directory temporary file and atomic rename, and back up existing files.
+For all CLI clients, setup backs up an existing config before registration and
+restores it if remove/add fails or read-back differs from the preview. The vendor
+CLI may itself normalize or remove unrelated settings on successful registration
+(Claude Code can drop unknown top-level keys); setup does not promise to undo a
+successful vendor rewrite. The backup retains the original bytes. Backups may
+contain secrets; protect them like the original and remove them when no longer needed.
 
 Setup refuses unreadable or malformed configuration without rewriting it. This
 includes Gemini settings with comments: repair/export strict JSON yourself
@@ -134,7 +140,7 @@ npm install
 npm run build -w packages/mcp-server
 
 # Run the server
-node packages/mcp-server/server/index.js ~/Trading/backtests
+node packages/mcp-server/server/cli.js ~/Trading/backtests
 ```
 
 ## Quick Start

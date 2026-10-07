@@ -268,14 +268,13 @@ async function tryRecoverLockByTerminatingStaleProcess(
   // Only terminate lock holders that look like another tradeblocks-mcp session for this data dir.
   const normalizedDbPath = dbPath.replace(/\\/g, "/");
   const normalizedDbDir = path.dirname(normalizedDbPath);
+  const normalizedCommand = command.replace(/\\/g, "/");
   const isTradeblocksProcess =
     command.includes("tradeblocks-mcp") ||
-    command.includes("/mcp-server/server/index.js") ||
-    command.includes("packages/mcp-server/server/index.js") ||
-    command.includes("\\mcp-server\\server\\index.js") ||
-    command.includes("packages\\mcp-server\\server\\index.js");
-  // Normalize command paths for consistent comparison (Windows backslashes → forward slashes)
-  const normalizedCommand = command.replace(/\\/g, "/");
+    normalizedCommand.includes("/mcp-server/server/index.js") ||
+    normalizedCommand.includes("packages/mcp-server/server/index.js") ||
+    normalizedCommand.includes("/mcp-server/server/cli.js") ||
+    normalizedCommand.includes("packages/mcp-server/server/cli.js");
   const targetsSameDb =
     normalizedCommand.includes(normalizedDbPath) || normalizedCommand.includes(normalizedDbDir);
 

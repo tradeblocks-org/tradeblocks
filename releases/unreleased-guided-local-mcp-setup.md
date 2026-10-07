@@ -11,3 +11,11 @@ Success requires a real MCP initialization and tool discovery against the read-b
 The packaged bin now enters through a small engine-checking bootstrap, before loading setup or the existing server module. This lets unsupported Node versions return actionable prerequisite guidance rather than failing while importing newer built-ins. The existing `server/index.js` server/host entry remains available.
 
 Node/npm/client installation remains manual, with prerequisites documented for macOS, Windows and Linux before any npm command. No OO credentials, provider keys or optional Claude Code skills plugin are needed. Existing stdio/HTTP invocation, environment options and retained skills-instruction commands are unchanged. No version bump or publication is included; guided setup is not yet in published 3.11.0.
+
+Review hardening: equivalent registrations reject extra launch/settings fields;
+Codex read-back accepts only its precise null/default metadata. Gemini replacement
+refuses env values its CLI would truncate. Every existing client config is backed
+up before registration and restored on command failure or read-back mismatch.
+Successful vendor CLI rewrites may still normalize unrelated settings; the backup
+retains the original bytes. Early refusals do not suggest restarting a client or
+claim verification ran. Source CLI processes retain orphan-lock recovery.
