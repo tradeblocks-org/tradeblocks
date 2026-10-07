@@ -221,12 +221,15 @@ function equivalent(existing: unknown, desired: Entry): boolean {
   );
 }
 
-async function verify(entry: Entry): Promise<ObjectValue> {
+// Clients do not launch servers from the directory setup runs in. Starting from the
+// data folder keeps npx from resolving the invoking directory's npm project instead.
+async function verify(entry: Entry, cwd: string): Promise<ObjectValue> {
   const client = new Client({ name: "tradeblocks-setup", version: "1.0.0" });
   const transport = new StdioClientTransport({
     command: entry.command,
     args: entry.args,
     env: { ...getDefaultEnvironment(), ...entry.env },
+    cwd,
     stderr: "pipe",
   });
   transport.stderr?.on("data", () => {
@@ -260,11 +263,14 @@ async function verify(entry: Entry): Promise<ObjectValue> {
         timer = setTimeout(() => reject(new Error("Timeout")), 120_000);
       }),
     ]);
-  } catch {
+  } catch (error) {
     return {
       initialized: false,
       error:
-        "The configured server did not complete MCP initialize and tools/list within 120 seconds. Check Node/npm, network access to npm, folder permissions, and any existing server environment settings.",
+        (error instanceof Error && error.message === "Timeout"
+          ? "The configured server did not complete MCP initialize and tools/list within 120 seconds."
+          : "The configured server exited or failed before completing MCP initialize and tools/list.") +
+        " Check Node/npm, network access to npm, folder permissions, and any existing server environment settings.",
     };
   } finally {
     clearTimeout(timer);
@@ -646,11 +652,14 @@ export async function runSetup(args: string[]): Promise<number> {
     console.error(
       "Verifying the configured server (up to 120 seconds); the first npx run may download TradeBlocks and native DuckDB binaries.",
     );
-    result.verification = await verify({
-      command: (readback as Entry).command,
-      args: (readback as Entry).args,
-      env: environment(readback, file),
-    });
+    result.verification = await verify(
+      {
+        command: (readback as Entry).command,
+        args: (readback as Entry).args,
+        env: environment(readback, file),
+      },
+      folder,
+    );
     result.status = (result.verification as ObjectValue).initialized
       ? already
         ? "already_configured"
