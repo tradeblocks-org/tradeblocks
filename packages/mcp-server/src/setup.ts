@@ -122,7 +122,10 @@ async function runCommand(
     command = process.execPath;
   }
   return await new Promise((resolve, reject) => {
+    // Run outside the invoking directory: a client such as Codex layers a trusted
+    // project's config over the user file that setup reads and writes.
     const child = spawn(command, args, {
+      cwd: homedir(),
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
       windowsHide: true,
