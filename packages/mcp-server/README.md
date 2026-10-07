@@ -59,6 +59,10 @@ npx tradeblocks-mcp setup --client codex --folder "/path/to/backtests" --yes --j
 ```
 
 Client choices are `claude-desktop`, `claude-code`, `codex`, and `gemini`.
+Interactive setup shows all four clients numbered with detected/not-detected
+markers and accepts a number or client name; it never selects one automatically.
+Without `--json`, the preview and result are readable prose, including the
+quoted launch command, verification, client action and next steps.
 Folder paths are resolved to absolute paths, including paths with spaces. Setup
 previews the exact file, entry and official user-scope registration command.
 It can create a missing data folder only under the same consent. Without a TTY,
@@ -91,11 +95,14 @@ nvm shell's PATH. Moving/upgrading that Node installation can require setup
 again; an existing server `PATH` is preserved, not overridden.
 
 Verification starts the **read-back configured server subprocess**, performs MCP
-`initialize` and `tools/list` with a 30-second timeout, and reports server
+`initialize` and `tools/list` with a 120-second timeout, and reports server
 name/version and tool count. It does **not** prove that the AI client itself
 connected. Restart/reopen Desktop or start a new CLI-client session afterward.
 If verification fails, registration may already have succeeded: inspect the
 result's `appliedChange`, fix the indicated prerequisites, and rerun.
+The bounded two-minute window allows for a first npx launch downloading the
+package and native DuckDB binaries. Setup explains that possibility before
+verification starts.
 The server's first npx launch may need network access to download TradeBlocks;
 setup does not install clients, Node/npm, or change system settings.
 

@@ -18,6 +18,30 @@ type ObjectValue = Record<string, unknown>;
 const object = (value: unknown): value is ObjectValue =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
+function desktopConfigPath(): string {
+  return process.platform === "darwin"
+    ? path.join(homedir(), "Library/Application Support/Claude/claude_desktop_config.json")
+    : process.platform === "win32"
+      ? path.join(
+          process.env.APPDATA || path.join(homedir(), "AppData/Roaming"),
+          "Claude/claude_desktop_config.json",
+        )
+      : path.join(homedir(), ".config/Claude/claude_desktop_config.json");
+}
+
+function displayCommand(args: string[]): string {
+  const line = args
+    .map((arg) =>
+      /^[a-zA-Z0-9_./:-]+$/.test(arg)
+        ? arg
+        : process.platform === "win32"
+          ? `'${arg.replace(/'/g, "''")}'`
+          : `'${arg.replace(/'/g, "'\\''")}'`,
+    )
+    .join(" ");
+  return process.platform === "win32" ? `& ${line}` : line;
+}
+
 class SetupError extends Error {
   status: string;
   constructor(status: string, message: string) {
@@ -212,12 +236,13 @@ async function verify(entry: Entry): Promise<ObjectValue> {
   try {
     return await Promise.race([
       (async () => {
-        await client.connect(transport);
+        // The SDK otherwise caps initialize at its 60-second request default.
+        await client.connect(transport, { timeout: 120_000 });
         const info = client.getServerVersion();
         let count = 0;
         let cursor: string | undefined;
         do {
-          const page = await client.listTools(cursor ? { cursor } : {});
+          const page = await client.listTools(cursor ? { cursor } : {}, { timeout: 120_000 });
           count += page.tools.length;
           cursor = page.nextCursor;
         } while (cursor);
@@ -230,14 +255,16 @@ async function verify(entry: Entry): Promise<ObjectValue> {
         };
       })(),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("Timeout")), 30_000);
+        // A first npx launch may download the package and native DuckDB binaries.
+        // Two minutes allows that cold start while keeping verification bounded.
+        timer = setTimeout(() => reject(new Error("Timeout")), 120_000);
       }),
     ]);
   } catch {
     return {
       initialized: false,
       error:
-        "The configured server did not complete MCP initialize and tools/list within 30 seconds. Check Node/npm, network access to npm, folder permissions, and any existing server environment settings.",
+        "The configured server did not complete MCP initialize and tools/list within 120 seconds. Check Node/npm, network access to npm, folder permissions, and any existing server environment settings.",
     };
   } finally {
     clearTimeout(timer);
@@ -264,7 +291,31 @@ export async function runSetup(args: string[]): Promise<number> {
   };
   const emit = () => {
     if (json) console.log(JSON.stringify(result));
-    else console.log(JSON.stringify(result, null, 2));
+    else {
+      const statuses: Record<string, string> = {
+        configured: `TradeBlocks configured for ${result.client}.`,
+        already_configured: `TradeBlocks is already configured for ${result.client}; no registration changed.`,
+        consent_required: "Setup stopped: consent required; no changes made.",
+        conflict:
+          "Setup stopped: the existing tradeblocks entry conflicts with the requested launch.",
+        verification_failed: "TradeBlocks registration is present, but server verification failed.",
+      };
+      console.log(statuses[String(result.status)] || `Setup failed (${result.status}).`);
+      const verification = result.verification as ObjectValue;
+      if (verification.initialized)
+        console.log(
+          `Verified configured server: ${verification.serverName} ${verification.serverVersion}; ${verification.toolCount} tools discovered.`,
+        );
+      else
+        console.log(
+          verification.error
+            ? `Verification failed: ${verification.error}`
+            : "Verification: not run.",
+        );
+      if (result.clientActionNeeded)
+        console.log(`Client action after configuration: ${result.clientActionNeeded}`);
+      for (const step of result.nextSteps as string[]) console.log(`Next: ${step}`);
+    }
   };
   try {
     let client: string | undefined;
@@ -289,7 +340,28 @@ export async function runSetup(args: string[]): Promise<number> {
           "Usage: tradeblocks-mcp setup --client <claude-desktop|claude-code|codex|gemini> --folder <path> [--yes] [--replace] [--json]",
         );
     }
-    if (!client && prompt) client = await prompt.question(`Client (${clients.join(", ")}): `);
+    if (!client && prompt) {
+      const names = ["Claude Desktop", "Claude Code", "Codex CLI", "Gemini CLI"];
+      console.error("Choose a client (nothing is selected automatically):");
+      for (let i = 0; i < clients.length; i++) {
+        let detected = false;
+        try {
+          if (clients[i] === "claude-desktop")
+            detected = (await fs.stat(path.dirname(desktopConfigPath()))).isDirectory();
+          else {
+            await executable(clients[i] === "claude-code" ? "claude" : clients[i]);
+            detected = true;
+          }
+        } catch {
+          /* Detection reports absence; selected-client preflight gives guidance. */
+        }
+        console.error(
+          `${i + 1}. ${names[i]} (${clients[i]}) — ${detected ? "detected" : "not detected"}`,
+        );
+      }
+      const choice = (await prompt.question("Client number or name: ")).trim();
+      client = /^[1-4]$/.test(choice) ? clients[Number(choice) - 1] : choice;
+    }
     if (!folder && prompt)
       folder = await prompt.question("Data folder (absolute or relative path): ");
     if (!clients.includes(client as ClientName) || !folder?.trim())
@@ -325,15 +397,7 @@ export async function runSetup(args: string[]): Promise<number> {
         : await executable(client === "claude-code" ? "claude" : client!);
     let file: string;
     if (client === "claude-desktop") {
-      file =
-        process.platform === "darwin"
-          ? path.join(homedir(), "Library/Application Support/Claude/claude_desktop_config.json")
-          : process.platform === "win32"
-            ? path.join(
-                process.env.APPDATA || path.join(homedir(), "AppData/Roaming"),
-                "Claude/claude_desktop_config.json",
-              )
-            : path.join(homedir(), ".config/Claude/claude_desktop_config.json");
+      file = desktopConfigPath();
       try {
         if (!(await fs.stat(path.dirname(file))).isDirectory()) throw new Error();
       } catch {
@@ -452,7 +516,36 @@ export async function runSetup(args: string[]): Promise<number> {
     };
     // Show the preview before writing, including with --yes. JSON mode keeps
     // stdout to one final result; the earlier preview goes to stderr.
-    console.error("Preview:\n" + JSON.stringify(result.plannedChange, null, 2));
+    if (json) console.error("Preview:\n" + JSON.stringify(result.plannedChange, null, 2));
+    else {
+      console.error(`Preview for ${client}:`);
+      console.error(`Configuration file: ${file}`);
+      console.error(`TradeBlocks stdio launch: ${displayCommand([entry.command, ...entry.args])}`);
+      console.error(
+        `Environment keys (values preserved, not shown): ${Object.keys(env).join(", ") || "none"}`,
+      );
+      console.error(
+        `Data folder: ${folder}${createFolder ? " (will be created)" : " (already exists)"}`,
+      );
+      console.error(`Backup: ${backup || "none needed"}`);
+      if (cli && !already)
+        console.error(`Register at user scope: ${displayCommand([cli, ...publicArgs])}`);
+      if (client === "claude-code" && conflict)
+        console.error(
+          `Remove conflicting registration first: ${displayCommand([cli!, "mcp", "remove", "-s", "user", "tradeblocks"])}`,
+        );
+      if (conflict) {
+        const differences = (result.plannedChange as ObjectValue).conflict as ObjectValue;
+        console.error(
+          `Conflicting fields: ${(differences.differingFields as string[]).join(", ")}`,
+        );
+        console.error(String(differences.behavior));
+      }
+      if (already) console.error("Equivalent registration found; it will not be rewritten.");
+      console.error(
+        "Verification may take up to 120 seconds. The first npx run may download TradeBlocks and native DuckDB binaries.",
+      );
+    }
     if (
       conflict &&
       !replace &&
@@ -550,6 +643,9 @@ export async function runSetup(args: string[]): Promise<number> {
         "client_error",
         `Registration read-back did not match the preview in ${file}; inspect settings before retrying.`,
       );
+    console.error(
+      "Verifying the configured server (up to 120 seconds); the first npx run may download TradeBlocks and native DuckDB binaries.",
+    );
     result.verification = await verify({
       command: (readback as Entry).command,
       args: (readback as Entry).args,

@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 
+let runtimeGuidance = "Use the Node version declared in this package's engines, with npm.";
 try {
   if (process.argv[2] === "setup") {
     const manifest = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
     ) as { engines: { node: string } };
+    runtimeGuidance = `Use Node ${manifest.engines.node} with npm.`;
     const minimum = Number(manifest.engines.node.match(/^>=(\d+)$/)?.[1]);
     if (!minimum || Number(process.versions.node.split(".")[0]) < minimum) {
       const args = process.argv.slice(3);
@@ -20,7 +22,11 @@ try {
           `Node ${manifest.engines.node} is required. Install Node with npm from https://nodejs.org/en/download and reopen your terminal.`,
         ],
       };
-      console.log(JSON.stringify(result, null, args.includes("--json") ? undefined : 2));
+      if (args.includes("--json")) console.log(JSON.stringify(result));
+      else {
+        console.log("Setup stopped: missing Node prerequisite.");
+        for (const step of result.nextSteps) console.log(`Next: ${step}`);
+      }
       process.exitCode = 1;
     } else {
       // Unsupported Node versions cannot even load readline/promises. Delay
@@ -46,12 +52,12 @@ try {
         verification: { initialized: false, skipped: true },
         clientActionNeeded: null,
         nextSteps: [
-          "Could not load setup. Use Node 24 with npm; check the TradeBlocks installation and retry.",
+          `Could not load setup. ${runtimeGuidance} Check the TradeBlocks installation and retry.`,
         ],
       }),
     );
   } else if (process.argv[2] === "setup")
-    console.error("Could not load setup. Use Node 24 with npm and check the installation.");
+    console.error(`Could not load setup. ${runtimeGuidance} Check the installation.`);
   else console.error("Error:", error instanceof Error ? error.message : error);
   process.exitCode = 1;
 }

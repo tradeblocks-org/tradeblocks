@@ -135,11 +135,14 @@ it("requires explicit consent in JSON and piped human modes before creating eith
   await expect(access(join(home, "data with spaces"))).rejects.toThrow();
   const piped = spawnSync(
     process.execPath,
-    [binary, "setup", "--client", "claude-desktop", "--folder", join(home, "data")],
+    [binary, "setup", "--client", "claude-desktop", "--folder", join(home, "piped data")],
     { env, input: "y\n", encoding: "utf8", timeout: 5_000 },
   );
   expect(piped.status).toBe(1);
-  expect(JSON.parse(piped.stdout).status).toBe("consent_required");
+  expect(() => JSON.parse(piped.stdout)).toThrow();
+  expect(piped.stdout).toContain("consent required");
+  expect(piped.stderr).toContain(file);
+  expect(piped.stderr).toContain(`'${join(home, "piped data")}'`);
   await expect(access(file)).rejects.toThrow();
 });
 
@@ -427,4 +430,53 @@ it("returns actionable unsupported-Node guidance before loading setup, without w
   expect(result.result.appliedChange).toBeNull();
   await expect(access(file)).rejects.toThrow();
   await expect(access(join(home, "data with spaces"))).rejects.toThrow();
+});
+
+it("presents the human preview and verified result as prose, keeping environment values private", async () => {
+  await writeFile(
+    file,
+    JSON.stringify({
+      mcpServers: { tradeblocks: { command: "old", env: { PRIVATE_NOTE: "do-not-expose-human" } } },
+    }),
+  );
+  const child = spawnSync(
+    process.execPath,
+    [
+      binary,
+      "setup",
+      "--client",
+      "claude-desktop",
+      "--folder",
+      join(home, "data with spaces"),
+      "--yes",
+      "--replace",
+    ],
+    { env, encoding: "utf8", timeout: 130_000 },
+  );
+  expect(child.status).toBe(0);
+  expect(() => JSON.parse(child.stdout)).toThrow();
+  expect(child.stdout).toContain("tradeblocks-mcp");
+  expect(Number(child.stdout.match(/(\d+) tools discovered/)?.[1])).toBeGreaterThan(50);
+  expect(child.stdout).toMatch(/restart|reopen/i);
+  expect(child.stderr).toContain(file);
+  expect(child.stderr).toContain(`'${join(home, "data with spaces")}'`);
+  expect(child.stderr).toContain("PRIVATE_NOTE");
+  expect(child.stderr).toContain("120 seconds");
+  expect(child.stderr).toMatch(/download.*DuckDB/);
+  expect(child.stderr).not.toContain('"envKeys"');
+  expect(child.stdout + child.stderr).not.toContain("do-not-expose-human");
+}, 140_000);
+
+it("presents unsupported-Node human guidance using the declared engine rather than JSON", () => {
+  const child = spawnSync(
+    process.execPath,
+    ["--require", join(packageDir, "tests/fixtures/setup-old-node.cjs"), binary, "setup"],
+    { env, encoding: "utf8", timeout: 5_000 },
+  );
+  expect(child.status).toBe(1);
+  expect(() => JSON.parse(child.stdout)).toThrow();
+  expect(child.stdout).toContain(
+    JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")).engines.node,
+  );
+  expect(child.stdout).toContain("nodejs.org/en/download");
 });
