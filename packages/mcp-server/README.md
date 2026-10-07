@@ -43,7 +43,7 @@ distribution's instructions. Local setup does not need OO, a provider key, or a 
 **Unreleased:** this guided command is available in the source build containing
 this change; it is not yet in the published 3.11.0 package. Until a release
 includes it, build from source (Option 2 below) and replace `npx tradeblocks-mcp`
-in these setup examples with `node packages/mcp-server/server/index.js`.
+in these setup examples with `node packages/mcp-server/server/cli.js`.
 The registered launch remains `npx -y tradeblocks-mcp <absolute-folder>`; its
 server version can therefore differ from the source setup version until release.
 

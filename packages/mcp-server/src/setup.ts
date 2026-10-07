@@ -318,15 +318,6 @@ export async function runSetup(args: string[]): Promise<number> {
         "Optional, separate tradeblocks-skills plugin: https://github.com/tradeblocks-org/tradeblocks-skills (not installed by setup).",
       );
     result.nextSteps = nextSteps;
-    const manifest = JSON.parse(
-      await fs.readFile(new URL("../package.json", import.meta.url), "utf8"),
-    ) as { engines: { node: string } };
-    const minimum = Number(manifest.engines.node.match(/^>=(\d+)$/)?.[1]);
-    if (!minimum || Number(process.versions.node.split(".")[0]) < minimum)
-      throw new SetupError(
-        "prerequisite_missing",
-        `Node ${manifest.engines.node} is required. Install Node with npm from https://nodejs.org/en/download and reopen the terminal.`,
-      );
     const npx = await executable("npx");
     const cli =
       client === "claude-desktop"

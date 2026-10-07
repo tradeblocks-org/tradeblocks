@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -10,6 +11,10 @@ import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 
 const packageDir = resolve(import.meta.dirname, "../..");
+const binary = join(
+  packageDir,
+  JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")).bin["tradeblocks-mcp"],
+);
 let home: string;
 let env: NodeJS.ProcessEnv;
 let file: string;
@@ -58,18 +63,19 @@ beforeEach(async () => {
   // A local npx command adapter executes the real built server, never npm/network.
   await writeExecutable(
     "npx",
-    `const {spawn}=require('node:child_process'); const args=process.argv.slice(2); if(args[0]!=='-y'||args[1]!=='tradeblocks-mcp') process.exit(2); const p=spawn(${JSON.stringify(process.execPath)},[${JSON.stringify(join(packageDir, "server/index.js"))},...args.slice(2)],{stdio:'inherit'}); p.on('exit',c=>process.exit(c??1));`,
+    `const {spawn}=require('node:child_process'); const args=process.argv.slice(2); if(args[0]!=='-y'||args[1]!=='tradeblocks-mcp') process.exit(2); const p=spawn(${JSON.stringify(process.execPath)},[${JSON.stringify(binary)},...args.slice(2)],{stdio:'inherit'}); p.on('exit',c=>process.exit(c??1));`,
   );
 });
 afterEach(async () => {
   await rm(home, { recursive: true, force: true });
 });
 
-function setup(extra: string[] = [], client = "claude-desktop") {
+function setup(extra: string[] = [], client = "claude-desktop", nodeArgs: string[] = []) {
   const child = spawnSync(
     process.execPath,
     [
-      join(packageDir, "server/index.js"),
+      ...nodeArgs,
+      binary,
       "setup",
       "--client",
       client,
@@ -129,14 +135,7 @@ it("requires explicit consent in JSON and piped human modes before creating eith
   await expect(access(join(home, "data with spaces"))).rejects.toThrow();
   const piped = spawnSync(
     process.execPath,
-    [
-      join(packageDir, "server/index.js"),
-      "setup",
-      "--client",
-      "claude-desktop",
-      "--folder",
-      join(home, "data"),
-    ],
+    [binary, "setup", "--client", "claude-desktop", "--folder", join(home, "data")],
     { env, input: "y\n", encoding: "utf8", timeout: 5_000 },
   );
   expect(piped.status).toBe(1);
@@ -308,7 +307,7 @@ it("never calls registration alone a successful MCP verification", async () => {
 
 it("keeps help and all retained skill instruction commands compatible", () => {
   for (const command of ["--help", "install-skills", "uninstall-skills", "check-skills"]) {
-    const child = spawnSync(process.execPath, [join(packageDir, "server/index.js"), command], {
+    const child = spawnSync(process.execPath, [binary, command], {
       env,
       encoding: "utf8",
       timeout: 5_000,
@@ -342,7 +341,7 @@ it.each(["positional", "environment"])(
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [
-        join(packageDir, "server/index.js"),
+        binary,
         ...(mode === "positional"
           ? [
               data,
@@ -386,7 +385,7 @@ it("retains built HTTP, custom port and no-auth invocation with real MCP discove
   await mkdir(data);
   const child = spawn(
     process.execPath,
-    [join(packageDir, "server/index.js"), "--http", "--port", String(port), "--no-auth", data],
+    [binary, "--http", "--port", String(port), "--no-auth", data],
     { env, stdio: ["ignore", "ignore", "pipe"] },
   );
   child.stderr.resume();
@@ -416,3 +415,16 @@ it("retains built HTTP, custom port and no-auth invocation with real MCP discove
     await exited;
   }
 }, 30_000);
+
+it("returns actionable unsupported-Node guidance before loading setup, without writing", async () => {
+  const result = setup(["--yes"], "claude-desktop", [
+    "--require",
+    join(packageDir, "tests/fixtures/setup-old-node.cjs"),
+  ]);
+  expect(result.code).toBe(1);
+  expect(result.result.status).toBe("prerequisite_missing");
+  expect(result.result.nextSteps.join(" ")).toContain("nodejs.org/en/download");
+  expect(result.result.appliedChange).toBeNull();
+  await expect(access(file)).rejects.toThrow();
+  await expect(access(join(home, "data with spaces"))).rejects.toThrow();
+});

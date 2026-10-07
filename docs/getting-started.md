@@ -53,7 +53,7 @@ npx tradeblocks-mcp setup --client claude-code --folder "/path/to/backtests" --y
 ```
 
 **Not yet published in 3.11.0:** until release, [build from source](../packages/mcp-server/README.md#option-2-from-source)
-and use `node packages/mcp-server/server/index.js setup` instead of
+and use `node packages/mcp-server/server/cli.js setup` instead of
 `npx tradeblocks-mcp setup`. The configured server launch is still
 `npx -y tradeblocks-mcp <absolute-folder>`.
 
