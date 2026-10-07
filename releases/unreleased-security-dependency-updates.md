@@ -42,3 +42,32 @@ reason and expiry are printed by the check. Update the locked dependency,
 remove the exception from `scripts/audit.mjs`, and retain the high/critical
 gate. Installed packages and images receive the production fix only at the
 next release.
+
+## Second audit repair for the next release
+
+Advisories published after the repair above blocked the required **Dependency
+audit** again. All fixes are non-major; no package version is bumped here, and
+the `braces` exception and audit policy are unchanged.
+
+- **High — `@modelcontextprotocol/sdk` 1.30.0 → 1.32.1** (the MCP server's
+  protocol dependency, within its existing `^1.30.0` range): the SDK's OAuth
+  client could send credentials to an authorization server chosen by the MCP
+  server ([GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h)).
+  The server's stdio and HTTP transports, its OAuth login, and its tools, inputs
+  and outputs are unchanged.
+- **High — `sharp` 0.35.4 → 0.35.5** (under `next`): librsvg CVE-2026-96889
+  ([GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w)).
+  The root `overrides` pin moves from `0.35.4` to `0.35.5`.
+- **Critical — `proxy-addr` 2.0.7 → 2.0.8** (transitive through `express`): IP
+  spoofing through an IPv4-mapped IPv6 trust subnet
+  ([GHSA-jqcg-44mw-7w3h](https://github.com/advisories/GHSA-jqcg-44mw-7w3h)).
+- **High — `source-map-js` 1.2.1 → 1.2.2** (transitive): event-loop denial of
+  service through indexed source-map section offsets
+  ([GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)).
+- **Critical — `tinypool` 2.1.0 → 2.2.0** (development-only, through
+  `repomix`): prototype-pollution gadgets in worker and `run()` options leading to
+  code execution ([GHSA-5gmw-xhrv-c9v3](https://github.com/advisories/GHSA-5gmw-xhrv-c9v3),
+  [GHSA-85c8-ppgw-ccpr](https://github.com/advisories/GHSA-85c8-ppgw-ccpr)).
+
+Installed MCP packages and Docker images stay on the vulnerable versions until
+the next release.
