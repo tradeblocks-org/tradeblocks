@@ -1,9 +1,9 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig([
-  // Main MCP server entry (executable) - outputs to server/ (the `bin` target)
+  // Packaged CLI bootstrap and the unchanged server/host entry.
   {
-    entry: ["src/index.ts"],
+    entry: ["src/cli.ts", "src/index.ts"],
     outDir: "server",
     format: ["esm"],
     target: "node18",

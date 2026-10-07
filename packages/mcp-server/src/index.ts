@@ -49,6 +49,7 @@ import { shouldShutdownOnParentChange } from "./parent-watchdog.ts";
 import { leaseToolHandlers } from "./tools/middleware/connection-lease.ts";
 import { refuseUnknownArguments } from "./tools/middleware/strict-arguments.ts";
 import { registerWorkflowPrompts } from "./prompts.ts";
+import { runSetup } from "./setup.ts";
 
 // How often the stdio parent-death watchdog polls process.ppid. See the
 // watchdog install site in startTradeBlocksMcp() below.
@@ -102,7 +103,8 @@ Environment:
   TRADEBLOCKS_DATA_ROOT   Root directory for shared data (overrides default, overridden by --data-root)
   MARKET_DB_PATH      Path to market.duckdb (overrides default, overridden by --market-db)
 
-Commands (print tradeblocks-skills plugin installation instructions and exit):
+Commands:
+  setup            Guided local client setup; --client, --folder, --yes, --replace, --json
   install-skills    Show plugin installation instructions
   uninstall-skills  Show plugin installation instructions
   check-skills      Show plugin installation instructions
@@ -235,6 +237,11 @@ export function registerTradeBlocksCoreTools(
 export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = {}): Promise<void> {
   const plugins = options.plugins ?? [];
   const command = process.argv[2];
+
+  if (command === "setup") {
+    process.exitCode = await runSetup(process.argv.slice(3));
+    return;
+  }
 
   // Handle skill commands (exit after handling)
   if (
