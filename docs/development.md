@@ -116,6 +116,9 @@ in the computation remain instants.
 - `components/performance-charts/` – Plotly components (via react-plotly.js) for equity curves and strategy comparisons.
 - `components/block-dialog.tsx`, `components/sidebar-active-blocks.tsx`, etc. orchestrate import flows and navigation.
 
+Lucide v1 provides interface icons, not brand icons. Use the existing
+`@tabler/icons-react` dependency for brand marks such as the footer's GitHub icon.
+
 ## CSV Schema Reference
 
 ### Trade Logs
