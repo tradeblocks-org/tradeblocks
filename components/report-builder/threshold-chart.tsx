@@ -19,7 +19,7 @@ import { calculateThresholdAnalysis } from "@tradeblocks/lib";
 import { EnrichedTrade } from "@tradeblocks/lib";
 import { ChartAxisConfig, ThresholdMetric, getFieldInfo } from "@tradeblocks/lib";
 import { generateTimeAxisTicksWithInterval } from "@tradeblocks/lib";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { useMemo } from "react";
 import { WhatIfExplorer } from "./what-if-explorer";
 
@@ -55,7 +55,7 @@ export function ThresholdChart({
     const fieldLabel = xInfo?.label ?? xAxis.field;
 
     // Trace 1: Cumulative % of trades (primary Y-axis)
-    const cumulativeTradesTrace: Partial<PlotData> = {
+    const cumulativeTradesTrace: Data = {
       x: xValues,
       y: analysis.dataPoints.map((d) => d.cumulativeTradesPct),
       type: "scatter",
@@ -75,7 +75,7 @@ export function ThresholdChart({
     };
 
     // Trace 2: Cumulative % of P/L (primary Y-axis)
-    const cumulativePlTrace: Partial<PlotData> = {
+    const cumulativePlTrace: Data = {
       x: xValues,
       y: analysis.dataPoints.map((d) => d.cumulativePlPct),
       type: "scatter",
@@ -128,7 +128,7 @@ export function ThresholdChart({
     const shortFieldName = fieldLabel.replace(/^(Opening|Closing|Avg)\s+/i, "");
 
     // Trace 3: Avg metric above threshold (secondary Y-axis)
-    const avgAboveTrace: Partial<PlotData> = {
+    const avgAboveTrace: Data = {
       x: xValues,
       y: analysis.dataPoints.map(getAboveValue),
       type: "scatter",
@@ -148,7 +148,7 @@ export function ThresholdChart({
     };
 
     // Trace 4: Avg metric below threshold (secondary Y-axis)
-    const avgBelowTrace: Partial<PlotData> = {
+    const avgBelowTrace: Data = {
       x: xValues,
       y: analysis.dataPoints.map(getBelowValue),
       type: "scatter",
@@ -218,6 +218,7 @@ export function ThresholdChart({
       yaxis2: {
         title: { text: `Avg ${metricLabel} (${metricUnit})` },
         overlaying: "y",
+        tickmode: "auto",
         side: "right",
         range: [minMetric - metricPadding, maxMetric + metricPadding],
         zeroline: true,
@@ -260,7 +261,7 @@ export function ThresholdChart({
       <ChartWrapper
         title=""
         className={className}
-        data={traces as PlotData[]}
+        data={traces as Data[]}
         layout={layout}
         style={{ height: "400px" }}
       />

@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import { ChartWrapper, createLineChartLayout } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 import { useTheme } from "next-themes";
-import type { PlotData, Layout } from "plotly.js";
+import type { Data, Layout } from "plotly.js";
 
 interface DrawdownChartProps {
   className?: string;
@@ -31,7 +31,7 @@ export function DrawdownChart({ className }: DrawdownChartProps) {
         : { date: "", drawdownPct: 0 };
 
     // Main drawdown area
-    const drawdownTrace: Partial<PlotData> = {
+    const drawdownTrace: Data = {
       x: drawdownData.map((point) => point.date),
       y: drawdownData.map((point) => point.drawdownPct),
       type: "scatter" as const,
@@ -53,7 +53,7 @@ export function DrawdownChart({ className }: DrawdownChartProps) {
     };
 
     // Zero line (baseline)
-    const zeroLineTrace: Partial<PlotData> = {
+    const zeroLineTrace: Data = {
       x: drawdownData.map((point) => point.date),
       y: Array(drawdownData.length).fill(0),
       type: "scatter" as const,
@@ -65,7 +65,7 @@ export function DrawdownChart({ className }: DrawdownChartProps) {
     };
 
     // Maximum drawdown point
-    const maxDrawdownTrace: Partial<PlotData> = {
+    const maxDrawdownTrace: Data = {
       x: [maxDrawdownPoint.date],
       y: [maxDrawdownPoint.drawdownPct],
       type: "scatter" as const,
@@ -84,12 +84,12 @@ export function DrawdownChart({ className }: DrawdownChartProps) {
         "<extra></extra>",
     };
 
-    const traces: Partial<PlotData>[] = [zeroLineTrace, drawdownTrace, maxDrawdownTrace];
+    const traces: Data[] = [zeroLineTrace, drawdownTrace, maxDrawdownTrace];
 
     // Use the same max drawdown point for consistency
     const minDrawdown = maxDrawdownPoint.drawdownPct;
 
-    const yAxisRange = [minDrawdown * 1.1, 5];
+    const yAxisRange: [number, number] = [minDrawdown * 1.1, 5];
 
     const chartLayout: Partial<Layout> = {
       ...createLineChartLayout("", "Date", "Drawdown (%)"),

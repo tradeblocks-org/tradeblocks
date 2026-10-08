@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { ChartWrapper, createBarChartLayout } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 
 interface DayOfWeekChartProps {
   className?: string;
@@ -53,7 +53,7 @@ export function DayOfWeekChart({ className }: DayOfWeekChartProps) {
 
     const yAxisTitle = viewMode === "dollars" ? "Average Return ($)" : "Average Return (%)";
 
-    const barTrace: Partial<PlotData> = {
+    const barTrace: Data = {
       x: days,
       y: metricValues,
       type: "bar",

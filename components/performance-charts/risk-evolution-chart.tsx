@@ -3,7 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { useMemo, useState } from "react";
 import { ChartWrapper } from "./chart-wrapper";
 
@@ -146,7 +146,7 @@ export function RiskEvolutionChart({ className }: RiskEvolutionChartProps) {
           ? "Volatility (% of Margin)"
           : "Volatility (% of Portfolio)";
 
-    const trace: Partial<PlotData> = {
+    const trace: Data = {
       x: dates,
       y: volatility,
       type: "scatter",

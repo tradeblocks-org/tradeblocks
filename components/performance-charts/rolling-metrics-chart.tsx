@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { ChartWrapper } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -55,7 +55,7 @@ export function RollingMetricsChart({ className }: RollingMetricsChartProps) {
     const dates = rollingMetrics.map((m) => m.date);
     const values = rollingMetrics.map((m) => m[config.key]);
 
-    const trace: Partial<PlotData> = {
+    const trace: Data = {
       x: dates,
       y: values,
       type: "scatter",

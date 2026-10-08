@@ -224,9 +224,10 @@ export function ChartWrapper({
   const enhancedConfig = React.useMemo(
     (): Partial<Config> => ({
       responsive: true,
+      doubleClickDelay: 300,
       displayModeBar: true,
       displaylogo: false,
-      modeBarButtonsToRemove: [],
+      modeBarButtonsToRemove: ["sendChartToCloud"],
       toImageButtonOptions: {
         format: "png" as const,
         filename: `tradeblocks-${title.toLowerCase().replace(/\s+/g, "-")}`,
@@ -326,7 +327,6 @@ export const createChartConfig = (overrides?: Partial<Config>): Partial<Config> 
   showTips: false,
   showAxisDragHandles: false,
   showAxisRangeEntryBoxes: false,
-  showLink: false,
   ...overrides,
 });
 

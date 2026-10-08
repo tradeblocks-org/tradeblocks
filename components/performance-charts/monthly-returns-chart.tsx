@@ -2,7 +2,7 @@
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { useMemo, useState } from "react";
 import { ChartWrapper, createBarChartLayout } from "./chart-wrapper";
 
@@ -50,7 +50,7 @@ function formatValueLabel(value: number, viewMode: ViewMode): string {
   }
 }
 
-function createBarTrace(config: BarTraceConfig): Partial<PlotData> {
+function createBarTrace(config: BarTraceConfig): Data {
   return {
     x: config.x,
     y: config.y,

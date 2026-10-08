@@ -12,7 +12,7 @@
  */
 
 import { useMemo, useState, useCallback } from "react";
-import type { Layout, PlotData, Shape } from "plotly.js";
+import type { Layout, Data, Shape } from "plotly.js";
 import { ChartWrapper } from "@/components/performance-charts/chart-wrapper";
 import { EnrichedTrade, formatDateKey, getEnrichedTradeValue } from "@tradeblocks/lib";
 import { ChartAxisConfig, getFieldInfo, ThresholdMetric } from "@tradeblocks/lib";
@@ -144,7 +144,7 @@ export function ScatterChart({
 
     const xInfo = getFieldInfo(xAxis.field);
     const yInfo = getFieldInfo(yAxis.field);
-    const chartTraces: Partial<PlotData>[] = [];
+    const chartTraces: Data[] = [];
 
     // Multi-axis mode - different rendering path
     if (hasMultiAxis) {
@@ -332,6 +332,7 @@ export function ScatterChart({
         (chartLayout as Record<string, unknown>).yaxis2 = {
           title: { text: y2Info?.label ?? yAxis2.field },
           overlaying: "y",
+          tickmode: "auto",
           side: "right",
           zeroline: true,
           zerolinewidth: 1,
@@ -351,6 +352,7 @@ export function ScatterChart({
         (chartLayout as Record<string, unknown>).yaxis3 = {
           title: { text: y3Info?.label ?? yAxis3.field },
           overlaying: "y",
+          tickmode: "auto",
           side: "right",
           anchor: "free",
           position: 1,
@@ -760,12 +762,7 @@ export function ScatterChart({
 
   return (
     <div className={className}>
-      <ChartWrapper
-        title=""
-        data={traces as PlotData[]}
-        layout={layout}
-        style={{ height: "400px" }}
-      />
+      <ChartWrapper title="" data={traces as Data[]} layout={layout} style={{ height: "400px" }} />
 
       {/* What-If Filter Explorer */}
       {showWhatIf && (

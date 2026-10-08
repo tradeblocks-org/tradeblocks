@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { ChartWrapper } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 
@@ -44,7 +44,7 @@ export function PremiumEfficiencyChart({ className }: PremiumEfficiencyChartProp
     });
 
     // Gross P/L bars (before commissions)
-    const grossTrace: Partial<PlotData> = {
+    const grossTrace: Data = {
       x: tradeNumbers,
       y: grossPL,
       type: "bar",
@@ -63,7 +63,7 @@ export function PremiumEfficiencyChart({ className }: PremiumEfficiencyChartProp
     };
 
     // Net P/L line (after commissions)
-    const netTrace: Partial<PlotData> = {
+    const netTrace: Data = {
       x: tradeNumbers,
       y: netPL,
       type: "scatter",
@@ -184,7 +184,7 @@ export function PremiumEfficiencyChart({ className }: PremiumEfficiencyChartProp
       title="💸 Commission Drag"
       description="Gross vs net P/L showing commission impact per trade"
       className={className}
-      data={plotData as PlotData[]}
+      data={plotData as Data[]}
       layout={layout}
       style={{ height: "350px" }}
       tooltip={tooltip}

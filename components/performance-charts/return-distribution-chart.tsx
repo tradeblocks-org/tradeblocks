@@ -1,7 +1,7 @@
 "use client";
 
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
-import type { PlotData } from "plotly.js";
+import type { Data, Layout } from "plotly.js";
 import { useMemo } from "react";
 import { ChartWrapper, createHistogramLayout } from "./chart-wrapper";
 
@@ -26,7 +26,7 @@ export function ReturnDistributionChart({ className }: ReturnDistributionChartPr
     ];
 
     // Create histogram
-    const histogramTrace = {
+    const histogramTrace: Data = {
       x: returnDistribution,
       type: "histogram" as const,
       nbinsx: 30,
@@ -45,7 +45,7 @@ export function ReturnDistributionChart({ className }: ReturnDistributionChartPr
         "<b>ROM Range:</b> %{x:.1f}%<br>" + "<b>Trade Count:</b> %{y}<br>" + "<extra></extra>",
     };
 
-    const traces: Partial<PlotData>[] = [histogramTrace];
+    const traces: Data[] = [histogramTrace];
 
     // Smart x-axis range
     const minRom = Math.min(...returnDistribution);
@@ -80,7 +80,7 @@ export function ReturnDistributionChart({ className }: ReturnDistributionChartPr
       hovertemplate: `<b>Median</b><br>${median.toFixed(1)}%<extra></extra>`,
     });
 
-    const chartLayout = {
+    const chartLayout: Partial<Layout> = {
       ...createHistogramLayout("", "Return on Margin (%)", "Number of Trades"),
       xaxis: {
         title: { text: "Return on Margin (%)" },
@@ -93,6 +93,7 @@ export function ReturnDistributionChart({ className }: ReturnDistributionChartPr
       },
       yaxis2: {
         overlaying: "y" as const,
+        tickmode: "auto",
         range: [0, 1],
         showgrid: false,
         showticklabels: false,

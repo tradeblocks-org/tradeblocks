@@ -3,7 +3,7 @@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { useEffect, useMemo, useState } from "react";
 import { ChartWrapper } from "./chart-wrapper";
 
@@ -58,7 +58,7 @@ export function DailyExposureChart({ className }: DailyExposureChartProps) {
     const yAxisTitle =
       effectiveViewMode === "dollars" ? "Daily Exposure ($)" : "Daily Exposure (% of Portfolio)";
 
-    const trace: Partial<PlotData> = {
+    const trace: Data = {
       x: dates,
       y: values,
       customdata: dailyExposure.map((d) => d.openPositions),
@@ -75,13 +75,13 @@ export function DailyExposureChart({ className }: DailyExposureChartProps) {
     };
 
     // Add a marker for the peak day
-    const traces: Partial<PlotData>[] = [trace];
+    const traces: Data[] = [trace];
 
     if (activePeak) {
       const peakValue =
         effectiveViewMode === "dollars" ? activePeak.exposure : activePeak.exposurePercent;
 
-      const peakTrace: Partial<PlotData> = {
+      const peakTrace: Data = {
         x: [activePeak.date],
         y: [peakValue],
         type: "scatter",

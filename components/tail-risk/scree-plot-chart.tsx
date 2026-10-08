@@ -83,6 +83,7 @@ export function ScreePlotChart({ result }: ScreePlotChartProps) {
         title: { text: "Cumulative Variance (%)" },
         side: "right",
         overlaying: "y",
+        tickmode: "auto",
         range: [0, 105],
         showgrid: false,
       },

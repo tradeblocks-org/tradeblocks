@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { ChartWrapper } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 import {
@@ -130,7 +130,7 @@ export function VixRegimeChart({ className }: VixRegimeChartProps) {
       return Math.min(28, Math.max(8, Math.sqrt(magnitude) / 15));
     };
 
-    const buildTrace = (entries: typeof openingEntries, isOpening: boolean): Partial<PlotData> => ({
+    const buildTrace = (entries: typeof openingEntries, isOpening: boolean): Data => ({
       x: entries.map((entry) => (isOpening ? entry.openingVix : entry.closingVix) as number),
       y: entries.map((entry) => entry.pl),
       customdata: entries.map((entry) => [entry.pl, entry.rom ?? null]),
@@ -160,7 +160,7 @@ export function VixRegimeChart({ className }: VixRegimeChartProps) {
       yaxis: isOpening ? "y" : "y2",
     });
 
-    const traces: Partial<PlotData>[] = [];
+    const traces: Data[] = [];
     if (openingEntries.length > 0) traces.push(buildTrace(openingEntries, true));
     if (closingEntries.length > 0) traces.push(buildTrace(closingEntries, false));
 
@@ -196,7 +196,7 @@ export function VixRegimeChart({ className }: VixRegimeChartProps) {
     const openingSummary = buildSummary(openingEntries, "");
     const closingSummary = buildSummary(closingEntries, "2");
 
-    const regimeShapes = (forOpening: boolean): Layout["shapes"] => {
+    const regimeShapes = (forOpening: boolean): NonNullable<Layout["shapes"]> => {
       const xref = forOpening ? "x" : "x2";
       const yref = forOpening ? "y" : "y2";
 
@@ -426,7 +426,7 @@ export function VixRegimeChart({ className }: VixRegimeChartProps) {
       title="🌀 Volatility Regimes"
       description="Entry and exit VIX versus profit, sized by P/L and colored by return on margin"
       className={className}
-      data={plotData as PlotData[]}
+      data={plotData as Data[]}
       layout={layout}
       style={{ height: "700px" }}
       tooltip={tooltip}

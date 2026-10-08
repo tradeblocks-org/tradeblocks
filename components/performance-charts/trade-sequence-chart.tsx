@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { ChartWrapper } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 
 interface TradeSequenceChartProps {
   className?: string;
@@ -29,7 +29,7 @@ export function TradeSequenceChart({ className, showTrend = true }: TradeSequenc
       viewMode === "dollars" ? tradeSequence.map((t) => t.pl) : tradeSequence.map((t) => t.rom);
     const colors = returns.map((ret) => (ret > 0 ? "#22c55e" : "#ef4444"));
 
-    const traces: Partial<PlotData>[] = [];
+    const traces: Data[] = [];
 
     const hoverTemplate =
       viewMode === "dollars"
