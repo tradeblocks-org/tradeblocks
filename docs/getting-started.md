@@ -37,9 +37,9 @@ or [Gemini CLI](https://geminicli.com/docs/get-started/installation/)
 once with its configuration directory present. No OO or market-data credentials
 are required for local setup or CSV import.
 
-### Guided local setup (unreleased)
+### Guided local setup
 
-The source build now includes:
+Since 4.0.0, the published package includes:
 
 ```bash
 # People: pick a client/folder, see the preview, explicitly consent
@@ -51,11 +51,6 @@ npx tradeblocks-mcp setup --client claude-code --folder "/path/to/backtests" --j
 # Apply after reviewing the preview
 npx tradeblocks-mcp setup --client claude-code --folder "/path/to/backtests" --yes --json
 ```
-
-**Not yet published in 3.11.0:** until release, [build from source](../packages/mcp-server/README.md#option-2-from-source)
-and use `node packages/mcp-server/server/cli.js setup` instead of
-`npx tradeblocks-mcp setup`. The configured server launch is still
-`npx -y tradeblocks-mcp <absolute-folder>`.
 
 Choose `claude-desktop`, `claude-code`, `codex`, or `gemini`. Setup never installs
 software or prompts in JSON/non-TTY mode. Desktop writes preserve other settings;

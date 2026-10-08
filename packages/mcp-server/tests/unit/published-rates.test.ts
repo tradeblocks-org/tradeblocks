@@ -8,16 +8,20 @@ import { loadPublishedRates } from "../../src/market/published-rates.ts";
 import { computeQuoteGreeks } from "../../src/utils/option-quote-greeks.ts";
 
 const tail = Object.keys(TREASURY_RATES).at(-1)!;
-const next = new Date(`${tail}T00:00:00Z`);
+const sofrTail = Object.keys(SOFR_RATES).at(-1)!;
+// The first day after both bundles, so the publication adds a rate rather than conflicting with one.
+const next = new Date(`${tail > sofrTail ? tail : sofrTail}T00:00:00Z`);
 next.setUTCDate(next.getUTCDate() + 1);
 const day = next.toISOString().slice(0, 10);
+const expiry = new Date(next);
+expiry.setUTCDate(expiry.getUTCDate() + 9);
 const greekInput = {
   optionPrice: 52,
   underlyingPrice: 6500,
   strike: 6500,
   date: day,
   time: "10:00",
-  expiration: "2026-10-16",
+  expiration: expiry.toISOString().slice(0, 10),
   contractType: "call" as const,
 };
 const publication = () => ({
