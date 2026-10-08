@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, Github, ShieldQuestion } from "lucide-react";
+import { IconBrandGithub } from "@tabler/icons-react";
+import { AlertTriangle, ShieldQuestion } from "lucide-react";
 import Link from "next/link";
 
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -93,7 +94,7 @@ export function SidebarFooterLegal() {
               target="_blank"
               className="inline-flex items-center gap-1 transition hover:text-foreground"
             >
-              <Github className="h-3.5 w-3.5" aria-hidden />
+              <IconBrandGithub className="h-3.5 w-3.5" aria-hidden />
               <span className="font-medium">GitHub</span>
             </Link>
           </div>
@@ -161,7 +162,7 @@ export function SidebarFooterLegal() {
           target="_blank"
           className="inline-flex items-center gap-1.5 transition hover:text-foreground"
         >
-          <Github className="h-4 w-4" aria-hidden />
+          <IconBrandGithub className="h-4 w-4" aria-hidden />
           <span className="font-medium">GitHub</span>
         </Link>
       </div>
