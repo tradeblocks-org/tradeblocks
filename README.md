@@ -75,7 +75,7 @@ Files are auto-detected by column headers, not filenames. See [Usage Guide](docs
 
 TradeBlocks never calls Option Omega. Install both MCP servers, TradeBlocks and OO's, in the same AI client:
 
-- **Capture (Claude Code only).** The optional [tradeblocks-skills](https://github.com/tradeblocks-org/tradeblocks-skills) plugin's `/tradeblocks:oo-capture` saves a saved OO backtest, saved portfolio or run to disk, verifies its trades against OO's own count and net profit, and imports the trade log with OO's marked daily curve into one block. It needs TradeBlocks running locally over stdio; it is not supported with the Docker image or HTTP mode.
+- **Capture (Claude Code only).** The optional [tradeblocks-skills](https://github.com/tradeblocks-org/tradeblocks-skills) plugin's `/tradeblocks:oo-capture` saves OO's responses for a saved backtest, saved portfolio or run to disk, verifies the trades against OO's own count and net profit, and imports the trade log into one block with OO's marked daily curve. A run whose OO headline reports no date range is imported with its trades only, and the capture says so. It needs TradeBlocks running locally over stdio; it is not supported with the Docker image or HTTP mode.
 - **CSV fallback (every client and mode).** Export the trade log, and optionally the daily log, from OO and import both with one `import_csv` call using `dailyLogPath`. For Docker/HTTP, put the CSVs inside the server's mounted data directory.
 - **Prompts.** `bring-in-oo-backtest`, `is-this-optimum-real`, `stress-oo-portfolio`, `live-vs-oo` and `allocate-oo-portfolio` guide the OO workflows. See the [MCP server README](packages/mcp-server/README.md#prompts).
 
