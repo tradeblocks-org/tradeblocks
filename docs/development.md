@@ -7,13 +7,17 @@ This document explains how TradeBlocks is structured and how to work effectively
 - **Runtime:** Node.js 24 (see `.node-version`).
 - **Package manager:** npm (lockfile committed). Husky installs git hooks via `npm install`.
 - **Type system:** TypeScript with `strict` mode.
-- **Linting:** ESLint 9 + Next.js config (`npm run lint`).
+- **Linting:** ESLint 10 + Next.js rules (`npm run lint`).
 - **Formatting:** Prettier (`npm run format` to write, `npm run format:check` to verify).
 - **Testing:** Jest 30 with `ts-jest` and `fake-indexeddb` to emulate browser storage.
 
 Upgrade `react`, `react-dom`, `@types/react` and `@types/react-dom` together, and update the
 React type `overrides` in `package.json` with them. React requires `react` and `react-dom` at the
 exact same version.
+
+The flat lint configuration registers only the Next.js, React Hooks and
+TypeScript rule modules it uses. No `react/*` rules are enabled; do not import
+the unused `eslint-plugin-react` module (its peer range does not support ESLint 10).
 
 ### First-Time Setup
 
