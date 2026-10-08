@@ -127,6 +127,13 @@ in the computation remain instants.
 Lucide v1 provides interface icons, not brand icons. Use the existing
 `@tabler/icons-react` dependency for brand marks such as the footer's GitHub icon.
 
+Plotly v4 and react-plotly.js provide bundled types; chart traces use `Data`
+directly. Chart Studio's `showLink` was removed with the feature and has no
+replacement. Overlay axes explicitly keep `tickmode: "auto"`. Every Plotly
+render uses `components/plotly-config.ts`, directly or through ChartWrapper,
+to keep a 300 ms double-click delay and hide the v4 default cloud-upload button.
+Charts and trading data remain local.
+
 ## CSV Schema Reference
 
 ### Trade Logs

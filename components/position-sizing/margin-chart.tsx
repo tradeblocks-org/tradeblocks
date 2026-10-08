@@ -4,6 +4,7 @@
 
 "use client";
 
+import { plotlyBaseConfig } from "@/components/plotly-config";
 import { Card } from "@/components/ui/card";
 import { MarginTimeline } from "@tradeblocks/lib";
 import { truncateStrategyName } from "@tradeblocks/lib";
@@ -128,7 +129,7 @@ export function MarginChart({ marginTimeline, strategyNames }: MarginChartProps)
         <Plot
           data={data}
           layout={layout}
-          config={{ displayModeBar: true, displaylogo: false, responsive: true }}
+          config={plotlyBaseConfig}
           style={{ width: "100%", height: "400px" }}
           useResizeHandler
         />

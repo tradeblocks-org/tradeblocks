@@ -1,5 +1,6 @@
 "use client";
 
+import { plotlyBaseConfig } from "@/components/plotly-config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -223,10 +224,7 @@ export function ChartWrapper({
   // Enhanced config with responsive behavior
   const enhancedConfig = React.useMemo(
     (): Partial<Config> => ({
-      responsive: true,
-      displayModeBar: true,
-      displaylogo: false,
-      modeBarButtonsToRemove: [],
+      ...plotlyBaseConfig,
       toImageButtonOptions: {
         format: "png" as const,
         filename: `tradeblocks-${title.toLowerCase().replace(/\s+/g, "-")}`,
@@ -306,7 +304,7 @@ export function ChartWrapper({
               divId={chartId}
               data={data}
               layout={themedLayout}
-              config={enhancedConfig as unknown as Parameters<typeof Plot>[0]["config"]}
+              config={enhancedConfig}
               onInitialized={handleInitialized}
               onUpdate={handleUpdate}
               style={mergedStyle}
@@ -326,7 +324,6 @@ export const createChartConfig = (overrides?: Partial<Config>): Partial<Config> 
   showTips: false,
   showAxisDragHandles: false,
   showAxisRangeEntryBoxes: false,
-  showLink: false,
   ...overrides,
 });
 

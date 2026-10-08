@@ -8,7 +8,7 @@
  */
 
 import { useMemo, useState, useCallback } from "react";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { ChartWrapper } from "@/components/performance-charts/chart-wrapper";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -130,7 +130,7 @@ export function HistogramChart({
     }
 
     const xInfo = getFieldInfo(xAxis.field);
-    const chartTraces: Partial<PlotData>[] = [];
+    const chartTraces: Data[] = [];
     const isTime = xAxis.field === "timeOfDayMinutes";
     const fieldLabel = xInfo?.label ?? xAxis.field;
 
@@ -314,12 +314,7 @@ export function HistogramChart({
         </div>
       )}
 
-      <ChartWrapper
-        title=""
-        data={traces as PlotData[]}
-        layout={layout}
-        style={{ height: "400px" }}
-      />
+      <ChartWrapper title="" data={traces as Data[]} layout={layout} style={{ height: "400px" }} />
 
       {/* What-If Filter Explorer */}
       <WhatIfExplorer

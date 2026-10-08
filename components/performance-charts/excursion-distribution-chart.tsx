@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { ChartWrapper } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 
 interface ExcursionDistributionChartProps {
   className?: string;
@@ -23,7 +23,7 @@ export function ExcursionDistributionChart({ className }: ExcursionDistributionC
     const mfeCounts = mfeMaeDistribution.map((d) => d.mfeCount);
     const maeCounts = mfeMaeDistribution.map((d) => d.maeCount);
 
-    const traces: Partial<PlotData>[] = [];
+    const traces: Data[] = [];
 
     // MFE histogram
     traces.push({

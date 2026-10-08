@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { ChartWrapper } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 
@@ -23,7 +23,7 @@ export function MarginUtilizationChart({ className }: MarginUtilizationChartProp
       return { plotData: [], layout: {} };
     }
 
-    const utilizationTrace: Partial<PlotData> = {
+    const utilizationTrace: Data = {
       x: entries.map((entry) => entry.marginReq),
       y: entries.map((entry) => entry.pl),
       customdata: entries.map((entry) => [entry.numContracts, entry.fundsAtClose]),
@@ -71,7 +71,7 @@ export function MarginUtilizationChart({ className }: MarginUtilizationChartProp
       title="🏗️ Margin Utilization"
       description="Profit/Loss versus required margin and sizing"
       className={className}
-      data={plotData as PlotData[]}
+      data={plotData as Data[]}
       layout={layout}
       style={{ height: "350px" }}
       tooltip={tooltip}

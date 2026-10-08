@@ -5,7 +5,7 @@ import { usePerformanceStore } from "@tradeblocks/lib/stores";
 import { ChartWrapper } from "./chart-wrapper";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, TrendingUp, Shuffle, ArrowLeftRight } from "lucide-react";
-import type { PlotData, Layout } from "plotly.js";
+import type { Data, Layout } from "plotly.js";
 import type { RunsTestResult } from "@tradeblocks/lib";
 
 function RunsTestCard({ runsTest }: { runsTest: RunsTestResult }) {
@@ -88,7 +88,7 @@ export function WinLossStreaksChart() {
       return { plotData: [], layout: {}, statistics: null, runsTest: undefined };
     }
 
-    const traces: Partial<PlotData>[] = [];
+    const traces: Data[] = [];
 
     // Win streaks trace (right side, positive Y-axis)
     if (winLengths.length > 0) {

@@ -14,7 +14,7 @@ import {
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 import { cn } from "@tradeblocks/lib";
 import { format } from "date-fns";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { useMemo, useState } from "react";
 import { ChartWrapper } from "./chart-wrapper";
 
@@ -254,7 +254,7 @@ export function MarginUtilizationTable({ className }: MarginUtilizationTableProp
     }
 
     // Create stacked area traces - one per bucket
-    const traces: Partial<PlotData>[] = chartData.bucketLabels.map((label, index) => ({
+    const traces: Data[] = chartData.bucketLabels.map((label, index) => ({
       x: chartData.monthLabels,
       y: chartData.bucketCounts[index],
       type: "scatter" as const,
@@ -542,7 +542,7 @@ export function MarginUtilizationTable({ className }: MarginUtilizationTableProp
       title="Margin Utilization Distribution"
       description={description}
       className={className}
-      data={plotData as PlotData[]}
+      data={plotData as Data[]}
       layout={layout}
       style={{ height: "350px" }}
       tooltip={tooltip}

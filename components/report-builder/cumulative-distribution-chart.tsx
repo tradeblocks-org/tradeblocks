@@ -7,7 +7,7 @@
  */
 
 import { useMemo } from "react";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { ChartWrapper } from "@/components/performance-charts/chart-wrapper";
 import { CumulativeDistributionAnalysis } from "@tradeblocks/lib";
 
@@ -30,7 +30,7 @@ export function CumulativeDistributionChart({
     }
 
     // Trade count trace (primary y-axis)
-    const tradeTrace: Partial<PlotData> = {
+    const tradeTrace: Data = {
       x: points.map((p) => p.threshold),
       y: points.map((p) => p.tradesAtOrAbovePercent),
       type: "scatter",
@@ -41,7 +41,7 @@ export function CumulativeDistributionChart({
     };
 
     // Win rate trace (secondary y-axis)
-    const winRateTrace: Partial<PlotData> = {
+    const winRateTrace: Data = {
       x: points.map((p) => p.threshold),
       y: points.map((p) => p.winRateAtOrAbove),
       type: "scatter",
@@ -53,7 +53,7 @@ export function CumulativeDistributionChart({
     };
 
     // Avg ROM trace
-    const romTrace: Partial<PlotData> = {
+    const romTrace: Data = {
       x: points.map((p) => p.threshold),
       y: points.map((p) => p.avgRomAtOrAbove),
       type: "scatter",
@@ -64,11 +64,11 @@ export function CumulativeDistributionChart({
       hovertemplate: `${fieldLabel}: %{x:.2f}<br>Avg ROM: %{y:.1f}%<extra></extra>`,
     };
 
-    const chartTraces: Partial<PlotData>[] = [tradeTrace, winRateTrace, romTrace];
+    const chartTraces: Data[] = [tradeTrace, winRateTrace, romTrace];
 
     // Optional P&L trace
     if (showPl) {
-      const plTrace: Partial<PlotData> = {
+      const plTrace: Data = {
         x: points.map((p) => p.threshold),
         y: points.map((p) => p.plAtOrAbovePercent),
         type: "scatter",
@@ -93,6 +93,7 @@ export function CumulativeDistributionChart({
       yaxis2: {
         title: { text: "Win Rate / ROM %" },
         overlaying: "y",
+        tickmode: "auto",
         side: "right",
         range: [-10, 105],
         zeroline: false,
@@ -166,7 +167,7 @@ export function CumulativeDistributionChart({
     <ChartWrapper
       title=""
       description=""
-      data={traces as PlotData[]}
+      data={traces as Data[]}
       layout={layout}
       className={className}
       tooltip={tooltip}

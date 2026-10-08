@@ -2,7 +2,7 @@
 
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 import { format, parseISO } from "date-fns";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { useMemo } from "react";
 import { ChartWrapper } from "./chart-wrapper";
 
@@ -70,7 +70,7 @@ export function GroupedLegOutcomesChart({ className }: GroupedLegOutcomesChartPr
       ];
     });
 
-    const scatterTrace: Partial<PlotData> = {
+    const scatterTrace: Data = {
       x: xValues,
       y: yValues,
       type: "scatter",

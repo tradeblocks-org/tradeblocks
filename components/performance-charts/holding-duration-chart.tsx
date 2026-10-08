@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { ChartWrapper } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 
@@ -31,7 +31,7 @@ export function HoldingDurationChart({ className }: HoldingDurationChartProps) {
     const range = maxDuration - minDuration;
     const binSize = range > 0 ? range / binCount : 1;
 
-    const histogramTrace: Partial<PlotData> = {
+    const histogramTrace: Data = {
       x: durations,
       type: "histogram",
       name: "Holding Duration",
@@ -71,7 +71,7 @@ export function HoldingDurationChart({ className }: HoldingDurationChartProps) {
       title="⏱️ Holding Periods"
       description="Distribution of time-in-trade"
       className={className}
-      data={plotData as PlotData[]}
+      data={plotData as Data[]}
       layout={layout}
       style={{ height: "320px" }}
       tooltip={tooltip}

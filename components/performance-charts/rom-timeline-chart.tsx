@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { ChartWrapper } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -31,7 +31,7 @@ export function ROMTimelineChart({ className }: ROMTimelineChartProps) {
     const dates = romTimeline.map((r) => r.date);
     const romValues = romTimeline.map((r) => r.rom);
 
-    const traces: Partial<PlotData>[] = [];
+    const traces: Data[] = [];
 
     // ROM scatter plot
     traces.push({

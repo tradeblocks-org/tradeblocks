@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { ChartWrapper } from "./chart-wrapper";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -24,7 +24,7 @@ export function ExitReasonChart({ className }: ExitReasonChartProps) {
     const sorted = [...data.exitReasonBreakdown].sort((a, b) => b.count - a.count);
     const reasons = sorted.map((item) => item.reason);
 
-    const countTrace: Partial<PlotData> = {
+    const countTrace: Data = {
       x: reasons,
       y: sorted.map((item) => item.count),
       type: "bar",
@@ -46,7 +46,7 @@ export function ExitReasonChart({ className }: ExitReasonChartProps) {
         ? "%{x}<br>Avg P/L: $%{y:.2f}<extra></extra>"
         : "%{x}<br>Avg P/L: %{y:.2f}%<extra></extra>";
 
-    const avgPlTrace: Partial<PlotData> = {
+    const avgPlTrace: Data = {
       x: reasons,
       y: metricValues,
       type: "scatter",
@@ -71,6 +71,7 @@ export function ExitReasonChart({ className }: ExitReasonChartProps) {
       yaxis2: {
         title: { text: yAxisTitle },
         overlaying: "y",
+        tickmode: "auto",
         side: "right",
       },
       barmode: "group",
@@ -120,7 +121,7 @@ export function ExitReasonChart({ className }: ExitReasonChartProps) {
       title="🚪 Exit Diagnostics"
       description="Counts and average P/L by closing reason"
       className={className}
-      data={plotData as PlotData[]}
+      data={plotData as Data[]}
       layout={layout}
       style={{ height: "320px" }}
       tooltip={tooltip}

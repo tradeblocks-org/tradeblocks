@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { usePerformanceStore } from "@tradeblocks/lib/stores";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { useMemo } from "react";
 import { ChartWrapper, createLineChartLayout } from "./chart-wrapper";
 
@@ -24,7 +24,7 @@ export function EquityCurveChart({ className }: EquityCurveChartProps) {
     const { equityScale, showDrawdownAreas } = chartSettings;
 
     // Main equity line
-    const equityTrace: Partial<PlotData> = {
+    const equityTrace: Data = {
       x: equityCurve.map((point) => point.date),
       y: equityCurve.map((point) => point.equity),
       type: "scatter",
@@ -43,7 +43,7 @@ export function EquityCurveChart({ className }: EquityCurveChartProps) {
     };
 
     // High water mark line
-    const highWaterMarkTrace: Partial<PlotData> = {
+    const highWaterMarkTrace: Data = {
       x: equityCurve.map((point) => point.date),
       y: equityCurve.map((point) => point.highWaterMark),
       type: "scatter",
@@ -124,7 +124,7 @@ export function EquityCurveChart({ className }: EquityCurveChartProps) {
 
       // Add legend entry for drawdown periods
       if (drawdownPeriods.length > 0) {
-        const legendTrace: Partial<PlotData> = {
+        const legendTrace: Data = {
           x: [],
           y: [],
           type: "scatter",

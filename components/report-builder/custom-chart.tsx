@@ -15,7 +15,7 @@ import {
   getTimingLabel,
   isDiscreteTimingField,
 } from "@tradeblocks/lib";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data, ScatterData } from "plotly.js";
 import { useMemo } from "react";
 
 interface CustomChartProps {
@@ -100,7 +100,7 @@ function buildCategoricalScatterTraces(
   yAxis: ChartAxisConfig,
   colorBy: ChartAxisConfig,
   sizeBy?: ChartAxisConfig,
-): Partial<PlotData>[] {
+): Data[] {
   // Separate trades into winners and losers
   const winners: { x: number; y: number; size: number; hover: string }[] = [];
   const losers: { x: number; y: number; size: number; hover: string }[] = [];
@@ -143,7 +143,7 @@ function buildCategoricalScatterTraces(
     }
   }
 
-  const traces: Partial<PlotData>[] = [];
+  const traces: Data[] = [];
 
   // Winners trace (green)
   if (winners.length > 0) {
@@ -189,7 +189,7 @@ function buildScatterTraces(
   yAxis: ChartAxisConfig,
   colorBy?: ChartAxisConfig,
   sizeBy?: ChartAxisConfig,
-): Partial<PlotData>[] {
+): Data[] {
   // Use categorical coloring for binary fields
   if (colorBy && colorBy.field !== "none" && isBinaryField(colorBy.field)) {
     return buildCategoricalScatterTraces(trades, xAxis, yAxis, colorBy, sizeBy);
@@ -238,7 +238,7 @@ function buildScatterTraces(
   }
 
   // Calculate color scale bounds for symmetry around zero
-  let colorConfig: Partial<PlotData["marker"]> = {
+  let colorConfig: Partial<ScatterData["marker"]> = {
     color: "rgb(59, 130, 246)", // Default blue
     size: markerSize,
   };
@@ -274,10 +274,7 @@ function buildScatterTraces(
 /**
  * Build traces for a histogram
  */
-function buildHistogramTraces(
-  trades: EnrichedTrade[],
-  xAxis: ChartAxisConfig,
-): Partial<PlotData>[] {
+function buildHistogramTraces(trades: EnrichedTrade[], xAxis: ChartAxisConfig): Data[] {
   const values: number[] = [];
 
   for (const trade of trades) {
@@ -306,7 +303,7 @@ function buildBarTraces(
   trades: EnrichedTrade[],
   xAxis: ChartAxisConfig,
   yAxis: ChartAxisConfig,
-): Partial<PlotData>[] {
+): Data[] {
   // Group trades by X value buckets
   const buckets = new Map<string, number[]>();
   const isTimeField = xAxis.field === "timeOfDayMinutes";
@@ -377,7 +374,7 @@ function buildLineTraces(
   trades: EnrichedTrade[],
   xAxis: ChartAxisConfig,
   yAxis: ChartAxisConfig,
-): Partial<PlotData>[] {
+): Data[] {
   const points: { x: number; y: number }[] = [];
 
   for (const trade of trades) {
@@ -427,7 +424,7 @@ function buildBoxTraces(
   xAxis: ChartAxisConfig,
   yAxis: ChartAxisConfig,
   bucketCount: number = 4,
-): Partial<PlotData>[] {
+): Data[] {
   // For box plots, we'll create N buckets of X and show Y distribution
   const xValues: number[] = [];
   const yValues: number[] = [];
@@ -526,8 +523,8 @@ function buildAdditionalAxisTraces(
   yAxis2?: ChartAxisConfig,
   yAxis3?: ChartAxisConfig,
   chartType?: ChartType,
-): Partial<PlotData>[] {
-  const traces: Partial<PlotData>[] = [];
+): Data[] {
+  const traces: Data[] = [];
   const isLine = chartType === "line";
   const xInfo = getFieldInfo(xAxis.field);
 
@@ -658,7 +655,7 @@ export function CustomChart({
       return { traces: [], layout: {} };
     }
 
-    let chartTraces: Partial<PlotData>[] = [];
+    let chartTraces: Data[] = [];
 
     // Check if we're using multi-axis (only for scatter/line)
     const hasMultiAxis =
@@ -863,6 +860,7 @@ export function CustomChart({
       (chartLayout as Record<string, unknown>).yaxis2 = {
         title: { text: y2Info?.label ?? yAxis2.field },
         overlaying: "y",
+        tickmode: "auto",
         side: "right",
         zeroline: true,
         zerolinewidth: 1,
@@ -882,6 +880,7 @@ export function CustomChart({
       (chartLayout as Record<string, unknown>).yaxis3 = {
         title: { text: y3Info?.label ?? yAxis3.field },
         overlaying: "y",
+        tickmode: "auto",
         side: "right",
         anchor: "free",
         position: 1,
@@ -908,7 +907,7 @@ export function CustomChart({
     <ChartWrapper
       title=""
       className={className}
-      data={traces as PlotData[]}
+      data={traces as Data[]}
       layout={layout}
       style={{ height: "400px" }}
     />

@@ -10,7 +10,7 @@ import {
   ScalingMode,
   CalendarViewMode,
 } from "@tradeblocks/lib/stores";
-import type { Layout, PlotData } from "plotly.js";
+import type { Layout, Data } from "plotly.js";
 import { useMemo } from "react";
 
 /**
@@ -294,7 +294,7 @@ export function EquityCurveChart() {
         : actualCurve;
 
   // Build traces
-  const traces: Partial<PlotData>[] = [];
+  const traces: Data[] = [];
 
   if (btCurve.length > 0) {
     traces.push({
