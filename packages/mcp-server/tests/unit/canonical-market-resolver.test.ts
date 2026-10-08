@@ -395,8 +395,12 @@ describe("producer-owned canonical market resolver", () => {
     ).rejects.toThrow(new RegExp(`sofr_rates input is stale after ${tail}`));
   });
 
-  it("publishes a September 2026 rate slice from a validated overlay while preserving historical identities", async () => {
-    const session = "2026-09-25";
+  it("publishes a rate slice beyond the bundle from a validated overlay while preserving historical identities", async () => {
+    const next = new Date(`${getEffectiveRateDate("SOFR")}T00:00:00Z`);
+    do {
+      next.setUTCDate(next.getUTCDate() + 1);
+    } while (!isXnysSessionDate(next.toISOString().slice(0, 10)));
+    const session = next.toISOString().slice(0, 10);
     const historical = await publishCanonicalRateSlice(
       partitions.objects,
       "treasury_rates",
