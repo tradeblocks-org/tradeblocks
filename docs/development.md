@@ -11,6 +11,10 @@ This document explains how TradeBlocks is structured and how to work effectively
 - **Formatting:** Prettier (`npm run format` to write, `npm run format:check` to verify).
 - **Testing:** Jest 30 with `ts-jest` and `fake-indexeddb` to emulate browser storage.
 
+Upgrade `react`, `react-dom`, `@types/react` and `@types/react-dom` together, and update the
+React type `overrides` in `package.json` with them. React requires `react` and `react-dom` at the
+exact same version.
+
 ### First-Time Setup
 
 1. `npm install`
