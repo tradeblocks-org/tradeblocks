@@ -7,4 +7,6 @@
 - Plotly 4 adds a cloud-upload button to the chart toolbar by default. It stays hidden: charts and trading data never leave the browser.
 - Plotly 4 removed its Chart Studio link option, `showLink`. It was already off here.
 
+The shared `components/plotly-config.ts` defaults apply both through ChartWrapper and to direct Plotly renders in risk simulation and position sizing.
+
 `@types/react-plotly.js` is removed; `plotly.js` 4 and `react-plotly.js` ship their own types. The MCP server and the library exports are unchanged.

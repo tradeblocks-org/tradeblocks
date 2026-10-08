@@ -2,6 +2,7 @@
 
 import { MultiSelect } from "@/components/multi-select";
 import { NoActiveBlock } from "@/components/no-active-block";
+import { plotlyBaseConfig } from "@/components/plotly-config";
 import {
   DrawdownDistributionChart,
   ReturnDistributionChart,
@@ -2176,7 +2177,7 @@ function EquityCurveChart({
       <Plot
         data={data}
         layout={layout}
-        config={{ displayModeBar: true, displaylogo: false, responsive: true }}
+        config={plotlyBaseConfig}
         style={{ width: "100%", height: "600px" }}
         useResizeHandler
       />

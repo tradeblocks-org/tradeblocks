@@ -129,9 +129,10 @@ Lucide v1 provides interface icons, not brand icons. Use the existing
 
 Plotly v4 and react-plotly.js provide bundled types; chart traces use `Data`
 directly. Chart Studio's `showLink` was removed with the feature and has no
-replacement. Overlay axes explicitly keep `tickmode: "auto"` and the chart
-wrapper keeps a 300 ms double-click delay to preserve pre-v4 interactions.
-The v4 default cloud-upload button stays hidden; charts and trading data remain local.
+replacement. Overlay axes explicitly keep `tickmode: "auto"`. Every Plotly
+render uses `components/plotly-config.ts`, directly or through ChartWrapper,
+to keep a 300 ms double-click delay and hide the v4 default cloud-upload button.
+Charts and trading data remain local.
 
 ## CSV Schema Reference
 
