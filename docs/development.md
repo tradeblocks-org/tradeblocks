@@ -118,6 +118,111 @@ The lib's walk-forward period endpoints are calendar-day keys, and the MCP
 response reports them unchanged as `YYYY-MM-DD`. Runtime timestamps elsewhere
 in the computation remain instants.
 
+#### Offline book replay and drawdown-budget search
+
+`@tradeblocks/lib` exports `replayBook(BookReplayInput)` and
+`searchBookAtDrawdown(DrawdownBudgetSearchInput)`. Both are pure calculations:
+they make no provider calls, read no profiles and add no market-data requirement.
+The replay accepts net dollars and buying power **per strategy contract**, an
+explicit session axis, member sizing rules and simultaneous member ordering.
+It sizes whole contracts from closed funds at each entry, closes before opens at
+an identical timestamp, and admits margin-respected groups by clipping quantity
+to available buying power. Allocation, fixed count and capital-per-contract
+sizing are distinct declarations; active capital-per-contract sizing requires
+`ignoreMarginRequirements: false` but bypasses buying-power admission by its
+sizing semantics. It still reserves buying power for later ordinary entries.
+Normalize a capped ignore-margin fill to an explicit fixed-count rule; zero
+allocation is not a substitute for removal.
+
+All member declarations are required: `sizing`, `removed`,
+`ignoreMarginRequirements`, `maxContractsPerTrade`, `maxAllocationAmount`,
+`minimumOne`, and `maxOpenTrades`. Null caps are uncapped; null concurrency means
+the rule is unavailable, not inferred. Minimum-one raises the requested quantity
+before hard caps and admission, so it cannot override those limits or insolvency.
+`reservationMode` selects one reservation retained until the last child closes
+(`sharedEntryGroup`) or summed child reservations released separately
+(`sumChildren`). `sharedEntryGroupBuyingPower: "equalPackageMaximum"` declares
+verified equal-package buying power; shared groups with unequal child buying
+power are refused. Supply unambiguous `entryGroupId`s within each member and
+`simultaneousOrder` containing every member exactly once. Times are zero-padded
+`HH:mm:ss` with optional fractional seconds; dates are market-calendar keys,
+not timestamps. Every in-window entry and close must lie on the supplied axis.
+An endpoint close beyond that axis remains open; no terminal mark is invented.
+
+The result's `basis` is `offline_closed_equity`. `startingEquity` is the seed,
+and `equity` contains one after-events closed-funds observation per session.
+Drawdown episodes reuse the dated-equity calculator, including the starting
+seed. Intraday nonpositive funds make the whole replay insolvent even if it
+recovers before the daily observation: drawdown is then null and search refuses
+to rank that path. Member summaries count entry groups and one quantity per
+group, not one independently sized position per child. The census separates
+ignored input rows, simulated-zero groups, executed child closes and endpoint
+open positions. Ignored rows affect neither opportunities nor realized P/L.
+`liquidityThresholdContracts` is an explicit count warning, not a fill-quality
+estimate. Net per-contract P/L already includes fees, which are never deducted
+again.
+
+Optional `marks` is `{ mode: "child", values: [{ tradeId, date,
+netOpenPlPerContract }] }` or `{ mode: "entryGroup", values: [{ memberId,
+entryGroupId, date, netOpenPlPerContract }] }`. These are cumulative **net open**
+P/L dollars per strategy contract, not incremental daily returns. A group mark
+is the aggregate of its remaining children, applied once. Every admitted open
+position needs a finite mark on every observed session; a gap throws a named
+`missing_mark_coverage` error, never a zero or a carried-forward fill. Duplicate
+keys and unknown identities are refused. `marked` adds a separate result with
+`basis: "offline_marked_equity"`: closed funds plus quantity times each supplied
+open mark, drawdown from the existing calculator, and explicit marked insolvency.
+Sizing and realized return still use closed funds. Without marks, no marked
+result is returned and replay behavior is unchanged. Ignored rows remain fully
+excluded, including their open marks; callers whose producer marks ignored open
+positions must disclose that discrepancy. Marks do not supply missing
+opportunities or verify producer parity.
+
+Search maximizes ending realized `returnPct` subject to drawdown at most
+`targetDrawdownPct - calibrationMarginPct`: it uses the marked drawdown when
+complete marks are supplied, otherwise the closed-equity drawdown, and reports
+that risk basis. A nonpositive marked path is never ranked.
+Declare bounds, initial vectors, descending or other finite `steps`, weight and
+allocation decimal precision, and `maxEvaluations`. A zero weight means true
+removal. Positive weights scale allocation, fixed counts, dollar caps and
+whole-number contract caps; positive quantities rounding to zero are reported
+separately. CPC division requires `weightScaling: "capitalPerContractInverse"`;
+`"allocationAndContracts"` refuses CPC inputs. Each optimization records unique
+normalized economic evaluations, `k`, budget/step termination, the best-observed
+feasible vector and the near-optimal set and weight ranges. Ties retain the
+first deterministic evaluation. The robust vector is the highest-return
+evaluated feasible vector also meeting `robust.maxDrawdownPct`, including the
+declared shrinkage grid; its return cost is in percentage points. No feasible
+candidate, no robust candidate and unusable calibration produce named refusals,
+never a least-bad winner. This bounded coordinate search does **not** certify a
+global optimum.
+
+`dropOne` reoptimizes with each member constrained to removal, with the same
+per-optimization budget. Stability uses the existing seeded stationary-block
+resampler on joint session indices. It transplants entry-day cohorts, preserving
+intraday times and each child's source-session close offset, and extends an
+artificial ordinal session axis until carried positions close. It does **not**
+reconstruct source market paths, authentic holding-aware block boundaries,
+unobserved attempted entries or open-position marks. Missing child-close offsets
+make stability explicitly unavailable. Bootstrap and sensitivity panels report
+every replicate's search, carried-row count, feasible-winner fraction,
+member retention/top-region fractions and observed min/max weight intervals
+(not confidence intervals). The top region begins at
+`min + (max - min) * stability.topRegionFraction`; zero is never retained.
+`totalEvaluations` includes the main search, drop-one searches and bootstrap
+searches, while each nested `k` has its own declared budget.
+Supplied marks are transplanted with the same entry-relative source-session
+offsets. The transformed marks retain the source economics; this is not a
+simulation of a different underlying market path.
+
+Closed-equity screening cannot certify a marked drawdown budget. Supply a
+separately assessed calibration margin and `calibrationUsable`; false returns
+`calibration_unusable` with no winner or evaluations. A collection of executed
+tapes is not a census of attempted opportunities: pooled alternative entries
+can be mutually incompatible. Neither search nor resampling can resolve missing
+eligibility rules. Validate shortlisted mixes independently before relying on
+their economics or risk.
+
 ### UI Components
 
 - `components/ui/` – shadcn/ui primitives configured with Tailwind CSS.
