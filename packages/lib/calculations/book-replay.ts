@@ -94,6 +94,7 @@ export interface BookReplayResult {
     eligibleRows: number;
     entryGroups: number;
     executedGroups: number;
+    executedIgnoredOnlyGroups: number;
     zeroGroups: number;
     closedRows: number;
     openRows: number;
@@ -178,6 +179,7 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
   }
   type Group = typeof groups extends Map<string, infer G> ? G : never;
   const activeGroups = new Set<Group>();
+  let executedIgnoredOnlyGroups = 0;
   const markValues = new Map<string, number>();
   if (input.marks?.mode === "child")
     for (const mark of input.marks.values)
@@ -289,6 +291,9 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
         summary.maxContractsPerTrade = Math.max(summary.maxContractsPerTrade, quantity);
         summary.contractsPerEntry.push({ entryGroupId: group.entryGroupId, contracts: quantity });
         const ignoredChildren = group.children.reduce((n, child) => n + Number(child.ignored), 0);
+        executedIgnoredOnlyGroups += Number(
+          quantity > 0 && ignoredChildren === group.children.length,
+        );
         if (ignoredChildren > 0) {
           ignoredPositions.entryGroups++;
           ignoredPositions.executedGroups += Number(quantity > 0);
@@ -394,6 +399,7 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       eligibleRows: input.trades.filter((t) => !t.ignored).length,
       entryGroups: groups.size,
       executedGroups: members.reduce((n, m) => n + m.executedGroups, 0),
+      executedIgnoredOnlyGroups,
       zeroGroups: members.reduce((n, m) => n + m.zeroGroups, 0),
       closedRows,
       openRows: open.reduce((n, g) => n + g.remaining, 0),

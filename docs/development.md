@@ -194,6 +194,8 @@ closes, while the group remains open for marks and concurrency until all its
 children close. Shared counted children must declare equal package buying
 power, as in normal replay. `census.ignoredPositions` separately reports ignored
 entry/executed/zero groups and executed/closed/open rows and open groups.
+`census.executedIgnoredOnlyGroups` counts executed groups whose children are
+all ignored, separately from groups containing any ignored children.
 Both buying-power choices and mixed-child treatment are declared hypotheses:
 the available native tapes do not identify reservation behavior or witness
 mixed ignored/included groups. Calibrate and report both hypotheses rather
@@ -221,10 +223,12 @@ candidate, no robust candidate and unusable calibration produce named refusals,
 with null `best`, `robust` and `robustReturnCostPct`, never a least-bad winner.
 This bounded coordinate search does **not** certify a global optimum.
 The all-zero vector is retained only as a search origin, never as a best or
-robust answer. Feasibility requires at least one executed entry group. Positive
-weights rounding entirely to zero contracts are also empty answers, excluded
+robust answer. Feasibility requires at least one executed entry group with an
+included (non-ignored) child; mixed groups qualify. Positive weights rounding
+entirely to zero contracts, or executing only ignored-only groups, are excluded
 from selection but retained in `evaluations` and `k`, labelled with
-`executedGroups: 0`.
+`executedGroups` and `executedIgnoredOnlyGroups`. If none qualifies, search
+refuses with `no_feasible_candidate` and null best/robust answers.
 
 `dropOne` reoptimizes with each member constrained to removal, with the same
 per-optimization budget. Stability uses the existing seeded stationary-block

@@ -33,6 +33,7 @@ export interface BookSearchEvaluation {
   insolvent: boolean;
   feasible: boolean;
   executedGroups: number;
+  executedIgnoredOnlyGroups: number;
   roundedToZero: string[];
 }
 export interface BookSearchStability {
@@ -147,10 +148,11 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
       weights,
       returnPct: replay.returnPct,
       executedGroups: replay.census.executedGroups,
+      executedIgnoredOnlyGroups: replay.census.executedIgnoredOnlyGroups,
       maxDrawdownPct: risk.maxDrawdownPct,
       insolvent: replay.insolvent || risk.insolvent,
       feasible:
-        replay.census.executedGroups > 0 &&
+        replay.census.executedGroups - replay.census.executedIgnoredOnlyGroups > 0 &&
         !replay.insolvent &&
         !risk.insolvent &&
         risk.maxDrawdownPct !== null &&

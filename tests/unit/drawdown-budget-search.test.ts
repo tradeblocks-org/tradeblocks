@@ -346,6 +346,7 @@ it("preserves mark-only ignored cohorts and their marks in search and seeded sta
   value.replay.ignoredBuyingPower = "reserve";
   value.replay.trades = [
     { ...value.replay.trades[0], dateClosed: "2025-01-03", ignored: true, netPlPerContract: 999 },
+    { ...value.replay.trades[0], id: "included", entryGroupId: "included", netPlPerContract: 0 },
   ];
   value.replay.marks = {
     mode: "child",
@@ -355,7 +356,7 @@ it("preserves mark-only ignored cohorts and their marks in search and seeded sta
   const result = searchBookAtDrawdown(value);
   expect(result.best).toMatchObject({
     weights: { a: 0.5 },
-    executedGroups: 1,
+    executedGroups: 2,
     returnPct: 0,
     maxDrawdownPct: 10,
   });
@@ -367,10 +368,52 @@ it("preserves mark-only ignored cohorts and their marks in search and seeded sta
         (r.search.best?.executedGroups ?? 0) > 0,
     ),
   ).toBe(true);
+  value.replay.trades[1].entryGroupId = "loss";
+  expect(searchBookAtDrawdown(value).best).toMatchObject({
+    executedGroups: 1,
+    executedIgnoredOnlyGroups: 0,
+    feasible: true,
+  });
   value.replay.trades[0].dateClosed = "2025-01-06";
   value.replay.marks.values.push({ tradeId: "loss", date: "2025-01-03", netOpenPlPerContract: 0 });
   expect(searchBookAtDrawdown(value).stability).toMatchObject({
     status: "unavailable",
     reason: "child_close_offset_unavailable",
   });
+});
+
+it("refuses vectors executing only ignored positions when included buying power rounds allocation to zero", () => {
+  const value = input();
+  value.replay.ignoredRows = "markOnly";
+  value.replay.ignoredBuyingPower = "exclude";
+  value.replay.members.a.sizing = { mode: "allocation", allocationPercentage: 10 };
+  value.replay.trades[0].buyingPowerPerContract = 5000;
+  value.replay.trades[1] = {
+    ...value.replay.trades[1],
+    dateOpened: "2025-01-02",
+    ignored: true,
+    buyingPowerPerContract: 50,
+  };
+  value.replay.marks = {
+    mode: "child",
+    values: [{ tradeId: "win", date: "2025-01-02", netOpenPlPerContract: -1 }],
+  };
+  const result = searchBookAtDrawdown(value);
+  expect(result).toMatchObject({
+    status: "refused",
+    reason: "no_feasible_candidate",
+    best: null,
+    robust: null,
+    robustReturnCostPct: null,
+  });
+  expect(result.k).toBe(3);
+  expect(result.evaluations).toHaveLength(3);
+  expect(result.evaluations.find((e) => e.weights.a === 1)).toMatchObject({
+    executedGroups: 1,
+    executedIgnoredOnlyGroups: 1,
+    returnPct: 0,
+    maxDrawdownPct: 0.2,
+    feasible: false,
+  });
+  expect(result.evaluations.every((e) => !e.feasible)).toBe(true);
 });
