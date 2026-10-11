@@ -192,7 +192,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     const coordinateBudget = input.maxEvaluations - robustReserve;
     if (coordinateBudget < new Set(preparedStarts.map((s) => s.key)).size)
       throw new RangeError(
-        "Invalid book search: maxEvaluations cannot cover initial vectors and robust shrinkage grid",
+        "Invalid drawdown search: maxEvaluations cannot cover initial vectors and robust shrinkage grid",
       );
     const starts = preparedStarts.map((start) => evaluate(start, coordinateBudget));
     for (const start of starts) {

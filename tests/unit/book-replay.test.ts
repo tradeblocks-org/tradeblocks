@@ -658,3 +658,53 @@ it("sizes summed child buying power and dollar caps using the same package cost 
   value.reservationMode = "sharedEntryGroup";
   expect(replayBook(value).members.map((m) => m.totalContracts)).toEqual([50, 50]);
 });
+
+it.each([
+  ["a-loss", "z-win"],
+  ["z-loss", "a-win"],
+])(
+  "settles tied closes atomically before opens regardless of child IDs %s / %s",
+  (lossId, winId) => {
+    const value = input();
+    value.startingFunds = 100;
+    value.members.a.sizing = { mode: "fixed", contracts: 1 };
+    value.trades = [
+      { ...value.trades[0], id: lossId, netPlPerContract: -150 },
+      { ...value.trades[0], id: winId, netPlPerContract: 150 },
+      {
+        ...value.trades[0],
+        id: "next",
+        entryGroupId: "next",
+        dateOpened: "2025-01-03",
+        timeOpened: "16:00:00",
+        dateClosed: "2025-01-06",
+      },
+    ];
+    value.marks = {
+      mode: "entryGroup",
+      values: [
+        { memberId: "a", entryGroupId: "g", date: "2025-01-02", netOpenPlPerContract: 0 },
+        { memberId: "a", entryGroupId: "next", date: "2025-01-03", netOpenPlPerContract: 0 },
+      ],
+    };
+    const result = replayBook(value);
+    expect(result).toMatchObject({
+      status: "ok",
+      insolvent: false,
+      endingFunds: 100,
+      maxDrawdownPct: 0,
+    });
+    expect(result.members[0].contractsPerEntry).toEqual([
+      { entryGroupId: "g", contracts: 1 },
+      { entryGroupId: "next", contracts: 1 },
+    ]);
+    expect(result.marked).toMatchObject({
+      insolvent: false,
+      maxDrawdownPct: 0,
+      equity: [
+        { date: "2025-01-02", equity: 100 },
+        { date: "2025-01-03", equity: 100 },
+      ],
+    });
+  },
+);

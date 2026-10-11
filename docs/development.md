@@ -125,8 +125,10 @@ in the computation remain instants.
 they make no provider calls, read no profiles and add no market-data requirement.
 The replay accepts net dollars and buying power **per strategy contract**, an
 explicit session axis, member sizing rules and simultaneous member ordering.
-It sizes whole contracts from closed funds at each entry, closes before opens at
-an identical timestamp, and admits margin-respected groups by clipping quantity
+It sizes whole contracts from closed funds at each entry. All close cash flows
+at an identical timestamp settle atomically before insolvency is tested, so
+child IDs cannot create transient false insolvency. Opens at that timestamp
+follow those closes. It admits margin-respected groups by clipping quantity
 to available buying power. Allocation, fixed count and capital-per-contract
 sizing are distinct declarations; active capital-per-contract sizing requires
 `ignoreMarginRequirements: false` but bypasses buying-power admission by its

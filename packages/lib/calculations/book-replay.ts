@@ -244,6 +244,7 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
   const equity: DatedEquity[] = [];
   let cursor = 0;
   for (const date of input.dates) {
+    let closingCashFlow = 0;
     while (cursor < events.length && events[cursor].date <= date) {
       const event = events[cursor++];
       const group = event.group;
@@ -300,9 +301,15 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       } else {
         const child = event.child!;
         const pl = child.ignored ? 0 : group.quantity * child.netPlPerContract;
-        funds += pl;
+        closingCashFlow += pl;
         summary.netPl += pl;
-        insolvent ||= funds <= 0 || !Number.isFinite(funds);
+        const next = events[cursor];
+        // Settle all closes at this timestamp before judging funds or admitting opens.
+        if (next?.kind !== "close" || next.date !== event.date || next.time !== event.time) {
+          funds += closingCashFlow;
+          closingCashFlow = 0;
+          insolvent ||= funds <= 0 || !Number.isFinite(funds);
+        }
         group.remaining--;
         const countsBuyingPower = !child.ignored || countIgnoredBuyingPower;
         if (countsBuyingPower) group.remainingBuyingPowerChildren--;

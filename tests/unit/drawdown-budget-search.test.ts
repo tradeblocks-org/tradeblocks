@@ -434,5 +434,7 @@ it("reserves the declared robust shrinkage grid before coordinate exploration sp
   value.robust.shrinkageFactors = [1, 0.5, 0.5, 0];
   expect(searchBookAtDrawdown(value).evaluations).toEqual(result.evaluations);
   value.maxEvaluations = 2;
-  expect(() => searchBookAtDrawdown(value)).toThrow(/maxEvaluations.*robust/);
+  expect(() => searchBookAtDrawdown(value)).toThrow(
+    /^Invalid drawdown search: maxEvaluations.*robust/,
+  );
 });
