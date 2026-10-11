@@ -220,7 +220,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     }
     coordinateBudgetExhausted = evaluations.length >= coordinateBudget;
   }
-  const best = evaluations.reduce<BookSearchEvaluation | null>(
+  const winner = evaluations.reduce<BookSearchEvaluation | null>(
     (winner, candidate) =>
       candidate.feasible && (!winner || candidate.returnPct > winner.returnPct)
         ? candidate
@@ -229,13 +229,16 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
   );
   let robust: BookSearchEvaluation | null = null;
   let robustBudgetExhausted = false;
-  if (best) {
-    const base: BookSearchEvaluation = best;
+  let shrinkageOutperformedBest = false;
+  if (winner) {
+    const base: BookSearchEvaluation = winner;
     for (const factor of input.robust.shrinkageFactors) {
       const candidate = evaluate(
         prepare(Object.fromEntries(ids.map((id) => [id, base.weights[id] * factor]))),
       );
       robustBudgetExhausted ||= candidate === null;
+      shrinkageOutperformedBest ||=
+        candidate !== null && candidate.feasible && candidate.returnPct > base.returnPct;
     }
     for (const candidate of evaluations)
       if (
@@ -245,13 +248,6 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
       )
         robust = candidate;
   }
-  const winner = evaluations.reduce<BookSearchEvaluation | null>(
-    (winner, candidate) =>
-      candidate.feasible && (!winner || candidate.returnPct > winner.returnPct)
-        ? candidate
-        : winner,
-    null,
-  );
   const nearOptimal = winner
     ? evaluations.filter(
         (e) =>
@@ -337,6 +333,11 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     warnings: [
       "Best observed in a bounded search, not a global optimum. Return objective remains closed equity; missing opportunities are not synthesized.",
       "Stability resamples entry-day cohorts with child session offsets, not source market paths or authentic holding-aware block boundaries.",
+      ...(shrinkageOutperformedBest
+        ? [
+            "A shrinkage-only evaluation outperformed the coordinate-search best; reported best is unchanged.",
+          ]
+        : []),
     ],
   };
 }

@@ -236,10 +236,16 @@ whole-number contract caps; positive quantities rounding to zero are reported
 separately. CPC division requires `weightScaling: "capitalPerContractInverse"`;
 `"allocationAndContracts"` refuses CPC inputs. Each optimization records unique
 normalized economic evaluations, `k`, budget/step termination, the best-observed
-feasible vector and the near-optimal set and weight ranges. Ties retain the
-first deterministic evaluation. The robust vector is the highest-return
-evaluated feasible vector also meeting `robust.maxDrawdownPct`, including the
-declared shrinkage grid; its return cost is in percentage points. No feasible
+feasible **coordinate-search** vector and the near-optimal set and weight
+ranges. Ties retain the first deterministic evaluation. The robust vector is
+the highest-return evaluated feasible vector also meeting `robust.maxDrawdownPct`,
+including the declared shrinkage grid applied to that coordinate best.
+Shrinkage-only evaluations cannot replace `best`; they remain in evaluations
+and `k`, and remain eligible for the near-optimal set. If nonlinear capacity
+makes a shrinkage-only vector outperform `best`, an explicit warning records
+that result without silently swapping the grid's base. The robust return cost
+is best minus robust return in percentage points; it can be negative in this
+case. No feasible
 candidate, no robust candidate and unusable calibration produce named refusals,
 with null `best`, `robust` and `robustReturnCostPct`, never a least-bad winner.
 The evaluation budget reserves one slot per distinct shrinkage factor other

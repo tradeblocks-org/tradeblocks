@@ -461,3 +461,44 @@ it("preserves explicit same-member group precedence while rekeying bootstrap ent
     ]);
   }
 });
+
+it("retains the coordinate best and warns when nonlinear capacity makes a shrinkage-only vector outperform it", () => {
+  const value = input();
+  value.replay.members.a.sizing = { mode: "fixed", contracts: 8 };
+  value.replay.members.b = { ...value.replay.members.a };
+  value.replay.simultaneousOrder = ["a", "b"];
+  value.replay.trades = [
+    { ...value.replay.trades[0], dateClosed: "2025-01-03", netPlPerContract: -10 },
+    {
+      ...value.replay.trades[1],
+      memberId: "b",
+      dateOpened: "2025-01-02",
+      timeOpened: "10:00:00",
+      netPlPerContract: 100,
+    },
+  ];
+  value.weightBounds.b = { min: 0, max: 1 };
+  value.initialWeights = [{ a: 1, b: 1 }];
+  value.steps = [1];
+  value.maxEvaluations = 3;
+  const result = searchBookAtDrawdown(value);
+  expect(result.status).toBe("ok");
+  expect(result.best?.weights).toEqual({ a: 1, b: 1 });
+  expect(result.best?.returnPct).toBeCloseTo(12, 12);
+  expect(result.robust?.weights).toEqual({ a: 0.5, b: 0.5 });
+  expect(result.robust?.returnPct).toBeCloseTo(36, 12);
+  expect(result.robustReturnCostPct).toBeCloseTo(-24, 12);
+  expect(result.k).toBe(3);
+  expect(result.evaluations.map((e) => e.weights)).toEqual([
+    { a: 0, b: 0 },
+    { a: 1, b: 1 },
+    { a: 0.5, b: 0.5 },
+  ]);
+  expect(result.nearOptimal.map((e) => e.weights)).toEqual([
+    { a: 1, b: 1 },
+    { a: 0.5, b: 0.5 },
+  ]);
+  expect(result.warnings.some((w) => /shrinkage.*outperformed.*best.*unchanged/i.test(w))).toBe(
+    true,
+  );
+});
