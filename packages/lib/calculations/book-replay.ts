@@ -51,7 +51,7 @@ export interface BookMarkedResult {
   maxDrawdownEpisode: DrawdownEpisode | null;
   insolvent: boolean;
 }
-export interface BookReplayInput {
+interface BookReplayBaseInput {
   startingFunds: number;
   dates: string[];
   trades: BookTrade[];
@@ -62,6 +62,11 @@ export interface BookReplayInput {
   liquidityThresholdContracts: number | null;
   marks?: BookMarks;
 }
+export type BookReplayInput = BookReplayBaseInput &
+  (
+    | { ignoredRows?: "exclude"; ignoredBuyingPower?: never }
+    | { ignoredRows: "markOnly"; ignoredBuyingPower: "exclude" | "reserve" }
+  );
 export interface BookMemberResult {
   memberId: string;
   entryGroups: number;
@@ -93,17 +98,37 @@ export interface BookReplayResult {
     closedRows: number;
     openRows: number;
     openGroups: number;
+    ignoredPositions?: {
+      entryGroups: number;
+      executedGroups: number;
+      zeroGroups: number;
+      executedRows: number;
+      closedRows: number;
+      openRows: number;
+      openGroups: number;
+    };
   };
   warnings: string[];
   insolvent: boolean;
   liquidityFlag: boolean;
-  declarations: BookReplayInput;
+  declarations: BookReplayInput & { ignoredRows: "exclude" | "markOnly" };
   marked?: BookMarkedResult;
 }
 
 /** Closed-equity replay, not a marked account path or a census of attempted entries. */
 export function replayBook(input: BookReplayInput): BookReplayResult {
   validateReplay(input);
+  const markOnly = input.ignoredRows === "markOnly";
+  const countIgnoredBuyingPower = input.ignoredBuyingPower === "reserve";
+  const ignoredPositions = {
+    entryGroups: 0,
+    executedGroups: 0,
+    zeroGroups: 0,
+    executedRows: 0,
+    closedRows: 0,
+    openRows: 0,
+    openGroups: 0,
+  };
   let funds = input.startingFunds;
   let reserved = 0;
   let insolvent = false;
@@ -127,11 +152,12 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       children: BookTrade[];
       quantity: number;
       remaining: number;
+      remainingBuyingPowerChildren: number;
       bp: number;
     }
   >();
   for (const trade of input.trades) {
-    if (trade.ignored) continue;
+    if (trade.ignored && !markOnly) continue;
     const key = JSON.stringify([trade.memberId, trade.entryGroupId]);
     let group = groups.get(key);
     if (!group) {
@@ -141,12 +167,14 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
         children: [],
         quantity: 0,
         remaining: 0,
+        remainingBuyingPowerChildren: 0,
         bp: 0,
       };
       groups.set(key, group);
     }
     group.children.push(trade);
     group.remaining++;
+    if (!trade.ignored || countIgnoredBuyingPower) group.remainingBuyingPowerChildren++;
   }
   type Group = typeof groups extends Map<string, infer G> ? G : never;
   const activeGroups = new Set<Group>();
@@ -173,8 +201,16 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
     const first = group.children[0];
     group.bp =
       input.reservationMode === "sharedEntryGroup"
-        ? group.children.reduce((bp, t) => Math.max(bp, t.buyingPowerPerContract), 0)
-        : group.children.reduce((sum, t) => sum + t.buyingPowerPerContract, 0);
+        ? group.children.reduce(
+            (bp, t) =>
+              !t.ignored || countIgnoredBuyingPower ? Math.max(bp, t.buyingPowerPerContract) : bp,
+            0,
+          )
+        : group.children.reduce(
+            (sum, t) =>
+              !t.ignored || countIgnoredBuyingPower ? sum + t.buyingPowerPerContract : sum,
+            0,
+          );
     events.push({
       date: first.dateOpened,
       time: clockSeconds(first.timeOpened),
@@ -212,7 +248,11 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       const summary = summaries[group.memberId];
       const member = input.members[group.memberId];
       if (event.kind === "open") {
-        const bp = group.children[0].buyingPowerPerContract;
+        // An all-ignored excluded group still needs unit economics for sizing, not capacity.
+        const bp = (
+          group.children.find((child) => !child.ignored || countIgnoredBuyingPower) ??
+          group.children[0]
+        ).buyingPowerPerContract;
         let quantity =
           member.sizing.mode === "allocation"
             ? Math.floor((Math.max(0, funds) * member.sizing.allocationPercentage) / 100 / bp)
@@ -224,7 +264,11 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
           quantity = Math.min(quantity, member.maxContractsPerTrade);
         if (member.maxAllocationAmount !== null)
           quantity = Math.min(quantity, Math.floor(member.maxAllocationAmount / bp));
-        if (!member.ignoreMarginRequirements && member.sizing.mode !== "capitalPerContract")
+        if (
+          group.bp > 0 &&
+          !member.ignoreMarginRequirements &&
+          member.sizing.mode !== "capitalPerContract"
+        )
           quantity = Math.min(quantity, Math.floor(Math.max(0, funds - reserved) / group.bp));
         if (
           member.removed ||
@@ -244,18 +288,31 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
         summary.totalContracts += quantity;
         summary.maxContractsPerTrade = Math.max(summary.maxContractsPerTrade, quantity);
         summary.contractsPerEntry.push({ entryGroupId: group.entryGroupId, contracts: quantity });
+        const ignoredChildren = group.children.reduce((n, child) => n + Number(child.ignored), 0);
+        if (ignoredChildren > 0) {
+          ignoredPositions.entryGroups++;
+          ignoredPositions.executedGroups += Number(quantity > 0);
+          ignoredPositions.zeroGroups += Number(quantity === 0);
+          if (quantity > 0) ignoredPositions.executedRows += ignoredChildren;
+        }
       } else {
         const child = event.child!;
-        const pl = group.quantity * child.netPlPerContract;
+        const pl = child.ignored ? 0 : group.quantity * child.netPlPerContract;
         funds += pl;
         summary.netPl += pl;
         insolvent ||= funds <= 0 || !Number.isFinite(funds);
         group.remaining--;
+        const countsBuyingPower = !child.ignored || countIgnoredBuyingPower;
+        if (countsBuyingPower) group.remainingBuyingPowerChildren--;
         if (group.quantity > 0) {
           closedRows++;
-          if (input.reservationMode === "sumChildren")
-            reserved -= group.quantity * child.buyingPowerPerContract;
-          else if (group.remaining === 0) reserved -= group.quantity * group.bp;
+          if (child.ignored) ignoredPositions.closedRows++;
+          if (countsBuyingPower) {
+            if (input.reservationMode === "sumChildren")
+              reserved -= group.quantity * child.buyingPowerPerContract;
+            else if (group.remainingBuyingPowerChildren === 0)
+              reserved -= group.quantity * group.bp;
+          }
           if (group.remaining === 0) {
             openCounts[group.memberId]--;
             activeGroups.delete(group);
@@ -293,6 +350,15 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
     null,
   );
   const open = [...groups.values()].filter((g) => g.quantity > 0 && g.remaining > 0);
+  if (markOnly)
+    for (const group of open) {
+      const ignoredOpenRows = group.children.reduce(
+        (n, child) => n + Number(child.ignored && child.dateClosed > input.dates.at(-1)!),
+        0,
+      );
+      ignoredPositions.openRows += ignoredOpenRows;
+      ignoredPositions.openGroups += Number(ignoredOpenRows > 0);
+    }
   const markedEpisodes =
     input.marks && !markedInsolvent && !insolvent
       ? drawdownEpisodesFromEquity([startingEquity, ...markedEquity])
@@ -332,9 +398,15 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       closedRows,
       openRows: open.reduce((n, g) => n + g.remaining, 0),
       openGroups: open.length,
+      ...(markOnly ? { ignoredPositions } : {}),
     },
     warnings: [
       "Closed equity excludes open-position marks and unobserved opportunities.",
+      ...(markOnly
+        ? [
+            `Ignored buying-power ${input.ignoredBuyingPower} is a declared hypothesis, not verified native behavior; mixed-child treatment is hypothetical.`,
+          ]
+        : []),
       ...members
         .filter((m) => input.members[m.memberId].maxOpenTrades === null)
         .map((m) => `maxOpenTrades unavailable: ${m.memberId}`),
@@ -343,7 +415,7 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
     liquidityFlag:
       input.liquidityThresholdContracts !== null &&
       members.some((m) => m.maxContractsPerTrade > input.liquidityThresholdContracts!),
-    declarations: input,
+    declarations: input.ignoredRows === "markOnly" ? input : { ...input, ignoredRows: "exclude" },
     ...(marked ? { marked } : {}),
   };
 }
@@ -352,6 +424,16 @@ function validateReplay(input: BookReplayInput): void {
   const fail = (name: string): never => {
     throw new RangeError(`Invalid book replay: ${name}`);
   };
+  if (
+    input.ignoredRows !== undefined &&
+    input.ignoredRows !== "exclude" &&
+    input.ignoredRows !== "markOnly"
+  )
+    fail("ignoredRows");
+  if (input.ignoredRows === "markOnly") {
+    if (input.ignoredBuyingPower !== "exclude" && input.ignoredBuyingPower !== "reserve")
+      fail("ignoredBuyingPower required with markOnly");
+  } else if (input.ignoredBuyingPower !== undefined) fail("ignoredBuyingPower requires markOnly");
   const positive = (n: number) => Number.isFinite(n) && n > 0;
   const integer = (n: number) => Number.isSafeInteger(n) && n >= 0;
   const dateValid = (date: string) => {
@@ -417,6 +499,7 @@ function validateReplay(input: BookReplayInput): void {
   const tradeIds = new Set<string>();
   const groups = new Map<string, BookTrade>();
   const knownGroups = new Set<string>();
+  const groupBuyingPower = new Map<string, number>();
   for (const trade of input.trades) {
     if (
       !trade.id ||
@@ -428,7 +511,7 @@ function validateReplay(input: BookReplayInput): void {
       fail("trade identity");
     tradeIds.add(trade.id);
     knownGroups.add(JSON.stringify([trade.memberId, trade.entryGroupId]));
-    if (trade.ignored) continue;
+    if (trade.ignored && input.ignoredRows !== "markOnly") continue;
     if (
       !dateValid(trade.dateOpened) ||
       !dateValid(trade.dateClosed) ||
@@ -454,11 +537,17 @@ function validateReplay(input: BookReplayInput): void {
     if (
       first &&
       (first.dateOpened !== trade.dateOpened ||
-        clockSeconds(first.timeOpened) !== clockSeconds(trade.timeOpened) ||
-        (input.reservationMode === "sharedEntryGroup" &&
-          first.buyingPowerPerContract !== trade.buyingPowerPerContract))
+        clockSeconds(first.timeOpened) !== clockSeconds(trade.timeOpened))
     )
       fail("ambiguous entry group or unequal package BP");
+    if (
+      input.reservationMode === "sharedEntryGroup" &&
+      (!trade.ignored || input.ignoredBuyingPower === "reserve")
+    ) {
+      const bp = groupBuyingPower.get(key);
+      if (bp !== undefined && bp !== trade.buyingPowerPerContract) fail("unequal package BP");
+      groupBuyingPower.set(key, trade.buyingPowerPerContract);
+    }
     groups.set(key, trade);
   }
   if (input.marks) {

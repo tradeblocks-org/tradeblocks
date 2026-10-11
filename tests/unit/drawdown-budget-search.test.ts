@@ -339,3 +339,38 @@ it("counts bootstrap replicates that activate uncovered positions as unavailable
   value.replay.trades[0].buyingPowerPerContract = 0;
   expect(() => searchBookAtDrawdown(value)).toThrow(/unit economics/);
 });
+
+it("preserves mark-only ignored cohorts and their marks in search and seeded stability", () => {
+  const value = input();
+  value.replay.ignoredRows = "markOnly";
+  value.replay.ignoredBuyingPower = "reserve";
+  value.replay.trades = [
+    { ...value.replay.trades[0], dateClosed: "2025-01-03", ignored: true, netPlPerContract: 999 },
+  ];
+  value.replay.marks = {
+    mode: "child",
+    values: [{ tradeId: "loss", date: "2025-01-02", netOpenPlPerContract: -100 }],
+  };
+  value.stability.replicates = 2;
+  const result = searchBookAtDrawdown(value);
+  expect(result.best).toMatchObject({
+    weights: { a: 0.5 },
+    executedGroups: 1,
+    returnPct: 0,
+    maxDrawdownPct: 10,
+  });
+  expect(result.stability.panels[0].feasibleFraction).toBe(1);
+  expect(
+    result.stability.panels[0].replicates.every(
+      (r) =>
+        r.search?.declarations.replay.ignoredRows === "markOnly" &&
+        (r.search.best?.executedGroups ?? 0) > 0,
+    ),
+  ).toBe(true);
+  value.replay.trades[0].dateClosed = "2025-01-06";
+  value.replay.marks.values.push({ tradeId: "loss", date: "2025-01-03", netOpenPlPerContract: 0 });
+  expect(searchBookAtDrawdown(value).stability).toMatchObject({
+    status: "unavailable",
+    reason: "child_close_offset_unavailable",
+  });
+});

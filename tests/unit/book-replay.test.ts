@@ -389,3 +389,242 @@ it("accepts known ignored mark identities consistently in child and group modes 
   };
   expect(() => replayBook(value)).toThrow(/child mark identity/);
 });
+
+it("marks admitted ignored positions at simulated quantity but excludes their closing P/L from funds and later sizing", () => {
+  const value = input();
+  value.ignoredRows = "markOnly";
+  value.ignoredBuyingPower = "exclude";
+  value.trades = [
+    {
+      ...value.trades[0],
+      id: "ignored",
+      entryGroupId: "ignored",
+      ignored: true,
+      netPlPerContract: 999,
+      dateClosed: "2025-01-03",
+      timeClosed: "10:00:00",
+    },
+    {
+      ...value.trades[0],
+      id: "later",
+      entryGroupId: "later",
+      dateOpened: "2025-01-03",
+      timeOpened: "10:00:00",
+    },
+  ];
+  value.marks = {
+    mode: "child",
+    values: [{ tradeId: "ignored", date: "2025-01-02", netOpenPlPerContract: -20 }],
+  };
+  const result = replayBook(value);
+  expect(result.marked?.equity).toEqual([
+    { date: "2025-01-02", equity: 900 },
+    { date: "2025-01-03", equity: 1100 },
+  ]);
+  expect(result.endingFunds).toBe(1100);
+  expect(result.members[0].contractsPerEntry).toEqual([
+    { entryGroupId: "ignored", contracts: 5 },
+    { entryGroupId: "later", contracts: 5 },
+  ]);
+  expect(result.members[0].netPl).toBe(100);
+  expect(result.census.ignoredPositions).toMatchObject({
+    entryGroups: 1,
+    executedGroups: 1,
+    executedRows: 1,
+    closedRows: 1,
+    openRows: 0,
+    openGroups: 0,
+  });
+  expect(result.declarations.ignoredRows).toBe("markOnly");
+});
+
+it("defaults ignoredRows to exclusion and retains explicit exclusion and ignored input census", () => {
+  const value = input();
+  value.trades.push({
+    ...value.trades[0],
+    id: "ignored",
+    entryGroupId: "ignored",
+    ignored: true,
+    netPlPerContract: 999,
+  });
+  value.marks = {
+    mode: "child",
+    values: [
+      { tradeId: "t", date: "2025-01-02", netOpenPlPerContract: -20 },
+      { tradeId: "ignored", date: "2025-01-02", netOpenPlPerContract: 999 },
+    ],
+  };
+  const omitted = replayBook(value);
+  expect(omitted.declarations.ignoredRows).toBe("exclude");
+  expect(omitted.marked?.equity).toEqual([
+    { date: "2025-01-02", equity: 900 },
+    { date: "2025-01-03", equity: 1100 },
+  ]);
+  expect(omitted.census).toMatchObject({ ignoredRows: 1, eligibleRows: 1, executedGroups: 1 });
+  value.ignoredRows = "exclude";
+  const explicit = replayBook(value);
+  expect(explicit.marked?.equity).toEqual([
+    { date: "2025-01-02", equity: 900 },
+    { date: "2025-01-03", equity: 1100 },
+  ]);
+  expect(explicit.endingFunds).toBe(1100);
+  value.ignoredRows = "unknown" as BookReplayInput["ignoredRows"];
+  expect(() => replayBook(value)).toThrow(/ignoredRows/);
+});
+
+it.each(["sharedEntryGroup", "sumChildren"] as const)(
+  "uses the explicit ignored buying-power hypothesis under %s",
+  (reservationMode) => {
+    const value = input();
+    value.ignoredRows = "markOnly";
+    value.ignoredBuyingPower = "reserve";
+    value.reservationMode = reservationMode;
+    value.members.a.sizing = { mode: "fixed", contracts: 8 };
+    value.members.b = { ...value.members.a };
+    value.simultaneousOrder.push("b");
+    value.trades = [
+      {
+        ...value.trades[0],
+        id: "ignoredFirst",
+        entryGroupId: "ignored",
+        ignored: true,
+        dateClosed: "2025-01-02",
+        timeClosed: "10:00:00",
+        netPlPerContract: 999,
+      },
+      {
+        ...value.trades[0],
+        id: "ignoredLast",
+        entryGroupId: "ignored",
+        ignored: true,
+        netPlPerContract: 999,
+      },
+      {
+        ...value.trades[0],
+        id: "normal",
+        memberId: "b",
+        entryGroupId: "normal",
+        timeOpened: "11:00:00",
+      },
+    ];
+    value.marks = {
+      mode: "child",
+      values: [
+        { tradeId: "ignoredLast", date: "2025-01-02", netOpenPlPerContract: -10 },
+        { tradeId: "normal", date: "2025-01-02", netOpenPlPerContract: 0 },
+      ],
+    };
+    const reserved = replayBook(value);
+    expect(reserved.members.map((m) => m.totalContracts)).toEqual(
+      reservationMode === "sharedEntryGroup" ? [8, 2] : [5, 5],
+    );
+    expect(reserved.endingFunds).toBe(reservationMode === "sharedEntryGroup" ? 1040 : 1100);
+    value.ignoredBuyingPower = "exclude";
+    const excluded = replayBook(value);
+    expect(excluded.members.map((m) => m.totalContracts)).toEqual([8, 8]);
+    expect(excluded.endingFunds).toBe(1160);
+    expect(excluded.marked?.equity[0].equity).toBe(920);
+    expect(excluded.warnings.some((w) => w.includes("hypothesis") && w.includes("exclude"))).toBe(
+      true,
+    );
+  },
+);
+
+it("excludes ignored children from mixed-group buying power and releases shared capacity at the last counted child", () => {
+  const value = input();
+  value.ignoredRows = "markOnly";
+  value.ignoredBuyingPower = "exclude";
+  value.members.a.sizing = { mode: "fixed", contracts: 8 };
+  value.members.b = { ...value.members.a };
+  value.simultaneousOrder.push("b");
+  value.trades = [
+    {
+      ...value.trades[0],
+      id: "included",
+      dateClosed: "2025-01-02",
+      timeClosed: "10:00:00",
+      netPlPerContract: 0,
+    },
+    {
+      ...value.trades[0],
+      id: "ignored",
+      ignored: true,
+      buyingPowerPerContract: 900,
+      netPlPerContract: 999,
+    },
+    {
+      ...value.trades[0],
+      id: "later",
+      memberId: "b",
+      entryGroupId: "later",
+      timeOpened: "11:00:00",
+    },
+  ];
+  value.marks = {
+    mode: "entryGroup",
+    values: [
+      { memberId: "a", entryGroupId: "g", date: "2025-01-02", netOpenPlPerContract: -10 },
+      { memberId: "b", entryGroupId: "later", date: "2025-01-02", netOpenPlPerContract: 0 },
+    ],
+  };
+  const result = replayBook(value);
+  expect(result.members.map((m) => m.totalContracts)).toEqual([8, 8]);
+  expect(result.marked?.equity[0].equity).toBe(920);
+  expect(result.endingFunds).toBe(1160);
+  value.reservationMode = "sumChildren";
+  expect(replayBook(value).members.map((m) => m.totalContracts)).toEqual([8, 8]);
+  value.ignoredBuyingPower = "reserve";
+  const summedReserved = replayBook(value);
+  expect(summedReserved.members.map((m) => m.totalContracts)).toEqual([1, 1]);
+  expect(summedReserved.endingFunds).toBe(1020);
+  expect(summedReserved.census.ignoredPositions).toMatchObject({ executedRows: 1, closedRows: 1 });
+});
+
+it("requires an explicit ignored buying-power rule and complete ignored open-mark coverage in markOnly mode", () => {
+  const value = input();
+  value.ignoredRows = "markOnly";
+  expect(() => replayBook(value)).toThrow(/ignoredBuyingPower/);
+  value.ignoredBuyingPower = "reserve";
+  value.trades[0].ignored = true;
+  value.marks = { mode: "child", values: [] };
+  expect(() => replayBook(value)).toThrow(/missing_mark_coverage/);
+});
+
+it("counts ignored endpoint positions and simulated-zero ignored entries without inventing marks", () => {
+  const value = input();
+  value.ignoredRows = "markOnly";
+  value.ignoredBuyingPower = "exclude";
+  value.trades[0] = { ...value.trades[0], ignored: true, dateClosed: "2025-01-06" };
+  value.marks = {
+    mode: "child",
+    values: [
+      { tradeId: "t", date: "2025-01-02", netOpenPlPerContract: -20 },
+      { tradeId: "t", date: "2025-01-03", netOpenPlPerContract: -10 },
+    ],
+  };
+  const open = replayBook(value);
+  expect(open.census.ignoredPositions).toMatchObject({
+    executedRows: 1,
+    openRows: 1,
+    openGroups: 1,
+    closedRows: 0,
+  });
+  expect(open.endingFunds).toBe(1000);
+  expect(open.marked?.equity).toEqual([
+    { date: "2025-01-02", equity: 900 },
+    { date: "2025-01-03", equity: 950 },
+  ]);
+  value.members.a.removed = true;
+  value.marks.values = [];
+  const zero = replayBook(value);
+  expect(zero.census.ignoredPositions).toMatchObject({
+    entryGroups: 1,
+    zeroGroups: 1,
+    executedRows: 0,
+    openRows: 0,
+  });
+  expect(zero.marked?.equity).toEqual([
+    { date: "2025-01-02", equity: 1000 },
+    { date: "2025-01-03", equity: 1000 },
+  ]);
+});

@@ -157,7 +157,8 @@ recovers before the daily observation: drawdown is then null and search refuses
 to rank that path. Member summaries count entry groups and one quantity per
 group, not one independently sized position per child. The census separates
 ignored input rows, simulated-zero groups, executed child closes and endpoint
-open positions. Ignored rows affect neither opportunities nor realized P/L.
+open positions. `ignoredRows: "exclude"` is the default: ignored rows affect
+neither opportunities, marks nor realized P/L.
 `liquidityThresholdContracts` is an explicit count warning, not a fill-quality
 estimate. Net per-contract P/L already includes fees, which are never deducted
 again.
@@ -175,11 +176,30 @@ open mark, drawdown from the existing calculator, and explicit marked insolvency
 Sizing and realized return still use closed funds. Without marks, no marked
 result is returned and replay behavior is unchanged. Both mark modes accept
 known ignored identities and validate their dates, finite values and duplicate
-keys exactly like other known identities, but ignore their economics. Ignored
-rows remain fully excluded, including their open marks; callers whose producer
-marks ignored open positions must disclose that discrepancy. Unknown identities
+keys exactly like other known identities. Unknown identities
 are refused in either mode. Marks do not supply missing opportunities or verify
 producer parity.
+
+With `ignoredRows: "markOnly"`, ignored children are admitted at their group's
+single simulated quantity and require the same complete open-mark coverage.
+Their closing P/L never enters closed funds, realized return or later sizing.
+This mode requires `ignoredBuyingPower: "exclude" | "reserve"` with **no
+default**. `reserve` counts ignored children in buying-power admission and
+reservation under the declared `reservationMode`; `exclude` counts them in
+neither. An ignored-only excluded group bypasses buying-power admission but
+still uses closed funds, its logged unit buying power for sizing, and member
+caps. In mixed groups only buying-power-counted children set that group's
+capacity requirement; shared capacity releases when its last counted child
+closes, while the group remains open for marks and concurrency until all its
+children close. Shared counted children must declare equal package buying
+power, as in normal replay. `census.ignoredPositions` separately reports ignored
+entry/executed/zero groups and executed/closed/open rows and open groups.
+Both buying-power choices and mixed-child treatment are declared hypotheses:
+the available native tapes do not identify reservation behavior or witness
+mixed ignored/included groups. Calibrate and report both hypotheses rather
+than select one by fit. These are offline simulation options, not evidence of
+native producer parity. Bootstrap entry cohorts preserve the same ignored-row
+policy, child offsets and supplied marks.
 
 Search maximizes ending realized `returnPct` subject to drawdown at most
 `targetDrawdownPct - calibrationMarginPct`: it uses the marked drawdown when

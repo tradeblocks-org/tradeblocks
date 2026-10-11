@@ -389,10 +389,18 @@ function bootstrapStability(input: DrawdownBudgetSearchInput): BookSearchStabili
   const dates = input.replay.dates;
   const indices = dates.map((_, i) => i);
   const dateIndices = Object.fromEntries(dates.map((date, i) => [date, i]));
-  if (input.replay.trades.some((t) => !t.ignored && dateIndices[t.dateClosed] === undefined))
+  if (
+    input.replay.trades.some(
+      (t) =>
+        (!t.ignored || input.replay.ignoredRows === "markOnly") &&
+        dateIndices[t.dateClosed] === undefined,
+    )
+  )
     return { ...result, status: "unavailable", reason: "child_close_offset_unavailable" };
   const cohorts = dates.map((date) =>
-    input.replay.trades.filter((t) => !t.ignored && t.dateOpened === date),
+    input.replay.trades.filter(
+      (t) => (!t.ignored || input.replay.ignoredRows === "markOnly") && t.dateOpened === date,
+    ),
   );
   const sourceMarks = new Map<string, Array<{ date: string; netOpenPlPerContract: number }>>();
   if (input.replay.marks) {
