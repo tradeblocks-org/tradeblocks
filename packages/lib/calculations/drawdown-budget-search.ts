@@ -455,6 +455,7 @@ function bootstrapStability(input: DrawdownBudgetSearchInput): BookSearchStabili
     }
   }
   result.status = "available";
+  const sourceGroupOrders = Object.entries(input.replay.simultaneousGroupOrder ?? {});
   for (const meanBlockDays of [
     input.stability.meanBlockDays,
     ...input.stability.sensitivityBlockDays,
@@ -475,7 +476,20 @@ function bootstrapStability(input: DrawdownBudgetSearchInput): BookSearchStabili
       }> = [];
       let end = dates.length - 1;
       let carriedRows = 0;
+      const simultaneousGroupOrder = input.replay.simultaneousGroupOrder
+        ? Object.fromEntries(sourceGroupOrders.map(([memberId]) => [memberId, [] as string[]]))
+        : undefined;
       sourceIndices.forEach((source, opened) => {
+        if (simultaneousGroupOrder) {
+          for (const [memberId, order] of sourceGroupOrders) {
+            const present = new Set<string>();
+            for (const trade of cohorts[source])
+              if (trade.memberId === memberId) present.add(trade.entryGroupId);
+            for (const id of order)
+              if (present.has(id))
+                simultaneousGroupOrder[memberId].push(JSON.stringify([opened, id]));
+          }
+        }
         for (const trade of cohorts[source]) {
           const closed = opened + dateIndices[trade.dateClosed] - source;
           end = Math.max(end, closed);
@@ -541,7 +555,7 @@ function bootstrapStability(input: DrawdownBudgetSearchInput): BookSearchStabili
       try {
         const search = searchBookAtDrawdown({
           ...input,
-          replay: { ...input.replay, dates: syntheticDates, trades, marks },
+          replay: { ...input.replay, dates: syntheticDates, trades, marks, simultaneousGroupOrder },
           dropOne: false,
           stability: { ...input.stability, replicates: 0 },
         });

@@ -349,6 +349,7 @@ it("preserves mark-only ignored cohorts and their marks in search and seeded sta
     { ...value.replay.trades[0], dateClosed: "2025-01-03", ignored: true, netPlPerContract: 999 },
     { ...value.replay.trades[0], id: "included", entryGroupId: "included", netPlPerContract: 0 },
   ];
+  value.replay.simultaneousGroupOrder = { a: ["included", "loss"] };
   value.replay.marks = {
     mode: "child",
     values: [{ tradeId: "loss", date: "2025-01-02", netOpenPlPerContract: -100 }],
@@ -395,6 +396,7 @@ it("refuses vectors executing only ignored positions when included buying power 
     ignored: true,
     buyingPowerPerContract: 50,
   };
+  value.replay.simultaneousGroupOrder = { a: ["loss", "win"] };
   value.replay.marks = {
     mode: "child",
     values: [{ tradeId: "win", date: "2025-01-02", netOpenPlPerContract: -1 }],
@@ -437,4 +439,25 @@ it("reserves the declared robust shrinkage grid before coordinate exploration sp
   expect(() => searchBookAtDrawdown(value)).toThrow(
     /^Invalid drawdown search: maxEvaluations.*robust/,
   );
+});
+
+it("preserves explicit same-member group precedence while rekeying bootstrap entry cohorts", () => {
+  const value = input();
+  value.replay.trades[1].dateOpened = "2025-01-02";
+  value.replay.members.a.sizing = { mode: "fixed", contracts: 8 };
+  value.replay.simultaneousGroupOrder = { a: ["win", "loss"] };
+  value.weightBounds.a = { min: 1, max: 1 };
+  value.targetDrawdownPct = 90;
+  value.robust = { maxDrawdownPct: 90, shrinkageFactors: [1] };
+  value.stability.replicates = 2;
+  const result = searchBookAtDrawdown(value);
+  expect(result.best?.returnPct).toBeCloseTo(220, 12);
+  expect(result.stability.panels[0].feasibleFraction).toBe(1);
+  for (const replicate of result.stability.panels[0].replicates) {
+    expect(replicate.search?.best?.returnPct).toBeCloseTo(220, 12);
+    expect(replicate.search?.declarations.replay.simultaneousGroupOrder?.a.slice(0, 2)).toEqual([
+      JSON.stringify([0, "win"]),
+      JSON.stringify([0, "loss"]),
+    ]);
+  }
 });

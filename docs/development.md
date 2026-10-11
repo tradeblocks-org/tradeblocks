@@ -151,6 +151,18 @@ power are refused. Supply unambiguous `entryGroupId`s within each member and
 not timestamps. Every in-window entry and close must lie on the supplied axis.
 An endpoint close beyond that axis remains open; no terminal mark is invented.
 
+Optional `simultaneousGroupOrder: { [memberId]: [entryGroupId, ...] }` explicitly
+orders distinct entry groups of one member opening at the same timestamp.
+Every group participating in such a tie must appear in that member's list;
+an absent or incomplete order throws `ambiguous_simultaneous_groups`, never
+falls back to group-ID spelling or row order. No tie requires no declaration.
+Lists use unique nonempty IDs; unused entries are harmless. Multiple children
+of one group are not a distinct-group tie. Timestamp comparisons use numeric
+clock values, including equivalent fractional-second spellings.
+Member precedence still comes from `simultaneousOrder`; close settlement
+still precedes all opens. Bootstrap entry cohorts rekey these per-member
+orders alongside transplanted group IDs.
+
 Allocation sizing and `maxAllocationAmount` use that same group's buying power:
 summed counted-child cost in `sumChildren`, common counted-child package cost
 in `sharedEntryGroup`. For example, two $100 children at $10,000 funds and 50%

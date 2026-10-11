@@ -59,6 +59,7 @@ interface BookReplayBaseInput {
   reservationMode: "sharedEntryGroup" | "sumChildren";
   sharedEntryGroupBuyingPower: "equalPackageMaximum";
   simultaneousOrder: string[];
+  simultaneousGroupOrder?: Record<string, string[]>;
   liquidityThresholdContracts: number | null;
   marks?: BookMarks;
 }
@@ -145,11 +146,18 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
     netPl: 0,
   }));
   const summaries = Object.fromEntries(members.map((m) => [m.memberId, m]));
+  const groupOrders = new Map(
+    Object.entries(input.simultaneousGroupOrder ?? {}).map(([memberId, ids]) => [
+      memberId,
+      new Map(ids.map((id, index) => [id, index])),
+    ]),
+  );
   const groups = new Map<
     string,
     {
       memberId: string;
       entryGroupId: string;
+      simultaneousRank: number;
       children: BookTrade[];
       quantity: number;
       remaining: number;
@@ -165,6 +173,7 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       group = {
         memberId: trade.memberId,
         entryGroupId: trade.entryGroupId,
+        simultaneousRank: groupOrders.get(trade.memberId)?.get(trade.entryGroupId) ?? -1,
         children: [],
         quantity: 0,
         remaining: 0,
@@ -235,6 +244,7 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       a.time - b.time ||
       (a.kind === b.kind ? 0 : a.kind === "close" ? -1 : 1) ||
       order[a.group.memberId] - order[b.group.memberId] ||
+      (a.kind === "open" ? a.group.simultaneousRank - b.group.simultaneousRank : 0) ||
       a.group.entryGroupId.localeCompare(b.group.entryGroupId) ||
       (a.child?.id ?? "").localeCompare(b.child?.id ?? ""),
   );
@@ -559,6 +569,36 @@ function validateReplay(input: BookReplayInput): void {
       groupBuyingPower.set(key, trade.buyingPowerPerContract);
     }
     groups.set(key, trade);
+  }
+  if (input.simultaneousGroupOrder !== undefined) {
+    if (
+      !input.simultaneousGroupOrder ||
+      typeof input.simultaneousGroupOrder !== "object" ||
+      Array.isArray(input.simultaneousGroupOrder)
+    )
+      fail("simultaneousGroupOrder");
+    for (const [memberId, order] of Object.entries(input.simultaneousGroupOrder)) {
+      if (
+        !Object.hasOwn(input.members, memberId) ||
+        !Array.isArray(order) ||
+        order.some((id) => typeof id !== "string" || !id) ||
+        new Set(order).size !== order.length
+      )
+        fail("simultaneousGroupOrder");
+    }
+  }
+  const firstAtTimestamp = new Map<string, BookTrade>();
+  for (const trade of groups.values()) {
+    const key = JSON.stringify([trade.memberId, trade.dateOpened, clockSeconds(trade.timeOpened)]);
+    const first = firstAtTimestamp.get(key);
+    if (first) {
+      const order =
+        input.simultaneousGroupOrder && Object.hasOwn(input.simultaneousGroupOrder, trade.memberId)
+          ? input.simultaneousGroupOrder[trade.memberId]
+          : undefined;
+      if (!order?.includes(first.entryGroupId) || !order.includes(trade.entryGroupId))
+        throw new RangeError(`ambiguous_simultaneous_groups: ${key}`);
+    } else firstAtTimestamp.set(key, trade);
   }
   if (input.marks) {
     if (input.marks.mode !== "child" && input.marks.mode !== "entryGroup") fail("marks mode");

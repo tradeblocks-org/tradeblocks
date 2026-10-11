@@ -708,3 +708,36 @@ it.each([
     });
   },
 );
+
+it.each([
+  ["a-first", "z-second"],
+  ["z-first", "a-second"],
+])(
+  "requires explicit same-member simultaneous group order independent of renamed IDs %s / %s",
+  (firstId, secondId) => {
+    const value = input();
+    value.members.a.sizing = { mode: "fixed", contracts: 8 };
+    value.trades = [
+      { ...value.trades[0], entryGroupId: firstId },
+      { ...value.trades[0], id: "second", entryGroupId: secondId, timeOpened: "09:30:00.000" },
+    ];
+    expect(() => replayBook(value)).toThrow(/^ambiguous_simultaneous_groups:/);
+    value.simultaneousGroupOrder = { a: [firstId] };
+    expect(() => replayBook(value)).toThrow(/^ambiguous_simultaneous_groups:/);
+    value.simultaneousGroupOrder = { a: [firstId, "unknown"] };
+    expect(() => replayBook(value)).toThrow(/^ambiguous_simultaneous_groups:/);
+    value.simultaneousGroupOrder = { a: [firstId, firstId, secondId] };
+    expect(() => replayBook(value)).toThrow(/simultaneousGroupOrder/);
+    value.simultaneousGroupOrder = { a: [firstId, secondId] };
+    const result = replayBook(value);
+    expect(result.members[0].contractsPerEntry).toEqual([
+      { entryGroupId: firstId, contracts: 8 },
+      { entryGroupId: secondId, contracts: 2 },
+    ]);
+    expect(result.endingFunds).toBe(1200);
+    value.trades.reverse();
+    expect(replayBook(value).members[0].contractsPerEntry).toEqual(
+      result.members[0].contractsPerEntry,
+    );
+  },
+);
