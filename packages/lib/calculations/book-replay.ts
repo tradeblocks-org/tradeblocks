@@ -251,10 +251,7 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       const member = input.members[group.memberId];
       if (event.kind === "open") {
         // An all-ignored excluded group still needs unit economics for sizing, not capacity.
-        const bp = (
-          group.children.find((child) => !child.ignored || countIgnoredBuyingPower) ??
-          group.children[0]
-        ).buyingPowerPerContract;
+        const bp = group.bp || group.children[0].buyingPowerPerContract;
         let quantity =
           member.sizing.mode === "allocation"
             ? Math.floor((Math.max(0, funds) * member.sizing.allocationPercentage) / 100 / bp)

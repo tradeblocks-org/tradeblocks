@@ -64,7 +64,12 @@ export interface BookSearchStability {
 }
 export interface DrawdownBudgetSearchResult {
   status: "ok" | "refused";
-  reason: "no_feasible_candidate" | "calibration_unusable" | "no_robust_candidate" | null;
+  reason:
+    | "no_feasible_candidate"
+    | "calibration_unusable"
+    | "no_robust_candidate"
+    | "robust_budget_exhausted"
+    | null;
   drawdownBasis: "offline_closed_equity" | "offline_marked_equity";
   best: BookSearchEvaluation | null;
   robust: BookSearchEvaluation | null;
@@ -88,6 +93,13 @@ export interface DrawdownBudgetSearchResult {
   warnings: string[];
 }
 
+interface PreparedBookEvaluation {
+  key: string;
+  weights: Record<string, number>;
+  members: Record<string, BookMember>;
+  roundedToZero: string[];
+}
+
 /** Bounded best-observed coordinate search; never a certified global optimum. */
 export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): DrawdownBudgetSearchResult {
   validateSearch(input);
@@ -95,7 +107,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
   const limit = input.targetDrawdownPct - input.calibrationMarginPct;
   const evaluations: BookSearchEvaluation[] = [];
   const cache = new Map<string, BookSearchEvaluation>();
-  const evaluate = (requested: Record<string, number>): BookSearchEvaluation | null => {
+  const prepare = (requested: Record<string, number>): PreparedBookEvaluation => {
     const weights: Record<string, number> = {};
     const members: Record<string, BookMember> = {};
     const roundedToZero: string[] = [];
@@ -138,9 +150,15 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
       members[id] = member;
     }
     const key = JSON.stringify(ids.map((id) => [id, members[id]]));
+    return { key, weights, members, roundedToZero };
+  };
+  const evaluate = (
+    { key, weights, members, roundedToZero }: PreparedBookEvaluation,
+    budget = input.maxEvaluations,
+  ): BookSearchEvaluation | null => {
     const previous = cache.get(key);
     if (previous) return previous;
-    if (evaluations.length >= input.maxEvaluations) return null;
+    if (evaluations.length >= budget) return null;
     const replay = replayBook({ ...input.replay, members });
     const risk = replay.marked ?? replay;
     const candidate: BookSearchEvaluation = {
@@ -163,19 +181,33 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     evaluations.push(candidate);
     return candidate;
   };
+  let coordinateBudgetExhausted = false;
   if (input.calibrationUsable) {
     const zero = Object.fromEntries(ids.map((id) => [id, 0]));
-    const starts = [zero, ...input.initialWeights].map(evaluate);
+    const preparedStarts = [zero, ...input.initialWeights].map(prepare);
+    // Factors zero and one reuse the origin/base; each other distinct factor
+    // needs at most one new evaluation, even when rounded economics coincide.
+    const robustReserve = new Set(input.robust.shrinkageFactors.filter((f) => f !== 0 && f !== 1))
+      .size;
+    const coordinateBudget = input.maxEvaluations - robustReserve;
+    if (coordinateBudget < new Set(preparedStarts.map((s) => s.key)).size)
+      throw new RangeError(
+        "Invalid book search: maxEvaluations cannot cover initial vectors and robust shrinkage grid",
+      );
+    const starts = preparedStarts.map((start) => evaluate(start, coordinateBudget));
     for (const start of starts) {
       let current = start;
       if (!current) continue;
       for (const step of input.steps) {
         let changed = true;
-        while (changed && evaluations.length < input.maxEvaluations) {
+        while (changed && evaluations.length < coordinateBudget) {
           changed = false;
           for (const id of ids) {
             for (const value of [0, current.weights[id] - step, current.weights[id] + step]) {
-              const trial = evaluate({ ...current.weights, [id]: value });
+              const trial = evaluate(
+                prepare({ ...current.weights, [id]: value }),
+                coordinateBudget,
+              );
               if (!trial) break;
               if (trial.feasible && (!current.feasible || trial.returnPct > current.returnPct)) {
                 current = trial;
@@ -186,6 +218,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
         }
       }
     }
+    coordinateBudgetExhausted = evaluations.length >= coordinateBudget;
   }
   const best = evaluations.reduce<BookSearchEvaluation | null>(
     (winner, candidate) =>
@@ -195,10 +228,15 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     null,
   );
   let robust: BookSearchEvaluation | null = null;
+  let robustBudgetExhausted = false;
   if (best) {
     const base: BookSearchEvaluation = best;
-    for (const factor of input.robust.shrinkageFactors)
-      evaluate(Object.fromEntries(ids.map((id) => [id, base.weights[id] * factor])));
+    for (const factor of input.robust.shrinkageFactors) {
+      const candidate = evaluate(
+        prepare(Object.fromEntries(ids.map((id) => [id, base.weights[id] * factor]))),
+      );
+      robustBudgetExhausted ||= candidate === null;
+    }
     for (const candidate of evaluations)
       if (
         candidate.feasible &&
@@ -235,9 +273,11 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     ? "calibration_unusable"
     : !winner
       ? "no_feasible_candidate"
-      : !robust
-        ? "no_robust_candidate"
-        : null;
+      : robustBudgetExhausted
+        ? "robust_budget_exhausted"
+        : !robust
+          ? "no_robust_candidate"
+          : null;
   const dropOne: DrawdownBudgetSearchResult["dropOne"] = [];
   if (winner && input.dropOne && input.calibrationUsable) {
     for (const id of ids) {
@@ -278,7 +318,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     weightRanges,
     termination: !input.calibrationUsable
       ? "calibration_refusal"
-      : evaluations.length >= input.maxEvaluations
+      : coordinateBudgetExhausted || evaluations.length >= input.maxEvaluations
         ? "budget"
         : "step_ladder_exhausted",
     cardinalityUpperBound: ids.reduce(

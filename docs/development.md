@@ -149,6 +149,13 @@ power are refused. Supply unambiguous `entryGroupId`s within each member and
 not timestamps. Every in-window entry and close must lie on the supplied axis.
 An endpoint close beyond that axis remains open; no terminal mark is invented.
 
+Allocation sizing and `maxAllocationAmount` use that same group's buying power:
+summed counted-child cost in `sumChildren`, common counted-child package cost
+in `sharedEntryGroup`. For example, two $100 children at $10,000 funds and 50%
+allocation request 25 summed-group contracts and reserve $5,000, not 50
+contracts and $10,000. An all-ignored excluded group retains its logged unit-BP
+sizing fallback, since it has no reserved capacity.
+
 The result's `basis` is `offline_closed_equity`. `startingEquity` is the seed,
 and `equity` contains one after-events closed-funds observation per session.
 Drawdown episodes reuse the dated-equity calculator, including the starting
@@ -221,6 +228,15 @@ evaluated feasible vector also meeting `robust.maxDrawdownPct`, including the
 declared shrinkage grid; its return cost is in percentage points. No feasible
 candidate, no robust candidate and unusable calibration produce named refusals,
 with null `best`, `robust` and `robustReturnCostPct`, never a least-bad winner.
+The evaluation budget reserves one slot per distinct shrinkage factor other
+than zero and one before coordinate moves; those two reuse origin/base cached
+economics. Duplicate normalized initial vectors consume one slot. Inputs whose
+budget cannot cover those seeds and the reserved robust grid are refused with
+a `maxEvaluations` RangeError, rather than silently dropping declared work.
+Any unexpected robust-phase shortage is explicitly `robust_budget_exhausted`,
+not `no_robust_candidate`. The `budget` termination includes stopping coordinate
+exploration to preserve those slots. Rounded grid economics may reuse cache
+entries, so reserved slots are a conservative upper bound.
 This bounded coordinate search does **not** certify a global optimum.
 The all-zero vector is retained only as a search origin, never as a best or
 robust answer. Feasibility requires at least one executed entry group with an

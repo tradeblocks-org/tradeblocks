@@ -628,3 +628,33 @@ it("counts ignored endpoint positions and simulated-zero ignored entries without
     { date: "2025-01-03", equity: 1000 },
   ]);
 });
+
+it("sizes summed child buying power and dollar caps using the same package cost as reservation", () => {
+  const value = input();
+  value.startingFunds = 10000;
+  value.reservationMode = "sumChildren";
+  value.trades = [
+    value.trades[0],
+    { ...value.trades[0], id: "second" },
+    {
+      ...value.trades[0],
+      id: "next",
+      memberId: "b",
+      entryGroupId: "next",
+      timeOpened: "10:00:00",
+      netPlPerContract: 0,
+    },
+  ];
+  value.members.b = { ...value.members.a, sizing: { mode: "fixed", contracts: 100 } };
+  value.simultaneousOrder = ["a", "b"];
+  const summed = replayBook(value);
+  expect(summed.members.map((m) => m.totalContracts)).toEqual([25, 50]);
+  expect(summed.endingFunds).toBe(11000);
+  value.members.a.maxAllocationAmount = 1000;
+  const capped = replayBook(value);
+  expect(capped.members.map((m) => m.totalContracts)).toEqual([5, 90]);
+  expect(capped.endingFunds).toBe(10200);
+  value.members.a.maxAllocationAmount = null;
+  value.reservationMode = "sharedEntryGroup";
+  expect(replayBook(value).members.map((m) => m.totalContracts)).toEqual([50, 50]);
+});

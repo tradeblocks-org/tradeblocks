@@ -181,6 +181,7 @@ it("evaluates initial vectors before spending the remaining budget on coordinate
   value.initialWeights = [{ a: 0.5 }];
   value.steps = [1];
   value.maxEvaluations = 2;
+  value.robust.shrinkageFactors = [1];
   const result = searchBookAtDrawdown(value);
   expect(result.best?.weights).toEqual({ a: 0.5 });
   expect(result.k).toBe(2);
@@ -416,4 +417,22 @@ it("refuses vectors executing only ignored positions when included buying power 
     feasible: false,
   });
   expect(result.evaluations.every((e) => !e.feasible)).toBe(true);
+});
+
+it("reserves the declared robust shrinkage grid before coordinate exploration spends the evaluation budget", () => {
+  const value = input();
+  value.targetDrawdownPct = 25;
+  value.steps = [0.25];
+  value.maxEvaluations = 3;
+  const result = searchBookAtDrawdown(value);
+  expect(result).toMatchObject({ status: "ok", reason: null, k: 3 });
+  expect(result.best?.weights).toEqual({ a: 1 });
+  expect(result.robust?.weights).toEqual({ a: 0.5 });
+  expect(result.robustReturnCostPct).toBe(20);
+  expect(result.evaluations.map((e) => e.weights.a)).toEqual([0, 1, 0.5]);
+  value.initialWeights = [{ a: 1 }, { a: 1 }];
+  value.robust.shrinkageFactors = [1, 0.5, 0.5, 0];
+  expect(searchBookAtDrawdown(value).evaluations).toEqual(result.evaluations);
+  value.maxEvaluations = 2;
+  expect(() => searchBookAtDrawdown(value)).toThrow(/maxEvaluations.*robust/);
 });
