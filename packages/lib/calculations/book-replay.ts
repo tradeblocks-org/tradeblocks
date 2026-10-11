@@ -416,6 +416,7 @@ function validateReplay(input: BookReplayInput): void {
   const dates = new Set(input.dates);
   const tradeIds = new Set<string>();
   const groups = new Map<string, BookTrade>();
+  const knownGroups = new Set<string>();
   for (const trade of input.trades) {
     if (
       !trade.id ||
@@ -426,6 +427,7 @@ function validateReplay(input: BookReplayInput): void {
     )
       fail("trade identity");
     tradeIds.add(trade.id);
+    knownGroups.add(JSON.stringify([trade.memberId, trade.entryGroupId]));
     if (trade.ignored) continue;
     if (
       !dateValid(trade.dateOpened) ||
@@ -478,7 +480,7 @@ function validateReplay(input: BookReplayInput): void {
       for (const mark of input.marks.values) {
         const key = JSON.stringify([mark.memberId, mark.entryGroupId, mark.date]);
         if (
-          !groups.has(JSON.stringify([mark.memberId, mark.entryGroupId])) ||
+          !knownGroups.has(JSON.stringify([mark.memberId, mark.entryGroupId])) ||
           !dates.has(mark.date) ||
           !Number.isFinite(mark.netOpenPlPerContract) ||
           seen.has(key)

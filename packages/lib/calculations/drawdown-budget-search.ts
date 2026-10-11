@@ -32,6 +32,7 @@ export interface BookSearchEvaluation {
   maxDrawdownPct: number | null;
   insolvent: boolean;
   feasible: boolean;
+  executedGroups: number;
   roundedToZero: string[];
 }
 export interface BookSearchStability {
@@ -49,17 +50,21 @@ export interface BookSearchStability {
         weightInterval: { min: number; max: number } | null;
       }
     >;
-    replicates: Array<{
-      sourceIndices: number[];
-      carriedRows: number;
-      search: DrawdownBudgetSearchResult;
-    }>;
+    replicates: Array<
+      {
+        sourceIndices: number[];
+        carriedRows: number;
+      } & (
+        | { status: "available"; reason: null; search: DrawdownBudgetSearchResult }
+        | { status: "unavailable"; reason: "missing_mark_coverage"; search: null }
+      )
+    >;
   }>;
 }
 export interface DrawdownBudgetSearchResult {
   status: "ok" | "refused";
   reason: "no_feasible_candidate" | "calibration_unusable" | "no_robust_candidate" | null;
-  basis: "offline_closed_equity" | "offline_marked_equity";
+  drawdownBasis: "offline_closed_equity" | "offline_marked_equity";
   best: BookSearchEvaluation | null;
   robust: BookSearchEvaluation | null;
   robustReturnCostPct: number | null;
@@ -141,9 +146,11 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
       key,
       weights,
       returnPct: replay.returnPct,
+      executedGroups: replay.census.executedGroups,
       maxDrawdownPct: risk.maxDrawdownPct,
       insolvent: replay.insolvent || risk.insolvent,
       feasible:
+        replay.census.executedGroups > 0 &&
         !replay.insolvent &&
         !risk.insolvent &&
         risk.maxDrawdownPct !== null &&
@@ -252,14 +259,17 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
   const totalEvaluations =
     evaluations.length +
     dropOne.reduce((n, d) => n + d.search.k, 0) +
-    stability.panels.reduce((n, p) => n + p.replicates.reduce((m, r) => m + r.search.k, 0), 0);
+    stability.panels.reduce(
+      (n, p) => n + p.replicates.reduce((m, r) => m + (r.search?.k ?? 0), 0),
+      0,
+    );
   return {
     status: reason ? "refused" : "ok",
     reason,
-    basis: input.replay.marks ? "offline_marked_equity" : "offline_closed_equity",
-    best: winner,
-    robust,
-    robustReturnCostPct: winner && robust ? winner.returnPct - robust.returnPct : null,
+    drawdownBasis: input.replay.marks ? "offline_marked_equity" : "offline_closed_equity",
+    best: reason ? null : winner,
+    robust: reason ? null : robust,
+    robustReturnCostPct: !reason && winner && robust ? winner.returnPct - robust.returnPct : null,
     evaluations,
     k: evaluations.length,
     nearOptimal,
@@ -478,15 +488,27 @@ function bootstrapStability(input: DrawdownBudgetSearchInput): BookSearchStabili
         }
         marks = { mode: "entryGroup", values: [...values.values()] };
       }
-      const search = searchBookAtDrawdown({
-        ...input,
-        replay: { ...input.replay, dates: syntheticDates, trades, marks },
-        dropOne: false,
-        stability: { ...input.stability, replicates: 0 },
-      });
-      replicates.push({ sourceIndices, carriedRows, search });
+      try {
+        const search = searchBookAtDrawdown({
+          ...input,
+          replay: { ...input.replay, dates: syntheticDates, trades, marks },
+          dropOne: false,
+          stability: { ...input.stability, replicates: 0 },
+        });
+        replicates.push({ sourceIndices, carriedRows, status: "available", reason: null, search });
+      } catch (error) {
+        if (!(error instanceof RangeError) || !error.message.startsWith("missing_mark_coverage:"))
+          throw error;
+        replicates.push({
+          sourceIndices,
+          carriedRows,
+          status: "unavailable",
+          reason: "missing_mark_coverage",
+          search: null,
+        });
+      }
     }
-    const winners = replicates.flatMap((r) => (r.search.best ? [r.search.best] : []));
+    const winners = replicates.flatMap((r) => (r.search?.best ? [r.search.best] : []));
     const members = Object.fromEntries(
       input.replay.simultaneousOrder.map((id) => {
         const weights = winners.map((w) => w.weights[id]);

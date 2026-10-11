@@ -173,15 +173,19 @@ keys and unknown identities are refused. `marked` adds a separate result with
 `basis: "offline_marked_equity"`: closed funds plus quantity times each supplied
 open mark, drawdown from the existing calculator, and explicit marked insolvency.
 Sizing and realized return still use closed funds. Without marks, no marked
-result is returned and replay behavior is unchanged. Ignored rows remain fully
-excluded, including their open marks; callers whose producer marks ignored open
-positions must disclose that discrepancy. Marks do not supply missing
-opportunities or verify producer parity.
+result is returned and replay behavior is unchanged. Both mark modes accept
+known ignored identities and validate their dates, finite values and duplicate
+keys exactly like other known identities, but ignore their economics. Ignored
+rows remain fully excluded, including their open marks; callers whose producer
+marks ignored open positions must disclose that discrepancy. Unknown identities
+are refused in either mode. Marks do not supply missing opportunities or verify
+producer parity.
 
 Search maximizes ending realized `returnPct` subject to drawdown at most
 `targetDrawdownPct - calibrationMarginPct`: it uses the marked drawdown when
 complete marks are supplied, otherwise the closed-equity drawdown, and reports
-that risk basis. A nonpositive marked path is never ranked.
+that risk basis as `drawdownBasis`, separately from the closed-funds return
+objective. A nonpositive marked path is never ranked.
 Declare bounds, initial vectors, descending or other finite `steps`, weight and
 allocation decimal precision, and `maxEvaluations`. A zero weight means true
 removal. Positive weights scale allocation, fixed counts, dollar caps and
@@ -194,8 +198,13 @@ first deterministic evaluation. The robust vector is the highest-return
 evaluated feasible vector also meeting `robust.maxDrawdownPct`, including the
 declared shrinkage grid; its return cost is in percentage points. No feasible
 candidate, no robust candidate and unusable calibration produce named refusals,
-never a least-bad winner. This bounded coordinate search does **not** certify a
-global optimum.
+with null `best`, `robust` and `robustReturnCostPct`, never a least-bad winner.
+This bounded coordinate search does **not** certify a global optimum.
+The all-zero vector is retained only as a search origin, never as a best or
+robust answer. Feasibility requires at least one executed entry group. Positive
+weights rounding entirely to zero contracts are also empty answers, excluded
+from selection but retained in `evaluations` and `k`, labelled with
+`executedGroups: 0`.
 
 `dropOne` reoptimizes with each member constrained to removal, with the same
 per-optimization budget. Stability uses the existing seeded stationary-block
@@ -214,6 +223,11 @@ searches, while each nested `k` has its own declared budget.
 Supplied marks are transplanted with the same entry-relative source-session
 offsets. The transformed marks retain the source economics; this is not a
 simulation of a different underlying market path.
+A replicate activating an open position without mark coverage has
+`status: "unavailable"`, `reason: "missing_mark_coverage"` and `search: null`;
+it remains in the replicate count and feasible-fraction denominator. Other
+errors still propagate. Successful replicate records have `status: "available"`
+and the search result. Main replay/search coverage gaps still throw by name.
 
 Closed-equity screening cannot certify a marked drawdown budget. Supply a
 separately assessed calibration margin and `calibrationUsable`; false returns

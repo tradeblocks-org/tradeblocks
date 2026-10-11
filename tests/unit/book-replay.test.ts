@@ -355,3 +355,37 @@ it("sizes later entries from closed funds despite open marks and refuses marked 
   value.marks.values.push({ ...value.marks.values[0] });
   expect(() => replayBook(value)).toThrow(/mark identity/);
 });
+
+it("accepts known ignored mark identities consistently in child and group modes without including their economics", () => {
+  const value = input();
+  value.trades.push({ ...value.trades[0], id: "ignored", entryGroupId: "ignored", ignored: true });
+  value.marks = {
+    mode: "child",
+    values: [
+      { tradeId: "t", date: "2025-01-02", netOpenPlPerContract: -20 },
+      { tradeId: "ignored", date: "2025-01-02", netOpenPlPerContract: 999 },
+    ],
+  };
+  expect(replayBook(value).marked?.equity).toEqual([
+    { date: "2025-01-02", equity: 900 },
+    { date: "2025-01-03", equity: 1100 },
+  ]);
+  value.marks = {
+    mode: "entryGroup",
+    values: [
+      { memberId: "a", entryGroupId: "g", date: "2025-01-02", netOpenPlPerContract: -20 },
+      { memberId: "a", entryGroupId: "ignored", date: "2025-01-02", netOpenPlPerContract: 999 },
+    ],
+  };
+  expect(replayBook(value).marked?.equity).toEqual([
+    { date: "2025-01-02", equity: 900 },
+    { date: "2025-01-03", equity: 1100 },
+  ]);
+  value.marks.values[1].entryGroupId = "unknown";
+  expect(() => replayBook(value)).toThrow(/group mark identity/);
+  value.marks = {
+    mode: "child",
+    values: [{ tradeId: "unknown", date: "2025-01-02", netOpenPlPerContract: 999 }],
+  };
+  expect(() => replayBook(value)).toThrow(/child mark identity/);
+});

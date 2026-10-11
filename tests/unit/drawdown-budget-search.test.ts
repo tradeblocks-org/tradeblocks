@@ -187,7 +187,7 @@ it("evaluates initial vectors before spending the remaining budget on coordinate
   expect(result.termination).toBe("budget");
 });
 
-it("reports the robust return cost, positive weights rounded to zero, and unavailable close offsets", () => {
+it("refuses rounded-to-zero answers while reporting their evaluations and unavailable close offsets", () => {
   const value = input();
   value.robust.maxDrawdownPct = 0;
   value.initialWeights = [{ a: 0.1 }, { a: 0.5 }];
@@ -195,6 +195,10 @@ it("reports the robust return cost, positive weights rounded to zero, and unavai
   value.replay.trades[1].dateClosed = "2025-01-06";
   const result = searchBookAtDrawdown(value);
   expect(result.evaluations.find((e) => e.weights.a === 0.1)?.roundedToZero).toEqual(["a"]);
+  expect(result.evaluations.find((e) => e.weights.a === 0.1)).toMatchObject({
+    executedGroups: 0,
+    feasible: false,
+  });
   expect(result.stability).toMatchObject({
     status: "unavailable",
     reason: "child_close_offset_unavailable",
@@ -202,8 +206,24 @@ it("reports the robust return cost, positive weights rounded to zero, and unavai
   });
   value.replay.trades[1].dateClosed = "2025-01-03";
   const completed = searchBookAtDrawdown(value);
-  expect(completed.robust?.returnPct).toBe(0);
-  expect(completed.robustReturnCostPct).toBe(20);
+  expect(completed).toMatchObject({
+    status: "refused",
+    reason: "no_robust_candidate",
+    best: null,
+    robust: null,
+    robustReturnCostPct: null,
+  });
+  value.weightBounds.a.max = 0.1;
+  value.initialWeights = [{ a: 0.1 }];
+  const onlyRoundedZero = searchBookAtDrawdown(value);
+  expect(onlyRoundedZero).toMatchObject({
+    status: "refused",
+    reason: "no_feasible_candidate",
+    best: null,
+    robust: null,
+  });
+  expect(onlyRoundedZero.k).toBe(2);
+  expect(onlyRoundedZero.evaluations.every((e) => e.executedGroups === 0)).toBe(true);
 });
 
 it("constrains marked drawdown when marks are supplied, while sizing and objective remain closed", () => {
@@ -218,7 +238,7 @@ it("constrains marked drawdown when marks are supplied, while sizing and objecti
   value.targetDrawdownPct = 25;
   value.robust.maxDrawdownPct = 25;
   const result = searchBookAtDrawdown(value);
-  expect(result.basis).toBe("offline_marked_equity");
+  expect(result.drawdownBasis).toBe("offline_marked_equity");
   expect(result.best).toMatchObject({ weights: { a: 0.5 }, returnPct: 30, maxDrawdownPct: 20 });
   value.stability.replicates = 2;
   expect(searchBookAtDrawdown(value).stability.status).toBe("available");
@@ -228,4 +248,94 @@ it("constrains marked drawdown when marks are supplied, while sizing and objecti
     returnPct: 60,
     maxDrawdownPct: 0,
   });
+});
+
+it("keeps the empty book only as an origin when a positive budget cannot fit any nonempty mix", () => {
+  const value = input();
+  value.targetDrawdownPct = 5;
+  const result = searchBookAtDrawdown(value);
+  expect(result).toMatchObject({
+    status: "refused",
+    reason: "no_feasible_candidate",
+    best: null,
+    robust: null,
+    robustReturnCostPct: null,
+    drawdownBasis: "offline_closed_equity",
+  });
+  expect(result.evaluations.find((e) => e.weights.a === 0)).toMatchObject({
+    returnPct: 0,
+    maxDrawdownPct: 0,
+    feasible: false,
+  });
+  expect(result.evaluations.some((e) => e.weights.a > 0)).toBe(true);
+});
+
+it("refuses with null answers when a nonempty feasible candidate misses the robust constraint", () => {
+  const value = input();
+  value.robust = { maxDrawdownPct: 5, shrinkageFactors: [1] };
+  const result = searchBookAtDrawdown(value);
+  expect(result).toMatchObject({
+    status: "refused",
+    reason: "no_robust_candidate",
+    best: null,
+    robust: null,
+    robustReturnCostPct: null,
+  });
+  expect(result.evaluations.find((e) => e.weights.a === 0.5)).toMatchObject({
+    feasible: true,
+    returnPct: 20,
+    maxDrawdownPct: 10,
+  });
+});
+
+it("counts bootstrap replicates that activate uncovered positions as unavailable without swallowing other errors", () => {
+  const value = input();
+  value.replay.members.a.sizing = { mode: "fixed", contracts: 10 };
+  value.replay.dates = ["2025-01-02", "2025-01-03", "2025-01-06"];
+  value.replay.trades = [
+    {
+      ...value.replay.trades[0],
+      id: "held",
+      entryGroupId: "held",
+      dateClosed: "2025-01-06",
+      netPlPerContract: 20,
+    },
+    {
+      ...value.replay.trades[1],
+      id: "unmarked",
+      entryGroupId: "unmarked",
+      dateClosed: "2025-01-06",
+      netPlPerContract: 10,
+    },
+  ];
+  value.replay.marks = {
+    mode: "child",
+    values: [
+      { tradeId: "held", date: "2025-01-02", netOpenPlPerContract: 0 },
+      { tradeId: "held", date: "2025-01-03", netOpenPlPerContract: 0 },
+    ],
+  };
+  value.weightBounds.a = { min: 0, max: 1 };
+  value.initialWeights = [{ a: 1 }];
+  value.steps = [1];
+  value.robust.shrinkageFactors = [1];
+  value.stability = {
+    replicates: 4,
+    seed: 249,
+    meanBlockDays: 1,
+    sensitivityBlockDays: [],
+    topRegionFraction: 0.5,
+  };
+  const result = searchBookAtDrawdown(value);
+  const panel = result.stability.panels[0];
+  expect(panel.replicates).toHaveLength(4);
+  expect(panel.replicates.filter((r) => r.status === "unavailable")).toHaveLength(2);
+  expect(
+    panel.replicates
+      .filter((r) => r.status === "unavailable")
+      .every((r) => r.reason === "missing_mark_coverage" && r.search === null),
+  ).toBe(true);
+  expect(panel.feasibleFraction).toBe(0.5);
+  value.replay.trades[0].buyingPowerPerContract = 0;
+  expect(() => searchBookAtDrawdown(value)).toThrow(/unit economics/);
 });
