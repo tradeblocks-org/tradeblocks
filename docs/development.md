@@ -268,20 +268,28 @@ refuses with `no_feasible_candidate` and null best/robust answers.
 
 Callers may add a policy with
 `feasible?: (replay: BookReplayResult) => boolean | { ok: false; reason: string }`.
-It runs once for every uncached economic evaluation, including drawdown-infeasible
-and empty vectors, and is inherited by shrinkage, drop-one and stability searches.
+It runs once for every uncached economic evaluation, including the all-removed
+vector and vectors already drawdown-infeasible, and is inherited by shrinkage,
+drop-one and synthetic stability cohorts.
 Only `true` permits selection alongside the existing drawdown, solvency and
 included-entry requirements. `false` records `caller_feasibility`; an object
 records its supplied reason as the evaluation's `feasibilityRejectionReason`.
+Returns other than `true`, `false` or `{ ok: false, reason: <nonempty string> }`
+throw a named `Invalid drawdown search: feasible returned <type>` RangeError;
+empty or whitespace-only reasons are invalid.
 When supplied, `feasibilityRejections: { count, reasons }` counts rejected
 evaluations across the result and its nested searches, matching the scope of
 `totalEvaluations`; each nested result also reports its own subtree, so do not
-sum those aggregates again. Cached evaluations do not rerun the policy. Caller
-exceptions propagate, and the policy must support synthetic entry-cohort replays
+sum those aggregates again. Cached evaluations do not rerun the policy.
+Counts and reasons record how often the policy said no, including on vectors
+already infeasible; they do not attribute why a vector was lost.
+Caller exceptions propagate, and the policy must support synthetic entry-cohort replays
 if stability is enabled. Extra replays performed inside a policy remain the
 caller's work to count, not library evaluations. Leaving the policy unset adds
 no metadata and preserves the previous serialized result exactly; the library
 does not impose a built-in all-entries-positive or native-rounding policy.
+Returned `declarations` omit the function, including in nested results, so the
+results remain compatible with `structuredClone`; the input is not mutated.
 
 `dropOne` reoptimizes with each member constrained to removal, with the same
 per-optimization budget. Stability uses the existing seeded stationary-block

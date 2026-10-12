@@ -83,7 +83,7 @@ export interface DrawdownBudgetSearchResult {
   weightRanges: Record<string, { min: number; max: number }>;
   termination: "budget" | "step_ladder_exhausted" | "calibration_refusal";
   cardinalityUpperBound: number;
-  declarations: DrawdownBudgetSearchInput;
+  declarations: Omit<DrawdownBudgetSearchInput, "feasible">;
   dropOne: Array<{
     memberId: string;
     redundant: boolean;
@@ -186,6 +186,20 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     };
     if (input.feasible) {
       const accepted = input.feasible(replay);
+      if (
+        accepted !== true &&
+        accepted !== false &&
+        (typeof accepted !== "object" ||
+          accepted === null ||
+          Array.isArray(accepted) ||
+          accepted.ok !== false ||
+          typeof accepted.reason !== "string" ||
+          accepted.reason.trim().length === 0)
+      ) {
+        const type =
+          accepted === null ? "null" : Array.isArray(accepted) ? "array" : typeof accepted;
+        throw new RangeError(`Invalid drawdown search: feasible returned ${type}`);
+      }
       if (accepted !== true) {
         const reason = accepted === false ? "caller_feasibility" : accepted.reason;
         candidate.feasible = false;
@@ -332,6 +346,8 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     for (const panel of stability.panels)
       for (const replicate of panel.replicates) if (replicate.search) merge(replicate.search);
   }
+  const declarations = input.feasible ? { ...input } : input;
+  if (input.feasible) delete declarations.feasible;
   const result: DrawdownBudgetSearchResult = {
     status: reason ? "refused" : "ok",
     reason,
@@ -357,7 +373,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
           1),
       1,
     ),
-    declarations: input,
+    declarations,
     dropOne,
     stability,
     totalEvaluations,

@@ -653,3 +653,45 @@ it("validates the optional policy boundary and propagates caller exceptions", ()
   };
   expect(() => searchBookAtDrawdown(value)).toThrow(failure);
 });
+
+it.each([
+  [undefined, "undefined"],
+  [null, "null"],
+  [1, "number"],
+  ["no", "string"],
+  [{ ok: false }, "object"],
+  [{ ok: false, reason: null }, "object"],
+  [{ ok: false, reason: 1 }, "object"],
+  [{ ok: false, reason: "" }, "object"],
+  [{ ok: false, reason: "   " }, "object"],
+  [{ ok: true, reason: "not a rejection" }, "object"],
+  [[], "array"],
+] as const)("refuses malformed policy return %p by name", (returned, type) => {
+  const value = input();
+  value.feasible = (() => returned) as DrawdownBudgetSearchInput["feasible"];
+  expect(() => searchBookAtDrawdown(value)).toThrow(
+    `Invalid drawdown search: feasible returned ${type}`,
+  );
+});
+
+it("keeps policy results structured-cloneable including drop-one and synthetic stability declarations", () => {
+  const value = input();
+  value.dropOne = true;
+  value.stability.replicates = 2;
+  value.feasible = () => true;
+  const result = searchBookAtDrawdown(value);
+  expect(result.dropOne).toHaveLength(1);
+  expect(result.stability.panels[0].replicates).toHaveLength(2);
+  for (const search of [
+    result,
+    ...result.dropOne.map((drop) => drop.search),
+    ...result.stability.panels.flatMap((panel) =>
+      panel.replicates.flatMap((replicate) => (replicate.search ? [replicate.search] : [])),
+    ),
+  ]) {
+    expect(search.declarations).not.toHaveProperty("feasible");
+    expect(search.declarations).toMatchObject({ objective: "returnPct", maxEvaluations: 20 });
+  }
+  expect(structuredClone(result)).toEqual(result);
+  expect(value.feasible).toBeDefined();
+});
