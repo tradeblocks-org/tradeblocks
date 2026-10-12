@@ -266,6 +266,23 @@ from selection but retained in `evaluations` and `k`, labelled with
 `executedGroups` and `executedIgnoredOnlyGroups`. If none qualifies, search
 refuses with `no_feasible_candidate` and null best/robust answers.
 
+Callers may add a policy with
+`feasible?: (replay: BookReplayResult) => boolean | { ok: false; reason: string }`.
+It runs once for every uncached economic evaluation, including drawdown-infeasible
+and empty vectors, and is inherited by shrinkage, drop-one and stability searches.
+Only `true` permits selection alongside the existing drawdown, solvency and
+included-entry requirements. `false` records `caller_feasibility`; an object
+records its supplied reason as the evaluation's `feasibilityRejectionReason`.
+When supplied, `feasibilityRejections: { count, reasons }` counts rejected
+evaluations across the result and its nested searches, matching the scope of
+`totalEvaluations`; each nested result also reports its own subtree, so do not
+sum those aggregates again. Cached evaluations do not rerun the policy. Caller
+exceptions propagate, and the policy must support synthetic entry-cohort replays
+if stability is enabled. Extra replays performed inside a policy remain the
+caller's work to count, not library evaluations. Leaving the policy unset adds
+no metadata and preserves the previous serialized result exactly; the library
+does not impose a built-in all-entries-positive or native-rounding policy.
+
 `dropOne` reoptimizes with each member constrained to removal, with the same
 per-optimization budget. Stability uses the existing seeded stationary-block
 resampler on joint session indices. It transplants entry-day cohorts, preserving

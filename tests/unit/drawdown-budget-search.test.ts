@@ -1,4 +1,6 @@
-import { searchBookAtDrawdown, type DrawdownBudgetSearchInput } from "@tradeblocks/lib";
+import { createHash } from "node:crypto";
+import { searchBookAtDrawdown } from "@tradeblocks/lib";
+import type { BookReplayResult, DrawdownBudgetSearchInput } from "@tradeblocks/lib";
 
 function input(): DrawdownBudgetSearchInput {
   return {
@@ -501,4 +503,153 @@ it("retains the coordinate best and warns when nonlinear capacity makes a shrink
   expect(result.warnings.some((w) => /shrinkage.*outperformed.*best.*unchanged/i.test(w))).toBe(
     true,
   );
+});
+
+it("uses caller feasibility to steer away from an otherwise feasible higher-return optimum", () => {
+  const value = input();
+  value.targetDrawdownPct = 25;
+  value.robust.maxDrawdownPct = 25;
+  expect(searchBookAtDrawdown(value).best).toMatchObject({ weights: { a: 1 }, returnPct: 40 });
+  const visited: BookReplayResult[] = [];
+  value.feasible = (replay) => {
+    visited.push(replay);
+    return replay.members.some((member) =>
+      member.contractsPerEntry.some((entry) => entry.contracts > 1),
+    )
+      ? { ok: false, reason: "more_than_one_contract" }
+      : true;
+  };
+  const result = searchBookAtDrawdown(value);
+  expect(result.status).toBe("ok");
+  expect(result.best).toMatchObject({ weights: { a: 0.5 }, returnPct: 20 });
+  expect(result.robust).toMatchObject({ weights: { a: 0.5 }, returnPct: 20 });
+  expect(result.evaluations.find((evaluation) => evaluation.weights.a === 1)).toMatchObject({
+    feasible: false,
+    feasibilityRejectionReason: "more_than_one_contract",
+    returnPct: 40,
+  });
+  expect(result.feasibilityRejections).toEqual({
+    count: 1,
+    reasons: { more_than_one_contract: 1 },
+  });
+  expect(visited).toHaveLength(result.totalEvaluations);
+});
+
+it("counts boolean-false rejection reasons even for drawdown-infeasible and empty evaluations", () => {
+  const value = input();
+  let calls = 0;
+  value.feasible = () => {
+    calls++;
+    return false;
+  };
+  const result = searchBookAtDrawdown(value);
+  expect(result).toMatchObject({
+    status: "refused",
+    reason: "no_feasible_candidate",
+    best: null,
+    robust: null,
+  });
+  expect(calls).toBe(result.k);
+  expect(result.feasibilityRejections).toEqual({
+    count: result.k,
+    reasons: { caller_feasibility: result.k },
+  });
+  expect(
+    result.evaluations.every(
+      (evaluation) =>
+        evaluation.feasibilityRejectionReason === "caller_feasibility" && !evaluation.feasible,
+    ),
+  ).toBe(true);
+});
+
+it("applies and aggregates caller feasibility throughout drop-one, shrinkage and stability searches", () => {
+  const value = input();
+  value.targetDrawdownPct = 25;
+  value.robust.maxDrawdownPct = 25;
+  value.dropOne = true;
+  value.stability.replicates = 2;
+  let calls = 0;
+  value.feasible = (replay) => {
+    calls++;
+    if (replay.census.executedGroups === 0) return { ok: false, reason: "caller_empty" };
+    return replay.members.some((member) =>
+      member.contractsPerEntry.some((entry) => entry.contracts > 1),
+    )
+      ? { ok: false, reason: "more_than_one_contract" }
+      : true;
+  };
+  const result = searchBookAtDrawdown(value);
+  const searches = [
+    result,
+    ...result.dropOne.map((drop) => drop.search),
+    ...result.stability.panels.flatMap((panel) =>
+      panel.replicates.flatMap((replicate) => (replicate.search ? [replicate.search] : [])),
+    ),
+  ];
+  const rejected = searches.flatMap((search) =>
+    search.evaluations.filter((evaluation) => evaluation.feasibilityRejectionReason !== undefined),
+  );
+  expect(result.dropOne).toHaveLength(1);
+  expect(result.stability.panels[0].replicates).toHaveLength(2);
+  expect(calls).toBe(result.totalEvaluations);
+  expect(result.feasibilityRejections?.count).toBe(rejected.length);
+  expect(result.feasibilityRejections?.reasons.caller_empty).toBe(
+    rejected.filter((evaluation) => evaluation.feasibilityRejectionReason === "caller_empty")
+      .length,
+  );
+  expect(result.feasibilityRejections?.reasons.more_than_one_contract).toBe(
+    rejected.filter(
+      (evaluation) => evaluation.feasibilityRejectionReason === "more_than_one_contract",
+    ).length,
+  );
+  expect(rejected.every((evaluation) => !evaluation.feasible)).toBe(true);
+});
+
+it("leaves the unset caller predicate byte-identical to the captured pre-addition public result", () => {
+  const result = searchBookAtDrawdown(input());
+  expect(createHash("sha256").update(JSON.stringify(result)).digest("hex")).toBe(
+    "bfce36a33ee77a15e19d7f9734d9cbac38cfb544320662b05ca4b463533c0c4c",
+  );
+  expect(result).not.toHaveProperty("feasibilityRejections");
+  expect(
+    result.evaluations.every((evaluation) => !("feasibilityRejectionReason" in evaluation)),
+  ).toBe(true);
+  expect(JSON.stringify(searchBookAtDrawdown({ ...input(), feasible: undefined }))).toBe(
+    JSON.stringify(result),
+  );
+});
+
+it("keeps the existing risk and executed-entry requirements when a caller permits every replay", () => {
+  const value = input();
+  value.targetDrawdownPct = 1;
+  value.feasible = () => true;
+  const result = searchBookAtDrawdown(value);
+  expect(result).toMatchObject({
+    status: "refused",
+    reason: "no_feasible_candidate",
+    best: null,
+    robust: null,
+  });
+  expect(result.feasibilityRejections).toEqual({ count: 0, reasons: {} });
+});
+
+it("records arbitrary caller reason strings without inheriting dictionary properties", () => {
+  const value = input();
+  value.feasible = () => ({ ok: false, reason: "__proto__" });
+  const result = searchBookAtDrawdown(value);
+  expect(result.feasibilityRejections?.count).toBe(result.k);
+  expect(result.feasibilityRejections?.reasons["__proto__"]).toBe(result.k);
+  expect(Object.keys(result.feasibilityRejections!.reasons)).toEqual(["__proto__"]);
+});
+
+it("validates the optional policy boundary and propagates caller exceptions", () => {
+  expect(() =>
+    searchBookAtDrawdown({ ...input(), feasible: 1 } as unknown as DrawdownBudgetSearchInput),
+  ).toThrow("Invalid drawdown search: feasible");
+  const value = input();
+  const failure = new Error("caller policy failed");
+  value.feasible = () => {
+    throw failure;
+  };
+  expect(() => searchBookAtDrawdown(value)).toThrow(failure);
 });
