@@ -255,6 +255,23 @@ it("refuses unusable calibration and impossible drawdown budgets without returni
   });
 });
 
+it("refuses a scheduled replay because candidate weights scale only base declarations", () => {
+  const value = input();
+  const base = value.replay.members.a;
+  value.replay.sizingSchedule = {
+    a: [
+      {
+        effectiveDate: "2025-01-02",
+        sizing: base.sizing,
+        maxContractsPerTrade: base.maxContractsPerTrade,
+        maxAllocationAmount: base.maxAllocationAmount,
+        maxOpenTrades: base.maxOpenTrades,
+      },
+    ],
+  };
+  expect(() => searchBookAtDrawdown(value)).toThrow(/replay\.sizingSchedule is not supported/);
+});
+
 it("distinguishes true removal from capped zero allocation and reoptimizes drop-one", () => {
   const value = input();
   value.replay.members.a = {

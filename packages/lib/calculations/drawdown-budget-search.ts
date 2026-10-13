@@ -410,6 +410,9 @@ function validateSearch(input: DrawdownBudgetSearchInput): void {
   )
     fail("declarations");
   if (input.feasible !== undefined && typeof input.feasible !== "function") fail("feasible");
+  // Candidate weights scale base member declarations only; a schedule would override them.
+  if (input.replay.sizingSchedule !== undefined)
+    fail("replay.sizingSchedule is not supported; candidate weights scale base declarations only");
   if (input.memberCapPolicies !== undefined) {
     if (
       input.memberCapPolicies === null ||
