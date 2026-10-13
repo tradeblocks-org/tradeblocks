@@ -229,6 +229,39 @@ These differ from the existing `percentileBands`, which contain terminal
 **equity dollars**, not return or maximum-drawdown quantiles. Existing modes'
 response shape, defaults and seeded results are unchanged.
 
+### Marginal contribution: optional expected shortfall
+
+`marginal_contribution` accepts `includeTailRisk: true` and optional
+`tailConfidence` (default `0.95`). Without the opt-in, the response—including
+its summary, Sharpe and Sortino values—remains unchanged.
+
+The added `tailRisk` section reports `baseline` and `removedStrategyArms`,
+each with `expectedShortfall`, `reason`, `observations` and `dateRange`.
+Removed arms also identify `strategy` and `changeVsBaseline`. The arms follow
+the existing `targetStrategy`, `topN` and marginal-Sharpe ordering.
+
+This is **incremental (leave-one-out), non-additive** realized-trade analysis.
+The changes do not sum to book ES. It is not Euler or marked-account attribution.
+ES uses the public `cvarFromReturnsAtConfidence` estimator: an interpolated
+lower-tail cutoff and the unweighted mean of observations at or below it.
+Confidence must be finite and strictly between 0 and 1; invalid confidence
+is surfaced as a tool error from the estimator.
+
+All ES values are signed decimal returns, not positive loss magnitudes or
+annualized percentages. Negative ES indicates tail losses.
+`changeVsBaseline = removed arm ES - baseline ES`: a positive change means
+**removing X reduces tail loss**.
+
+Each arm uses exactly its existing Sharpe/Sortino return series: close-date
+realized net P/L (opening-date fallback), dense business days with weekend
+trade dates retained, divided by that arm's prior reconstructed equity. All
+arms start with the original portfolio's initial capital. **Each arm's extent
+follows its own close dates**, not a shared padded window; observation counts
+and first/last dates make the different extents explicit. These are raw returns,
+not risk-free excess returns. An empty arm returns ES and change as `null`,
+with a reason and no date range; a single observation is valid for this
+estimator and is not replaced with zero.
+
 ## Edge Decay
 
 | Tool                               | Description                                          |

@@ -759,12 +759,15 @@ export class PortfolioStatsCalculator {
   }
 
   /**
-   * Calculate daily returns WITH associated dates for date-based risk-free rate calculations.
-   * Returns an array of {date, return} pairs where:
-   * - date: The trading day's date (for looking up that day's Treasury rate)
-   * - return: The portfolio return for that day as a decimal (e.g., 0.01 = 1%)
+   * Return the exact dated decimal series used by Sharpe and Sortino.
+   * With daily logs, returns use daily P/L divided by prior net liquidity.
+   * Otherwise, reported trade P/L is grouped by close date (opening-date fallback),
+   * divided by reconstructed prior equity, and zero-filled on business days
+   * between this arm's first and last close dates. Weekend trade dates are retained.
+   * Nonpositive prior equity produces no observation. Empty trades return [].
+   * Callers needing fee-aware returns should first rebuildEquityCurve with useNetPl.
    */
-  private calculateDailyReturnsWithDates(
+  calculateDailyReturnsWithDates(
     trades: Trade[],
     dailyLogEntries?: DailyLogEntry[],
   ): DailyReturnWithDate[] {

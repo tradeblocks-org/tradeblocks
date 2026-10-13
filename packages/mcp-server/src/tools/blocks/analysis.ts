@@ -19,6 +19,7 @@ import {
   buildRealizedDrawdownAttributionByCloseDate,
   STRESS_SCENARIOS,
   buildRealizedStressScenarios,
+  cvarFromReturnsAtConfidence,
 } from "@tradeblocks/lib";
 import type { Trade } from "@tradeblocks/lib";
 import { filterByStrategy, realizationDateBounds } from "../shared/filters.ts";
@@ -277,12 +278,17 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
     }),
   );
 
+  /**
+   * Leave-one-out ratio effects, optionally including signed realized-return ES.
+   * ES changes are incremental, non-additive; positive means removal reduces tail loss.
+   * Every measure reuses the arm's ratio return series and original initial capital.
+   */
   // Tool 9: marginal_contribution
   server.registerTool(
     "marginal_contribution",
     {
       description:
-        "Calculate how each strategy affects portfolio risk-adjusted returns (Sharpe/Sortino). Shows marginal contribution: positive means strategy IMPROVES the ratio, negative means it HURTS.",
+        "Calculate how each strategy affects portfolio risk-adjusted returns (Sharpe/Sortino). Shows marginal contribution: positive means strategy IMPROVES the ratio, negative means it HURTS. Optionally reports incremental (leave-one-out), non-additive realized-trade expected shortfall; a positive ES change means removal reduces tail loss.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         targetStrategy: z
@@ -300,243 +306,339 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           .describe(
             "Number of top contributors to return when targetStrategy is omitted (default: 5)",
           ),
+        includeTailRisk: z
+          .boolean()
+          .optional()
+          .describe(
+            "Include incremental (leave-one-out), non-additive expected shortfall on the existing ratio return series.",
+          ),
+        tailConfidence: z
+          .number()
+          .default(0.95)
+          .describe(
+            "ES confidence, strictly between 0 and 1 (default 0.95); validated by the public estimator when includeTailRisk is true.",
+          ),
       }),
     },
-    withSyncedBlock(baseDir, async ({ blockId, targetStrategy, topN }) => {
-      try {
-        const block = await loadBlock(baseDir, blockId);
-        const trades = block.trades;
+    withSyncedBlock(
+      baseDir,
+      async ({ blockId, targetStrategy, topN, includeTailRisk, tailConfidence }) => {
+        try {
+          if (includeTailRisk) cvarFromReturnsAtConfidence([], tailConfidence);
+          const block = await loadBlock(baseDir, blockId);
+          const trades = block.trades;
 
-        if (trades.length === 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `No trades found in block "${blockId}".`,
-              },
-            ],
-          };
-        }
-
-        // Get unique strategies
-        const strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
-        const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(
-          trades,
-          block.dailyLogs,
-        );
-        const rebuildArm = (armTrades: Trade[]): Trade[] =>
-          rebuildEquityCurve(armTrades, {
-            initialCapital,
-            useNetPl: true,
-          });
-        const baselineTrades = rebuildArm(trades);
-
-        // Validate targetStrategy if provided
-        if (targetStrategy) {
-          const matchedStrategy = strategies.find(
-            (s) => s.toLowerCase() === targetStrategy.toLowerCase(),
-          );
-          if (!matchedStrategy) {
+          if (trades.length === 0) {
             return {
               content: [
                 {
                   type: "text",
-                  text: `Strategy "${targetStrategy}" not found in block. Available: ${strategies.join(", ")}`,
+                  text: `No trades found in block "${blockId}".`,
                 },
               ],
-              isError: true,
             };
           }
-        }
 
-        // Edge case: single strategy portfolio
-        if (strategies.length === 1) {
+          // Get unique strategies
+          const strategies = Array.from(new Set(trades.map((t) => t.strategy))).sort();
+          const initialCapital = PortfolioStatsCalculator.calculateInitialCapital(
+            trades,
+            block.dailyLogs,
+          );
+          const rebuildArm = (armTrades: Trade[]): Trade[] =>
+            rebuildEquityCurve(armTrades, {
+              initialCapital,
+              useNetPl: true,
+            });
+          const baselineTrades = rebuildArm(trades);
+          type TailArm = {
+            expectedShortfall: number | null;
+            reason: string | null;
+            observations: number;
+            dateRange: { start: string; end: string } | null;
+          };
+          const tailArm = (armTrades: Trade[]): TailArm => {
+            const returns = calculator.calculateDailyReturnsWithDates(armTrades);
+            const expectedShortfall = cvarFromReturnsAtConfidence(returns, tailConfidence);
+            const dateKey = (date: Date) =>
+              `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+            return {
+              expectedShortfall: expectedShortfall ?? null,
+              reason:
+                expectedShortfall === undefined
+                  ? "No return observations available for this arm."
+                  : null,
+              observations: returns.length,
+              dateRange:
+                returns.length > 0
+                  ? {
+                      start: dateKey(returns[0].date),
+                      end: dateKey(returns[returns.length - 1].date),
+                    }
+                  : null,
+            };
+          };
+          const tailRisk = includeTailRisk
+            ? {
+                confidence: tailConfidence,
+                attribution: "incremental (leave-one-out), non-additive",
+                unit: "signed decimal return",
+                signConvention:
+                  "ES is the signed lower-tail mean; negative values indicate losses. changeVsBaseline = removed arm ES - baseline ES; positive means removing X reduces tail loss.",
+                basis: "realized_trade_pl_for_all_counterfactual_arms",
+                capitalConvention:
+                  "Original portfolio initial capital, with each arm's own prior reconstructed net equity as the daily denominator.",
+                axis: "Dense business days with weekend trade dates retained; each arm's extent follows its own close dates (opening-date fallback), exactly as its Sharpe/Sortino series.",
+                initialCapital,
+                baseline: tailArm(baselineTrades),
+                removedStrategyArms: [] as Array<
+                  TailArm & { strategy: string; changeVsBaseline: number | null }
+                >,
+              }
+            : undefined;
+          const addTailArm = (strategy: string, armTrades: Trade[]) => {
+            if (!tailRisk) return;
+            const arm = tailArm(armTrades);
+            tailRisk.removedStrategyArms.push({
+              strategy,
+              ...arm,
+              changeVsBaseline:
+                arm.expectedShortfall !== null && tailRisk.baseline.expectedShortfall !== null
+                  ? arm.expectedShortfall - tailRisk.baseline.expectedShortfall
+                  : null,
+            });
+          };
+
+          // Validate targetStrategy if provided
+          if (targetStrategy) {
+            const matchedStrategy = strategies.find(
+              (s) => s.toLowerCase() === targetStrategy.toLowerCase(),
+            );
+            if (!matchedStrategy) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Strategy "${targetStrategy}" not found in block. Available: ${strategies.join(", ")}`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+          }
+
+          // Edge case: single strategy portfolio
+          if (strategies.length === 1) {
+            const baselineStats = calculator.calculatePortfolioStats(
+              baselineTrades,
+              undefined,
+              true,
+            );
+            addTailArm(strategies[0], []);
+
+            const summary = `Marginal Contribution: ${blockId} | Single strategy portfolio - cannot calculate marginal contribution`;
+
+            const structuredData = {
+              blockId,
+              ...(tailRisk ? { tailRisk } : {}),
+              filters: { targetStrategy: targetStrategy ?? null, topN },
+              baseline: {
+                totalStrategies: 1,
+                totalTrades: trades.length,
+                sharpeRatio: baselineStats.sharpeRatio,
+                sortinoRatio: baselineStats.sortinoRatio,
+              },
+              contributions: [
+                {
+                  strategy: strategies[0],
+                  trades: trades.length,
+                  marginalSharpe: null,
+                  marginalSortino: null,
+                },
+              ],
+              summary: {
+                mostBeneficial: null,
+                leastBeneficial: null,
+              },
+              calculationMethodology: {
+                comparisonBasis: "realized_trade_pl_for_all_counterfactual_arms",
+                baseline: calculator.getCalculationMethodology(baselineTrades),
+              },
+              message:
+                "Single strategy portfolio - marginal contribution cannot be calculated (no 'without' comparison possible)",
+            };
+
+            return createToolOutput(summary, structuredData);
+          }
+
+          // A removed-strategy counterfactual cannot reuse the original
+          // full-portfolio daily log. Use the same trade-only basis for every arm.
           const baselineStats = calculator.calculatePortfolioStats(baselineTrades, undefined, true);
 
-          const summary = `Marginal Contribution: ${blockId} | Single strategy portfolio - cannot calculate marginal contribution`;
+          // Determine which strategies to analyze
+          const strategiesToAnalyze = targetStrategy
+            ? strategies.filter((s) => s.toLowerCase() === targetStrategy.toLowerCase())
+            : strategies;
 
+          // Calculate marginal contribution for each strategy
+          type Contribution = {
+            strategy: string;
+            trades: number;
+            marginalSharpe: number | null;
+            marginalSortino: number | null;
+          };
+          const contributions: Contribution[] = [];
+
+          for (const strategy of strategiesToAnalyze) {
+            // Filter OUT this strategy's trades (portfolio WITHOUT this strategy)
+            const tradesWithout = trades.filter(
+              (t) => t.strategy.toLowerCase() !== strategy.toLowerCase(),
+            );
+            const strategyTrades = trades.filter(
+              (t) => t.strategy.toLowerCase() === strategy.toLowerCase(),
+            );
+
+            // Edge case: removing this strategy leaves nothing
+            if (tradesWithout.length === 0) {
+              addTailArm(strategy, []);
+              contributions.push({
+                strategy,
+                trades: strategyTrades.length,
+                marginalSharpe: null,
+                marginalSortino: null,
+              });
+              continue;
+            }
+
+            // Calculate "without" portfolio metrics
+            // Trade-based: daily logs include the removed strategy's impact so can't be used here
+            const withoutTrades = rebuildArm(tradesWithout);
+            addTailArm(strategy, withoutTrades);
+            const withoutStats = calculator.calculatePortfolioStats(
+              withoutTrades,
+              undefined,
+              true, // Force trade-based - daily logs include the removed strategy's impact
+            );
+
+            // Marginal contribution = baseline - without (positive = improves, negative = hurts)
+            const hasValidSharpe =
+              baselineStats.sharpeRatio != null && withoutStats.sharpeRatio != null;
+            const hasValidSortino =
+              baselineStats.sortinoRatio != null && withoutStats.sortinoRatio != null;
+            const marginalSharpe = hasValidSharpe
+              ? baselineStats.sharpeRatio! - withoutStats.sharpeRatio!
+              : null;
+            const marginalSortino = hasValidSortino
+              ? baselineStats.sortinoRatio! - withoutStats.sortinoRatio!
+              : null;
+
+            contributions.push({
+              strategy,
+              trades: strategyTrades.length,
+              marginalSharpe,
+              marginalSortino,
+            });
+          }
+
+          // Sort by marginal Sharpe (most positive/beneficial first)
+          contributions.sort((a, b) => {
+            // Put null values last
+            if (a.marginalSharpe === null && b.marginalSharpe === null) return 0;
+            if (a.marginalSharpe === null) return 1;
+            if (b.marginalSharpe === null) return -1;
+            return b.marginalSharpe - a.marginalSharpe; // Descending (most beneficial first)
+          });
+
+          // Apply topN limit (only when not filtering by targetStrategy)
+          const limitedContributions = targetStrategy
+            ? contributions
+            : contributions.slice(0, topN);
+
+          // Find most and least beneficial
+          const validContributions = contributions.filter((c) => c.marginalSharpe !== null);
+          const mostBeneficial =
+            validContributions.length > 0
+              ? {
+                  strategy: validContributions[0].strategy,
+                  sharpe: validContributions[0].marginalSharpe,
+                }
+              : null;
+          const lastValid = validContributions[validContributions.length - 1];
+          const leastBeneficial =
+            validContributions.length > 0
+              ? { strategy: lastValid.strategy, sharpe: lastValid.marginalSharpe }
+              : null;
+
+          // Build summary line
+          const summaryParts: string[] = [`Marginal Contribution: ${blockId}`];
+          if (mostBeneficial && mostBeneficial.sharpe !== null) {
+            const sharpeStr =
+              mostBeneficial.sharpe >= 0
+                ? `+${formatRatio(mostBeneficial.sharpe)}`
+                : formatRatio(mostBeneficial.sharpe);
+            summaryParts.push(`Top: ${mostBeneficial.strategy} (Sharpe ${sharpeStr})`);
+          }
+          if (
+            leastBeneficial &&
+            leastBeneficial.sharpe !== null &&
+            leastBeneficial.strategy !== mostBeneficial?.strategy
+          ) {
+            const sharpeStr =
+              leastBeneficial.sharpe >= 0
+                ? `+${formatRatio(leastBeneficial.sharpe)}`
+                : formatRatio(leastBeneficial.sharpe);
+            summaryParts.push(`Worst: ${leastBeneficial.strategy} (Sharpe ${sharpeStr})`);
+          }
+          const summary = summaryParts.join(" | ");
+
+          // Build structured data
           const structuredData = {
             blockId,
+            ...(tailRisk
+              ? {
+                  tailRisk: {
+                    ...tailRisk,
+                    removedStrategyArms: limitedContributions.map((contribution) =>
+                      tailRisk.removedStrategyArms.find(
+                        (arm) => arm.strategy === contribution.strategy,
+                      )!,
+                    ),
+                  },
+                }
+              : {}),
             filters: { targetStrategy: targetStrategy ?? null, topN },
             baseline: {
-              totalStrategies: 1,
+              totalStrategies: strategies.length,
               totalTrades: trades.length,
               sharpeRatio: baselineStats.sharpeRatio,
               sortinoRatio: baselineStats.sortinoRatio,
             },
-            contributions: [
-              {
-                strategy: strategies[0],
-                trades: trades.length,
-                marginalSharpe: null,
-                marginalSortino: null,
-              },
-            ],
+            contributions: limitedContributions,
             summary: {
-              mostBeneficial: null,
-              leastBeneficial: null,
+              mostBeneficial,
+              leastBeneficial,
             },
             calculationMethodology: {
               comparisonBasis: "realized_trade_pl_for_all_counterfactual_arms",
               baseline: calculator.getCalculationMethodology(baselineTrades),
+              removedStrategyArms:
+                "Each arm uses the same close-date realized-P/L, dense-business-day, historical-DTB3 convention as baseline.",
             },
-            message:
-              "Single strategy portfolio - marginal contribution cannot be calculated (no 'without' comparison possible)",
           };
 
           return createToolOutput(summary, structuredData);
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error calculating marginal contribution: ${(error as Error).message}`,
+              },
+            ],
+            isError: true,
+          };
         }
-
-        // A removed-strategy counterfactual cannot reuse the original
-        // full-portfolio daily log. Use the same trade-only basis for every arm.
-        const baselineStats = calculator.calculatePortfolioStats(baselineTrades, undefined, true);
-
-        // Determine which strategies to analyze
-        const strategiesToAnalyze = targetStrategy
-          ? strategies.filter((s) => s.toLowerCase() === targetStrategy.toLowerCase())
-          : strategies;
-
-        // Calculate marginal contribution for each strategy
-        type Contribution = {
-          strategy: string;
-          trades: number;
-          marginalSharpe: number | null;
-          marginalSortino: number | null;
-        };
-        const contributions: Contribution[] = [];
-
-        for (const strategy of strategiesToAnalyze) {
-          // Filter OUT this strategy's trades (portfolio WITHOUT this strategy)
-          const tradesWithout = trades.filter(
-            (t) => t.strategy.toLowerCase() !== strategy.toLowerCase(),
-          );
-          const strategyTrades = trades.filter(
-            (t) => t.strategy.toLowerCase() === strategy.toLowerCase(),
-          );
-
-          // Edge case: removing this strategy leaves nothing
-          if (tradesWithout.length === 0) {
-            contributions.push({
-              strategy,
-              trades: strategyTrades.length,
-              marginalSharpe: null,
-              marginalSortino: null,
-            });
-            continue;
-          }
-
-          // Calculate "without" portfolio metrics
-          // Trade-based: daily logs include the removed strategy's impact so can't be used here
-          const withoutStats = calculator.calculatePortfolioStats(
-            rebuildArm(tradesWithout),
-            undefined,
-            true, // Force trade-based - daily logs include the removed strategy's impact
-          );
-
-          // Marginal contribution = baseline - without (positive = improves, negative = hurts)
-          const hasValidSharpe =
-            baselineStats.sharpeRatio != null && withoutStats.sharpeRatio != null;
-          const hasValidSortino =
-            baselineStats.sortinoRatio != null && withoutStats.sortinoRatio != null;
-          const marginalSharpe = hasValidSharpe
-            ? baselineStats.sharpeRatio! - withoutStats.sharpeRatio!
-            : null;
-          const marginalSortino = hasValidSortino
-            ? baselineStats.sortinoRatio! - withoutStats.sortinoRatio!
-            : null;
-
-          contributions.push({
-            strategy,
-            trades: strategyTrades.length,
-            marginalSharpe,
-            marginalSortino,
-          });
-        }
-
-        // Sort by marginal Sharpe (most positive/beneficial first)
-        contributions.sort((a, b) => {
-          // Put null values last
-          if (a.marginalSharpe === null && b.marginalSharpe === null) return 0;
-          if (a.marginalSharpe === null) return 1;
-          if (b.marginalSharpe === null) return -1;
-          return b.marginalSharpe - a.marginalSharpe; // Descending (most beneficial first)
-        });
-
-        // Apply topN limit (only when not filtering by targetStrategy)
-        const limitedContributions = targetStrategy ? contributions : contributions.slice(0, topN);
-
-        // Find most and least beneficial
-        const validContributions = contributions.filter((c) => c.marginalSharpe !== null);
-        const mostBeneficial =
-          validContributions.length > 0
-            ? {
-                strategy: validContributions[0].strategy,
-                sharpe: validContributions[0].marginalSharpe,
-              }
-            : null;
-        const lastValid = validContributions[validContributions.length - 1];
-        const leastBeneficial =
-          validContributions.length > 0
-            ? { strategy: lastValid.strategy, sharpe: lastValid.marginalSharpe }
-            : null;
-
-        // Build summary line
-        const summaryParts: string[] = [`Marginal Contribution: ${blockId}`];
-        if (mostBeneficial && mostBeneficial.sharpe !== null) {
-          const sharpeStr =
-            mostBeneficial.sharpe >= 0
-              ? `+${formatRatio(mostBeneficial.sharpe)}`
-              : formatRatio(mostBeneficial.sharpe);
-          summaryParts.push(`Top: ${mostBeneficial.strategy} (Sharpe ${sharpeStr})`);
-        }
-        if (
-          leastBeneficial &&
-          leastBeneficial.sharpe !== null &&
-          leastBeneficial.strategy !== mostBeneficial?.strategy
-        ) {
-          const sharpeStr =
-            leastBeneficial.sharpe >= 0
-              ? `+${formatRatio(leastBeneficial.sharpe)}`
-              : formatRatio(leastBeneficial.sharpe);
-          summaryParts.push(`Worst: ${leastBeneficial.strategy} (Sharpe ${sharpeStr})`);
-        }
-        const summary = summaryParts.join(" | ");
-
-        // Build structured data
-        const structuredData = {
-          blockId,
-          filters: { targetStrategy: targetStrategy ?? null, topN },
-          baseline: {
-            totalStrategies: strategies.length,
-            totalTrades: trades.length,
-            sharpeRatio: baselineStats.sharpeRatio,
-            sortinoRatio: baselineStats.sortinoRatio,
-          },
-          contributions: limitedContributions,
-          summary: {
-            mostBeneficial,
-            leastBeneficial,
-          },
-          calculationMethodology: {
-            comparisonBasis: "realized_trade_pl_for_all_counterfactual_arms",
-            baseline: calculator.getCalculationMethodology(baselineTrades),
-            removedStrategyArms:
-              "Each arm uses the same close-date realized-P/L, dense-business-day, historical-DTB3 convention as baseline.",
-          },
-        };
-
-        return createToolOutput(summary, structuredData);
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error calculating marginal contribution: ${(error as Error).message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    }),
+      },
+    ),
   );
 }

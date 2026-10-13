@@ -1,0 +1,111 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`marginal contribution tail risk through MCP stdio preserves the pre-tail default response byte for byte 1`] = `
+{
+  "content": [
+    {
+      "text": "Marginal Contribution: tail | Top: Beta (Sharpe -4.94)",
+      "type": "text",
+    },
+    {
+      "resource": {
+        "mimeType": "application/json",
+        "text": "{"blockId":"tail","filters":{"targetStrategy":null,"topN":5},"baseline":{"totalStrategies":2,"totalTrades":3,"sharpeRatio":0.01994668671206373,"sortinoRatio":0.040967252765007574},"contributions":[{"strategy":"Beta","trades":1,"marginalSharpe":-4.941842286156412,"marginalSortino":-17.623584481081856},{"strategy":"Alpha","trades":2,"marginalSharpe":null,"marginalSortino":null}],"summary":{"mostBeneficial":{"strategy":"Beta","sharpe":-4.941842286156412},"leastBeneficial":{"strategy":"Beta","sharpe":-4.941842286156412}},"calculationMethodology":{"comparisonBasis":"realized_trade_pl_for_all_counterfactual_arms","baseline":{"pnl":{"netPlBasis":"net_after_fees","sourceBasis":"net_includes_fees","feeHandling":"already_included","basisCounts":{"netIncludesFees":3,"grossBeforeFees":0,"undeclaredAssumedGross":0}},"returns":{"source":"realized_trade_pl","attribution":"date_closed_fallback_date_opened","observations":3,"dateRange":{"start":"2024-01-08","end":"2024-01-10"},"idleDays":"included_business_days"},"calmar":{"basis":"realized_trade_equity"},"sharpe":{"annualizationFactor":252,"volatilityEstimator":"sample_standard_deviation_n_minus_1","riskFreeRate":{"mode":"historical","series":"FRED_DTB3","dataThrough":"2026-10-08","resolutionCounts":{"exact":3,"prior":0,"clampedEarliest":0,"staleAfterLatest":0}}},"sortino":{"annualizationFactor":252,"downsideTarget":"zero_excess_return","observationSet":"all_return_observations_positive_values_contribute_zero","denominator":"total_observations_n","riskFreeRate":"same_daily_rate_as_sharpe"},"warnings":["No daily log was available; realized trade P/L is grouped by close date and zero-P/L weekdays are inserted. Exchange holidays are not modeled."]},"removedStrategyArms":"Each arm uses the same close-date realized-P/L, dense-business-day, historical-DTB3 convention as baseline."}}",
+        "uri": "data:application/json",
+      },
+      "type": "resource",
+    },
+  ],
+  "structuredContent": {
+    "baseline": {
+      "sharpeRatio": 0.01994668671206373,
+      "sortinoRatio": 0.040967252765007574,
+      "totalStrategies": 2,
+      "totalTrades": 3,
+    },
+    "blockId": "tail",
+    "calculationMethodology": {
+      "baseline": {
+        "calmar": {
+          "basis": "realized_trade_equity",
+        },
+        "pnl": {
+          "basisCounts": {
+            "grossBeforeFees": 0,
+            "netIncludesFees": 3,
+            "undeclaredAssumedGross": 0,
+          },
+          "feeHandling": "already_included",
+          "netPlBasis": "net_after_fees",
+          "sourceBasis": "net_includes_fees",
+        },
+        "returns": {
+          "attribution": "date_closed_fallback_date_opened",
+          "dateRange": {
+            "end": "2024-01-10",
+            "start": "2024-01-08",
+          },
+          "idleDays": "included_business_days",
+          "observations": 3,
+          "source": "realized_trade_pl",
+        },
+        "sharpe": {
+          "annualizationFactor": 252,
+          "riskFreeRate": {
+            "dataThrough": "2026-10-08",
+            "mode": "historical",
+            "resolutionCounts": {
+              "clampedEarliest": 0,
+              "exact": 3,
+              "prior": 0,
+              "staleAfterLatest": 0,
+            },
+            "series": "FRED_DTB3",
+          },
+          "volatilityEstimator": "sample_standard_deviation_n_minus_1",
+        },
+        "sortino": {
+          "annualizationFactor": 252,
+          "denominator": "total_observations_n",
+          "downsideTarget": "zero_excess_return",
+          "observationSet": "all_return_observations_positive_values_contribute_zero",
+          "riskFreeRate": "same_daily_rate_as_sharpe",
+        },
+        "warnings": [
+          "No daily log was available; realized trade P/L is grouped by close date and zero-P/L weekdays are inserted. Exchange holidays are not modeled.",
+        ],
+      },
+      "comparisonBasis": "realized_trade_pl_for_all_counterfactual_arms",
+      "removedStrategyArms": "Each arm uses the same close-date realized-P/L, dense-business-day, historical-DTB3 convention as baseline.",
+    },
+    "contributions": [
+      {
+        "marginalSharpe": -4.941842286156412,
+        "marginalSortino": -17.623584481081856,
+        "strategy": "Beta",
+        "trades": 1,
+      },
+      {
+        "marginalSharpe": null,
+        "marginalSortino": null,
+        "strategy": "Alpha",
+        "trades": 2,
+      },
+    ],
+    "filters": {
+      "targetStrategy": null,
+      "topN": 5,
+    },
+    "summary": {
+      "leastBeneficial": {
+        "sharpe": -4.941842286156412,
+        "strategy": "Beta",
+      },
+      "mostBeneficial": {
+        "sharpe": -4.941842286156412,
+        "strategy": "Beta",
+      },
+    },
+  },
+}
+`;
