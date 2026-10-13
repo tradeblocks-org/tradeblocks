@@ -206,6 +206,11 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
     input.bookBudget < 0
   )
     throw new RangeError("Invalid risk sizing: targets must be finite and nonnegative");
+  // Weights scale base member declarations only; a schedule would override them after its dates.
+  if (input.replay.sizingSchedule !== undefined)
+    throw new RangeError(
+      "Invalid risk sizing: replay.sizingSchedule is not supported; weights scale base declarations only",
+    );
   if (
     input.risk.method !== "markedMaxDrawdownPct" &&
     input.risk.method !== "standaloneExpectedShortfall"

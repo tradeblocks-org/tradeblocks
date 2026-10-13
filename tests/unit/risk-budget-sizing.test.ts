@@ -429,6 +429,25 @@ it("refuses negative standalone targets and book budgets before replaying", () =
   ).toThrow(/targets must be finite and nonnegative/);
 });
 
+it("refuses a scheduled replay because weights scale only base declarations", () => {
+  const replay = fixture();
+  const base = replay.members.a;
+  replay.sizingSchedule = {
+    a: [
+      {
+        effectiveDate: replay.dates[0],
+        sizing: base.sizing,
+        maxContractsPerTrade: base.maxContractsPerTrade,
+        maxAllocationAmount: base.maxAllocationAmount,
+        maxOpenTrades: base.maxOpenTrades,
+      },
+    ],
+  };
+  expect(() => sizeBookAtEqualStandaloneRisk(sizingInput(replay))).toThrow(
+    /replay\.sizingSchedule is not supported/,
+  );
+});
+
 it.each([0, 1, -0.1, 1.1, NaN, Infinity])(
   "validates standalone ES confidence %s even without trades",
   (confidence) => {
