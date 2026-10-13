@@ -101,6 +101,13 @@ it("fits ES95 references then selects the caller's marked-DD budget book", () =>
   expect(result.bookRisk).toBe(4.5);
   expect(result.members.map((member) => member.referenceWeight)).toEqual([1, 2]);
   expect(result.members.map((member) => member.bookContracts)).toEqual([[2], [5]]);
+  // Final standalone tail losses use each standalone starting equity:
+  // A loses 2 * $1000 / $100000 = .02; B loses 5 * $500 / $100000 = .025.
+  // Residuals remain decimal ES against the original .1 standalone target.
+  expect(result.members[0].finalRisk).toBeCloseTo(0.02, 14);
+  expect(result.members[1].finalRisk).toBeCloseTo(0.025, 14);
+  expect(result.members[0].finalResidualFromTarget).toBeCloseTo(-0.08, 14);
+  expect(result.members[1].finalResidualFromTarget).toBeCloseTo(-0.075, 14);
   expect(result).toMatchObject({
     risk: input.risk,
     riskUnit: "loss_positive_decimal",
