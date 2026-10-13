@@ -27,6 +27,34 @@ it("preserves literal objectives and the legacy result annotation", () => {
   ]);
 });
 
+it("preserves objective literals for annotated requests and coherent normalized declarations", () => {
+  const legacyRequest: DrawdownBudgetSearchInput = input();
+  legacyRequest.feasible = (replay) => replay.returnPct > 0;
+  const ratioRequest: DrawdownBudgetSearchInput<"returnOverDrawdown"> = {
+    ...input(),
+    objective: "returnOverDrawdown",
+    feasible: legacyRequest.feasible,
+  };
+  const legacyResult = searchBookAtDrawdown(legacyRequest);
+  const ratioResult = searchBookAtDrawdown(ratioRequest);
+  const legacy: "returnPct" = legacyResult.declarations.objective;
+  const ratio: "returnOverDrawdown" = ratioResult.declarations.objective;
+  const legacyDeclarations: DrawdownBudgetSearchResult["declarations"] = legacyResult.declarations;
+  const normalizedLegacy: DrawdownBudgetSearchInput = legacyDeclarations;
+  const ratioDeclarations: DrawdownBudgetSearchResult<"returnOverDrawdown">["declarations"] =
+    ratioResult.declarations;
+  const normalizedRatio: DrawdownBudgetSearchInput<"returnOverDrawdown"> = ratioDeclarations;
+  const legacyPolicy: DrawdownBudgetSearchInput["feasible"] = ratioRequest.feasible;
+  normalizedLegacy.feasible = legacyPolicy;
+  normalizedRatio.feasible = legacyPolicy;
+  expect([legacy, ratio, normalizedLegacy.objective, normalizedRatio.objective]).toEqual([
+    "returnPct",
+    "returnOverDrawdown",
+    "returnPct",
+    "returnOverDrawdown",
+  ]);
+});
+
 it("observes committed progress without changing search results", () => {
   const value = input();
   const baseline = searchBookAtDrawdown(value);
@@ -1155,7 +1183,7 @@ it("keeps policy results structured-cloneable including drop-one and synthetic s
   expect(value.feasible).toBeDefined();
 });
 
-function ratioInput(): DrawdownBudgetSearchInput {
+function ratioInput(): DrawdownBudgetSearchInput<"returnPct" | "returnOverDrawdown"> {
   const value = input();
   value.replay.members.a.sizing = { mode: "allocation", allocationPercentage: 50 };
   value.replay.trades[0].netPlPerContract = -20;

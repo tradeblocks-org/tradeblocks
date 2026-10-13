@@ -4,7 +4,7 @@ import { resampleStationaryBlocks } from "./monte-carlo.ts";
 
 type SearchObjective = "returnPct" | "returnOverDrawdown";
 
-export interface DrawdownBudgetSearchInput {
+export interface DrawdownBudgetSearchInput<O extends SearchObjective = "returnPct"> {
   replay: BookReplayInput;
   feasible?: (replay: BookReplayResult) => boolean | { ok: false; reason: string };
   weightBounds: Record<string, { min: number; max: number }>;
@@ -19,7 +19,7 @@ export interface DrawdownBudgetSearchInput {
   targetDrawdownPct: number;
   calibrationMarginPct: number;
   calibrationUsable: boolean;
-  objective?: SearchObjective;
+  objective?: O;
   nearOptimalRelativeTolerance: number;
   robust: { maxDrawdownPct: number; shrinkageFactors: number[] };
   dropOne: boolean;
@@ -91,7 +91,7 @@ export interface DrawdownBudgetSearchResult<O extends SearchObjective = "returnP
   termination: "budget" | "step_ladder_exhausted" | "calibration_refusal";
   cardinalityUpperBound: number;
   /** Normalized request: `objective` is always present (omitted input means "returnPct"). */
-  declarations: Omit<DrawdownBudgetSearchInput, "feasible" | "objective"> & {
+  declarations: Omit<DrawdownBudgetSearchInput<O>, "feasible" | "objective"> & {
     objective: O;
   };
   dropOne: Array<{
@@ -218,20 +218,12 @@ function compareObjective(
  * and resume; changing policy without changing its ID reuses old verdicts.
  * Checkpoint-capable calls with feasible require feasibleId before any evaluation.
  */
-export function searchBookAtDrawdown(
-  input: Omit<DrawdownBudgetSearchInput, "objective"> & { objective?: "returnPct" },
-  options?: BookSearchOptions,
-): DrawdownBudgetSearchResult<"returnPct">;
-export function searchBookAtDrawdown<O extends SearchObjective>(
-  input: Omit<DrawdownBudgetSearchInput, "objective"> & { objective: O },
+export function searchBookAtDrawdown<O extends SearchObjective = "returnPct">(
+  input: DrawdownBudgetSearchInput<O>,
   options?: BookSearchOptions,
 ): DrawdownBudgetSearchResult<O>;
 export function searchBookAtDrawdown(
-  input: DrawdownBudgetSearchInput,
-  options?: BookSearchOptions,
-): DrawdownBudgetSearchResult<SearchObjective>;
-export function searchBookAtDrawdown(
-  input: DrawdownBudgetSearchInput,
+  input: DrawdownBudgetSearchInput<SearchObjective>,
   options?: BookSearchOptions,
 ): DrawdownBudgetSearchResult<SearchObjective> {
   if (!options?.onProgress && !options?.checkpoint && !options?.resumeFrom) return runSearch(input);
@@ -263,7 +255,7 @@ export function searchBookAtDrawdown(
 }
 
 function runSearch(
-  input: DrawdownBudgetSearchInput,
+  input: DrawdownBudgetSearchInput<SearchObjective>,
   execution?: SearchExecution,
   scope = "root",
 ): DrawdownBudgetSearchResult<SearchObjective> {
@@ -651,7 +643,7 @@ function runSearch(
   return result;
 }
 
-function validateSearch(input: DrawdownBudgetSearchInput): void {
+function validateSearch(input: DrawdownBudgetSearchInput<SearchObjective>): void {
   const fail = (name: string): never => {
     throw new RangeError(`Invalid drawdown search: ${name}`);
   };
@@ -746,7 +738,7 @@ function validateSearch(input: DrawdownBudgetSearchInput): void {
 }
 
 function bootstrapStability(
-  input: DrawdownBudgetSearchInput,
+  input: DrawdownBudgetSearchInput<SearchObjective>,
   execution?: SearchExecution,
 ): BookSearchStability<SearchObjective> {
   const result: BookSearchStability<SearchObjective> = {

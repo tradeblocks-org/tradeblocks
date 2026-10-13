@@ -452,10 +452,12 @@ drop-one and every stability/sensitivity search use that same ranking.
 The objective scores a single replay: the Wizzy joint study's minimum ratio
 over reserve/exclude policies and its CPC/factor tie-breaks still require a
 caller-owned wrapper, for example two searches or a `feasible`-based joint check.
-The result type `DrawdownBudgetSearchResult<O = "returnPct">` preserves the
-legacy literal `declarations.objective` on bare annotations; calls infer
-`"returnPct"` for omitted/explicit return objectives and `"returnOverDrawdown"`
-for an explicit ratio objective, including auxiliary searches, with no runtime change.
+The input and result types `DrawdownBudgetSearchInput<O = "returnPct">` and
+`DrawdownBudgetSearchResult<O = "returnPct">` preserve the legacy literal on
+bare annotations. Annotate ratio requests as
+`DrawdownBudgetSearchInput<"returnOverDrawdown">`; calls infer that literal in
+`declarations.objective`, including auxiliary searches. Fresh literals still
+infer the selected objective, and `feasible` typing and runtime behavior are unchanged.
 
 The ratio has three tiers: positive return with drawdown ≤ 0 ranks first by
 return; positive drawdown ranks next by the exact signed ratio (negative returns
