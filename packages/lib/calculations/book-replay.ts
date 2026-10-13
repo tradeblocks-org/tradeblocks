@@ -153,7 +153,7 @@ export interface BookReplayResult {
  * separately from zero groups, with additive disabledGroups only when disabled state is supplied.
  * Declarations echo the schedule. Without disabled state, output is unchanged.
  * includeFundsAtEntry records closed funds on each contractsPerEntry entry after
- * same-timestamp closes settle and before sizing/admission, including zero quantities.
+ * same-timestamp closes settle and before sizing/admission, including zero and disabled entries.
  * Marks and buying-power reservations do not reduce this value.
  * Without the option, the result shape and replay behavior are unchanged.
  */
@@ -331,7 +331,11 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
         if ("disabled" in rule && rule.disabled === true) {
           summary.entryGroups++;
           summary.disabledGroups!++;
-          summary.contractsPerEntry.push({ entryGroupId: group.entryGroupId, contracts: 0 });
+          summary.contractsPerEntry.push({
+            entryGroupId: group.entryGroupId,
+            contracts: 0,
+            ...(input.includeFundsAtEntry ? { fundsAtEntry: funds } : {}),
+          });
           if (group.children.some((child) => child.ignored)) {
             ignoredPositions.entryGroups++;
             ignoredPositions.disabledGroups!++;

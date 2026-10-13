@@ -183,7 +183,9 @@ Omitting the schedule preserves existing output. This is a library-only option,
 not an MCP tool argument.
 
 Optional `includeFundsAtEntry: true` adds `fundsAtEntry` to each member's
-`contractsPerEntry` entry, including zero-quantity attempts. This is the exact
+`contractsPerEntry` entry, including zero-quantity and disabled attempts. Disabled
+entries report the closed funds available at that attempted entry, without sizing
+or admitting a position. For active entries, this is the exact
 closed funds used for sizing after all same-timestamp closes settle, before
 minimum-one, caps and buying-power/concurrency admission. It is not remaining
 buying power or marked equity. Simultaneous entries retain the declared order;

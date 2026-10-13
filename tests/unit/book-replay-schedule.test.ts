@@ -205,6 +205,24 @@ it("adds sizing funds without changing scheduled quantities, marks, attribution 
   expect(value).toEqual(before);
 });
 
+it("reports settled closed funds on a disabled attempted entry without changing replay output", () => {
+  const value = fixture();
+  value.sizingSchedule!.a.push({ effectiveDate: "2025-02-02", disabled: true });
+  value.trades[3].timeOpened = "16:01:00";
+  const baseline = replayBook(value);
+  const result = replayBook({ ...value, includeFundsAtEntry: true });
+  expect(result.members[0].contractsPerEntry).toEqual([
+    { entryGroupId: "old", contracts: 6, fundsAtEntry: 1000 },
+    { entryGroupId: "new", contracts: 4, fundsAtEntry: 1000 },
+    { entryGroupId: "endpoint", contracts: 0, fundsAtEntry: 1060 },
+  ]);
+  expect(result.members[0]).toMatchObject({ disabledGroups: 1, zeroGroups: 0 });
+  for (const member of result.members)
+    for (const entry of member.contractsPerEntry) delete entry.fundsAtEntry;
+  delete result.declarations.includeFundsAtEntry;
+  expect(JSON.stringify(result)).toBe(JSON.stringify(baseline));
+});
+
 it("matches the entry-month pseudo-member construction with non-binding concurrency", () => {
   const value = fixture();
   const scheduled = replayBook(value);
