@@ -88,7 +88,10 @@ export interface DrawdownBudgetSearchResult {
   weightRanges: Record<string, { min: number; max: number }>;
   termination: "budget" | "step_ladder_exhausted" | "calibration_refusal";
   cardinalityUpperBound: number;
-  declarations: Omit<DrawdownBudgetSearchInput, "feasible">;
+  /** Normalized request: `objective` is always present (omitted input means "returnPct"). */
+  declarations: Omit<DrawdownBudgetSearchInput, "feasible" | "objective"> & {
+    objective: NonNullable<DrawdownBudgetSearchInput["objective"]>;
+  };
   dropOne: Array<{
     memberId: string;
     redundant: boolean;

@@ -4,7 +4,17 @@ import type {
   BookReplayResult,
   BookSearchCheckpoint,
   DrawdownBudgetSearchInput,
+  DrawdownBudgetSearchResult,
 } from "@tradeblocks/lib";
+
+// Compile-time contract: the normalized result always carries a concrete objective.
+const declaredObjective = (
+  result: DrawdownBudgetSearchResult,
+): "returnPct" | "returnOverDrawdown" => result.declarations.objective;
+
+it("normalizes an omitted objective to a concrete declared objective", () => {
+  expect(declaredObjective(searchBookAtDrawdown(input()))).toBe("returnPct");
+});
 
 it("observes committed progress without changing search results", () => {
   const value = input();
