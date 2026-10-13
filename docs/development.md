@@ -249,7 +249,9 @@ finite, explicitly enumerated member weights and common factors (at most ten dec
 places). Weight multiplies sizing: CPC is divided by weight, so larger weight means
 more contracts. Combined weights are rounded to ten decimals and returned as
 `finalWeight`. Contract caps remain fixed through `memberCapPolicies`; allocation
-amount caps follow the existing search weight convention.
+amount caps follow the existing search weight convention. A `replay.sizingSchedule`
+is refused: weights scale base member declarations only, and a schedule would
+override them after its effective dates.
 
 Stage one chooses each member's nearest standalone target over its supplied domain
 (ties prefer the smaller weight). Stage two chooses the highest realized-return
@@ -280,7 +282,9 @@ linear-interpolated percentile cutoff, all discrete observations at or below it,
 including every cutoff tie, with no fractional weights. Insolvent paths or missing
 marks are refused. Floors, caps, shared funds and compounding prevent interpreting
 this fixed-position decomposition as replay-sizing sensitivity. This release offers
-standalone-ES sizing and this decomposition, not contribution-based retuning.
+standalone-ES sizing and this decomposition, not contribution-based retuning. The
+decomposition accepts a `sizingSchedule`, because it applies no weights and
+decomposes the replay as declared.
 
 `nominalCapitalPerContractFromPercentagePoints(buyingPowerPerContract,
 percentagePoints)` uses the median of the caller-selected row set and
