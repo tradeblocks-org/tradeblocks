@@ -182,6 +182,18 @@ Effective dates need not appear on the replay's `dates` axis.
 Omitting the schedule preserves existing output. This is a library-only option,
 not an MCP tool argument.
 
+Optional `includeFundsAtEntry: true` adds `fundsAtEntry` to each member's
+`contractsPerEntry` entry, including zero-quantity attempts. This is the exact
+closed funds used for sizing after all same-timestamp closes settle, before
+minimum-one, caps and buying-power/concurrency admission. It is not remaining
+buying power or marked equity. Simultaneous entries retain the declared order;
+opens reserve buying power but do not spend closed funds. For positive funds,
+`floor(fundsAtEntry / capitalPerContract)` gives the CPC quantity before
+minimum-one and caps (nonpositive funds request zero). It works with
+`sizingSchedule` and `memberMarkedPl` without changing the replay. Omission
+preserves the existing result bytes. This is a library-only option, not an MCP
+tool argument.
+
 Optional `simultaneousGroupOrder: { [memberId]: [entryGroupId, ...] }` explicitly
 orders distinct entry groups of one member opening at the same timestamp.
 Every group participating in such a tie must appear in that member's list;

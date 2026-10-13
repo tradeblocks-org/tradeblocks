@@ -114,6 +114,114 @@ it("keeps the omitted-option result identical to the pre-change marked replay ba
   expect(replayBook(value).marked).not.toHaveProperty("members");
 });
 
+it("reports the sizing funds after atomic same-timestamp closes, including zero entries", () => {
+  const value = input();
+  value.members.a.sizing = { mode: "capitalPerContract", capitalPerContract: 250 };
+  value.trades[0].netPlPerContract = 100;
+  value.trades.push(
+    { ...value.trades[0], id: "loss", netPlPerContract: -75 },
+    {
+      ...value.trades[0],
+      id: "next",
+      entryGroupId: "next",
+      dateOpened: "2025-01-03",
+      timeOpened: "16:00:00",
+      dateClosed: "2025-01-06",
+    },
+  );
+  value.sizingSchedule = {
+    a: [
+      {
+        effectiveDate: "2025-01-03",
+        sizing: { mode: "capitalPerContract", capitalPerContract: 1200 },
+        maxContractsPerTrade: null,
+        maxAllocationAmount: null,
+        maxOpenTrades: null,
+      },
+    ],
+  };
+  const result = replayBook({ ...value, includeFundsAtEntry: true });
+  expect(result.members[0].contractsPerEntry).toEqual([
+    { entryGroupId: "g", contracts: 4, fundsAtEntry: 1000 },
+    { entryGroupId: "next", contracts: 0, fundsAtEntry: 1100 },
+  ]);
+});
+
+it.each([
+  ["uncapped", {}, 4],
+  ["contract cap", { maxContractsPerTrade: 2 }, 2],
+  ["allocation cap", { maxAllocationAmount: 100 }, 1],
+  ["removed", { removed: true }, 0],
+])("keeps raw sizing funds separate from %s admission", (_name, overrides, contracts) => {
+  const value = input();
+  value.members.a = {
+    ...value.members.a,
+    sizing: { mode: "capitalPerContract", capitalPerContract: 225 },
+    ...overrides,
+  };
+  const entry = replayBook({ ...value, includeFundsAtEntry: true }).members[0].contractsPerEntry[0];
+  expect(entry).toEqual({ entryGroupId: "g", contracts, fundsAtEntry: 1000 });
+  expect(Math.floor(entry.fundsAtEntry! / 225)).toBe(4);
+});
+
+it("includes an entry rejected by concurrency", () => {
+  const value = input();
+  value.members.a.maxOpenTrades = 1;
+  value.trades.push({
+    ...value.trades[0],
+    id: "blocked",
+    entryGroupId: "blocked",
+    timeOpened: "10:00:00",
+  });
+  expect(replayBook({ ...value, includeFundsAtEntry: true }).members[0].contractsPerEntry).toEqual([
+    { entryGroupId: "g", contracts: 5, fundsAtEntry: 1000 },
+    { entryGroupId: "blocked", contracts: 0, fundsAtEntry: 1000 },
+  ]);
+});
+
+it.each([false, true])("records sub-CPC funds with minimumOne=%s", (minimumOne) => {
+  const value = input();
+  value.members.a.sizing = { mode: "capitalPerContract", capitalPerContract: 1200 };
+  value.members.a.minimumOne = minimumOne;
+  const entry = replayBook({ ...value, includeFundsAtEntry: true }).members[0].contractsPerEntry[0];
+  expect(entry).toEqual({ entryGroupId: "g", contracts: Number(minimumOne), fundsAtEntry: 1000 });
+  expect(Math.floor(entry.fundsAtEntry! / 1200)).toBe(0);
+});
+
+it.each([
+  ["a", "b"],
+  ["b", "a"],
+])(
+  "records closed funds, not remaining buying power, in simultaneous order %s then %s",
+  (first, second) => {
+    const value = input();
+    value.members.b = { ...value.members.a };
+    value.members.a.sizing = { mode: "allocation", allocationPercentage: 100 };
+    value.members.b.sizing = { mode: "allocation", allocationPercentage: 100 };
+    value.simultaneousOrder = [first, second];
+    value.trades.push({ ...value.trades[0], id: "b", memberId: "b", entryGroupId: "b" });
+    expect(
+      replayBook({ ...value, includeFundsAtEntry: true }).members.map((member) => ({
+        memberId: member.memberId,
+        ...member.contractsPerEntry[0],
+      })),
+    ).toEqual([
+      {
+        memberId: first,
+        entryGroupId: first === "a" ? "g" : "b",
+        contracts: 10,
+        fundsAtEntry: 1000,
+      },
+      {
+        memberId: second,
+        entryGroupId: second === "a" ? "g" : "b",
+        contracts: 0,
+        fundsAtEntry: 1000,
+      },
+    ]);
+  },
+);
+
 describe.each(["child", "entryGroup"] as const)(
   "member marked reconciliation: %s marks",
   (mode) => {

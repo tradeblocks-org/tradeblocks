@@ -188,6 +188,23 @@ it("disables new groups without changing held quantities, marks or reservations,
   expect(zero.members[0]).not.toHaveProperty("disabledGroups");
 });
 
+it("adds sizing funds without changing scheduled quantities, marks, attribution or input", () => {
+  const value = fixture();
+  const before = structuredClone(value);
+  const baseline = replayBook(value);
+  const result = replayBook({ ...value, includeFundsAtEntry: true });
+  expect(result.members[0].contractsPerEntry).toEqual([
+    { entryGroupId: "old", contracts: 6, fundsAtEntry: 1000 },
+    { entryGroupId: "new", contracts: 4, fundsAtEntry: 1000 },
+    { entryGroupId: "endpoint", contracts: 0, fundsAtEntry: 1000 },
+  ]);
+  for (const member of result.members)
+    for (const entry of member.contractsPerEntry) delete entry.fundsAtEntry;
+  delete result.declarations.includeFundsAtEntry;
+  expect(JSON.stringify(result)).toBe(JSON.stringify(baseline));
+  expect(value).toEqual(before);
+});
+
 it("matches the entry-month pseudo-member construction with non-binding concurrency", () => {
   const value = fixture();
   const scheduled = replayBook(value);

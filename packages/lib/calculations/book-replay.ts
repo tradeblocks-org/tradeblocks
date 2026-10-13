@@ -77,6 +77,8 @@ interface BookReplayBaseInput {
   marks?: BookMarks;
   /** Requires marks; attribute changes in marked equity to each member, including ignored drop-off. */
   memberMarkedPl?: boolean;
+  /** Include the closed funds used at each entry, including zero-quantity attempts. */
+  includeFundsAtEntry?: boolean;
 }
 export type BookReplayInput = BookReplayBaseInput &
   (
@@ -92,7 +94,7 @@ export interface BookMemberResult {
   disabledGroups?: number;
   totalContracts: number;
   maxContractsPerTrade: number;
-  contractsPerEntry: Array<{ entryGroupId: string; contracts: number }>;
+  contractsPerEntry: Array<{ entryGroupId: string; contracts: number; fundsAtEntry?: number }>;
   netPl: number;
 }
 export interface BookReplayResult {
@@ -150,6 +152,10 @@ export interface BookReplayResult {
  * Funds, marks and member attribution continue without resets. Disabled groups are counted
  * separately from zero groups, with additive disabledGroups only when disabled state is supplied.
  * Declarations echo the schedule. Without disabled state, output is unchanged.
+ * includeFundsAtEntry records closed funds on each contractsPerEntry entry after
+ * same-timestamp closes settle and before sizing/admission, including zero quantities.
+ * Marks and buying-power reservations do not reduce this value.
+ * Without the option, the result shape and replay behavior are unchanged.
  */
 export function replayBook(input: BookReplayInput): BookReplayResult {
   validateReplay(input);
@@ -368,7 +374,11 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
         summary.zeroGroups += Number(quantity === 0);
         summary.totalContracts += quantity;
         summary.maxContractsPerTrade = Math.max(summary.maxContractsPerTrade, quantity);
-        summary.contractsPerEntry.push({ entryGroupId: group.entryGroupId, contracts: quantity });
+        summary.contractsPerEntry.push({
+          entryGroupId: group.entryGroupId,
+          contracts: quantity,
+          ...(input.includeFundsAtEntry ? { fundsAtEntry: funds } : {}),
+        });
         const ignoredChildren = group.children.reduce((n, child) => n + Number(child.ignored), 0);
         executedIgnoredOnlyGroups += Number(
           quantity > 0 && ignoredChildren === group.children.length,
