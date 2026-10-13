@@ -164,9 +164,12 @@ per adjusted contract likewise becomes $70 per entry contract and marks $140.
 Scale only values sourced on the adjusted basis; do not rescale marks already
 on the entry basis. Source the adjustment factor explicitly: `wasAdjusted`
 alone does not specify it, and replay does not detect corporate actions.
-Replay quantity reporting remains the entry quantity; retain OO's adjusted
-quantity separately when displaying settlement quantities. No extra replay
-field or market-data provider is required.
+Buying power per entry contract is OO's total position buying power divided by
+the entry quantity (not by the adjusted quantity), and `maxContractsPerTrade` and
+`maxAllocationAmount` constrain the entry quantity. Replay quantity reporting
+remains the entry quantity; retain OO's adjusted quantity separately when
+displaying settlement quantities. No extra replay field or market-data provider
+is required.
 
 All member declarations are required: `sizing`, `removed`,
 `ignoreMarginRequirements`, `maxContractsPerTrade`, `maxAllocationAmount`,
