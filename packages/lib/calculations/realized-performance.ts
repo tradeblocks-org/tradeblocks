@@ -631,7 +631,11 @@ export function buildRealizedPeriodReturnsByCloseDate(
   return { periods, totals };
 }
 
-/** Close-window attribution uses reported trade P/L, matching the realized-only MCP view. */
+/**
+ * Close-window attribution uses reported trade P/L, matching the realized-only MCP view.
+ * Selects the episode with the largest dollar drawdown on closed-trade equity (trades ordered
+ * by close date); every drawdownPeriod field describes that selected episode.
+ */
 export function buildRealizedDrawdownAttributionByCloseDate(trades: Trade[], topN: number) {
   const sortedTrades = [...trades].sort((a, b) => {
     const dateA = new Date(a.dateClosed ?? a.dateOpened);
@@ -651,6 +655,7 @@ export function buildRealizedDrawdownAttributionByCloseDate(trades: Trade[], top
   let maxDrawdownPct = 0;
   let troughDate: Date | null = null;
   let drawdownPeakDate: Date | null = null;
+  let drawdownPeakEquity = initialCapital;
   for (const trade of sortedTrades) {
     equity += trade.pl;
     const closeDate = new Date(trade.dateClosed ?? trade.dateOpened);
@@ -665,6 +670,7 @@ export function buildRealizedDrawdownAttributionByCloseDate(trades: Trade[], top
       maxDrawdownPct = drawdownPct;
       troughDate = closeDate;
       drawdownPeakDate = peakDate;
+      drawdownPeakEquity = peakEquity;
     }
   }
   if (maxDrawdown <= 0 || !troughDate || !drawdownPeakDate) return null;
@@ -709,8 +715,8 @@ export function buildRealizedDrawdownAttributionByCloseDate(trades: Trade[], top
     drawdownPeriod: {
       peakDate: peakDateStr,
       troughDate: troughDateStr,
-      peakEquity,
-      troughEquity: peakEquity - maxDrawdown,
+      peakEquity: drawdownPeakEquity,
+      troughEquity: drawdownPeakEquity - maxDrawdown,
       maxDrawdown,
       maxDrawdownPct,
       durationDays,

@@ -197,7 +197,7 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
     "drawdown_attribution",
     {
       description:
-        "Identify which strategies contributed most to losses during the portfolio's maximum drawdown period. Shows drawdown period (peak to trough) and per-strategy P/L attribution.",
+        "Identify which strategies contributed most to losses during the portfolio's maximum drawdown period. The period is the largest dollar drawdown on closed-trade equity built from reported trade P/L in close-date order (not the daily NLV log, not the largest percentage drawdown). Shows that period's peak and trough dates and equity, and per-strategy P/L attribution.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         strategy: z

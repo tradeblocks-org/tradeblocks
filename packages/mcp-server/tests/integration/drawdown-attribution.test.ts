@@ -36,6 +36,7 @@
  */
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { buildRealizedDrawdownAttributionByCloseDate } from "@tradeblocks/lib";
 
 // Import from built bundle (test-exports.js has @lib dependencies bundled)
 // @ts-expect-error - importing from bundled output
@@ -55,7 +56,7 @@ function filterByStrategy(trades: Array<{ strategy: string }>, strategy?: string
 }
 
 /**
- * Simulates the drawdown_attribution tool logic for testing
+ * Runs the drawdown_attribution tool's load/filter path and its library calculation.
  */
 async function simulateDrawdownAttribution(
   baseDir: string,
@@ -83,129 +84,22 @@ async function simulateDrawdownAttribution(
     };
   }
 
-  // Sort trades by close date/time for equity curve
-  const sortedTrades = [...trades].sort((a, b) => {
-    const dateA = new Date(a.dateClosed ?? a.dateOpened);
-    const dateB = new Date(b.dateClosed ?? b.dateOpened);
-    if (dateA.getTime() !== dateB.getTime()) {
-      return dateA.getTime() - dateB.getTime();
-    }
-    const timeA = a.timeClosed ?? a.timeOpened ?? "";
-    const timeB = b.timeClosed ?? b.timeOpened ?? "";
-    return timeA.localeCompare(timeB);
-  });
-
-  // Build equity curve from trades
-  const firstTrade = sortedTrades[0];
-  const initialCapital = (firstTrade.fundsAtClose ?? 10000) - firstTrade.pl;
-
-  // Track peak equity and drawdown
-  let equity = initialCapital;
-  let peakEquity = initialCapital;
-  let peakDate: Date = new Date(firstTrade.dateClosed ?? firstTrade.dateOpened);
-  let maxDrawdown = 0;
-  let maxDrawdownPct = 0;
-  let troughDate: Date | null = null;
-  let drawdownPeakDate: Date | null = null;
-
-  for (const trade of sortedTrades) {
-    equity += trade.pl;
-    const closeDate = new Date(trade.dateClosed ?? trade.dateOpened);
-
-    // Update peak if new high
-    if (equity > peakEquity) {
-      peakEquity = equity;
-      peakDate = closeDate;
-    }
-
-    // Calculate current drawdown from peak
-    const drawdown = peakEquity - equity;
-    const drawdownPct = peakEquity > 0 ? (drawdown / peakEquity) * 100 : 0;
-
-    // Track max drawdown
-    if (drawdown > maxDrawdown) {
-      maxDrawdown = drawdown;
-      maxDrawdownPct = drawdownPct;
-      troughDate = closeDate;
-      drawdownPeakDate = peakDate;
-    }
-  }
-
-  // Handle edge case: no drawdown
-  if (maxDrawdown <= 0 || !troughDate || !drawdownPeakDate) {
+  const result = buildRealizedDrawdownAttributionByCloseDate(trades, topN);
+  if (!result) {
     return {
       blockId,
-      filters: { strategy: strategy ?? null },
+      filters: { strategy: strategy ?? null, topN },
       drawdownPeriod: null,
       attribution: [],
-      message: "No drawdown detected - equity never declined from peak",
+      message: "No drawdown detected",
     };
   }
-
-  // Filter trades to the drawdown period
-  const drawdownTrades = sortedTrades.filter((trade) => {
-    const closeDate = new Date(trade.dateClosed ?? trade.dateOpened);
-    return closeDate >= drawdownPeakDate! && closeDate <= troughDate!;
-  });
-
-  // Group trades by strategy
-  const strategyPl: Map<string, { pl: number; trades: number; wins: number; losses: number }> =
-    new Map();
-
-  let totalLossDuringDrawdown = 0;
-
-  for (const trade of drawdownTrades) {
-    const existing = strategyPl.get(trade.strategy) ?? {
-      pl: 0,
-      trades: 0,
-      wins: 0,
-      losses: 0,
-    };
-    existing.pl += trade.pl;
-    existing.trades += 1;
-    if (trade.pl > 0) existing.wins += 1;
-    else if (trade.pl < 0) existing.losses += 1;
-    strategyPl.set(trade.strategy, existing);
-    totalLossDuringDrawdown += trade.pl;
-  }
-
-  // Calculate attribution
-  const attribution = Array.from(strategyPl.entries())
-    .map(([strategyName, data]) => ({
-      strategy: strategyName,
-      pl: data.pl,
-      trades: data.trades,
-      wins: data.wins,
-      losses: data.losses,
-      contributionPct:
-        totalLossDuringDrawdown !== 0 ? Math.abs((data.pl / totalLossDuringDrawdown) * 100) : 0,
-    }))
-    .sort((a, b) => a.pl - b.pl)
-    .slice(0, topN);
-
-  // Calculate duration in days
-  const durationMs = troughDate.getTime() - drawdownPeakDate.getTime();
-  const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
-
-  const formatDate = (d: Date) => d.toISOString().split("T")[0];
-
   return {
     blockId,
     filters: { strategy: strategy ?? null, topN },
-    drawdownPeriod: {
-      peakDate: formatDate(drawdownPeakDate),
-      troughDate: formatDate(troughDate),
-      peakEquity,
-      troughEquity: peakEquity - maxDrawdown,
-      maxDrawdown,
-      maxDrawdownPct,
-      durationDays,
-    },
-    periodStats: {
-      totalTrades: drawdownTrades.length,
-      totalPl: totalLossDuringDrawdown,
-    },
-    attribution,
+    drawdownPeriod: result.drawdownPeriod,
+    periodStats: result.periodStats,
+    attribution: result.attribution,
   };
 }
 

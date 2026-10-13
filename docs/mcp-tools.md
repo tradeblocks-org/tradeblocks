@@ -177,15 +177,15 @@ these truncated windows as well as any windows skipped for insufficient trades.
 
 ## Portfolio Health
 
-| Tool                      | Description                                                     |
-| ------------------------- | --------------------------------------------------------------- |
-| `portfolio_health_check`  | Comprehensive health check across multiple dimensions           |
-| `drawdown_attribution`    | Attribute drawdowns to specific strategies or market conditions |
-| `strategy_similarity`     | Find similar strategies based on return patterns                |
-| `analyze_discrepancies`   | Analyze discrepancies between backtest and live results         |
-| `analyze_slippage_trends` | Track execution slippage over time                              |
-| `analyze_live_alignment`  | Compare live execution against backtest expectations            |
-| `get_reporting_log_stats` | Statistics on reported/live trade logs                          |
+| Tool                      | Description                                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `portfolio_health_check`  | Comprehensive health check across multiple dimensions                                                                                             |
+| `drawdown_attribution`    | Per-strategy P/L attribution for the largest dollar drawdown on closed-trade equity (reported trade P/L, close-date order; not the daily NLV log) |
+| `strategy_similarity`     | Find similar strategies based on return patterns                                                                                                  |
+| `analyze_discrepancies`   | Analyze discrepancies between backtest and live results                                                                                           |
+| `analyze_slippage_trends` | Track execution slippage over time                                                                                                                |
+| `analyze_live_alignment`  | Compare live execution against backtest expectations                                                                                              |
+| `get_reporting_log_stats` | Statistics on reported/live trade logs                                                                                                            |
 
 ## SQL and Schema
 

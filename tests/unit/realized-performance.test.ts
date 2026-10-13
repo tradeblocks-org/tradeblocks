@@ -78,6 +78,25 @@ describe("public close-date realized calculations", () => {
     expect(buildRealizedDrawdownAttributionByCloseDate([trades[0]], 5)).toBeNull();
   });
 
+  it("returns the selected drawdown episode's own peak and trough after a later high", () => {
+    const episodes = [
+      trade("2026-01-05", "2026-01-05", 100),
+      trade("2026-01-06", "2026-01-06", -500, "B"),
+      trade("2026-01-07", "2026-01-07", 2000),
+      trade("2026-01-08", "2026-01-08", -100, "B"),
+    ];
+    const result = buildRealizedDrawdownAttributionByCloseDate(episodes, 5);
+    expect(result?.drawdownPeriod).toMatchObject({
+      peakDate: "2026-01-05",
+      troughDate: "2026-01-06",
+      peakEquity: 1100,
+      troughEquity: 600,
+      maxDrawdown: 500,
+    });
+    expect(result?.drawdownPeriod.maxDrawdownPct).toBeCloseTo((500 / 1100) * 100);
+    expect(result?.maxDrawdownPct).toBe(result?.drawdownPeriod.maxDrawdownPct);
+  });
+
   it("accepts an evidenced starting amount without changing direct callers' default", () => {
     const explicit = buildRealizedEquityCurveByCloseDate(trades, 10000);
     expect(explicit.map((point) => point.equity)).toEqual([10000, 10100, 9900, 9950]);
