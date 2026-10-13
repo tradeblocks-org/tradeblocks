@@ -114,6 +114,55 @@ it("keeps the omitted-option result identical to the pre-change marked replay ba
   expect(replayBook(value).marked).not.toHaveProperty("members");
 });
 
+it("reproduces the OO TSLA split row with caller-scaled entry-basis P/L and marks", () => {
+  // OO run 3voZFuA90wct0I5L0npE: adjusted 2022-08-24 RDC row, closed
+  // 2022-08-25 10:55; q6, profit $120, fees $0, BP $46,169.60.
+  // #4479 retained mark: $23 1/3 per adjusted contract on 2022-08-24.
+  // This isolates that row at OO's $600,000 seed, not the full book's DD.
+  const adjustedQuantity = 6;
+  const factor = 3;
+  const value = input();
+  value.startingFunds = 600000;
+  value.dates = ["2022-08-24", "2022-08-25"];
+  value.members.a.sizing = { mode: "fixed", contracts: 2 };
+  value.members.a.maxContractsPerTrade = 2;
+  value.trades = [
+    {
+      id: "tsla-split",
+      memberId: "a",
+      entryGroupId: "tsla-split",
+      dateOpened: "2022-08-24",
+      timeOpened: "15:20:00",
+      dateClosed: "2022-08-25",
+      timeClosed: "10:55:00",
+      netPlPerContract: (120 / adjustedQuantity) * factor,
+      buyingPowerPerContract: 46169.6 / 2,
+      ignored: false,
+    },
+  ];
+  value.marks = {
+    mode: "child",
+    values: [
+      {
+        tradeId: "tsla-split",
+        date: "2022-08-24",
+        netOpenPlPerContract: (70 / 3) * factor,
+      },
+    ],
+  };
+  const result = replayBook(value);
+  expect(result.members[0].contractsPerEntry).toEqual([
+    { entryGroupId: "tsla-split", contracts: 2 },
+  ]);
+  expect(result.members[0].netPl).toBe(120);
+  expect(result.endingFunds).toBe(600120);
+  expect(result.marked?.equity).toEqual([
+    { date: "2022-08-24", equity: 600140 },
+    { date: "2022-08-25", equity: 600120 },
+  ]);
+  expect(result.marked?.maxDrawdownPct).toBeCloseTo((20 / 600140) * 100, 12);
+});
+
 it("reports the sizing funds after atomic same-timestamp closes, including zero entries", () => {
   const value = input();
   value.members.a.sizing = { mode: "capitalPerContract", capitalPerContract: 250 };

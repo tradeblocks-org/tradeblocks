@@ -155,6 +155,19 @@ sizing semantics. It still reserves buying power for later ordinary entries.
 Normalize a capped ignore-margin fill to an explicit fixed-count rule; zero
 allocation is not a substitute for removal.
 
+For corporate-action rows, normalize net P/L and every open mark to the
+**entry-contract basis** before calling `replayBook`; keep sizing and buying-power
+inputs on that same entry basis. For example, an OO TSLA row adjusted 3-for-1
+reports six settlement contracts and $120 profit: its $20 per adjusted contract
+becomes $60 per entry contract, so two entry contracts settle $120. A $23⅓ mark
+per adjusted contract likewise becomes $70 per entry contract and marks $140.
+Scale only values sourced on the adjusted basis; do not rescale marks already
+on the entry basis. Source the adjustment factor explicitly: `wasAdjusted`
+alone does not specify it, and replay does not detect corporate actions.
+Replay quantity reporting remains the entry quantity; retain OO's adjusted
+quantity separately when displaying settlement quantities. No extra replay
+field or market-data provider is required.
+
 All member declarations are required: `sizing`, `removed`,
 `ignoreMarginRequirements`, `maxContractsPerTrade`, `maxAllocationAmount`,
 `minimumOne`, and `maxOpenTrades`. Null caps are uncapped; null concurrency means
