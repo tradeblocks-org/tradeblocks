@@ -147,6 +147,37 @@ it("reports the sizing funds after atomic same-timestamp closes, including zero 
   ]);
 });
 
+it("reports raw negative funds at an insolvent attempted entry without changing insolvency", () => {
+  const value = input();
+  value.members.a.sizing = { mode: "capitalPerContract", capitalPerContract: 250 };
+  value.trades[0].netPlPerContract = -300;
+  value.trades.push({
+    ...value.trades[0],
+    id: "next",
+    entryGroupId: "next",
+    dateOpened: "2025-01-03",
+    timeOpened: "16:00:00",
+    dateClosed: "2025-01-06",
+  });
+  const baseline = replayBook(value);
+  const result = replayBook({ ...value, includeFundsAtEntry: true });
+  expect(result.members[0].contractsPerEntry).toEqual([
+    { entryGroupId: "g", contracts: 4, fundsAtEntry: 1000 },
+    { entryGroupId: "next", contracts: 0, fundsAtEntry: -200 },
+  ]);
+  expect(result).toMatchObject({
+    status: "insolvent",
+    insolvent: true,
+    endingFunds: -200,
+    maxDrawdownPct: null,
+    maxDrawdownEpisode: null,
+  });
+  for (const member of result.members)
+    for (const entry of member.contractsPerEntry) delete entry.fundsAtEntry;
+  delete result.declarations.includeFundsAtEntry;
+  expect(JSON.stringify(result)).toBe(JSON.stringify(baseline));
+});
+
 it.each([
   ["uncapped", {}, 4],
   ["contract cap", { maxContractsPerTrade: 2 }, 2],
