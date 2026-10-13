@@ -7,6 +7,8 @@ export interface DrawdownBudgetSearchInput {
   feasible?: (replay: BookReplayResult) => boolean | { ok: false; reason: string };
   weightBounds: Record<string, { min: number; max: number }>;
   weightScaling: "allocationAndContracts" | "capitalPerContractInverse";
+  /** Per-member contract-cap policy; omitted members scale their caps with weight. */
+  memberCapPolicies?: Record<string, "fixed" | "scaled">;
   initialWeights: Array<Record<string, number>>;
   steps: number[];
   weightPrecision: number;
@@ -104,7 +106,12 @@ interface PreparedBookEvaluation {
   roundedToZero: string[];
 }
 
-/** Bounded best-observed coordinate search; never a certified global optimum. */
+/**
+ * Bounded best-observed coordinate search; never a certified global optimum.
+ * memberCapPolicies holds selected maxContractsPerTrade caps fixed across all
+ * searches while sizing still follows weight; zero weight still removes a member.
+ * Omitted policies retain scaled caps. Null caps remain uncapped.
+ */
 export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): DrawdownBudgetSearchResult {
   validateSearch(input);
   const ids = input.replay.simultaneousOrder;
@@ -140,7 +147,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
           member.sizing.contracts = Math.floor(member.sizing.contracts * weight);
         else member.sizing.capitalPerContract /= weight;
         if (member.maxAllocationAmount !== null) member.maxAllocationAmount *= weight;
-        if (member.maxContractsPerTrade !== null) {
+        if (member.maxContractsPerTrade !== null && input.memberCapPolicies?.[id] !== "fixed") {
           const cap = Math.floor(member.maxContractsPerTrade * weight);
           if (cap === 0) {
             member.sizing = { mode: "fixed", contracts: 0 };
@@ -403,6 +410,17 @@ function validateSearch(input: DrawdownBudgetSearchInput): void {
   )
     fail("declarations");
   if (input.feasible !== undefined && typeof input.feasible !== "function") fail("feasible");
+  if (input.memberCapPolicies !== undefined) {
+    if (
+      input.memberCapPolicies === null ||
+      typeof input.memberCapPolicies !== "object" ||
+      Array.isArray(input.memberCapPolicies)
+    )
+      fail("memberCapPolicies");
+    for (const [id, policy] of Object.entries(input.memberCapPolicies))
+      if (!ids.includes(id) || (policy !== "fixed" && policy !== "scaled"))
+        fail("memberCapPolicies");
+  }
   if (!["allocationAndContracts", "capitalPerContractInverse"].includes(input.weightScaling))
     fail("weightScaling");
   if (

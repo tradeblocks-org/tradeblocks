@@ -73,6 +73,157 @@ function input(): DrawdownBudgetSearchInput {
   };
 }
 
+function cappedInput(): DrawdownBudgetSearchInput {
+  const value = input();
+  value.replay.startingFunds = 1000000;
+  value.replay.members.a.sizing = { mode: "fixed", contracts: 1000 };
+  value.replay.members.a.maxContractsPerTrade = 250;
+  value.replay.trades = [{ ...value.replay.trades[1], netPlPerContract: 100 }];
+  value.weightBounds.a.max = 2;
+  value.initialWeights = [{ a: 0.5 }, { a: 2 }];
+  value.steps = [0.5];
+  value.targetDrawdownPct = 100;
+  value.robust = { maxDrawdownPct: 100, shrinkageFactors: [1, 0.1] };
+  return value;
+}
+
+it("holds fixed caps through coordinate and common-factor sizing while zero removes the member", () => {
+  const value = cappedInput();
+  value.memberCapPolicies = { a: "fixed" };
+  const observed: BookReplayResult[] = [];
+  value.feasible = (replay) => {
+    observed.push(replay);
+    return true;
+  };
+  const result = searchBookAtDrawdown(value);
+  expect(result.status).toBe("ok");
+  expect(result.best).toMatchObject({ weights: { a: 0.5 }, returnPct: 2.5 });
+  expect(result.robust?.returnPct).toBe(2.5);
+  expect(result.evaluations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ weights: { a: 2 }, returnPct: 2.5 }),
+      expect.objectContaining({ weights: { a: 0.05 }, returnPct: 0.5 }),
+      expect.objectContaining({ weights: { a: 0 }, executedGroups: 0, feasible: false }),
+    ]),
+  );
+  expect(result.declarations.replay.members.a.maxContractsPerTrade).toBe(250);
+  expect(result.declarations.memberCapPolicies).toEqual({ a: "fixed" });
+  const winnerMember = JSON.parse(result.best!.key)[0][1];
+  expect(winnerMember).toMatchObject({
+    maxContractsPerTrade: 250,
+    sizing: { mode: "fixed", contracts: 500 },
+    removed: false,
+  });
+  expect(observed.length).toBe(result.k);
+  for (const replay of observed) {
+    expect(replay.declarations.members.a.maxContractsPerTrade).toBe(250);
+    expect(replay.members[0].maxContractsPerTrade).toBeLessThanOrEqual(250);
+  }
+  expect(observed.some((r) => r.members[0].maxContractsPerTrade === 250)).toBe(true);
+  expect(
+    observed.some((r) => r.declarations.members.a.removed && r.census.executedGroups === 0),
+  ).toBe(true);
+});
+
+it.each(["fixed", "allocation", "capitalPerContract"] as const)(
+  "preserves fixed caps in drop-one and every stability panel with %s sizing",
+  (mode) => {
+    const value = cappedInput();
+    value.memberCapPolicies = { a: "fixed" };
+    value.replay.members.a.sizing =
+      mode === "fixed"
+        ? { mode, contracts: 1000 }
+        : mode === "allocation"
+          ? { mode, allocationPercentage: 10 }
+          : { mode, capitalPerContract: 1000 };
+    value.weightScaling =
+      mode === "capitalPerContract" ? "capitalPerContractInverse" : "allocationAndContracts";
+    value.replay.members.b = {
+      ...value.replay.members.a,
+      sizing: { mode: "fixed", contracts: 1 },
+      maxContractsPerTrade: null,
+    };
+    value.replay.trades = value.replay.dates.flatMap((date) =>
+      ["a", "b"].map((memberId) => ({
+        ...value.replay.trades[0],
+        id: `${memberId}-${date}`,
+        entryGroupId: `${memberId}-${date}`,
+        memberId,
+        dateOpened: date,
+        dateClosed: date,
+      })),
+    );
+    value.replay.simultaneousOrder.push("b");
+    value.weightBounds.b = { min: 0, max: 1 };
+    value.initialWeights = [
+      { a: 0.5, b: 1 },
+      { a: 2, b: 1 },
+    ];
+    value.dropOne = true;
+    value.stability.replicates = 2;
+    value.stability.sensitivityBlockDays = [1, 3];
+    let observed = 0;
+    value.feasible = (replay) => {
+      observed++;
+      expect(replay.declarations.members.a.maxContractsPerTrade).toBe(250);
+      expect(
+        replay.members.find((m) => m.memberId === "a")!.maxContractsPerTrade,
+      ).toBeLessThanOrEqual(250);
+      return true;
+    };
+    const result = searchBookAtDrawdown(value);
+    expect(result.best?.returnPct).toBeCloseTo(5.02, 10);
+    expect(result.dropOne).toHaveLength(2);
+    expect(result.dropOne.find((d) => d.memberId === "b")?.best?.returnPct).toBe(5);
+    expect(result.dropOne.find((d) => d.memberId === "a")?.best?.returnPct).toBeCloseTo(0.02, 10);
+    expect(result.stability.panels.map((p) => p.meanBlockDays)).toEqual([2, 1, 3]);
+    const searches = [
+      result,
+      ...result.dropOne.map((d) => d.search),
+      ...result.stability.panels.flatMap((p) => p.replicates.map((r) => r.search!)),
+    ];
+    expect(observed).toBe(result.totalEvaluations);
+    for (const search of searches) {
+      expect(search.status).toBe("ok");
+      expect(search.declarations.memberCapPolicies).toEqual({ a: "fixed" });
+      expect(search.declarations.replay.members.a.maxContractsPerTrade).toBe(250);
+      expect(JSON.parse(search.best!.key).find(([id]: [string]) => id === "a")[1]).toMatchObject({
+        maxContractsPerTrade: 250,
+      });
+      expect(search.evaluations.every((e) => e.returnPct <= 5.02 + 1e-10)).toBe(true);
+    }
+  },
+);
+
+it("defaults missing policies to scaled caps and leaves uncapped members uncapped", () => {
+  const value = cappedInput();
+  const omitted = searchBookAtDrawdown(value);
+  expect(omitted.best).toMatchObject({ weights: { a: 2 }, returnPct: 5 });
+  const policies: Array<NonNullable<DrawdownBudgetSearchInput["memberCapPolicies"]>> = [
+    {},
+    { a: "scaled" },
+  ];
+  for (const memberCapPolicies of policies) {
+    const explicit = searchBookAtDrawdown({ ...value, memberCapPolicies });
+    delete explicit.declarations.memberCapPolicies;
+    expect(JSON.stringify(explicit)).toBe(JSON.stringify(omitted));
+  }
+  value.replay.members.a.maxContractsPerTrade = null;
+  value.memberCapPolicies = { a: "fixed" };
+  const uncapped = searchBookAtDrawdown(value);
+  expect(uncapped.best?.returnPct).toBe(20);
+  expect(JSON.parse(uncapped.best!.key)[0][1].maxContractsPerTrade).toBeNull();
+});
+
+it.each([{ unknown: "fixed" }, { a: "invalid" }, null, []])(
+  "refuses invalid member-cap policy declarations: %j",
+  (policy) => {
+    const value = input();
+    value.memberCapPolicies = policy as unknown as DrawdownBudgetSearchInput["memberCapPolicies"];
+    expect(() => searchBookAtDrawdown(value)).toThrow(/memberCapPolicies/);
+  },
+);
+
 it("selects only feasible positive-equity candidates and records each normalized unique evaluation", () => {
   const result = searchBookAtDrawdown(input());
   expect(result.status).toBe("ok");

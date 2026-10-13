@@ -251,9 +251,17 @@ that risk basis as `drawdownBasis`, separately from the closed-funds return
 objective. A nonpositive marked path is never ranked.
 Declare bounds, initial vectors, descending or other finite `steps`, weight and
 allocation decimal precision, and `maxEvaluations`. A zero weight means true
-removal. Positive weights scale allocation, fixed counts, dollar caps and
-whole-number contract caps; positive quantities rounding to zero are reported
-separately. CPC division requires `weightScaling: "capitalPerContractInverse"`;
+removal. Positive weights scale allocation, fixed counts, dollar caps and,
+by default, whole-number contract caps; positive quantities rounding to zero
+are reported separately. Optional `memberCapPolicies: { [memberId]: "fixed" | "scaled" }`
+holds a `"fixed"` member's declared `maxContractsPerTrade` unchanged while its
+sizing still follows weight. This applies to initial vectors, coordinate moves,
+robust common-factor shrinkage, drop-one reoptimization, and every stability
+panel (including sensitivity block lengths). Omitted maps and members mean
+`"scaled"`; null caps remain uncapped. Unknown member IDs or invalid policies
+are refused. For a fixed 250-contract liquidity limit, declare the actual cap
+250 and the fixed policy, without caller-side precompensation.
+CPC division requires `weightScaling: "capitalPerContractInverse"`;
 `"allocationAndContracts"` refuses CPC inputs. Each optimization records unique
 normalized economic evaluations, `k`, budget/step termination, the best-observed
 feasible **coordinate-search** vector and the near-optimal set and weight
