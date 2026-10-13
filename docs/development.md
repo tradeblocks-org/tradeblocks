@@ -373,8 +373,11 @@ attempts. A completed checkpoint therefore reuses every outcome without evaluati
 again. Checkpoints are caller-owned trusted data, not authenticated evidence.
 
 If `input.feasible` is supplied, pass an opaque `feasibleId` when saving and the
-same ID when resuming. Resume without it throws
-`search_checkpoint_constraint_identity`. The caller must supply the same
+same ID when resuming. Enabling `checkpoint: true`, supplying `onProgress`, or
+resuming without it throws `search_checkpoint_constraint_identity` before any
+evaluation or progress event; no unresumable checkpoint is produced.
+Calls without checkpoint-capable controls still need no ID.
+The caller must supply the same
 deterministic policy; the library cannot serialize or detect a changed function.
 Changing the policy without changing its ID silently reuses old verdicts.
 Progress appends one compact metrics entry and reports a detached best-so-far,

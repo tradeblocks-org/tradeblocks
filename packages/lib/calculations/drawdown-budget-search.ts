@@ -176,13 +176,14 @@ interface PreparedBookEvaluation {
  * without rerunning saved replays or feasibility calls. Callers own storage and
  * must supply the same deterministic feasibility policy and feasibleId at save
  * and resume; changing policy without changing its ID reuses old verdicts.
+ * Checkpoint-capable calls with feasible require feasibleId before any evaluation.
  */
 export function searchBookAtDrawdown(
   input: DrawdownBudgetSearchInput,
   options?: BookSearchOptions,
 ): DrawdownBudgetSearchResult {
   if (!options?.onProgress && !options?.checkpoint && !options?.resumeFrom) return runSearch(input);
-  if (input.feasible && options.resumeFrom && !options.feasibleId)
+  if (input.feasible && !options.feasibleId)
     throw new RangeError("search_checkpoint_constraint_identity: feasibleId is required");
   const { feasible, ...economicRequest } = input;
   const identity = requestIdentity({

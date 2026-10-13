@@ -108,9 +108,13 @@ it("refuses changes anywhere in the economic request and in constraint identity"
     checkpoint: true,
     feasibleId: "policy-v1",
   }).checkpoint!;
+  // Reordering input trades must invalidate identity even if replay sorts them.
   const changes: Array<(request: DrawdownBudgetSearchInput) => void> = [
     (request) => {
       request.replay.trades[0].netPlPerContract--;
+    },
+    (request) => {
+      request.replay.trades.reverse();
     },
     (request) => {
       request.replay.members.a.maxOpenTrades = 2;
@@ -170,6 +174,53 @@ it("refuses changes anywhere in the economic request and in constraint identity"
   expect(
     searchBookAtDrawdown(reordered, { resumeFrom: checkpoint, feasibleId: "policy-v1" }).best,
   ).toMatchObject({ weights: { a: 0.5 }, returnPct: 20 });
+});
+
+it.each(["checkpoint", "progress"] as const)(
+  "refuses %s capture without a feasibility ID before evaluating or observing",
+  (mode) => {
+    const value = input();
+    let evaluations = 0;
+    let events = 0;
+    value.feasible = () => {
+      evaluations++;
+      return true;
+    };
+    const options =
+      mode === "checkpoint"
+        ? { checkpoint: true }
+        : {
+            onProgress: () => {
+              events++;
+            },
+          };
+    expect(() => searchBookAtDrawdown(value, options)).toThrow(
+      /search_checkpoint_constraint_identity/,
+    );
+    expect(evaluations).toBe(0);
+    expect(events).toBe(0);
+    expect(searchBookAtDrawdown(value).best).toMatchObject({ weights: { a: 0.5 }, returnPct: 20 });
+  },
+);
+
+it("binds feasibility presence in checkpoint identity in both directions", () => {
+  const withoutPolicy = input();
+  const withPolicy = { ...withoutPolicy, feasible: () => true };
+  const options = { checkpoint: true, feasibleId: "policy-v1" };
+  const withPolicyCheckpoint = searchBookAtDrawdown(withPolicy, options).checkpoint!;
+  const withoutPolicyCheckpoint = searchBookAtDrawdown(withoutPolicy, options).checkpoint!;
+  expect(() =>
+    searchBookAtDrawdown(withoutPolicy, {
+      resumeFrom: withPolicyCheckpoint,
+      feasibleId: "policy-v1",
+    }),
+  ).toThrow(/search_checkpoint_identity_mismatch/);
+  expect(() =>
+    searchBookAtDrawdown(withPolicy, {
+      resumeFrom: withoutPolicyCheckpoint,
+      feasibleId: "policy-v1",
+    }),
+  ).toThrow(/search_checkpoint_identity_mismatch/);
 });
 
 it("isolates progress object mutations from live search and later checkpoints", () => {
