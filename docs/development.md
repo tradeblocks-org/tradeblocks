@@ -201,6 +201,26 @@ keys exactly like other known identities. Unknown identities
 are refused in either mode. Marks do not supply missing opportunities or verify
 producer parity.
 
+With `memberMarkedPl: true`, `marked.members` contains
+`Array<{ memberId, daily: Array<{ date, pl }> }>` in `simultaneousOrder`,
+including removed and zero-quantity members with zero flows. Each `daily`
+series uses the exact replay `dates` axis. `pl` is incremental net dollars,
+not a percentage return: each member's cumulative realized net P/L plus its
+remaining open marks, differenced from zero for the first date. Member flows
+sum to the aggregate marked-equity change (day one measured from starting
+funds), within floating-point rounding. The same executed quantities and mark
+terms are used, without changing admission, census, warnings or aggregate
+results and without deducting fees again. Partial closes replace the closed
+child's mark with its realized net P/L; mark-only ignored closes drop their
+marks without realizing cash, attributed to the ignored child's own member.
+Positions beyond the cutoff retain their supplied open marks. Every replay
+flow has a member owner, so no residual bucket is needed. Requesting attribution
+without `marks` throws `Invalid book replay: memberMarkedPl requires marks`;
+it never substitutes closed-equity flows. Missing marks still throw
+`missing_mark_coverage`. Leaving the option unset preserves the previous
+result exactly; false does not add `marked.members`. No MCP tool exposes
+`replayBook`; this option belongs to the library interface only.
+
 With `ignoredRows: "markOnly"`, ignored children are admitted at their group's
 single simulated quantity and require the same complete open-mark coverage.
 Their closing P/L never enters closed funds, realized return or later sizing.

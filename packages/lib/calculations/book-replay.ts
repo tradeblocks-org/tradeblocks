@@ -50,6 +50,8 @@ export interface BookMarkedResult {
   maxDrawdownPct: number | null;
   maxDrawdownEpisode: DrawdownEpisode | null;
   insolvent: boolean;
+  /** Opt-in daily net-dollar contributions on the replay dates axis, in simultaneousOrder. */
+  members?: Array<{ memberId: string; daily: Array<{ date: string; pl: number }> }>;
 }
 interface BookReplayBaseInput {
   startingFunds: number;
@@ -62,6 +64,8 @@ interface BookReplayBaseInput {
   simultaneousGroupOrder?: Record<string, string[]>;
   liquidityThresholdContracts: number | null;
   marks?: BookMarks;
+  /** Requires marks; attribute changes in marked equity to each member, including ignored drop-off. */
+  memberMarkedPl?: boolean;
 }
 export type BookReplayInput = BookReplayBaseInput &
   (
@@ -117,7 +121,14 @@ export interface BookReplayResult {
   marked?: BookMarkedResult;
 }
 
-/** Closed-equity replay, not a marked account path or a census of attempted entries. */
+/**
+ * Replay closed funds and, with supplied marks, a separate marked equity path.
+ * memberMarkedPl opts into per-member daily net-dollar changes in that marked path:
+ * realized net P/L plus remaining open marks, differenced from zero on day one.
+ * Fees are already included in net inputs; ignored mark-only closes realize no cash.
+ * Missing marks are refused, and endpoint positions remain open. Attribution requires marks.
+ * Without the option, the result shape and replay behavior are unchanged.
+ */
 export function replayBook(input: BookReplayInput): BookReplayResult {
   validateReplay(input);
   const markOnly = input.ignoredRows === "markOnly";
@@ -146,6 +157,17 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
     netPl: 0,
   }));
   const summaries = Object.fromEntries(members.map((m) => [m.memberId, m]));
+  const memberMarked = input.memberMarkedPl
+    ? members.map(({ memberId }) => ({
+        memberId,
+        daily: [] as Array<{ date: string; pl: number }>,
+        cumulative: 0,
+        previous: 0,
+      }))
+    : undefined;
+  const markedSummaries = memberMarked
+    ? Object.fromEntries(memberMarked.map((member) => [member.memberId, member]))
+    : undefined;
   const groupOrders = new Map(
     Object.entries(input.simultaneousGroupOrder ?? {}).map(([memberId, ids]) => [
       memberId,
@@ -342,12 +364,15 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
     equity.push({ date, equity: funds });
     if (input.marks) {
       let markedFunds = funds;
+      if (memberMarked)
+        for (const member of memberMarked) member.cumulative = summaries[member.memberId].netPl;
       for (const group of activeGroups) {
         if (input.marks.mode === "entryGroup") {
           const key = JSON.stringify([group.memberId, group.entryGroupId, date]);
           const mark = markValues.get(key);
           if (mark === undefined) throw new RangeError(`missing_mark_coverage: ${key}`);
           markedFunds += group.quantity * mark;
+          if (markedSummaries) markedSummaries[group.memberId].cumulative += group.quantity * mark;
         } else {
           for (const child of group.children) {
             if (child.dateClosed <= date) continue;
@@ -355,11 +380,18 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
             const mark = markValues.get(key);
             if (mark === undefined) throw new RangeError(`missing_mark_coverage: ${key}`);
             markedFunds += group.quantity * mark;
+            if (markedSummaries)
+              markedSummaries[group.memberId].cumulative += group.quantity * mark;
           }
         }
       }
       markedEquity.push({ date, equity: markedFunds });
       markedInsolvent ||= markedFunds <= 0 || !Number.isFinite(markedFunds);
+      if (memberMarked)
+        for (const member of memberMarked) {
+          member.daily.push({ date, pl: member.cumulative - member.previous });
+          member.previous = member.cumulative;
+        }
     }
   }
   const startingEquity = { date: input.dates[0], equity: input.startingFunds };
@@ -394,6 +426,9 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
         maxDrawdownPct: markedInsolvent || insolvent ? null : (markedWorst?.depthPct ?? 0),
         maxDrawdownEpisode: markedWorst,
         insolvent: markedInsolvent || insolvent,
+        ...(memberMarked
+          ? { members: memberMarked.map(({ memberId, daily }) => ({ memberId, daily })) }
+          : {}),
       }
     : undefined;
   return {
@@ -444,6 +479,9 @@ function validateReplay(input: BookReplayInput): void {
   const fail = (name: string): never => {
     throw new RangeError(`Invalid book replay: ${name}`);
   };
+  if (input.memberMarkedPl !== undefined && typeof input.memberMarkedPl !== "boolean")
+    fail("memberMarkedPl");
+  if (input.memberMarkedPl && !input.marks) fail("memberMarkedPl requires marks");
   if (
     input.ignoredRows !== undefined &&
     input.ignoredRows !== "exclude" &&

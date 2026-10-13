@@ -1,4 +1,5 @@
 import { replayBook, type BookReplayInput } from "@tradeblocks/lib";
+import defaultReplayBaseline from "../fixtures/book-replay-default.json";
 
 function input(): BookReplayInput {
   return {
@@ -35,6 +36,135 @@ function input(): BookReplayInput {
     liquidityThresholdContracts: 1000,
   };
 }
+
+it("reports optional member marked daily net flows and refuses attribution without marks", () => {
+  const value = input();
+  value.memberMarkedPl = true;
+  expect(() => replayBook(value)).toThrow(/memberMarkedPl requires marks/);
+  value.marks = {
+    mode: "child",
+    values: [{ tradeId: "t", date: value.dates[0], netOpenPlPerContract: -40 }],
+  };
+  expect(replayBook(value).marked).toMatchObject({
+    members: [
+      {
+        memberId: "a",
+        daily: [
+          { date: value.dates[0], pl: -200 },
+          { date: value.dates[1], pl: 300 },
+        ],
+      },
+    ],
+  });
+});
+
+// Captured from replayBook at 6bcdf110a71b5c71e15146d208788ef1628e08ef before this change.
+it("keeps the omitted-option result identical to the pre-change marked replay baseline", () => {
+  const value = input();
+  value.marks = {
+    mode: "child",
+    values: [{ tradeId: "t", date: value.dates[0], netOpenPlPerContract: -40 }],
+  };
+  expect(replayBook(value)).toEqual(defaultReplayBaseline);
+  value.memberMarkedPl = false;
+  expect(replayBook(value).marked).not.toHaveProperty("members");
+});
+
+describe.each(["child", "entryGroup"] as const)(
+  "member marked reconciliation: %s marks",
+  (mode) => {
+    it.each([
+      ["sharedEntryGroup", "exclude"],
+      ["sharedEntryGroup", "reserve"],
+      ["sumChildren", "exclude"],
+      ["sumChildren", "reserve"],
+    ] as const)(
+      "preserves replay with %s reservations and %s ignored buying power",
+      (reservationMode, ignoredBuyingPower) => {
+        const base = input();
+        const dates = ["2025-01-02", "2025-01-03", "2025-01-06"];
+        const value: BookReplayInput = {
+          ...base,
+          dates,
+          reservationMode,
+          ignoredRows: "markOnly",
+          ignoredBuyingPower,
+          members: {
+            a: { ...base.members.a, sizing: { mode: "fixed", contracts: 2 } },
+            b: { ...base.members.a, sizing: { mode: "fixed", contracts: 3 } },
+            removed: { ...base.members.a, removed: true },
+            zero: { ...base.members.a, sizing: { mode: "fixed", contracts: 0 } },
+          },
+          simultaneousOrder: ["b", "a", "removed", "zero"],
+          trades: [
+            { ...base.trades[0], id: "partial", netPlPerContract: 7 },
+            { ...base.trades[0], id: "cutoff", dateClosed: "2025-01-07", netPlPerContract: 999 },
+            {
+              ...base.trades[0],
+              id: "ignored",
+              memberId: "b",
+              ignored: true,
+              netPlPerContract: 999,
+            },
+            { ...base.trades[0], id: "removed", memberId: "removed" },
+            { ...base.trades[0], id: "zero", memberId: "zero" },
+          ],
+          marks:
+            mode === "child"
+              ? {
+                  mode,
+                  values: [
+                    { tradeId: "partial", date: dates[0], netOpenPlPerContract: -4 },
+                    { tradeId: "cutoff", date: dates[0], netOpenPlPerContract: 10 },
+                    { tradeId: "cutoff", date: dates[1], netOpenPlPerContract: 13 },
+                    { tradeId: "cutoff", date: dates[2], netOpenPlPerContract: -2 },
+                    { tradeId: "ignored", date: dates[0], netOpenPlPerContract: -5 },
+                  ],
+                }
+              : {
+                  mode,
+                  values: [
+                    { memberId: "a", entryGroupId: "g", date: dates[0], netOpenPlPerContract: 6 },
+                    { memberId: "a", entryGroupId: "g", date: dates[1], netOpenPlPerContract: 13 },
+                    { memberId: "a", entryGroupId: "g", date: dates[2], netOpenPlPerContract: -2 },
+                    { memberId: "b", entryGroupId: "g", date: dates[0], netOpenPlPerContract: -5 },
+                  ],
+                },
+        };
+        const before = structuredClone(value);
+        const baseline = replayBook(value);
+        const result = replayBook({ ...value, memberMarkedPl: true });
+        const { members: contributions, ...aggregate } = result.marked!;
+        const { memberMarkedPl, ...declarations } = result.declarations;
+        expect(memberMarkedPl).toBe(true);
+        expect({ ...result, marked: aggregate, declarations }).toEqual(baseline);
+        expect(value).toEqual(before);
+        expect(contributions).toEqual([
+          { memberId: "b", daily: dates.map((date, i) => ({ date, pl: [-15, 15, 0][i] })) },
+          { memberId: "a", daily: dates.map((date, i) => ({ date, pl: [12, 28, -30][i] })) },
+          { memberId: "removed", daily: dates.map((date) => ({ date, pl: 0 })) },
+          { memberId: "zero", daily: dates.map((date) => ({ date, pl: 0 })) },
+        ]);
+        let prior = value.startingFunds;
+        for (const [i, observation] of result.marked!.equity.entries()) {
+          expect(contributions!.every((member) => member.daily[i].date === observation.date)).toBe(
+            true,
+          );
+          expect(contributions!.reduce((sum, member) => sum + member.daily[i].pl, 0)).toBeCloseTo(
+            observation.equity - prior,
+            10,
+          );
+          prior = observation.equity;
+        }
+        // Missing admitted marks must still be refused when attribution is requested.
+        value.marks!.values.pop();
+        expect(() => replayBook({ ...value, memberMarkedPl: true })).toThrow(
+          /missing_mark_coverage/,
+        );
+      },
+    );
+  },
+);
 
 it("sizes allocation in whole contracts and compounds net closed equity without deducting fees again", () => {
   const result = replayBook(input());

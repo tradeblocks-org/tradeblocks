@@ -1,0 +1,136 @@
+{
+  "status": "ok",
+  "basis": "offline_closed_equity",
+  "endingFunds": 1100,
+  "returnPct": 10,
+  "startingEquity": {
+    "date": "2025-01-02",
+    "equity": 1000
+  },
+  "equity": [
+    {
+      "date": "2025-01-02",
+      "equity": 1000
+    },
+    {
+      "date": "2025-01-03",
+      "equity": 1100
+    }
+  ],
+  "drawdownEpisodes": [],
+  "maxDrawdownPct": 0,
+  "maxDrawdownEpisode": null,
+  "members": [
+    {
+      "memberId": "a",
+      "entryGroups": 1,
+      "executedGroups": 1,
+      "zeroGroups": 0,
+      "totalContracts": 5,
+      "maxContractsPerTrade": 5,
+      "contractsPerEntry": [
+        {
+          "entryGroupId": "g",
+          "contracts": 5
+        }
+      ],
+      "netPl": 100
+    }
+  ],
+  "census": {
+    "inputRows": 1,
+    "ignoredRows": 0,
+    "eligibleRows": 1,
+    "entryGroups": 1,
+    "executedGroups": 1,
+    "executedIgnoredOnlyGroups": 0,
+    "zeroGroups": 0,
+    "closedRows": 1,
+    "openRows": 0,
+    "openGroups": 0
+  },
+  "warnings": [
+    "Closed equity excludes open-position marks and unobserved opportunities.",
+    "maxOpenTrades unavailable: a"
+  ],
+  "insolvent": false,
+  "liquidityFlag": false,
+  "declarations": {
+    "startingFunds": 1000,
+    "dates": ["2025-01-02", "2025-01-03"],
+    "trades": [
+      {
+        "id": "t",
+        "memberId": "a",
+        "entryGroupId": "g",
+        "dateOpened": "2025-01-02",
+        "timeOpened": "09:30:00",
+        "dateClosed": "2025-01-03",
+        "timeClosed": "16:00:00",
+        "netPlPerContract": 20,
+        "buyingPowerPerContract": 100,
+        "ignored": false
+      }
+    ],
+    "members": {
+      "a": {
+        "sizing": {
+          "mode": "allocation",
+          "allocationPercentage": 50
+        },
+        "removed": false,
+        "ignoreMarginRequirements": false,
+        "maxContractsPerTrade": null,
+        "maxAllocationAmount": null,
+        "minimumOne": false,
+        "maxOpenTrades": null
+      }
+    },
+    "reservationMode": "sharedEntryGroup",
+    "sharedEntryGroupBuyingPower": "equalPackageMaximum",
+    "simultaneousOrder": ["a"],
+    "liquidityThresholdContracts": 1000,
+    "marks": {
+      "mode": "child",
+      "values": [
+        {
+          "tradeId": "t",
+          "date": "2025-01-02",
+          "netOpenPlPerContract": -40
+        }
+      ]
+    },
+    "ignoredRows": "exclude"
+  },
+  "marked": {
+    "basis": "offline_marked_equity",
+    "equity": [
+      {
+        "date": "2025-01-02",
+        "equity": 800
+      },
+      {
+        "date": "2025-01-03",
+        "equity": 1100
+      }
+    ],
+    "drawdownEpisodes": [
+      {
+        "peakDate": "2025-01-02",
+        "troughDate": "2025-01-02",
+        "recoveryDate": "2025-01-03",
+        "depthPct": 20,
+        "underwaterDays": 1
+      }
+    ],
+    "maxDrawdownPct": 20,
+    "maxDrawdownEpisode": {
+      "peakDate": "2025-01-02",
+      "troughDate": "2025-01-02",
+      "recoveryDate": "2025-01-03",
+      "depthPct": 20,
+      "underwaterDays": 1
+    },
+    "insolvent": false
+  }
+}
