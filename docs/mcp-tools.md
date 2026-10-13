@@ -299,6 +299,28 @@ these truncated windows as well as any windows skipped for insufficient trades.
 | `analyze_live_alignment`  | Compare live execution against backtest expectations                                                                                              |
 | `get_reporting_log_stats` | Statistics on reported/live trade logs                                                                                                            |
 
+`drawdown_attribution` optionally accepts `episodeCount` (integer 1..20) to add
+an `episodes` list ranked by largest dollar depth, then earlier peak trade.
+`topN` (default 5, integer 1..50) still limits strategy contributors **per episode**.
+Equity uses reported trade P/L in close-date/time order; exact timestamp ties
+retain input order. Recovery to or above the previous peak ends an episode;
+the latest equal peak starts the next one. An unrecovered final episode is
+included with `recoveryDate: null`. Each list entry contains `drawdownPeriod`,
+`periodStats`, and `attribution`; peak minus trough equals `maxDrawdown`, and
+`maxDrawdownPct` is that depth divided by peak equity times 100 (zero for a
+nonpositive peak, matching the legacy convention).
+
+List attribution includes only trades **after** its peak trade through its
+trough trade, even when both occur on one day. A peak at the initial seed
+includes the first trade. `periodStats.totalPl` reconciles to negative depth;
+contributors truncated by `topN` need not sum to that total. All strategies
+participate before truncation. This is closed-trade equity, not marked equity
+or daily NLV. With `episodeCount` omitted the response is unchanged: the legacy
+single-episode fields retain their inclusive peak-to-trough **date** window,
+which can include the peak trade and other same-day trades, so their attributed
+P/L need not equal negative depth. Opting in adds the list without changing
+those legacy fields. A no-drawdown result adds an empty list when opted in.
+
 ## SQL and Schema
 
 | Tool                | Description                                                                                                      |

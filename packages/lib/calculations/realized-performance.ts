@@ -631,12 +631,134 @@ export function buildRealizedPeriodReturnsByCloseDate(
   return { periods, totals };
 }
 
+function attributeDrawdownTrades(drawdownTrades: Trade[], topN: number) {
+  const strategyPl = new Map<
+    string,
+    { pl: number; trades: number; wins: number; losses: number }
+  >();
+  let totalLossDuringDrawdown = 0;
+  for (const trade of drawdownTrades) {
+    const existing = strategyPl.get(trade.strategy) ?? { pl: 0, trades: 0, wins: 0, losses: 0 };
+    existing.pl += trade.pl;
+    existing.trades += 1;
+    if (trade.pl > 0) existing.wins += 1;
+    else if (trade.pl < 0) existing.losses += 1;
+    strategyPl.set(trade.strategy, existing);
+    totalLossDuringDrawdown += trade.pl;
+  }
+  const attribution = Array.from(strategyPl.entries())
+    .map(([strategyName, data]) => ({
+      strategy: strategyName,
+      pl: data.pl,
+      trades: data.trades,
+      wins: data.wins,
+      losses: data.losses,
+      contributionPct:
+        totalLossDuringDrawdown !== 0 ? Math.abs((data.pl / totalLossDuringDrawdown) * 100) : 0,
+    }))
+    .sort((a, b) => a.pl - b.pl)
+    .slice(0, topN);
+  return {
+    attribution,
+    periodStats: { totalTrades: drawdownTrades.length, totalPl: totalLossDuringDrawdown },
+  };
+}
+
+function buildDrawdownEpisodes(
+  sortedTrades: Trade[],
+  initialCapital: number,
+  topN: number,
+  episodeCount: number,
+) {
+  let equity = initialCapital;
+  let peakEquity = initialCapital;
+  let peakIndex = -1;
+  type SequenceEpisode = {
+    peakIndex: number;
+    troughIndex: number;
+    peakEquity: number;
+    troughEquity: number;
+    recoveryIndex: number | null;
+  };
+  let current: SequenceEpisode | null = null;
+  const episodes: SequenceEpisode[] = [];
+  for (let index = 0; index < sortedTrades.length; index++) {
+    equity += sortedTrades[index].pl;
+    if (equity >= peakEquity) {
+      if (current) {
+        current.recoveryIndex = index;
+        episodes.push(current);
+        current = null;
+      }
+      peakEquity = equity;
+      peakIndex = index;
+    } else if (!current) {
+      current = {
+        peakIndex,
+        troughIndex: index,
+        peakEquity,
+        troughEquity: equity,
+        recoveryIndex: null,
+      };
+    } else if (equity < current.troughEquity) {
+      current.troughEquity = equity;
+      current.troughIndex = index;
+    }
+  }
+  if (current) episodes.push(current);
+  return episodes
+    .sort(
+      (a, b) =>
+        b.peakEquity - b.troughEquity - (a.peakEquity - a.troughEquity) ||
+        a.peakIndex - b.peakIndex,
+    )
+    .slice(0, episodeCount)
+    .map((episode) => {
+      const peakDate = getRealizationDate(sortedTrades[Math.max(0, episode.peakIndex)]);
+      const troughDate = getRealizationDate(sortedTrades[episode.troughIndex]);
+      const maxDrawdown = episode.peakEquity - episode.troughEquity;
+      return {
+        drawdownPeriod: {
+          peakDate: formatDateKey(peakDate),
+          troughDate: formatDateKey(troughDate),
+          peakEquity: episode.peakEquity,
+          troughEquity: episode.troughEquity,
+          maxDrawdown,
+          maxDrawdownPct: episode.peakEquity > 0 ? (maxDrawdown / episode.peakEquity) * 100 : 0,
+          durationDays: Math.ceil((troughDate.getTime() - peakDate.getTime()) / 86400000),
+          recoveryDate:
+            episode.recoveryIndex === null
+              ? null
+              : formatDateKey(getRealizationDate(sortedTrades[episode.recoveryIndex])),
+        },
+        ...attributeDrawdownTrades(
+          sortedTrades.slice(episode.peakIndex + 1, episode.troughIndex + 1),
+          topN,
+        ),
+      };
+    });
+}
+
 /**
  * Close-window attribution uses reported trade P/L, matching the realized-only MCP view.
  * Selects the episode with the largest dollar drawdown on closed-trade equity (trades ordered
  * by close date); every drawdownPeriod field describes that selected episode.
+ * Optional episodeCount (1..20) adds dollar-ranked distinct episodes, ties by earlier peak
+ * trade index. Recovery includes equality; an unrecovered final episode is included.
+ * List attribution uses trades after the peak through the trough, unlike the unchanged
+ * legacy inclusive-date window. topN limits contributors, never episode count.
  */
-export function buildRealizedDrawdownAttributionByCloseDate(trades: Trade[], topN: number) {
+export function buildRealizedDrawdownAttributionByCloseDate(
+  trades: Trade[],
+  topN: number,
+  episodeCount?: number,
+) {
+  if (
+    episodeCount !== undefined &&
+    (!Number.isInteger(episodeCount) || episodeCount < 1 || episodeCount > 20)
+  ) {
+    throw new RangeError("episodeCount must be an integer from 1 to 20");
+  }
   const sortedTrades = [...trades].sort((a, b) => {
     const dateA = new Date(a.dateClosed ?? a.dateOpened);
     const dateB = new Date(b.dateClosed ?? b.dateOpened);
@@ -678,32 +800,7 @@ export function buildRealizedDrawdownAttributionByCloseDate(trades: Trade[], top
     const closeDate = new Date(trade.dateClosed ?? trade.dateOpened);
     return closeDate >= drawdownPeakDate && closeDate <= troughDate;
   });
-  const strategyPl = new Map<
-    string,
-    { pl: number; trades: number; wins: number; losses: number }
-  >();
-  let totalLossDuringDrawdown = 0;
-  for (const trade of drawdownTrades) {
-    const existing = strategyPl.get(trade.strategy) ?? { pl: 0, trades: 0, wins: 0, losses: 0 };
-    existing.pl += trade.pl;
-    existing.trades += 1;
-    if (trade.pl > 0) existing.wins += 1;
-    else if (trade.pl < 0) existing.losses += 1;
-    strategyPl.set(trade.strategy, existing);
-    totalLossDuringDrawdown += trade.pl;
-  }
-  const attribution = Array.from(strategyPl.entries())
-    .map(([strategyName, data]) => ({
-      strategy: strategyName,
-      pl: data.pl,
-      trades: data.trades,
-      wins: data.wins,
-      losses: data.losses,
-      contributionPct:
-        totalLossDuringDrawdown !== 0 ? Math.abs((data.pl / totalLossDuringDrawdown) * 100) : 0,
-    }))
-    .sort((a, b) => a.pl - b.pl)
-    .slice(0, topN);
+  const { attribution, periodStats } = attributeDrawdownTrades(drawdownTrades, topN);
   const durationMs = troughDate.getTime() - drawdownPeakDate.getTime();
   const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
   const peakDateStr = formatDateKey(drawdownPeakDate);
@@ -721,7 +818,12 @@ export function buildRealizedDrawdownAttributionByCloseDate(trades: Trade[], top
       maxDrawdownPct,
       durationDays,
     },
-    periodStats: { totalTrades: drawdownTrades.length, totalPl: totalLossDuringDrawdown },
+    periodStats,
+    ...(episodeCount === undefined
+      ? {}
+      : {
+          episodes: buildDrawdownEpisodes(sortedTrades, initialCapital, topN, episodeCount),
+        }),
     attribution,
   };
 }

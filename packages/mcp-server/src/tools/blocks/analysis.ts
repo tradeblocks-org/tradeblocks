@@ -198,7 +198,7 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
     "drawdown_attribution",
     {
       description:
-        "Identify which strategies contributed most to losses during the portfolio's maximum drawdown period. The period is the largest dollar drawdown on closed-trade equity built from reported trade P/L in close-date order (not the daily NLV log, not the largest percentage drawdown). Shows that period's peak and trough dates and equity, and per-strategy P/L attribution.",
+        "Identify strategy losses during the largest dollar drawdown on closed-trade reported-P/L equity in close-date/time order (not daily NLV or percentage-ranked). Optional episodeCount adds distinct episodes ranked by dollar depth then earlier peak trade; recovery to the prior peak ends an episode, and an unrecovered final episode is included. List attribution uses trades after each peak through its trough and reconciles to negative depth. Legacy fields retain inclusive-date attribution. topN limits contributors per episode, not episodes.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         strategy: z
@@ -212,9 +212,18 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           .max(50)
           .default(5)
           .describe("Number of top contributors to return (default: 5)"),
+        episodeCount: z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .optional()
+          .describe(
+            "Opt in to up to 1..20 ranked drawdown episodes; omitted preserves the legacy response",
+          ),
       }),
     },
-    withSyncedBlock(baseDir, async ({ blockId, strategy, topN }) => {
+    withSyncedBlock(baseDir, async ({ blockId, strategy, topN, episodeCount }) => {
       try {
         const block = await loadBlock(baseDir, blockId);
         let trades = block.trades;
@@ -233,7 +242,7 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           };
         }
 
-        const result = buildRealizedDrawdownAttributionByCloseDate(trades, topN);
+        const result = buildRealizedDrawdownAttributionByCloseDate(trades, topN, episodeCount);
         if (!result) {
           const summary = `Drawdown Attribution: ${blockId}${strategy ? ` (${strategy})` : ""} | No drawdown detected (equity never declined from peak)`;
 
@@ -243,6 +252,7 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
             drawdownPeriod: null,
             attribution: [],
             message: "No drawdown detected - equity never declined from peak",
+            ...(episodeCount === undefined ? {} : { episodes: [] }),
           };
 
           return createToolOutput(summary, structuredData);
@@ -261,6 +271,7 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
           drawdownPeriod: result.drawdownPeriod,
           periodStats: result.periodStats,
           attribution,
+          ...(episodeCount === undefined ? {} : { episodes: result.episodes }),
         };
 
         return createToolOutput(summary, structuredData);

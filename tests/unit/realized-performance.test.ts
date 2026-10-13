@@ -97,6 +97,119 @@ describe("public close-date realized calculations", () => {
     expect(result?.maxDrawdownPct).toBe(result?.drawdownPeriod.maxDrawdownPct);
   });
 
+  it("ranks distinct recovered and final episodes with sequence-only attribution", () => {
+    const tape = [
+      trade("2026-01-05", "2026-01-05", 100, "Peak"),
+      trade("2026-01-05", "2026-01-05", -200, "B"),
+      trade("2026-01-05", "2026-01-05", 50, "A"),
+      trade("2026-01-05", "2026-01-05", -150, "B"),
+      trade("2026-01-06", "2026-01-06", 300, "Recovery"),
+      trade("2026-01-07", "2026-01-07", -300, "C"),
+    ];
+    const result = buildRealizedDrawdownAttributionByCloseDate(tape, 1, 20);
+    expect(result?.episodes).toEqual([
+      {
+        drawdownPeriod: {
+          peakDate: "2026-01-05",
+          troughDate: "2026-01-05",
+          peakEquity: 1100,
+          troughEquity: 800,
+          maxDrawdown: 300,
+          maxDrawdownPct: (300 / 1100) * 100,
+          durationDays: 0,
+          recoveryDate: "2026-01-06",
+        },
+        periodStats: { totalTrades: 3, totalPl: -300 },
+        attribution: [
+          {
+            strategy: "B",
+            pl: -350,
+            trades: 2,
+            wins: 0,
+            losses: 2,
+            contributionPct: (350 / 300) * 100,
+          },
+        ],
+      },
+      {
+        drawdownPeriod: {
+          peakDate: "2026-01-06",
+          troughDate: "2026-01-07",
+          peakEquity: 1100,
+          troughEquity: 800,
+          maxDrawdown: 300,
+          maxDrawdownPct: (300 / 1100) * 100,
+          durationDays: 1,
+          recoveryDate: null,
+        },
+        periodStats: { totalTrades: 1, totalPl: -300 },
+        attribution: [
+          { strategy: "C", pl: -300, trades: 1, wins: 0, losses: 1, contributionPct: 100 },
+        ],
+      },
+    ]);
+    expect(buildRealizedDrawdownAttributionByCloseDate(tape, 5, 1)?.episodes).toHaveLength(1);
+  });
+
+  it("preserves the literal legacy byte baseline when episodeCount is omitted", () => {
+    expect(JSON.stringify(buildRealizedDrawdownAttributionByCloseDate(trades, 1))).toBe(
+      '{"maxDrawdownPct":18.181818181818183,"peakDateStr":"2026-02-02","troughDateStr":"2026-02-03","drawdownPeriod":{"peakDate":"2026-02-02","troughDate":"2026-02-03","peakEquity":1100,"troughEquity":900,"maxDrawdown":200,"maxDrawdownPct":18.181818181818183,"durationDays":1},"periodStats":{"totalTrades":2,"totalPl":-100},"attribution":[{"strategy":"B","pl":-200,"trades":1,"wins":0,"losses":1,"contributionPct":200}]}',
+    );
+  });
+
+  it("includes the initial seed, crosses zero, and ranks dollars rather than percentages", () => {
+    const tape = [
+      trade("2026-01-05", "2026-01-05", -1200, "B"),
+      trade("2026-01-06", "2026-01-06", 11200, "A"),
+      trade("2026-01-07", "2026-01-07", -2000, "C"),
+    ];
+    expect(buildRealizedDrawdownAttributionByCloseDate(tape, 5, 2)?.episodes).toMatchObject([
+      {
+        drawdownPeriod: {
+          peakEquity: 11000,
+          troughEquity: 9000,
+          maxDrawdown: 2000,
+          recoveryDate: null,
+        },
+        periodStats: { totalTrades: 1, totalPl: -2000 },
+      },
+      {
+        drawdownPeriod: {
+          peakEquity: 1000,
+          troughEquity: -200,
+          maxDrawdown: 1200,
+          maxDrawdownPct: 120,
+          recoveryDate: "2026-01-06",
+        },
+        periodStats: { totalTrades: 1, totalPl: -1200 },
+      },
+    ]);
+  });
+
+  it("uses the latest same-day equal peak and excludes all peak/pre-peak trades", () => {
+    const tape = [100, -100, 100, -200].map((pl, index) => ({
+      ...trade("2026-01-05", "2026-01-05", pl, String(index)),
+      timeClosed: `15:0${index}:00`,
+    }));
+    const episodes = buildRealizedDrawdownAttributionByCloseDate(
+      [...tape].reverse(),
+      5,
+      2,
+    )?.episodes;
+    expect(episodes?.map((episode) => episode.periodStats)).toEqual([
+      { totalTrades: 1, totalPl: -200 },
+      { totalTrades: 1, totalPl: -100 },
+    ]);
+    expect(episodes?.[0].attribution).toEqual([
+      { strategy: "3", pl: -200, trades: 1, wins: 0, losses: 1, contributionPct: 100 },
+    ]);
+    expect(buildRealizedDrawdownAttributionByCloseDate([trades[0]], 5, 2)).toBeNull();
+  });
+
+  it.each([0, 21, 1.5, NaN, Infinity])("refuses invalid episode count %s", (count) => {
+    expect(() => buildRealizedDrawdownAttributionByCloseDate(trades, 5, count)).toThrow(RangeError);
+  });
+
   it("accepts an evidenced starting amount without changing direct callers' default", () => {
     const explicit = buildRealizedEquityCurveByCloseDate(trades, 10000);
     expect(explicit.map((point) => point.equity)).toEqual([10000, 10100, 9900, 9950]);
