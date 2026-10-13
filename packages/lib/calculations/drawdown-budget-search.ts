@@ -97,6 +97,62 @@ export interface DrawdownBudgetSearchResult {
   totalEvaluations: number;
   feasibilityRejections?: { count: number; reasons: Record<string, number> };
   warnings: string[];
+  /** Present only when progress, checkpoint capture or resume is requested. */
+  checkpoint?: BookSearchCheckpoint;
+}
+
+export interface BookSearchCheckpoint {
+  version: 1;
+  requestIdentity: string;
+  evaluations: Array<{
+    scope: string;
+    phase: "coordinate" | "robust";
+    evaluation: BookSearchEvaluation;
+  }>;
+  /** Consumed unavailable bootstrap outcomes; never fabricated evaluation metrics. */
+  unavailableEvaluations: Array<{ scope: string; key: string; message: string }>;
+}
+
+export interface BookSearchProgress {
+  evaluationsDone: number;
+  /** Auxiliary scope: root, dropOne/member, stability/panel/replicate. */
+  scope: string;
+  phase: "coordinate" | "robust";
+  /** Best feasible evaluation in this search's scope, not across bootstrap samples. */
+  best: BookSearchEvaluation | null;
+  checkpoint: BookSearchCheckpoint;
+}
+
+export interface BookSearchOptions {
+  onProgress?: (event: BookSearchProgress) => void;
+  /** Return a final checkpoint even without a progress observer. */
+  checkpoint?: boolean;
+  resumeFrom?: BookSearchCheckpoint;
+  /** Opaque identity for the caller's deterministic feasibility policy. */
+  feasibleId?: string;
+}
+
+interface SearchExecution {
+  checkpoint: BookSearchCheckpoint;
+  cursor: number;
+  onProgress?: BookSearchOptions["onProgress"];
+}
+
+// Tag values so absent/undefined, null, arrays and objects cannot alias.
+function requestIdentity(value: unknown): string {
+  if (value === undefined) return "undefined";
+  if (value === null || typeof value !== "object") {
+    if (typeof value === "function" || typeof value === "symbol" || typeof value === "bigint")
+      throw new RangeError("search_checkpoint_identity: request must contain plain data");
+    return `${typeof value}:${String(value)}`;
+  }
+  if (Array.isArray(value)) return JSON.stringify(["array", value.map(requestIdentity)]);
+  return JSON.stringify([
+    "object",
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, requestIdentity((value as Record<string, unknown>)[key])]),
+  ]);
 }
 
 interface PreparedBookEvaluation {
@@ -111,8 +167,51 @@ interface PreparedBookEvaluation {
  * memberCapPolicies holds selected maxContractsPerTrade caps fixed across all
  * searches while sizing still follows weight; zero weight still removes a member.
  * Omitted policies retain scaled caps. Null caps remain uncapped.
+ * Optional progress is emitted after each new evaluation (including auxiliary
+ * searches), with a detached JSON checkpoint. A throwing observer aborts the
+ * call; its checkpoint includes the committed evaluation and remains resumable.
+ * Resume reconstructs deterministic control flow using saved metrics/verdicts,
+ * without rerunning saved replays or feasibility calls. Callers own storage and
+ * must supply the same deterministic feasibility policy and feasibleId at save
+ * and resume; changing policy without changing its ID reuses old verdicts.
  */
-export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): DrawdownBudgetSearchResult {
+export function searchBookAtDrawdown(
+  input: DrawdownBudgetSearchInput,
+  options?: BookSearchOptions,
+): DrawdownBudgetSearchResult {
+  if (!options?.onProgress && !options?.checkpoint && !options?.resumeFrom) return runSearch(input);
+  if (input.feasible && options.resumeFrom && !options.feasibleId)
+    throw new RangeError("search_checkpoint_constraint_identity: feasibleId is required");
+  const { feasible, ...economicRequest } = input;
+  const identity = requestIdentity({
+    request: economicRequest,
+    feasible: Boolean(feasible),
+    feasibleId: options.feasibleId,
+  });
+  if (
+    options.resumeFrom &&
+    (options.resumeFrom.version !== 1 || options.resumeFrom.requestIdentity !== identity)
+  )
+    throw new RangeError("search_checkpoint_identity_mismatch: request or constraint changed");
+  const execution: SearchExecution = {
+    checkpoint: options.resumeFrom
+      ? structuredClone(options.resumeFrom)
+      : { version: 1, requestIdentity: identity, evaluations: [], unavailableEvaluations: [] },
+    cursor: 0,
+    onProgress: options.onProgress,
+  };
+  const result = runSearch(input, execution);
+  if (execution.cursor !== execution.checkpoint.evaluations.length)
+    throw new RangeError("search_checkpoint_invalid: unused evaluations");
+  result.checkpoint = structuredClone(execution.checkpoint);
+  return result;
+}
+
+function runSearch(
+  input: DrawdownBudgetSearchInput,
+  execution?: SearchExecution,
+  scope = "root",
+): DrawdownBudgetSearchResult {
   validateSearch(input);
   const ids = input.replay.simultaneousOrder;
   const limit = input.targetDrawdownPct - input.calibrationMarginPct;
@@ -121,6 +220,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
   const feasibilityRejections: DrawdownBudgetSearchResult["feasibilityRejections"] = input.feasible
     ? { count: 0, reasons: Object.create(null) as Record<string, number> }
     : undefined;
+  let phase: BookSearchProgress["phase"] = "coordinate";
   const prepare = (requested: Record<string, number>): PreparedBookEvaluation => {
     const weights: Record<string, number> = {};
     const members: Record<string, BookMember> = {};
@@ -173,51 +273,102 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     const previous = cache.get(key);
     if (previous) return previous;
     if (evaluations.length >= budget) return null;
-    const replay = replayBook({ ...input.replay, members });
-    const risk = replay.marked ?? replay;
-    const candidate: BookSearchEvaluation = {
-      key,
-      weights,
-      returnPct: replay.returnPct,
-      executedGroups: replay.census.executedGroups,
-      executedIgnoredOnlyGroups: replay.census.executedIgnoredOnlyGroups,
-      maxDrawdownPct: risk.maxDrawdownPct,
-      insolvent: replay.insolvent || risk.insolvent,
-      feasible:
-        replay.census.executedGroups - replay.census.executedIgnoredOnlyGroups > 0 &&
-        !replay.insolvent &&
-        !risk.insolvent &&
-        risk.maxDrawdownPct !== null &&
-        risk.maxDrawdownPct <= limit,
-      roundedToZero,
-    };
-    if (input.feasible) {
-      const accepted = input.feasible(replay);
-      if (
-        accepted !== true &&
-        accepted !== false &&
-        (typeof accepted !== "object" ||
-          accepted === null ||
-          Array.isArray(accepted) ||
-          accepted.ok !== false ||
-          typeof accepted.reason !== "string" ||
-          accepted.reason.trim().length === 0)
-      ) {
-        const type =
-          accepted === null ? "null" : Array.isArray(accepted) ? "array" : typeof accepted;
-        throw new RangeError(`Invalid drawdown search: feasible returned ${type}`);
+    const unavailable = execution?.checkpoint.unavailableEvaluations.find(
+      (failure) => failure.scope === scope && failure.key === key,
+    );
+    if (unavailable) throw new RangeError(unavailable.message);
+    const saved = execution?.checkpoint.evaluations[execution.cursor];
+    if (saved && (saved.scope !== scope || saved.phase !== phase || saved.evaluation.key !== key))
+      throw new RangeError("search_checkpoint_invalid: evaluation order differs");
+    let candidate: BookSearchEvaluation;
+    if (saved) candidate = structuredClone(saved.evaluation);
+    else {
+      let replay: BookReplayResult;
+      try {
+        replay = replayBook({ ...input.replay, members });
+      } catch (error) {
+        if (
+          execution &&
+          error instanceof RangeError &&
+          error.message.startsWith("missing_mark_coverage:")
+        )
+          execution.checkpoint.unavailableEvaluations.push({ scope, key, message: error.message });
+        throw error;
       }
-      if (accepted !== true) {
-        const reason = accepted === false ? "caller_feasibility" : accepted.reason;
-        candidate.feasible = false;
-        candidate.feasibilityRejectionReason = reason;
-        feasibilityRejections!.count++;
-        const reasons = feasibilityRejections!.reasons;
-        reasons[reason] = (reasons[reason] ?? 0) + 1;
+      const risk = replay.marked ?? replay;
+      candidate = {
+        key,
+        weights,
+        returnPct: replay.returnPct,
+        executedGroups: replay.census.executedGroups,
+        executedIgnoredOnlyGroups: replay.census.executedIgnoredOnlyGroups,
+        maxDrawdownPct: risk.maxDrawdownPct,
+        insolvent: replay.insolvent || risk.insolvent,
+        feasible:
+          replay.census.executedGroups - replay.census.executedIgnoredOnlyGroups > 0 &&
+          !replay.insolvent &&
+          !risk.insolvent &&
+          risk.maxDrawdownPct !== null &&
+          risk.maxDrawdownPct <= limit,
+        roundedToZero,
+      };
+      if (input.feasible) {
+        const accepted = input.feasible(replay);
+        if (
+          accepted !== true &&
+          accepted !== false &&
+          (typeof accepted !== "object" ||
+            accepted === null ||
+            Array.isArray(accepted) ||
+            accepted.ok !== false ||
+            typeof accepted.reason !== "string" ||
+            accepted.reason.trim().length === 0)
+        ) {
+          const type =
+            accepted === null ? "null" : Array.isArray(accepted) ? "array" : typeof accepted;
+          throw new RangeError(`Invalid drawdown search: feasible returned ${type}`);
+        }
+        if (accepted !== true) {
+          const reason = accepted === false ? "caller_feasibility" : accepted.reason;
+          candidate.feasible = false;
+          candidate.feasibilityRejectionReason = reason;
+        }
       }
+    }
+    if (candidate.feasibilityRejectionReason !== undefined) {
+      const reason = candidate.feasibilityRejectionReason;
+      feasibilityRejections!.count++;
+      const reasons = feasibilityRejections!.reasons;
+      reasons[reason] = (reasons[reason] ?? 0) + 1;
     }
     cache.set(key, candidate);
     evaluations.push(candidate);
+    if (execution) {
+      execution.cursor++;
+      if (!saved) {
+        execution.checkpoint.evaluations.push({ scope, phase, evaluation: candidate });
+        if (execution.onProgress) {
+          const best = evaluations.reduce<BookSearchEvaluation | null>(
+            (best, trial) =>
+              trial.feasible && (!best || trial.returnPct > best.returnPct) ? trial : best,
+            null,
+          );
+          try {
+            execution.onProgress(
+              structuredClone({
+                evaluationsDone: execution.cursor,
+                scope,
+                phase,
+                best,
+                checkpoint: execution.checkpoint,
+              }),
+            );
+          } catch (cause) {
+            throw new Error("search_progress_callback: observer aborted", { cause });
+          }
+        }
+      }
+    }
     return candidate;
   };
   let coordinateBudgetExhausted = false;
@@ -267,6 +418,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
     null,
   );
   let robust: BookSearchEvaluation | null = null;
+  phase = "robust";
   let robustBudgetExhausted = false;
   let shrinkageOutperformedBest = false;
   if (winner) {
@@ -316,13 +468,17 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
   const dropOne: DrawdownBudgetSearchResult["dropOne"] = [];
   if (winner && input.dropOne && input.calibrationUsable) {
     for (const id of ids) {
-      const search = searchBookAtDrawdown({
-        ...input,
-        weightBounds: { ...input.weightBounds, [id]: { min: 0, max: 0 } },
-        initialWeights: input.initialWeights.map((v) => ({ ...v, [id]: 0 })),
-        dropOne: false,
-        stability: { ...input.stability, replicates: 0 },
-      });
+      const search = runSearch(
+        {
+          ...input,
+          weightBounds: { ...input.weightBounds, [id]: { min: 0, max: 0 } },
+          initialWeights: input.initialWeights.map((v) => ({ ...v, [id]: 0 })),
+          dropOne: false,
+          stability: { ...input.stability, replicates: 0 },
+        },
+        execution,
+        `dropOne/${id}`,
+      );
       dropOne.push({
         memberId: id,
         redundant: winner.weights[id] === 0,
@@ -332,7 +488,7 @@ export function searchBookAtDrawdown(input: DrawdownBudgetSearchInput): Drawdown
       });
     }
   }
-  const stability = bootstrapStability(input);
+  const stability = bootstrapStability(input, execution);
   const totalEvaluations =
     evaluations.length +
     dropOne.reduce((n, d) => n + d.search.k, 0) +
@@ -490,7 +646,10 @@ function validateSearch(input: DrawdownBudgetSearchInput): void {
     if (!Number.isFinite(length) || length < 1) fail("block lengths");
 }
 
-function bootstrapStability(input: DrawdownBudgetSearchInput): BookSearchStability {
+function bootstrapStability(
+  input: DrawdownBudgetSearchInput,
+  execution?: SearchExecution,
+): BookSearchStability {
   const result: BookSearchStability = {
     status: "disabled",
     reason: null,
@@ -625,12 +784,22 @@ function bootstrapStability(input: DrawdownBudgetSearchInput): BookSearchStabili
         marks = { mode: "entryGroup", values: [...values.values()] };
       }
       try {
-        const search = searchBookAtDrawdown({
-          ...input,
-          replay: { ...input.replay, dates: syntheticDates, trades, marks, simultaneousGroupOrder },
-          dropOne: false,
-          stability: { ...input.stability, replicates: 0 },
-        });
+        const search = runSearch(
+          {
+            ...input,
+            replay: {
+              ...input.replay,
+              dates: syntheticDates,
+              trades,
+              marks,
+              simultaneousGroupOrder,
+            },
+            dropOne: false,
+            stability: { ...input.stability, replicates: 0 },
+          },
+          execution,
+          `stability/${result.panels.length}/${replicate}`,
+        );
         replicates.push({ sourceIndices, carriedRows, status: "available", reason: null, search });
       } catch (error) {
         if (!(error instanceof RangeError) || !error.message.startsWith("missing_mark_coverage:"))

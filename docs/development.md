@@ -333,6 +333,48 @@ panel (including sensitivity block lengths). Omitted maps and members mean
 `"scaled"`; null caps remain uncapped. Unknown member IDs or invalid policies
 are refused. For a fixed 250-contract liquidity limit, declare the actual cap
 250 and the fixed policy, without caller-side precompensation.
+
+`searchBookAtDrawdown(input, options?)` also accepts optional caller-owned progress
+and checkpoint controls. `onProgress(event)` runs after each successful new
+evaluation, including robust, drop-one, stability and sensitivity searches.
+`event` contains `evaluationsDone`, `scope`, `phase`, that scope's best feasible
+evaluation, and a detached plain-JSON `checkpoint`. Counts include successful
+evaluations in unavailable bootstrap searches; result totals still count only
+the searches retained in the result. `phase` is `"coordinate"` or `"robust"`;
+`scope` is `"root"`, `"dropOne/<memberId>"`, or
+`"stability/<zero-based-panel>/<zero-based-replicate>"`. The first panel is the
+primary block length; subsequent panels are sensitivity lengths. Metrics from
+different bootstrap samples are not compared as one best-so-far.
+
+Setting `checkpoint: true` captures a final checkpoint without an observer.
+Any of these controls adds `result.checkpoint`; omitting them preserves the
+existing serialized result. Save an event's checkpoint before interrupting by
+throwing from the observer. The call aborts with `search_progress_callback`,
+whose `cause` is the original exception; the saved checkpoint includes the
+committed evaluation. Mutating an event does not mutate live search state.
+The library never reads or writes files.
+
+Resume with `resumeFrom: JSON.parse(savedJson)` and the identical economic
+`input`. Checkpoints carry a version, a canonical identity over every request
+field except the `feasible` function, and an ordered journal of evaluation
+metrics and feasibility verdicts—not full replay results. Object key order
+does not change identity; array order does. A changed request, policy or
+constraint ID throws `search_checkpoint_identity_mismatch`. Consumed
+`missing_mark_coverage` outcomes are journaled separately as named errors, not
+metrics. Resume reconstructs deterministic control flow and seeded cohorts,
+but skips saved replay evaluations, saved feasibility calls and saved missing-mark
+attempts. A completed checkpoint therefore reuses every outcome without evaluating
+again. Checkpoints are caller-owned trusted data, not authenticated evidence.
+
+If `input.feasible` is supplied, pass an opaque `feasibleId` when saving and the
+same ID when resuming. Resume without it throws
+`search_checkpoint_constraint_identity`. The caller must supply the same
+deterministic policy; the library cannot serialize or detect a changed function.
+Changing the policy without changing its ID silently reuses old verdicts.
+Progress and checkpoint capture copy the accumulated journal; their storage and
+copying costs grow with successful evaluation count. Resume saves replay work,
+not the cost of reconstructing coordinate control flow and bootstrap cohorts.
+
 CPC division requires `weightScaling: "capitalPerContractInverse"`;
 `"allocationAndContracts"` refuses CPC inputs. Each optimization records unique
 normalized economic evaluations, `k`, budget/step termination, the best-observed
