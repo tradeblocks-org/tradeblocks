@@ -9,17 +9,17 @@ import type {
 
 // Compile-time contracts use the same public seam as runtime callers.
 it("preserves literal objectives and the legacy result annotation", () => {
-  const { objective: _objective, ...omitted } = input();
-  const legacy: "returnPct" = searchBookAtDrawdown(omitted).declarations.objective;
+  // The bare input type keeps objective required as the legacy literal.
+  const declared: "returnPct" = input().objective;
   const explicit: "returnPct" = searchBookAtDrawdown({ ...input(), objective: "returnPct" })
     .declarations.objective;
   const ratio: "returnOverDrawdown" = searchBookAtDrawdown({
     ...input(),
     objective: "returnOverDrawdown",
   }).declarations.objective;
-  const annotated: DrawdownBudgetSearchResult = searchBookAtDrawdown(omitted);
+  const annotated: DrawdownBudgetSearchResult = searchBookAtDrawdown(input());
   const annotatedObjective: "returnPct" = annotated.declarations.objective;
-  expect([legacy, explicit, ratio, annotatedObjective]).toEqual([
+  expect([declared, explicit, ratio, annotatedObjective]).toEqual([
     "returnPct",
     "returnPct",
     "returnOverDrawdown",
@@ -1360,10 +1360,11 @@ it("inherits ratio ranking in drop-one, stability and sensitivity, including pro
   ).toThrow(/search_checkpoint_identity_mismatch/);
 });
 
-it("defaults omitted objective to legacy return ranking and refuses unknown objectives", () => {
+it("defaults an untyped omitted objective to legacy return ranking and refuses unknown objectives", () => {
   const value = ratioInput();
   const explicit = searchBookAtDrawdown(value);
-  delete value.objective;
+  // Typed callers must pass objective; untyped JavaScript callers that omit it get "returnPct".
+  delete (value as Partial<typeof value>).objective;
   const omitted = searchBookAtDrawdown(value);
   expect(omitted).toEqual(explicit);
   expect(omitted).not.toHaveProperty("objectiveValue");

@@ -19,7 +19,8 @@ export interface DrawdownBudgetSearchInput<O extends SearchObjective = "returnPc
   targetDrawdownPct: number;
   calibrationMarginPct: number;
   calibrationUsable: boolean;
-  objective?: O;
+  /** Required, as before; the bare type keeps the legacy "returnPct" contract. */
+  objective: O;
   nearOptimalRelativeTolerance: number;
   robust: { maxDrawdownPct: number; shrinkageFactors: number[] };
   dropOne: boolean;

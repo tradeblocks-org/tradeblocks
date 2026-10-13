@@ -443,9 +443,9 @@ Search defaults to ending realized `returnPct` subject to drawdown at most
 `targetDrawdownPct - calibrationMarginPct`: it uses the marked drawdown when
 complete marks are supplied, otherwise the closed-equity drawdown, and reports
 that risk basis as `drawdownBasis`. A nonpositive marked-equity path is never ranked.
-Optional `objective: "returnPct" | "returnOverDrawdown"` selects the ranking;
-omitting it normalizes `declarations.objective` to `"returnPct"` and preserves
-the legacy result without new metadata. The ratio divides closed-funds return
+The required `objective` now accepts `"returnPct" | "returnOverDrawdown"` and selects
+the ranking; `"returnPct"` preserves the legacy result without new metadata (an
+untyped JavaScript caller that omits it also gets `"returnPct"`). The ratio divides closed-funds return
 by the same drawdown used for feasibility, never by an unmarked substitute.
 Coordinate moves, progress best, winner, robust shrinkage, near-optimal regions,
 drop-one and every stability/sensitivity search use that same ranking.
