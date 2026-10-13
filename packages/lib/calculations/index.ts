@@ -52,6 +52,7 @@ export * from "./enrich-trades.ts";
 export * from "./statistical-utils.ts";
 export * from "./mfe-mae.ts";
 export * from "./paired-block-bootstrap.ts";
+export * from "./holm-adjust.ts";
 export * from "./selection-adjusted-lower-bound.ts";
 export * from "./parameter-study-selection.ts";
 

@@ -118,6 +118,25 @@ The lib's walk-forward period endpoints are calendar-day keys, and the MCP
 response reports them unchanged as `YYYY-MM-DD`. Runtime timestamps elsewhere
 in the computation remain instants.
 
+#### Paired bootstrap and multiple-testing adjustment
+
+`pairedPathBlockBootstrap` recomputes a caller-supplied two-path statistic on
+shared moving-day-block draws and returns a raw, unadjusted one-sided p-value.
+For a declared family spanning multiple calls, `holmAdjust(pValues: readonly number[]): number[]`
+applies Holm's step-down family-wise correction and returns adjusted p-values in
+the original order. It stably sorts ascending, multiplies by the remaining
+hypothesis count, caps at one and takes the running maximum. For example,
+`holmAdjust([0.01, 0.04, 0.03, 0.005])` returns `[0.03, 0.06, 0.06, 0.02]`.
+
+The input is not mutated; an empty family returns `[]`. Non-finite values
+(including NaN) and values outside `[0, 1]` throw an indexed `RangeError`.
+The caller must declare the complete family and an explicit policy for
+unavailable bootstrap p-values. For example, conservatively substitute `1`
+for unavailable comparisons when counting the family, then continue to display
+those comparisons as unavailable rather than reporting the substitution as
+measured evidence. This additive library calculation changes neither bootstrap
+inference nor MCP tools, and adds no bootstrap option or provider requirement.
+
 #### Offline book replay and drawdown-budget search
 
 `@tradeblocks/lib` exports `replayBook(BookReplayInput)` and
