@@ -95,7 +95,8 @@ describe.each(["child", "entryGroup"] as const)(
             removed: { ...base.members.a, removed: true },
             zero: { ...base.members.a, sizing: { mode: "fixed", contracts: 0 } },
           },
-          simultaneousOrder: ["b", "a", "removed", "zero"],
+          // The ignored child's member is not first, so attributing it to order[0] is caught.
+          simultaneousOrder: ["a", "b", "removed", "zero"],
           trades: [
             { ...base.trades[0], id: "partial", netPlPerContract: 7 },
             { ...base.trades[0], id: "cutoff", dateClosed: "2025-01-07", netPlPerContract: 999 },
@@ -140,8 +141,8 @@ describe.each(["child", "entryGroup"] as const)(
         expect({ ...result, marked: aggregate, declarations }).toEqual(baseline);
         expect(value).toEqual(before);
         expect(contributions).toEqual([
-          { memberId: "b", daily: dates.map((date, i) => ({ date, pl: [-15, 15, 0][i] })) },
           { memberId: "a", daily: dates.map((date, i) => ({ date, pl: [12, 28, -30][i] })) },
+          { memberId: "b", daily: dates.map((date, i) => ({ date, pl: [-15, 15, 0][i] })) },
           { memberId: "removed", daily: dates.map((date) => ({ date, pl: 0 })) },
           { memberId: "zero", daily: dates.map((date) => ({ date, pl: 0 })) },
         ]);
