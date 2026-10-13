@@ -252,6 +252,10 @@ annualized percentages. Negative ES indicates tail losses.
 `changeVsBaseline = removed arm ES - baseline ES`: a positive change means
 **removing X reduces tail loss**.
 
+The shared return path applies the same basis-aware net mapping as the ratio
+calculations: gross-before-fees trades deduct opening and closing fees once,
+and already-net trades retain their reported P/L without another fee deduction.
+
 Each arm uses exactly its existing Sharpe/Sortino return series: close-date
 realized net P/L (opening-date fallback), dense business days with weekend
 trade dates retained, divided by that arm's prior reconstructed equity. All

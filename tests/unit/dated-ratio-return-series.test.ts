@@ -1,4 +1,4 @@
-import { PortfolioStatsCalculator, type Trade } from "@tradeblocks/lib";
+import { PlBasis, PortfolioStatsCalculator, type Trade } from "@tradeblocks/lib";
 import { mockTrades } from "../data/mock-trades";
 
 /** The production class entrypoint exposes the same dated returns used by ratios. */
@@ -7,6 +7,7 @@ describe("PortfolioStatsCalculator.calculateDailyReturnsWithDates", () => {
     const trades: Trade[] = [
       {
         ...mockTrades[0],
+        plBasis: PlBasis.NetIncludesFees,
         dateOpened: new Date(2024, 0, 1),
         dateClosed: new Date(2024, 0, 5),
         pl: -1000,
@@ -14,6 +15,7 @@ describe("PortfolioStatsCalculator.calculateDailyReturnsWithDates", () => {
       },
       {
         ...mockTrades[0],
+        plBasis: PlBasis.NetIncludesFees,
         dateOpened: new Date(2024, 0, 2),
         dateClosed: new Date(2024, 0, 7),
         pl: 2000,
@@ -21,6 +23,7 @@ describe("PortfolioStatsCalculator.calculateDailyReturnsWithDates", () => {
       },
       {
         ...mockTrades[0],
+        plBasis: PlBasis.NetIncludesFees,
         dateOpened: new Date(2024, 0, 3),
         dateClosed: new Date(2024, 0, 9),
         pl: -500,
@@ -35,5 +38,26 @@ describe("PortfolioStatsCalculator.calculateDailyReturnsWithDates", () => {
       { date: new Date(2024, 0, 9), return: -500 / 101000 },
     ]);
     expect(calculator.calculateDailyReturnsWithDates([])).toEqual([]);
+  });
+
+  it.each([
+    { basis: PlBasis.GrossBeforeFees, reportedPl: -1000 },
+    { basis: PlBasis.NetIncludesFees, reportedPl: -1500 },
+  ])("normalizes $basis exactly once without mutating caller trades", ({ basis, reportedPl }) => {
+    const trade: Trade = {
+      ...mockTrades[0],
+      dateOpened: new Date(2024, 0, 8),
+      dateClosed: new Date(2024, 0, 8),
+      plBasis: basis,
+      pl: reportedPl,
+      openingCommissionsFees: 500,
+      closingCommissionsFees: 0,
+      fundsAtClose: 99000,
+    };
+    expect(new PortfolioStatsCalculator().calculateDailyReturnsWithDates([trade])).toEqual([
+      { date: new Date(2024, 0, 8), return: -1500 / 100500 },
+    ]);
+    expect(trade.pl).toBe(reportedPl);
+    expect(trade.plBasis).toBe(basis);
   });
 });

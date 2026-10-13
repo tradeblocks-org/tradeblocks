@@ -48,7 +48,7 @@ describe("marginal contribution tail risk through MCP stdio", () => {
         command: process.execPath,
         args: ["--experimental-strip-types", path.join(packageDir, "src/index.ts"), root],
         cwd: path.resolve(packageDir, "../.."),
-        env: { ...getDefaultEnvironment(), TZ: "UTC" },
+        env: { ...getDefaultEnvironment(), TZ: "America/New_York" },
         stderr: "pipe",
       }),
     );
@@ -98,6 +98,37 @@ describe("marginal contribution tail risk through MCP stdio", () => {
       dateRange: { start: "2024-01-08", end: "2024-01-10" },
     });
     expect(beta?.changeVsBaseline).toBeCloseTo(2000 / 99000 - 0.01, 14);
+  });
+
+  it("uses net ratio-series returns for fee-bearing gross_before_fees arms", async () => {
+    const csvPath = path.join(root, "gross.csv");
+    const grossCsv = csv
+      .split("\n")
+      .map((row, index) =>
+        index === 0
+          ? `${row},Opening Commissions + Fees,Closing Commissions + Fees`
+          : `${row},${index === 1 ? 500 : 0},0`,
+      )
+      .join("\n");
+    await fs.writeFile(csvPath, grossCsv);
+    expect(
+      (
+        await client.callTool({
+          name: "import_csv",
+          arguments: { csvPath, blockName: "Gross", plBasis: "gross_before_fees" },
+        })
+      ).isError,
+    ).not.toBe(true);
+    const result = await call({ blockId: "gross", includeTailRisk: true });
+    expect(result.isError).not.toBe(true);
+    const tail = tailSchema.parse(result.structuredContent?.tailRisk);
+    expect(tail.baseline.expectedShortfall).toBeCloseTo(-2000 / 99000, 14);
+    expect(tail.baseline.dateRange).toEqual({ start: "2024-01-08", end: "2024-01-10" });
+    const alpha = tail.removedStrategyArms.find((arm) => arm.strategy === "Alpha");
+    const beta = tail.removedStrategyArms.find((arm) => arm.strategy === "Beta");
+    expect(alpha?.expectedShortfall).toBeCloseTo(-2000 / 100500, 14);
+    expect(beta?.expectedShortfall).toBeCloseTo(-1500 / 100500, 14);
+    expect(beta?.changeVsBaseline).toBeCloseTo(2000 / 99000 - 1500 / 100500, 14);
   });
 
   it("uses the requested confidence and respects targetStrategy and topN", async () => {
