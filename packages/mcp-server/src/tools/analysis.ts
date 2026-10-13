@@ -621,6 +621,14 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
               "marked-daily requires an imported daily log; no trade-P&L fallback is available.",
             );
           }
+          const missingPl = block.dailyLogs.filter(
+            (entry) => entry.startingCapitalInputsProvided === false,
+          );
+          if (missingPl.length > 0) {
+            throw new Error(
+              `marked-daily requires reported daily P/L on every daily-log row; ${missingPl.length} row(s) lack it, first ${missingPl[0].date.toISOString().slice(0, 10)}. Zero returns would be fabricated.`,
+            );
+          }
           const logs = [...block.dailyLogs].sort((a, b) => a.date.getTime() - b.date.getTime());
           const returns = dailyLogReturns(logs).map((item) => item.return);
           const initialCapital = initialCapitalParam ?? logs[0].netLiquidity - logs[0].dailyPl;

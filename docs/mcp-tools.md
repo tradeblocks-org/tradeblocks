@@ -185,7 +185,8 @@ Existing modes require at least ten trades and a pool of at least five samples.
 They default to stationary-block resampling and support `resampleMode: "iid"`
 and synthetic trade-loss injection. `marked-daily` requires at least five
 daily-log samples after `resampleWindow`; missing/short logs return an error,
-**never** a trade-P/L fallback. Strategy filters (including an explicitly
+**never** a trade-P/L fallback. A daily-log row without a usable reported `P/L`
+is refused rather than treated as a zero return. Strategy filters (including an explicitly
 supplied `"all"`), one-lot normalization, `resampleMode: "iid"`, and explicit
 `includeWorstCase: true` are refused. Marked mode uses stationary blocks and
 disables trade-derived synthetic losses; both choices are declared in the

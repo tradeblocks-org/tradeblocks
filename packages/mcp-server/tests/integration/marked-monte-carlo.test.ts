@@ -139,9 +139,18 @@ it("refuses missing or insufficient daily logs without falling back to trades", 
     [1000, 0],
     [1000, 0],
   ]);
+  // A row without a usable P/L imports with dailyPl 0; sampling it would fabricate a zero return.
+  await importBlock("no-pl", [
+    [1000, 0],
+    [1010, 10],
+    [1010, Number.NaN],
+    [1020, 10],
+    [1030, 10],
+  ]);
   for (const [blockId, message] of [
     ["missing", "requires an imported daily log"],
     ["short", "Found 4 samples, need at least 5"],
+    ["no-pl", "1 row(s) lack it, first 2024-01-04"],
   ]) {
     const result = await monteCarlo(blockId);
     expect(result.isError).toBe(true);
