@@ -1,0 +1,5 @@
+# Unreleased — Effective-dated book sizing
+
+The public `@tradeblocks/lib` calculation `replayBook` accepts an optional `sizingSchedule` keyed by member ID. Each ordered entry declares `effectiveDate`, `sizing`, `maxContractsPerTrade`, `maxAllocationAmount`, and `maxOpenTrades`. The latest rule in force on a group's entry date sizes that group; before the first date the base member declaration applies. Existing callers that omit the option keep their output unchanged.
+
+Admitted positions keep their quantity and ordinary buying-power reservation/release behavior across later changes. Funds and marks continue in one ledger, and `memberMarkedPl` remains per real member. Concurrency counts all open groups of the real member across schedule segments. Member flags (`removed`, `ignoreMarginRequirements`, `minimumOne`) cannot vary in a schedule. Invalid, duplicate or unsorted effective dates, unknown members, invalid sizing/caps and unsupported fields are refused; supplied schedules are echoed in declarations. MCP tool interfaces are unchanged.

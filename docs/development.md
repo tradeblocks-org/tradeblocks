@@ -151,6 +151,23 @@ power are refused. Supply unambiguous `entryGroupId`s within each member and
 not timestamps. Every in-window entry and close must lie on the supplied axis.
 An endpoint close beyond that axis remains open; no terminal mark is invented.
 
+Optional `sizingSchedule: Record<string, BookSizingScheduleEntry[]>` supplies
+strictly increasing market-calendar `effectiveDate` keys per known member.
+Each entry declares complete `sizing`, `maxContractsPerTrade`,
+`maxAllocationAmount`, and `maxOpenTrades` (null means uncapped). The latest
+entry dated on or before a group's entry date replaces those fields; before
+the first date, the base member declaration applies. Entries do not inherit
+from earlier entries. Empty lists leave the base unchanged.
+`removed`, `ignoreMarginRequirements`, and `minimumOne` remain fixed member
+flags. Concurrency counts the real member's open groups across every segment,
+not a separate count per effective date. Admitted groups retain their quantity
+and ordinary buying-power release rules across schedule changes; funds and
+marks use one continuous ledger. Member attribution remains per real member.
+The supplied schedule is echoed in `declarations`; duplicate/unsorted dates,
+unknown members, invalid sizing/caps and unsupported fields are refused.
+Omitting the schedule preserves existing output. This is a library-only option,
+not an MCP tool argument.
+
 Optional `simultaneousGroupOrder: { [memberId]: [entryGroupId, ...] }` explicitly
 orders distinct entry groups of one member opening at the same timestamp.
 Every group participating in such a tie must appear in that member's list;

@@ -37,6 +37,50 @@ function input(): BookReplayInput {
   };
 }
 
+it("selects sizing on the effective entry date and uses the base before it", () => {
+  const value = input();
+  value.trades.push({
+    ...value.trades[0],
+    id: "next",
+    entryGroupId: "next",
+    dateOpened: "2025-01-03",
+    timeOpened: "16:01:00",
+    dateClosed: "2025-01-06",
+  });
+  value.sizingSchedule = {
+    a: [
+      {
+        effectiveDate: "2025-01-03",
+        sizing: { mode: "fixed", contracts: 2 },
+        maxContractsPerTrade: null,
+        maxAllocationAmount: null,
+        maxOpenTrades: null,
+      },
+      {
+        effectiveDate: "2025-01-06",
+        sizing: { mode: "fixed", contracts: 1 },
+        maxContractsPerTrade: null,
+        maxAllocationAmount: null,
+        maxOpenTrades: null,
+      },
+    ],
+  };
+  value.dates.push("2025-01-06");
+  value.trades.push({
+    ...value.trades[0],
+    id: "last",
+    entryGroupId: "last",
+    dateOpened: "2025-01-06",
+    timeOpened: "16:01:00",
+    dateClosed: "2025-01-07",
+  });
+  expect(replayBook(value).members[0].contractsPerEntry).toEqual([
+    { entryGroupId: "g", contracts: 5 },
+    { entryGroupId: "next", contracts: 2 },
+    { entryGroupId: "last", contracts: 1 },
+  ]);
+});
+
 it("reports optional member marked daily net flows and refuses attribution without marks", () => {
   const value = input();
   value.memberMarkedPl = true;

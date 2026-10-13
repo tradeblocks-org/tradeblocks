@@ -46,6 +46,15 @@ For `replay_trade`'s computed model and units, see the
 [computed option-Greeks method](market-data.md#computed-option-greeks-method).
 Replay calculations are not themselves a stored quote's revision/provenance.
 
+The separate offline `@tradeblocks/lib` calculation `replayBook` now accepts an
+optional per-member `sizingSchedule` (see
+[offline book replay](development.md#offline-book-replay-and-drawdown-budget-search)).
+Each effective-date entry supplies complete sizing and caps; selection uses
+the entry date inclusively, with the base declaration before the first date.
+Open quantities and reservations are not resized, and concurrency and marked
+attribution stay per real member in one continuous ledger. This is not an
+argument to `replay_trade` or any MCP tool; their interfaces are unchanged.
+
 ## Exit Trigger Analysis
 
 | Tool                    | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |

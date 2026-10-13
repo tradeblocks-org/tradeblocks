@@ -17,6 +17,10 @@ export interface BookMember {
   minimumOne: boolean;
   maxOpenTrades: number | null;
 }
+export type BookSizingScheduleEntry = Pick<
+  BookMember,
+  "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades"
+> & { effectiveDate: string };
 export interface BookTrade {
   id: string;
   memberId: string;
@@ -58,6 +62,8 @@ interface BookReplayBaseInput {
   dates: string[];
   trades: BookTrade[];
   members: Record<string, BookMember>;
+  /** Ordered complete sizing/caps by member. Base applies before the first effective date. */
+  sizingSchedule?: Record<string, BookSizingScheduleEntry[]>;
   reservationMode: "sharedEntryGroup" | "sumChildren";
   sharedEntryGroupBuyingPower: "equalPackageMaximum";
   simultaneousOrder: string[];
@@ -127,6 +133,10 @@ export interface BookReplayResult {
  * realized net P/L plus remaining open marks, differenced from zero on day one.
  * Fees are already included in net inputs; ignored mark-only closes realize no cash.
  * Missing marks are refused, and endpoint positions remain open. Attribution requires marks.
+ * sizingSchedule selects complete sizing/caps on each group's entry date (inclusive).
+ * Before its first date the base applies. Member flags stay fixed; concurrency counts
+ * the real member across segments. Existing quantities/reservations never resize,
+ * and funds and marks continue without resets. Declarations echo the supplied schedule.
  * Without the option, the result shape and replay behavior are unchanged.
  */
 export function replayBook(input: BookReplayInput): BookReplayResult {
@@ -283,29 +293,41 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       const summary = summaries[group.memberId];
       const member = input.members[group.memberId];
       if (event.kind === "open") {
+        const schedule = input.sizingSchedule?.[group.memberId];
+        let rule: BookMember | BookSizingScheduleEntry = member;
+        if (schedule) {
+          let low = 0;
+          let high = schedule.length;
+          while (low < high) {
+            const middle = (low + high) >>> 1;
+            if (schedule[middle].effectiveDate <= event.date) low = middle + 1;
+            else high = middle;
+          }
+          if (low > 0) rule = schedule[low - 1];
+        }
         // An all-ignored excluded group still needs unit economics for sizing, not capacity.
         const bp = group.bp || group.children[0].buyingPowerPerContract;
         let quantity =
-          member.sizing.mode === "allocation"
-            ? Math.floor((Math.max(0, funds) * member.sizing.allocationPercentage) / 100 / bp)
-            : member.sizing.mode === "fixed"
-              ? member.sizing.contracts
-              : Math.floor(Math.max(0, funds) / member.sizing.capitalPerContract);
+          rule.sizing.mode === "allocation"
+            ? Math.floor((Math.max(0, funds) * rule.sizing.allocationPercentage) / 100 / bp)
+            : rule.sizing.mode === "fixed"
+              ? rule.sizing.contracts
+              : Math.floor(Math.max(0, funds) / rule.sizing.capitalPerContract);
         if (member.minimumOne && funds > 0) quantity = Math.max(1, quantity);
-        if (member.maxContractsPerTrade !== null)
-          quantity = Math.min(quantity, member.maxContractsPerTrade);
-        if (member.maxAllocationAmount !== null)
-          quantity = Math.min(quantity, Math.floor(member.maxAllocationAmount / bp));
+        if (rule.maxContractsPerTrade !== null)
+          quantity = Math.min(quantity, rule.maxContractsPerTrade);
+        if (rule.maxAllocationAmount !== null)
+          quantity = Math.min(quantity, Math.floor(rule.maxAllocationAmount / bp));
         if (
           group.bp > 0 &&
           !member.ignoreMarginRequirements &&
-          member.sizing.mode !== "capitalPerContract"
+          rule.sizing.mode !== "capitalPerContract"
         )
           quantity = Math.min(quantity, Math.floor(Math.max(0, funds - reserved) / group.bp));
         if (
           member.removed ||
           funds <= 0 ||
-          (member.maxOpenTrades !== null && openCounts[group.memberId] >= member.maxOpenTrades)
+          (rule.maxOpenTrades !== null && openCounts[group.memberId] >= rule.maxOpenTrades)
         )
           quantity = 0;
         group.quantity = quantity;
@@ -523,13 +545,13 @@ function validateReplay(input: BookReplayInput): void {
     input.simultaneousOrder.some((id) => !Object.hasOwn(input.members, id))
   )
     fail("simultaneousOrder");
-  for (const member of Object.values(input.members)) {
-    if (
-      [member.removed, member.minimumOne, member.ignoreMarginRequirements].some(
-        (v) => typeof v !== "boolean",
-      )
-    )
-      fail("member booleans");
+  const validateSizing = (
+    member: Pick<
+      BookMember,
+      "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades"
+    >,
+    ignoreMarginRequirements: boolean,
+  ) => {
     if (
       member.maxContractsPerTrade !== null &&
       (!integer(member.maxContractsPerTrade) || member.maxContractsPerTrade === 0)
@@ -549,9 +571,54 @@ function validateReplay(input: BookReplayInput): void {
     } else if (rule.mode === "fixed") {
       if (!integer(rule.contracts)) fail("contracts");
     } else if (rule.mode === "capitalPerContract") {
-      if (!positive(rule.capitalPerContract) || member.ignoreMarginRequirements)
+      if (!positive(rule.capitalPerContract) || ignoreMarginRequirements)
         fail("capitalPerContract requires margin flag false");
     } else fail("sizing mode");
+  };
+  for (const member of Object.values(input.members)) {
+    validateSizing(member, member.ignoreMarginRequirements);
+    if (
+      [member.removed, member.minimumOne, member.ignoreMarginRequirements].some(
+        (v) => typeof v !== "boolean",
+      )
+    )
+      fail("member booleans");
+  }
+  if (input.sizingSchedule !== undefined) {
+    if (
+      !input.sizingSchedule ||
+      typeof input.sizingSchedule !== "object" ||
+      Array.isArray(input.sizingSchedule)
+    )
+      fail("sizingSchedule");
+    for (const [memberId, schedule] of Object.entries(input.sizingSchedule)) {
+      if (!Object.hasOwn(input.members, memberId)) fail("sizingSchedule unknown member");
+      if (!Array.isArray(schedule)) fail("sizingSchedule entries");
+      for (let i = 0; i < schedule.length; i++) {
+        const entry = schedule[i];
+        if (
+          !entry ||
+          !dateValid(entry.effectiveDate) ||
+          (i > 0 && entry.effectiveDate <= schedule[i - 1].effectiveDate)
+        )
+          fail("sizingSchedule effective dates");
+        if (
+          Object.keys(entry).some(
+            (key) =>
+              ![
+                "effectiveDate",
+                "sizing",
+                "maxContractsPerTrade",
+                "maxAllocationAmount",
+                "maxOpenTrades",
+              ].includes(key),
+          )
+        )
+          fail("sizingSchedule fields");
+        if (!entry.sizing) fail("sizingSchedule sizing");
+        validateSizing(entry, input.members[memberId].ignoreMarginRequirements);
+      }
+    }
   }
   const dates = new Set(input.dates);
   const tradeIds = new Set<string>();
