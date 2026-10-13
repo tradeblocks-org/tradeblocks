@@ -10,15 +10,18 @@ it("observes committed progress without changing search results", () => {
   const value = input();
   const baseline = searchBookAtDrawdown(value);
   const counts: number[] = [];
+  const bestReturns: Array<number | null> = [];
   const observed = searchBookAtDrawdown(value, {
     onProgress: (event) => {
       counts.push(event.evaluationsDone);
-      expect(event.checkpoint.evaluations).toHaveLength(event.evaluationsDone);
+      bestReturns.push(event.best?.returnPct ?? null);
+      expect(event.checkpoint().evaluations).toHaveLength(event.evaluationsDone);
     },
   });
   delete observed.checkpoint;
   expect(JSON.stringify(observed)).toBe(JSON.stringify(baseline));
   expect(counts).toEqual([1, 2, 3, 4]);
+  expect(bestReturns).toEqual([null, null, 20, 20]);
   expect(baseline.best).toMatchObject({ weights: { a: 0.5 }, returnPct: 20 });
 });
 
@@ -61,7 +64,7 @@ it("resumes JSON checkpoints at every evaluation across robust, drop-one and see
           scopes.add(event.scope);
           phases.add(event.phase);
           if (event.evaluationsDone === interruption) {
-            saved = JSON.parse(JSON.stringify(event.checkpoint));
+            saved = JSON.parse(JSON.stringify(event.checkpoint()));
             throw stop;
           }
         },
@@ -174,13 +177,28 @@ it("isolates progress object mutations from live search and later checkpoints", 
   const baseline = searchBookAtDrawdown(value);
   const result = searchBookAtDrawdown(value, {
     onProgress: (event) => {
-      event.checkpoint.evaluations[0].evaluation.returnPct = 9999;
+      event.checkpoint().evaluations[0].evaluation.returnPct = 9999;
       if (event.best) event.best.weights.a = 9999;
     },
   });
   expect(result.checkpoint!.evaluations[0].evaluation.returnPct).toBe(0);
   delete result.checkpoint;
   expect(JSON.stringify(result)).toBe(JSON.stringify(baseline));
+});
+
+it("captures retained progress events lazily at their original committed prefix", () => {
+  const snapshots: Array<() => BookSearchCheckpoint> = [];
+  const result = searchBookAtDrawdown(input(), {
+    onProgress: (event) => snapshots.push(event.checkpoint),
+  });
+  expect(snapshots).toHaveLength(4);
+  expect(snapshots.map((capture) => capture().evaluations.length)).toEqual([1, 2, 3, 4]);
+  const first = snapshots[0]();
+  first.evaluations[0].evaluation.returnPct = 9999;
+  expect(snapshots[0]().evaluations[0].evaluation.returnPct).toBe(0);
+  expect(result.checkpoint!.evaluations[0].evaluation.returnPct).toBe(0);
+  expect(snapshots[3]()).toEqual(result.checkpoint);
+  expect(JSON.parse(JSON.stringify(result.checkpoint))).toEqual(result.checkpoint);
 });
 
 function input(): DrawdownBudgetSearchInput {

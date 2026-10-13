@@ -102,12 +102,12 @@ export interface DrawdownBudgetSearchResult {
 }
 
 export interface BookSearchCheckpoint {
-  version: 1;
+  version: 2;
   requestIdentity: string;
   evaluations: Array<{
     scope: string;
     phase: "coordinate" | "robust";
-    evaluation: BookSearchEvaluation;
+    evaluation: Omit<BookSearchEvaluation, "key" | "weights" | "roundedToZero">;
   }>;
   /** Consumed unavailable bootstrap outcomes; never fabricated evaluation metrics. */
   unavailableEvaluations: Array<{ scope: string; key: string; message: string }>;
@@ -120,7 +120,8 @@ export interface BookSearchProgress {
   phase: "coordinate" | "robust";
   /** Best feasible evaluation in this search's scope, not across bootstrap samples. */
   best: BookSearchEvaluation | null;
-  checkpoint: BookSearchCheckpoint;
+  /** Capture this event's committed prefix on demand, detached from live state. */
+  checkpoint: () => BookSearchCheckpoint;
 }
 
 export interface BookSearchOptions {
@@ -168,8 +169,9 @@ interface PreparedBookEvaluation {
  * searches while sizing still follows weight; zero weight still removes a member.
  * Omitted policies retain scaled caps. Null caps remain uncapped.
  * Optional progress is emitted after each new evaluation (including auxiliary
- * searches), with a detached JSON checkpoint. A throwing observer aborts the
- * call; its checkpoint includes the committed evaluation and remains resumable.
+ * searches). Calling event.checkpoint() captures a detached JSON checkpoint on
+ * demand; the event itself contains no journal copy. A throwing observer aborts
+ * the call; a checkpoint captured before throwing remains resumable.
  * Resume reconstructs deterministic control flow using saved metrics/verdicts,
  * without rerunning saved replays or feasibility calls. Callers own storage and
  * must supply the same deterministic feasibility policy and feasibleId at save
@@ -190,13 +192,13 @@ export function searchBookAtDrawdown(
   });
   if (
     options.resumeFrom &&
-    (options.resumeFrom.version !== 1 || options.resumeFrom.requestIdentity !== identity)
+    (options.resumeFrom.version !== 2 || options.resumeFrom.requestIdentity !== identity)
   )
     throw new RangeError("search_checkpoint_identity_mismatch: request or constraint changed");
   const execution: SearchExecution = {
     checkpoint: options.resumeFrom
       ? structuredClone(options.resumeFrom)
-      : { version: 1, requestIdentity: identity, evaluations: [], unavailableEvaluations: [] },
+      : { version: 2, requestIdentity: identity, evaluations: [], unavailableEvaluations: [] },
     cursor: 0,
     onProgress: options.onProgress,
   };
@@ -221,6 +223,7 @@ function runSearch(
     ? { count: 0, reasons: Object.create(null) as Record<string, number> }
     : undefined;
   let phase: BookSearchProgress["phase"] = "coordinate";
+  let progressBest: BookSearchEvaluation | null = null;
   const prepare = (requested: Record<string, number>): PreparedBookEvaluation => {
     const weights: Record<string, number> = {};
     const members: Record<string, BookMember> = {};
@@ -278,11 +281,15 @@ function runSearch(
     );
     if (unavailable) throw new RangeError(unavailable.message);
     const saved = execution?.checkpoint.evaluations[execution.cursor];
-    if (saved && (saved.scope !== scope || saved.phase !== phase || saved.evaluation.key !== key))
+    if (saved && (saved.scope !== scope || saved.phase !== phase))
       throw new RangeError("search_checkpoint_invalid: evaluation order differs");
     let candidate: BookSearchEvaluation;
-    if (saved) candidate = structuredClone(saved.evaluation);
-    else {
+    if (saved) {
+      const { feasibilityRejectionReason, ...metrics } = saved.evaluation;
+      candidate = { key, weights, ...metrics, roundedToZero };
+      if (feasibilityRejectionReason !== undefined)
+        candidate.feasibilityRejectionReason = feasibilityRejectionReason;
+    } else {
       let replay: BookReplayResult;
       try {
         replay = replayBook({ ...input.replay, members });
@@ -345,24 +352,47 @@ function runSearch(
     evaluations.push(candidate);
     if (execution) {
       execution.cursor++;
+      if (
+        execution.onProgress &&
+        candidate.feasible &&
+        (!progressBest || candidate.returnPct > progressBest.returnPct)
+      )
+        progressBest = candidate;
       if (!saved) {
-        execution.checkpoint.evaluations.push({ scope, phase, evaluation: candidate });
+        execution.checkpoint.evaluations.push({
+          scope,
+          phase,
+          evaluation: {
+            returnPct: candidate.returnPct,
+            executedGroups: candidate.executedGroups,
+            executedIgnoredOnlyGroups: candidate.executedIgnoredOnlyGroups,
+            maxDrawdownPct: candidate.maxDrawdownPct,
+            insolvent: candidate.insolvent,
+            feasible: candidate.feasible,
+            ...(candidate.feasibilityRejectionReason !== undefined
+              ? { feasibilityRejectionReason: candidate.feasibilityRejectionReason }
+              : {}),
+          },
+        });
         if (execution.onProgress) {
-          const best = evaluations.reduce<BookSearchEvaluation | null>(
-            (best, trial) =>
-              trial.feasible && (!best || trial.returnPct > best.returnPct) ? trial : best,
-            null,
-          );
+          const evaluationsDone = execution.cursor;
+          const unavailableCount = execution.checkpoint.unavailableEvaluations.length;
           try {
-            execution.onProgress(
-              structuredClone({
-                evaluationsDone: execution.cursor,
-                scope,
-                phase,
-                best,
-                checkpoint: execution.checkpoint,
-              }),
-            );
+            execution.onProgress({
+              evaluationsDone,
+              scope,
+              phase,
+              best: progressBest ? structuredClone(progressBest) : null,
+              checkpoint: () =>
+                structuredClone({
+                  ...execution.checkpoint,
+                  evaluations: execution.checkpoint.evaluations.slice(0, evaluationsDone),
+                  unavailableEvaluations: execution.checkpoint.unavailableEvaluations.slice(
+                    0,
+                    unavailableCount,
+                  ),
+                }),
+            });
           } catch (cause) {
             throw new Error("search_progress_callback: observer aborted", { cause });
           }
