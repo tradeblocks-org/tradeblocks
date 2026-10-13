@@ -151,11 +151,12 @@ power are refused. Supply unambiguous `entryGroupId`s within each member and
 not timestamps. Every in-window entry and close must lie on the supplied axis.
 An endpoint close beyond that axis remains open; no terminal mark is invented.
 
-Optional `sizingSchedule: Record<string, BookSizingScheduleEntry[]>` supplies
+Optional `sizingSchedule: Record<string, Array<BookSizingScheduleEntry | BookDisabledScheduleEntry>>` supplies
 strictly increasing ET calendar dates (YYYY-MM-DD) as `effectiveDate` per known member.
 Each active entry declares complete `sizing`, `maxContractsPerTrade`,
 `maxAllocationAmount`, and `maxOpenTrades` (null means uncapped), with `disabled`
-omitted or `false`. An entry `{ effectiveDate, disabled: true }` prevents new
+omitted or `false`; the exported `BookSizingScheduleEntry` type keeps those fields required.
+A `BookDisabledScheduleEntry` `{ effectiveDate, disabled: true }` prevents new
 groups from being admitted from that date. Sizing and caps are optional and
 ignored while disabled, even if supplied with invalid values. A later active
 entry reinstates the member using that entry's complete sizing and caps.

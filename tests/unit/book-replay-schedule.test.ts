@@ -1,5 +1,23 @@
 import { replayBook, type BookReplayInput, type BookSizingScheduleEntry } from "@tradeblocks/lib";
 
+// Compile-time contract: the exported active-entry type keeps sizing and caps required.
+const readActiveEntry = (entry: BookSizingScheduleEntry) => [
+  entry.sizing.mode,
+  entry.maxContractsPerTrade,
+  entry.maxAllocationAmount,
+  entry.maxOpenTrades,
+];
+
+it("keeps the active schedule entry type's required fields readable", () => {
+  const entry: BookSizingScheduleEntry = {
+    effectiveDate: "2025-01-02",
+    sizing: { mode: "fixed", contracts: 1 },
+    maxContractsPerTrade: null,
+    maxAllocationAmount: null,
+    maxOpenTrades: null,
+  };
+  expect(readActiveEntry(entry)).toEqual(["fixed", null, null, null]);
+});
 function fixture(): BookReplayInput {
   const trade = {
     memberId: "a",

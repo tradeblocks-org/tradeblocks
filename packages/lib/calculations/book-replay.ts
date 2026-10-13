@@ -17,16 +17,15 @@ export interface BookMember {
   minimumOne: boolean;
   maxOpenTrades: number | null;
 }
-/** Active entries replace complete sizing/caps; disabled entries ignore any supplied sizing/caps. */
-export type BookSizingScheduleEntry = { effectiveDate: string } & (
-  | (Pick<
-      BookMember,
-      "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades"
-    > & { disabled?: false })
-  | (Partial<
-      Pick<BookMember, "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades">
-    > & { disabled: true })
-);
+/** An active schedule entry: complete replacement sizing/caps from its effective date. */
+export type BookSizingScheduleEntry = Pick<
+  BookMember,
+  "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades"
+> & { effectiveDate: string; disabled?: false };
+/** A disabled schedule entry: no new entries from its effective date; supplied sizing/caps are ignored. */
+export type BookDisabledScheduleEntry = { effectiveDate: string; disabled: true } & Partial<
+  Pick<BookMember, "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades">
+>;
 export interface BookTrade {
   id: string;
   memberId: string;
@@ -69,7 +68,7 @@ interface BookReplayBaseInput {
   trades: BookTrade[];
   members: Record<string, BookMember>;
   /** Ordered complete sizing/caps or disabled states by member; base applies before the first date. */
-  sizingSchedule?: Record<string, BookSizingScheduleEntry[]>;
+  sizingSchedule?: Record<string, Array<BookSizingScheduleEntry | BookDisabledScheduleEntry>>;
   reservationMode: "sharedEntryGroup" | "sumChildren";
   sharedEntryGroupBuyingPower: "equalPackageMaximum";
   simultaneousOrder: string[];
@@ -312,7 +311,7 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       const member = input.members[group.memberId];
       if (event.kind === "open") {
         const schedule = input.sizingSchedule?.[group.memberId];
-        let rule: BookMember | BookSizingScheduleEntry = member;
+        let rule: BookMember | BookSizingScheduleEntry | BookDisabledScheduleEntry = member;
         if (schedule) {
           let low = 0;
           let high = schedule.length;
