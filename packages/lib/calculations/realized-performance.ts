@@ -682,9 +682,13 @@ function buildDrawdownEpisodes(
   };
   let current: SequenceEpisode | null = null;
   const episodes: SequenceEpisode[] = [];
+  // Reported P/L is in cents; compare recovery and troughs in integer cents so binary
+  // rounding (1000 - 0.1 - 0.2 + 0.3 is 999.9999999999999) neither misses a recovery nor
+  // opens a sub-cent episode.
+  const cents = (value: number) => Math.round(value * 100);
   for (let index = 0; index < sortedTrades.length; index++) {
     equity += sortedTrades[index].pl;
-    if (equity >= peakEquity) {
+    if (cents(equity) >= cents(peakEquity)) {
       if (current) {
         current.recoveryIndex = index;
         episodes.push(current);
@@ -700,7 +704,7 @@ function buildDrawdownEpisodes(
         troughEquity: equity,
         recoveryIndex: null,
       };
-    } else if (equity < current.troughEquity) {
+    } else if (cents(equity) < cents(current.troughEquity)) {
       current.troughEquity = equity;
       current.troughIndex = index;
     }

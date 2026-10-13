@@ -242,6 +242,29 @@ describe("public close-date realized calculations", () => {
     ]);
   });
 
+  it("closes an exact recovery despite binary rounding of decimal P/L", () => {
+    // 1000 - 0.1 - 0.2 + 0.3 is 999.9999999999999 in floating point, yet fully recovered.
+    const tape = [
+      trade("2026-01-05", "2026-01-05", -0.1, "A"),
+      trade("2026-01-06", "2026-01-06", -0.2, "A"),
+      trade("2026-01-07", "2026-01-07", 0.3, "A"),
+      trade("2026-01-08", "2026-01-08", -50, "B"),
+      trade("2026-01-09", "2026-01-09", 50, "B"),
+    ];
+    const episodes = buildRealizedDrawdownAttributionByCloseDate(tape, 5, 5)?.episodes;
+    expect(episodes).toHaveLength(2);
+    expect(episodes?.[0].drawdownPeriod).toMatchObject({
+      troughDate: "2026-01-08",
+      recoveryDate: "2026-01-09",
+    });
+    expect(episodes?.[0].drawdownPeriod.maxDrawdown).toBeCloseTo(50, 9);
+    expect(episodes?.[1].drawdownPeriod).toMatchObject({
+      peakDate: "2026-01-05",
+      troughDate: "2026-01-06",
+      recoveryDate: "2026-01-07",
+    });
+  });
+
   it("preserves local-midnight calendar keys when UTC slicing would shift the day", () => {
     const output = execFileSync(
       process.execPath,
