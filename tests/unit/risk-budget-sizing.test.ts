@@ -499,7 +499,7 @@ it("refuses the caller's zero-contract book path and selects the feasible altern
   expect(result.members.map((member) => member.bookContracts)).toEqual([[1], [1]]);
 });
 
-it("reports standalone policy rejection instead of fitting a partially participating reference", () => {
+function partialParticipationFixture() {
   const replay = fixture();
   replay.dates.push("2025-01-06");
   replay.members.a.sizing = { mode: "capitalPerContract", capitalPerContract: 100000 };
@@ -511,6 +511,11 @@ it("reports standalone policy rejection instead of fitting a partially participa
     dateOpened: "2025-01-06",
     dateClosed: "2025-01-06",
   });
+  return replay;
+}
+
+it("reports standalone policy rejection instead of fitting a partially participating reference", () => {
+  const replay = partialParticipationFixture();
   const input = sizingInput(replay);
   expect(sizeBookAtEqualStandaloneRisk(input).members[0].referenceStandaloneContracts).toEqual([
     1, 0,
@@ -534,6 +539,35 @@ it("reports standalone policy rejection instead of fitting a partially participa
       memberWeights: { a: { min: 1, max: 1 }, b: { min: 1, max: 1 } },
       commonFactors: { min: 1, max: 1 },
     },
+  });
+});
+
+it("fits the closest feasible reference rather than the closer rejected weight", () => {
+  // At weight 1, one $30000 loss leaves $70000: the later CPC $100000
+  // entry floors to zero and DD is exactly the 30% target. Weight 1.5
+  // requests one at both entries (CPC $66666.67), ending at $40000: DD 60%.
+  // The closest feasible reference must win, not the closest unconstrained one.
+  const multiWeight = {
+    ...sizingInput(partialParticipationFixture()),
+    standaloneTarget: 30,
+    memberWeightDomains: { a: [1, 1.5], b: [1] },
+  };
+  expect(sizeBookAtEqualStandaloneRisk(multiWeight).members[0].referenceWeight).toBe(1);
+  const feasibleReference = sizeBookAtEqualStandaloneRisk({
+    ...multiWeight,
+    feasible: everyEntryTrades,
+  });
+  expect(feasibleReference.members[0]).toMatchObject({
+    referenceWeight: 1.5,
+    referenceRisk: 60,
+    referenceResidualFromTarget: 30,
+    referenceStandaloneContracts: [1, 1],
+    referenceStatus: "not attained within domain",
+  });
+  expect(feasibleReference.budgetStatus).toBe("attained");
+  expect(feasibleReference.feasibilityRejections!.standalone.a).toEqual({
+    count: 1,
+    reasons: { partial_participation: 1 },
   });
 });
 

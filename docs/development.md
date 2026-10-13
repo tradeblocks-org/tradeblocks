@@ -288,6 +288,16 @@ const feasible = (replay: BookReplayResult) =>
     : { ok: false as const, reason: "partial_participation" };
 ```
 
+Policies must use `replay.declarations`, the candidate's own declarations, rather
+than compare them against a captured full-book input. For example, #4479's WFA
+unplanned-removal check (`run-wfa.mts:37`) rejects the helper's deliberate removal
+of other members during standalone fitting if it compares against the full book.
+Likewise, a policy closing over a full-book replay, such as parity's `scale()`,
+must construct its alternate-hypothesis replay from the candidate's declarations,
+not restore the full book. In either case, a full-book-scoped policy can reject
+every standalone reference and produce `not attained within domain`; that is a
+policy-scope failure, not evidence that no participating standalone sizing exists.
+
 With the option, `feasibilityRejections` reports `{ count, reasons }` separately
 for `standalone[memberId]` and `book`. Counts are rejected enumerated candidates,
 not entry groups; a book stage skipped for a missing reference has zero rejections.
