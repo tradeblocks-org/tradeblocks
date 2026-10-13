@@ -240,6 +240,55 @@ it never substitutes closed-equity flows. Missing marks still throw
 result exactly; false does not add `marked.members`. No MCP tool exposes
 `replayBook`; this option belongs to the library interface only.
 
+`sizeBookAtEqualStandaloneRisk({ replay, risk, standaloneTarget, bookBudget,
+memberWeightDomains, commonFactors })` composes replay, fixed-cap search evaluations
+and the public confidence estimator. It is **CPC-only**, matching the all-CPC #4479
+caller books; any non-CPC member throws `Unsupported sizing: member <id> must use
+capitalPerContract`, including removed members. Supply complete marks and positive,
+finite, explicitly enumerated member weights and common factors (at most ten decimal
+places). Weight multiplies sizing: CPC is divided by weight, so larger weight means
+more contracts. Combined weights are rounded to ten decimals and returned as
+`finalWeight`. Contract caps remain fixed through `memberCapPolicies`; allocation
+amount caps follow the existing search weight convention.
+
+Stage one chooses each member's nearest standalone target over its supplied domain
+(ties prefer the smaller weight). Stage two chooses the highest realized-return
+qualifying book over the common factors (ties prefer the smaller factor), never
+retuning individual members. `risk` is `{ method: "markedMaxDrawdownPct" }`
+(percentage points) or `{ method: "standaloneExpectedShortfall", confidence }`
+(loss-positive decimal ES, explicitly the negative of signed CVaR).
+Standalone ES uses each standalone replay's own equity denominator and tail.
+Reference and final standalone risks, residuals from the original target, final
+book risk, whole-contract quantities and zero groups are returned. Exact reference
+attainment uses a numerical tolerance of 1e-10 in the declared risk unit; budget
+attainment means risk at or below the budget with executed non-ignored groups.
+Failure is `not attained within domain`, with enumerated domains and examined
+bounds, not a claim of global infeasibility. An absent book candidate returns null
+final values. A common factor does **not** preserve exact standalone equality.
+`referenceCapBinding`, `finalCapBinding` and `bookCapBinding` compare executed
+quantities to a replay removing that member's contract and allocation-amount caps;
+these are whole-path counterfactuals, not local sensitivities.
+
+`bookExpectedShortfallContributions(replay, confidence)` reports
+`fixed_position_book_tail_decomposition`, not sensitivity to CPC or weight changes.
+It requests member marked-dollar flows, uses the **same book tail observations**
+and prior **book** equity for every member (starting funds on day one), negates
+signed-decimal CVaR to loss-positive ES and preserves negative offsetting
+contributions. Contributions reconcile to book ES within floating-point rounding,
+reported as `reconciliationResidual`. Tail membership matches the public estimator:
+linear-interpolated percentile cutoff, all discrete observations at or below it,
+including every cutoff tie, with no fractional weights. Insolvent paths or missing
+marks are refused. Floors, caps, shared funds and compounding prevent interpreting
+this fixed-position decomposition as replay-sizing sensitivity. This release offers
+standalone-ES sizing and this decomposition, not contribution-based retuning.
+
+`nominalCapitalPerContractFromPercentagePoints(buyingPowerPerContract,
+percentagePoints)` uses the median of the caller-selected row set and
+`CPC = 100 * medianBP / percentagePoints` (2 means 2%). The result is labelled
+`descriptive_nominal_conversion`: it does not reproduce allocation admission,
+package reservation or actual exposure. These three helpers are opt-in library
+calculations only; no MCP tool or default behavior changes.
+
 With `ignoredRows: "markOnly"`, ignored children are admitted at their group's
 single simulated quantity and require the same complete open-mark coverage.
 Their closing P/L never enters closed funds, realized return or later sizing.

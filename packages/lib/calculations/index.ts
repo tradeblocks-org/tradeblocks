@@ -57,5 +57,6 @@ export * from "./parameter-study-selection.ts";
 
 export * from "./oo-replay-attribution.ts";
 export * from "./xnys-session-calendar.ts";
+export * from "./risk-budget-sizing.ts";
 // Re-export types for convenience
 export * from "../models/portfolio-stats.ts";
