@@ -1121,8 +1121,10 @@ function calculateSharpeRatio(returns: number[], periodsPerYear: number): number
  * Sorts a copy (the caller's array is not mutated) and interpolates at rank (N - 1) * p.
  * Drawdown inputs are nonnegative depths; horizon returns remain signed decimals.
  * @returns p5, p50, p95 and p99 in the same units as the supplied values
+ * @throws RangeError for an empty array
  */
 export function pathQuantiles(input: readonly number[]) {
+  if (input.length === 0) throw new RangeError("pathQuantiles requires at least one value");
   const values = [...input].sort((a, b) => a - b);
   const quantile = (p: number) => {
     const rank = (values.length - 1) * p;
