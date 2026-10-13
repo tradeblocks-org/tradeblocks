@@ -1332,3 +1332,37 @@ it("refuses an overflowing ratio instead of serializing Infinity as a winning sc
   value.replay.trades[1].netPlPerContract = 1e306;
   expect(() => searchBookAtDrawdown(value)).toThrow(/non-finite objective ratio/);
 });
+
+it("orders negative closed returns by return when open gains keep marked drawdown at zero", () => {
+  const value = ratioInput();
+  value.objective = "returnOverDrawdown";
+  value.replay.members.b = { ...value.replay.members.a, sizing: { mode: "fixed", contracts: 1 } };
+  value.replay.trades = [
+    value.replay.trades[0],
+    {
+      ...value.replay.trades[1],
+      id: "b",
+      entryGroupId: "b",
+      memberId: "b",
+      dateOpened: "2025-01-02",
+      dateClosed: "2025-01-06",
+    },
+  ];
+  value.replay.simultaneousOrder.push("b");
+  value.weightBounds.b = { min: 1, max: 1 };
+  value.initialWeights = [{ a: 1, b: 1 }];
+  value.replay.marks = {
+    mode: "child",
+    values: value.replay.dates.map((date) => ({
+      tradeId: "b",
+      date,
+      netOpenPlPerContract: 200,
+    })),
+  };
+  expect(searchBookAtDrawdown(value)).toMatchObject({
+    drawdownBasis: "offline_marked_equity",
+    objectiveTier: "nonPositiveReturn",
+    objectiveValue: null,
+    best: { weights: { a: 0.5, b: 1 }, returnPct: -4, maxDrawdownPct: 0 },
+  });
+});

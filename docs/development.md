@@ -454,9 +454,10 @@ The ratio has three tiers: positive return with drawdown ≤ 0 ranks first by
 return; positive drawdown ranks next by the exact signed ratio (negative returns
 remain negative); nonpositive return with drawdown ≤ 0 ranks last by return.
 Exact ties retain the first observed candidate. Non-finite ratios throw rather
-than silently win. Replay drawdown is nonnegative; a negative final return
-necessarily has positive drawdown, so negative-return/nonpositive-drawdown
-paths are unreachable through replay. Zero-return/zero-drawdown paths can occur.
+than silently win. Replay drawdown is nonnegative. Negative closed return
+necessarily has positive closed drawdown, but can have zero marked drawdown
+when gains in open positions offset realized losses. Both zero and negative
+return can therefore reach the last tier on the marked basis.
 Ratio results add `objectiveTier: "zeroDrawdown" | "ratio" | "nonPositiveReturn" | null`
 and `objectiveValue`: the finite winner ratio, or null for undefined ratios or
 refusal. Near-optimal tolerance applies within the winner's tier, to ratio or
