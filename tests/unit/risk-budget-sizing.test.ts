@@ -5,6 +5,7 @@ import {
   replayBook,
   cvarFromReturnsAtConfidence,
   type BookReplayInput,
+  type BookReplayResult,
 } from "@tradeblocks/lib";
 
 it("converts percentage points from the supplied per-contract BP median, not exposure", () => {
@@ -71,6 +72,7 @@ it("reproduces the caller two-stage 10% standalone DD fit then common book facto
   expect(result.commonFactor).toBe(0.5);
   expect(result.bookRisk).toBe(10);
   expect(result.budgetStatus).toBe("attained");
+  expect(JSON.stringify(result)).toMatchSnapshot("omitted feasibility baseline");
   expect(result.members.map((m) => [m.referenceWeight, m.referenceRisk, m.finalRisk])).toEqual([
     [1, 10, 5],
     [2, 10, 5],
@@ -469,3 +471,128 @@ it.each([0, 1, -0.1, 1.1, NaN, Infinity])(
     ).toThrow(/Confidence must be finite and strictly between 0 and 1/);
   },
 );
+
+function everyEntryTrades(result: BookReplayResult) {
+  return result.members.every(
+    (member) => result.declarations.members[member.memberId].removed || member.zeroGroups === 0,
+  )
+    ? true
+    : ({ ok: false, reason: "partial_participation" } as const);
+}
+
+it("refuses the caller's zero-contract book path and selects the feasible alternative", () => {
+  const replay = fixture();
+  replay.trades[0].netPlPerContract = -1000;
+  replay.trades[1].netPlPerContract = 5000;
+  replay.members.b.maxContractsPerTrade = 1;
+  const input = {
+    ...sizingInput(replay),
+    memberWeightDomains: { a: [1], b: [2] },
+    commonFactors: [0.05, 0.1],
+  };
+  const baseline = sizeBookAtEqualStandaloneRisk(input);
+  expect(baseline.commonFactor).toBe(0.05);
+  expect(baseline.members.map((member) => member.bookContracts)).toEqual([[0], [1]]);
+  const result = sizeBookAtEqualStandaloneRisk({ ...input, ...{ feasible: everyEntryTrades } });
+  expect(result.budgetStatus).toBe("attained");
+  expect(result.commonFactor).toBe(0.1);
+  expect(result.members.map((member) => member.bookContracts)).toEqual([[1], [1]]);
+});
+
+it("reports standalone policy rejection instead of fitting a partially participating reference", () => {
+  const replay = fixture();
+  replay.dates.push("2025-01-06");
+  replay.members.a.sizing = { mode: "capitalPerContract", capitalPerContract: 100000 };
+  replay.trades[0].netPlPerContract = -30000;
+  replay.trades.push({
+    ...replay.trades[0],
+    id: "a-later",
+    entryGroupId: "a-later",
+    dateOpened: "2025-01-06",
+    dateClosed: "2025-01-06",
+  });
+  const input = sizingInput(replay);
+  expect(sizeBookAtEqualStandaloneRisk(input).members[0].referenceStandaloneContracts).toEqual([
+    1, 0,
+  ]);
+  const result = sizeBookAtEqualStandaloneRisk({ ...input, feasible: everyEntryTrades });
+  expect(result.budgetStatus).toBe("not attained within domain");
+  expect(result.bookReplay).toBeNull();
+  expect(result.members[0].referenceWeight).toBeNull();
+  expect(result.members[0].referenceStatus).toBe("not attained within domain");
+  expect(result.feasibilityRejections).toEqual({
+    standalone: {
+      a: { count: 1, reasons: { partial_participation: 1 } },
+      b: { count: 0, reasons: {} },
+    },
+    book: { count: 0, reasons: {} },
+  });
+  expect(result.examinedDomain).toEqual({
+    memberWeights: { a: [1], b: [1] },
+    commonFactors: [1],
+    bounds: {
+      memberWeights: { a: { min: 1, max: 1 }, b: { min: 1, max: 1 } },
+      commonFactors: { min: 1, max: 1 },
+    },
+  });
+});
+
+it.each(["exclude", "reserve"] as const)(
+  "reports book-only rejection and preserves the %s ignored buying-power hypothesis",
+  (ignoredBuyingPower) => {
+    const replay = fixture();
+    replay.ignoredRows = "markOnly";
+    replay.ignoredBuyingPower = ignoredBuyingPower;
+    replay.trades[0].ignored = true;
+    const input = sizingInput(replay);
+    // A needs a non-ignored group too; ignored rows retain marks, not realized P/L.
+    replay.trades.push({ ...replay.trades[0], id: "a-real", ignored: false });
+    replay.marks = {
+      mode: "child",
+      values: [
+        { tradeId: "a", date: "2025-01-02", netOpenPlPerContract: -1000 },
+        { tradeId: "b", date: "2025-01-02", netOpenPlPerContract: -500 },
+        { tradeId: "a-real", date: "2025-01-02", netOpenPlPerContract: -1000 },
+      ],
+    };
+    const accepted = sizeBookAtEqualStandaloneRisk({ ...input, feasible: everyEntryTrades });
+    expect(accepted.budgetStatus).toBe("attained");
+    expect(accepted.bookReplay!.declarations.ignoredBuyingPower).toBe(ignoredBuyingPower);
+    // CPC bypasses its own BP admission: both modes retain the same whole quantities,
+    // but reserve counts ignored BP in the ledger.
+    expect(accepted.members.map((member) => member.bookContracts)).toEqual([[10], [10]]);
+    const rejected = sizeBookAtEqualStandaloneRisk({
+      ...input,
+      feasible: (result) =>
+        result.declarations.members.a.removed || result.declarations.members.b.removed
+          ? true
+          : { ok: false, reason: "book_policy" },
+    });
+    expect(rejected.budgetStatus).toBe("not attained within domain");
+    expect(rejected.bookReplay).toBeNull();
+    expect(rejected.members.map((member) => member.referenceWeight)).toEqual([1, 1]);
+    expect(rejected.feasibilityRejections).toEqual({
+      standalone: {
+        a: { count: 0, reasons: {} },
+        b: { count: 0, reasons: {} },
+      },
+      book: { count: 1, reasons: { book_policy: 1 } },
+    });
+  },
+);
+
+it("uses the search's boolean rejection reason and refuses invalid policy verdicts", () => {
+  const input = sizingInput();
+  const rejected = sizeBookAtEqualStandaloneRisk({ ...input, feasible: () => false });
+  expect(rejected.budgetStatus).toBe("not attained within domain");
+  expect(rejected.feasibilityRejections!.standalone.a).toEqual({
+    count: 1,
+    reasons: { caller_feasibility: 1 },
+  });
+  expect(() =>
+    sizeBookAtEqualStandaloneRisk({
+      ...input,
+      feasible: () => ({ ok: false, reason: "" }),
+    }),
+  ).toThrow(/feasible returned object/);
+});

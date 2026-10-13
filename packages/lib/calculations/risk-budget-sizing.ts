@@ -1,5 +1,5 @@
 import { replayBook, type BookReplayInput, type BookReplayResult } from "./book-replay.ts";
-import { searchBookAtDrawdown } from "./drawdown-budget-search.ts";
+import { searchBookAtDrawdown, type DrawdownBudgetSearchInput } from "./drawdown-budget-search.ts";
 import { cvarFromReturnsAtConfidence } from "./return-series-stats.ts";
 
 /**
@@ -49,6 +49,8 @@ export interface EqualStandaloneRiskInput {
   memberWeightDomains: Record<string, readonly number[]>;
   /** Positive common sizing multipliers: larger means lower CPC, more contracts. */
   commonFactors: readonly number[];
+  /** Deterministic, non-mutating policy applied to standalone references and book candidates. */
+  feasible?: DrawdownBudgetSearchInput["feasible"];
 }
 
 function markedReturns(input: BookReplayInput, result: BookReplayResult) {
@@ -197,6 +199,9 @@ function contractEffects(input: BookReplayInput, result: BookReplayResult, id: s
  * ES is loss-positive decimal (-signed CVaR); DD is percentage points.
  * No exact final parity or global infeasibility claim: floors, caps and compounding change risk.
  * capBinding is a replay counterfactual with that member's caps removed, not a local derivative.
+ * Optional feasible uses the search's deterministic policy contract in both stages.
+ * Standalone replays retain other members as removed; policies must respect that declaration.
+ * Rejections are reported by stage only when supplied. No checkpoints or feasibleId are used.
  */
 export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
   if (
@@ -232,12 +237,25 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
   );
   const factors = domain(input.commonFactors, "commonFactors");
   const policies = Object.fromEntries(ids.map((id) => [id, "fixed" as const]));
+  const rejectionSummary = (rows: readonly { feasibilityRejectionReason?: string }[]) => {
+    const reasons: Record<string, number> = Object.create(null);
+    let count = 0;
+    for (const row of rows) {
+      if (row.feasibilityRejectionReason !== undefined) {
+        count++;
+        const reason = row.feasibilityRejectionReason;
+        reasons[reason] = (reasons[reason] ?? 0) + 1;
+      }
+    }
+    return { count, reasons };
+  };
   const evaluate = (base: BookReplayInput, weights: Record<string, number>) => {
     const replay = scaled(base, weights);
     const result = replayBook(replay);
     // Fixed bounds make this an evaluation, not member-specific coordinate retuning.
     const search = searchBookAtDrawdown({
       replay: base,
+      feasible: input.feasible,
       weightBounds: Object.fromEntries(
         ids.map((id) => [id, { min: weights[id], max: weights[id] }]),
       ),
@@ -267,8 +285,12 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
       replay,
       result,
       risk: measure(replay, result, input.risk),
+      feasibilityRejectionReason: search.evaluations[0]?.feasibilityRejectionReason,
       eligible: search.evaluations.some(
-        (row) => !row.insolvent && row.executedGroups > row.executedIgnoredOnlyGroups,
+        (row) =>
+          !row.insolvent &&
+          row.executedGroups > row.executedIgnoredOnlyGroups &&
+          row.feasibilityRejectionReason === undefined,
       ),
     };
   };
@@ -289,7 +311,7 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
           : best,
       null,
     );
-    return { id, best };
+    return { id, best, rejections: rejectionSummary(candidates) };
   });
   const examinedDomain = {
     memberWeights: domains,
@@ -367,6 +389,14 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
     bookRisk: best?.risk ?? null,
     bookReplay: best?.result ?? null,
     examinedDomain,
+    ...(input.feasible
+      ? {
+          feasibilityRejections: {
+            standalone: Object.fromEntries(references.map((row) => [row.id, row.rejections])),
+            book: rejectionSummary(candidates),
+          },
+        }
+      : {}),
     members,
   };
 }

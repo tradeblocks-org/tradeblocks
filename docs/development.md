@@ -241,7 +241,7 @@ result exactly; false does not add `marked.members`. No MCP tool exposes
 `replayBook`; this option belongs to the library interface only.
 
 `sizeBookAtEqualStandaloneRisk({ replay, risk, standaloneTarget, bookBudget,
-memberWeightDomains, commonFactors })` composes replay, fixed-cap search evaluations
+memberWeightDomains, commonFactors, feasible? })` composes replay, fixed-cap search evaluations
 and the public confidence estimator. It is **CPC-only**, matching the all-CPC #4479
 caller books; any non-CPC member throws `Unsupported sizing: member <id> must use
 capitalPerContract`, including removed members. Supply complete marks and positive,
@@ -270,6 +270,43 @@ final values. A common factor does **not** preserve exact standalone equality.
 `referenceCapBinding`, `finalCapBinding` and `bookCapBinding` compare executed
 quantities to a replay removing that member's contract and allocation-amount caps;
 these are whole-path counterfactuals, not local sensitivities.
+
+Optional `feasible(replay)` is the same deterministic, non-mutating policy used by
+`searchBookAtDrawdown`: return `true`, `false` (reason `caller_feasibility`), or
+`{ ok: false, reason: "nonempty reason" }`. Invalid verdicts throw. It runs on every
+enumerated standalone and book candidate before selection; rejected candidates
+cannot be references or attained books. Standalone replays retain other members
+as `removed`, so participation policies must exempt removed members. For example,
+q ≥ 1 on every retained entry is:
+
+```typescript
+const feasible = (replay: BookReplayResult) =>
+  replay.members.every(
+    (member) => replay.declarations.members[member.memberId].removed || member.zeroGroups === 0,
+  )
+    ? true
+    : { ok: false as const, reason: "partial_participation" };
+```
+
+With the option, `feasibilityRejections` reports `{ count, reasons }` separately
+for `standalone[memberId]` and `book`. Counts are rejected enumerated candidates,
+not entry groups; a book stage skipped for a missing reference has zero rejections.
+If a stage has no eligible candidate, the existing status is `not attained within
+domain`; rejection reasons accompany the enumerated domains and bounds, and no
+infeasible fallback is returned. With the option omitted, the report is absent
+and serialized output is unchanged.
+
+`replay.ignoredBuyingPower: "exclude" | "reserve"` passes unchanged through both
+stages. To compare hypotheses, run the helper once for each declaration. To
+require one common candidate to satisfy both, the caller's deterministic policy
+can replay the alternate hypothesis using the original replay input plus the
+candidate's `declarations.members` (including standalone removal flags), then
+check both results, as the #4479 caller does with the search. Separate fits need
+not choose identical weights. There is no combined-hypothesis optimizer.
+The helper uses fixed-weight search evaluations, not checkpoints: no `feasibleId`
+is needed or accepted here. Callers using `searchBookAtDrawdown` checkpointing
+directly must supply the same deterministic policy and `feasibleId` at save and
+resume; changing a policy without changing its ID reuses old verdicts.
 
 `bookExpectedShortfallContributions(replay, confidence)` reports
 `fixed_position_book_tail_decomposition`, not sensitivity to CPC or weight changes.
