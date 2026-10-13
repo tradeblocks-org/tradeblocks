@@ -713,7 +713,7 @@ function buildDrawdownEpisodes(
   return episodes
     .sort(
       (a, b) =>
-        b.peakEquity - b.troughEquity - (a.peakEquity - a.troughEquity) ||
+        cents(b.peakEquity - b.troughEquity) - cents(a.peakEquity - a.troughEquity) ||
         a.peakIndex - b.peakIndex,
     )
     .slice(0, episodeCount)

@@ -265,6 +265,40 @@ describe("public close-date realized calculations", () => {
     });
   });
 
+  it("ranks equal-cent depths by earlier peak despite float noise", () => {
+    // Depths are 0.2999999999999545 and 0.3000000000000682: equal in cents.
+    const pls = [10, -0.3, 0.3, 5, -0.1, -0.2, 0.3, 5];
+    const tape = pls.map((pl, i) =>
+      trade(
+        `2026-01-${String(5 + i).padStart(2, "0")}`,
+        `2026-01-${String(5 + i).padStart(2, "0")}`,
+        pl,
+        "A",
+      ),
+    );
+    const episodes = buildRealizedDrawdownAttributionByCloseDate(tape, 5, 2)?.episodes;
+    expect(episodes?.map((episode) => episode.drawdownPeriod.peakDate)).toEqual([
+      "2026-01-05",
+      "2026-01-08",
+    ]);
+  });
+
+  it("keeps the earliest trough when a later one ties it in cents but is lower in float", () => {
+    // Still below the 1000 peak, the second trough evaluates to 999.5999999999999 versus 999.6.
+    const pls = [-0.4, 0.3, -0.1, -0.2, 0.5];
+    const tape = pls.map((pl, i) =>
+      trade(
+        `2026-01-${String(5 + i).padStart(2, "0")}`,
+        `2026-01-${String(5 + i).padStart(2, "0")}`,
+        pl,
+        "A",
+      ),
+    );
+    const [episode] = buildRealizedDrawdownAttributionByCloseDate(tape, 5, 1)?.episodes ?? [];
+    expect(episode.drawdownPeriod.troughDate).toBe("2026-01-05");
+    expect(episode.periodStats.totalTrades).toBe(1);
+  });
+
   it("preserves local-midnight calendar keys when UTC slicing would shift the day", () => {
     const output = execFileSync(
       process.execPath,
