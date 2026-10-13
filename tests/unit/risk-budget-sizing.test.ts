@@ -3,6 +3,7 @@ import {
   sizeBookAtEqualStandaloneRisk,
   bookExpectedShortfallContributions,
   replayBook,
+  searchBookAtDrawdown,
   cvarFromReturnsAtConfidence,
   type BookReplayInput,
   type BookReplayResult,
@@ -17,7 +18,9 @@ it("converts percentage points from the supplied per-contract BP median, not exp
   });
 });
 
-function fixture(): BookReplayInput {
+function fixture(): BookReplayInput & {
+  marks: Extract<NonNullable<BookReplayInput["marks"]>, { mode: "child" }>;
+} {
   const member = {
     sizing: { mode: "capitalPerContract" as const, capitalPerContract: 10000 },
     removed: false,
@@ -80,6 +83,172 @@ it("reproduces the caller two-stage 10% standalone DD fit then common book facto
   expect(result.members.map((m) => m.finalStandaloneContracts)).toEqual([[5], [10]]);
   expect(result.members.map((m) => m.finalResidualFromTarget)).toEqual([-5, -5]);
 });
+
+it("fits ES95 references then selects the caller's marked-DD budget book", () => {
+  // ES95 references are A=10 lots and B=20 lots, each losing 10%.
+  // Common factors .25/.5/1 lose 4.5/10/20 percentage points after floors.
+  const input = {
+    replay: fixture(),
+    risk: { method: "standaloneExpectedShortfall" as const, confidence: 0.95 },
+    standaloneTarget: 0.1,
+    bookBudget: 5,
+    bookBudgetRisk: { method: "markedMaxDrawdownPct" as const },
+    memberWeightDomains: { a: [0.5, 1, 2], b: [0.5, 1, 2] },
+    commonFactors: [0.25, 0.5, 1],
+  };
+  const result = sizeBookAtEqualStandaloneRisk(input);
+  expect(result.commonFactor).toBe(0.25);
+  expect(result.bookRisk).toBe(4.5);
+  expect(result.members.map((member) => member.referenceWeight)).toEqual([1, 2]);
+  expect(result.members.map((member) => member.bookContracts)).toEqual([[2], [5]]);
+  expect(result).toMatchObject({
+    risk: input.risk,
+    riskUnit: "loss_positive_decimal",
+    bookBudgetRisk: input.bookBudgetRisk,
+    bookBudgetUnit: "percentage_points",
+    bookResidualFromBudget: -0.5,
+    budgetStatus: "attained",
+    exactFinalParityClaimed: false,
+  });
+  const callerCandidates = input.commonFactors.map((factor) => {
+    const weights = Object.fromEntries(
+      result.members.map((member) => [member.memberId, member.referenceWeight! * factor]),
+    );
+    const search = searchBookAtDrawdown({
+      replay: input.replay,
+      weightBounds: Object.fromEntries(
+        Object.entries(weights).map(([id, weight]) => [id, { min: weight, max: weight }]),
+      ),
+      weightScaling: "capitalPerContractInverse",
+      memberCapPolicies: { a: "fixed", b: "fixed" },
+      initialWeights: [weights],
+      steps: [1],
+      weightPrecision: 10,
+      allocationPrecision: 10,
+      maxEvaluations: 2,
+      targetDrawdownPct: input.bookBudget,
+      calibrationMarginPct: 0,
+      calibrationUsable: true,
+      objective: "returnPct",
+      nearOptimalRelativeTolerance: 0,
+      robust: { maxDrawdownPct: input.bookBudget, shrinkageFactors: [1] },
+      dropOne: false,
+      stability: {
+        replicates: 0,
+        seed: 0,
+        meanBlockDays: 1,
+        sensitivityBlockDays: [],
+        topRegionFraction: 0,
+      },
+    });
+    return { factor, weights, best: search.best };
+  });
+  const caller = callerCandidates
+    .filter((candidate) => candidate.best !== null)
+    .sort((a, b) => b.best!.returnPct - a.best!.returnPct)[0];
+  expect(result.commonFactor).toBe(caller.factor);
+  const callerBook = replayBook({
+    ...input.replay,
+    members: Object.fromEntries(
+      Object.entries(input.replay.members).map(([id, member]) => [
+        id,
+        {
+          ...member,
+          sizing: { mode: "capitalPerContract", capitalPerContract: 10000 / caller.weights[id] },
+        },
+      ]),
+    ),
+  });
+  expect(result.bookReplay).toEqual(callerBook);
+});
+
+it("uses the budget's own ES confidence, not the standalone DD metric or another tail", () => {
+  const replay = fixture();
+  replay.dates = ["2025-01-02", "2025-01-03", "2025-01-06"];
+  replay.trades.forEach((trade) => (trade.dateClosed = "2025-01-06"));
+  replay.marks!.values.push(
+    { tradeId: "a", date: "2025-01-03", netOpenPlPerContract: -1500 },
+    { tradeId: "b", date: "2025-01-03", netOpenPlPerContract: -750 },
+  );
+  const input = {
+    ...sizingInput(replay),
+    bookBudget: 0.13,
+    commonFactors: [0.5, 1],
+    bookBudgetRisk: { method: "bookExpectedShortfall" as const, confidence: 0.5 },
+  };
+  const result = sizeBookAtEqualStandaloneRisk(input);
+  // At factor 1 the two loss days are -15000/100000 and -7500/85000.
+  expect(result.commonFactor).toBe(1);
+  expect(result.bookRisk).toBeCloseTo((0.15 + 7500 / 85000) / 2, 14);
+  expect(result.bookBudgetUnit).toBe("loss_positive_decimal");
+  expect(result.riskUnit).toBe("percentage_points");
+  expect(result.bookResidualFromBudget).toBeCloseTo(result.bookRisk! - 0.13, 14);
+  expect(
+    sizeBookAtEqualStandaloneRisk({
+      ...input,
+      bookBudgetRisk: { method: "bookExpectedShortfall", confidence: 0.95 },
+    }).commonFactor,
+  ).toBe(0.5);
+  const absent = sizeBookAtEqualStandaloneRisk({ ...input, bookBudget: 0.01 });
+  expect(absent.budgetStatus).toBe("not attained within domain");
+  expect(absent.bookRisk).toBeNull();
+  expect(absent.bookResidualFromBudget).toBeNull();
+});
+
+it.each([0, 1, NaN, Infinity])("refuses invalid book ES confidence %s", (confidence) => {
+  expect(() =>
+    sizeBookAtEqualStandaloneRisk({
+      ...sizingInput(),
+      bookBudgetRisk: { method: "bookExpectedShortfall", confidence },
+    }),
+  ).toThrow(/Confidence must be finite and strictly between 0 and 1/);
+});
+
+it.each(["exclude", "reserve"] as const)(
+  "keeps fixed caps and feasible policy with ES parity and DD budgets under %s",
+  (ignoredBuyingPower) => {
+    const replay = fixture();
+    replay.ignoredRows = "markOnly";
+    replay.ignoredBuyingPower = ignoredBuyingPower;
+    replay.members.b.maxContractsPerTrade = 5;
+    replay.trades.push({
+      ...replay.trades[0],
+      id: "a-ignored",
+      entryGroupId: "ignored",
+      timeOpened: "09:31:00",
+      ignored: true,
+    });
+    replay.marks!.values.push({
+      tradeId: "a-ignored",
+      date: "2025-01-02",
+      netOpenPlPerContract: -1000,
+    });
+    const input = {
+      ...sizingInput(replay),
+      risk: { method: "standaloneExpectedShortfall" as const, confidence: 0.95 },
+      standaloneTarget: 0.1,
+      bookBudget: 10,
+      bookBudgetRisk: { method: "markedMaxDrawdownPct" as const },
+      commonFactors: [0.05, 0.1, 0.5, 1],
+      feasible: everyEntryTrades,
+    };
+    const result = sizeBookAtEqualStandaloneRisk(input);
+    expect(result.commonFactor).toBe(0.1);
+    expect(result.bookRisk).toBe(2.5);
+    expect(result.bookReplay!.declarations.ignoredBuyingPower).toBe(ignoredBuyingPower);
+    expect(result.bookReplay!.declarations.members.b.maxContractsPerTrade).toBe(5);
+    expect(result.feasibilityRejections!.book.count).toBe(1);
+    const rejected = sizeBookAtEqualStandaloneRisk({
+      ...input,
+      feasible: (book) =>
+        book.declarations.members.a.removed || book.declarations.members.b.removed
+          ? true
+          : { ok: false as const, reason: "book_policy" },
+    });
+    expect(rejected.budgetStatus).toBe("not attained within domain");
+    expect(rejected.feasibilityRejections!.book.count).toBe(4);
+  },
+);
 
 it("decomposes common-book tails with prior book equity and keeps negative offsets", () => {
   const input = fixture();

@@ -253,7 +253,7 @@ result exactly; false does not add `marked.members`. No MCP tool exposes
 `replayBook`; this option belongs to the library interface only.
 
 `sizeBookAtEqualStandaloneRisk({ replay, risk, standaloneTarget, bookBudget,
-memberWeightDomains, commonFactors, feasible? })` composes replay, fixed-cap search evaluations
+memberWeightDomains, commonFactors, feasible?, bookBudgetRisk? })` composes replay, fixed-cap search evaluations
 and the public confidence estimator. It is **CPC-only**, matching the all-CPC #4479
 caller books; any non-CPC member throws `Unsupported sizing: member <id> must use
 capitalPerContract`, including removed members. Supply complete marks and positive,
@@ -272,6 +272,21 @@ retuning individual members. `risk` is `{ method: "markedMaxDrawdownPct" }`
 (percentage points) or `{ method: "standaloneExpectedShortfall", confidence }`
 (loss-positive decimal ES, explicitly the negative of signed CVaR).
 Standalone ES uses each standalone replay's own equity denominator and tail.
+Optional `bookBudgetRisk` independently declares stage two as
+`{ method: "markedMaxDrawdownPct" }` (percentage points) or
+`{ method: "bookExpectedShortfall", confidence }` (loss-positive decimal).
+For example, `risk: { method: "standaloneExpectedShortfall", confidence: 0.95 }`,
+`standaloneTarget: 0.005`, `bookBudgetRisk: { method: "markedMaxDrawdownPct" }`
+and `bookBudget: 5` fit standalone ES95 references, then select the highest-return
+book with marked drawdown at most 5 percentage points over `commonFactors`.
+The references and final standalone risks still use `risk`; `bookRisk`,
+budget attainment and `bookResidualFromBudget` use `bookBudgetRisk`.
+Explicit declarations echo `riskUnit`, `bookBudgetRisk`, `bookBudgetUnit` and
+`bookResidualFromBudget` (book risk minus budget, or null without a qualifying book).
+Units are `percentage_points` or `loss_positive_decimal`. Book ES uses book equity
+and its own declared confidence, not standalone tails. Omission uses `risk` for
+both stages and preserves the previous output byte-for-byte, without new fields.
+
 Reference and final standalone risks, residuals from the original target, final
 book risk, whole-contract quantities and zero groups are returned. Exact reference
 attainment uses a numerical tolerance of 1e-10 in the declared risk unit; budget

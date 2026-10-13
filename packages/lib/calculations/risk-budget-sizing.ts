@@ -44,8 +44,11 @@ export interface EqualStandaloneRiskInput {
   risk: StandaloneRiskMeasure;
   /** Percentage points for marked DD; loss-positive decimal for ES. */
   standaloneTarget: number;
-  /** Same unit as standaloneTarget. */
+  /** In bookBudgetRisk units when declared; otherwise in the parity risk units. */
   bookBudget: number;
+  /** Stage-two book metric, independent of the standalone parity fit. Omission preserves output. */
+  bookBudgetRisk?:
+    { method: "markedMaxDrawdownPct" } | { method: "bookExpectedShortfall"; confidence: number };
   memberWeightDomains: Record<string, readonly number[]>;
   /** Positive common sizing multipliers: larger means lower CPC, more contracts. */
   commonFactors: readonly number[];
@@ -64,7 +67,11 @@ function markedReturns(input: BookReplayInput, result: BookReplayResult) {
   });
 }
 
-function measure(input: BookReplayInput, result: BookReplayResult, risk: StandaloneRiskMeasure) {
+function measure(
+  input: BookReplayInput,
+  result: BookReplayResult,
+  risk: StandaloneRiskMeasure | NonNullable<EqualStandaloneRiskInput["bookBudgetRisk"]>,
+) {
   if (!result.marked || result.insolvent || result.marked.insolvent) return null;
   if (risk.method === "markedMaxDrawdownPct") return result.marked.maxDrawdownPct;
   const signed = cvarFromReturnsAtConfidence(markedReturns(input, result), risk.confidence);
@@ -202,6 +209,9 @@ function contractEffects(input: BookReplayInput, result: BookReplayResult, id: s
  * Optional feasible uses the search's deterministic policy contract in both stages.
  * Standalone replays retain other members as removed; policies must respect that declaration.
  * Rejections are reported by stage only when supplied. No checkpoints or feasibleId are used.
+ * Optional bookBudgetRisk selects stage-two risk independently; standalone risks keep risk.
+ * Explicit budgets echo both metric units and bookResidualFromBudget (book risk minus budget).
+ * Omission preserves the previous result exactly.
  */
 export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
   if (
@@ -223,6 +233,15 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
     throw new RangeError("Invalid risk sizing: risk method");
   if (input.risk.method === "standaloneExpectedShortfall")
     cvarFromReturnsAtConfidence([], input.risk.confidence);
+  const budgetRisk = input.bookBudgetRisk ?? input.risk;
+  if (
+    budgetRisk.method !== "markedMaxDrawdownPct" &&
+    budgetRisk.method !== "standaloneExpectedShortfall" &&
+    budgetRisk.method !== "bookExpectedShortfall"
+  )
+    throw new RangeError("Invalid risk sizing: book budget risk method");
+  if (budgetRisk.method !== "markedMaxDrawdownPct")
+    cvarFromReturnsAtConfidence([], budgetRisk.confidence);
   // Validate the full replay first, without changing the caller's defaults or input.
   replayBook(input.replay);
   if (!input.replay.marks) throw new RangeError("Invalid risk sizing: marks required");
@@ -249,7 +268,11 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
     }
     return { count, reasons };
   };
-  const evaluate = (base: BookReplayInput, weights: Record<string, number>) => {
+  const evaluate = (
+    base: BookReplayInput,
+    weights: Record<string, number>,
+    risk: Parameters<typeof measure>[2] = input.risk,
+  ) => {
     const replay = scaled(base, weights);
     const result = replayBook(replay);
     // Fixed bounds make this an evaluation, not member-specific coordinate retuning.
@@ -266,7 +289,7 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
       weightPrecision: 10,
       allocationPrecision: 10,
       maxEvaluations: 2,
-      targetDrawdownPct: input.risk.method === "markedMaxDrawdownPct" ? input.bookBudget : 100,
+      targetDrawdownPct: risk.method === "markedMaxDrawdownPct" ? input.bookBudget : 100,
       calibrationMarginPct: 0,
       calibrationUsable: true,
       objective: "returnPct",
@@ -284,7 +307,7 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
     return {
       replay,
       result,
-      risk: measure(replay, result, input.risk),
+      risk: measure(replay, result, risk),
       feasibilityRejectionReason: search.evaluations[0]?.feasibilityRejectionReason,
       eligible: search.evaluations.some(
         (row) =>
@@ -330,7 +353,7 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
         );
         if (Object.values(weights).some((weight) => weight <= 0))
           throw new RangeError("Invalid risk sizing: combined weight rounds to zero");
-        return { factor, weights, ...evaluate(input.replay, weights) };
+        return { factor, weights, ...evaluate(input.replay, weights, budgetRisk) };
       })
     : [];
   const best = candidates.reduce<(typeof candidates)[number] | null>(
@@ -384,6 +407,20 @@ export function sizeBookAtEqualStandaloneRisk(input: EqualStandaloneRiskInput) {
     exactFinalParityClaimed: false as const,
     standaloneTarget: input.standaloneTarget,
     bookBudget: input.bookBudget,
+    ...(input.bookBudgetRisk
+      ? {
+          riskUnit:
+            input.risk.method === "markedMaxDrawdownPct"
+              ? ("percentage_points" as const)
+              : ("loss_positive_decimal" as const),
+          bookBudgetRisk: input.bookBudgetRisk,
+          bookBudgetUnit:
+            budgetRisk.method === "markedMaxDrawdownPct"
+              ? ("percentage_points" as const)
+              : ("loss_positive_decimal" as const),
+          bookResidualFromBudget: best ? best.risk! - input.bookBudget : null,
+        }
+      : {}),
     budgetStatus: best ? ("attained" as const) : ("not attained within domain" as const),
     commonFactor: best?.factor ?? null,
     bookRisk: best?.risk ?? null,
