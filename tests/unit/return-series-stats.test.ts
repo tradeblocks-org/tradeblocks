@@ -49,6 +49,46 @@ describe("return-series statistics public API", () => {
     expect(cvarFromReturns(returns)).toBe(-0.2);
   });
 
+  it("selects the configured discrete tail without changing signed decimal units", () => {
+    const returns = datedReturns(Array.from({ length: 102 }, (_, index) => (index - 50) / 100));
+    // At 90%, position 10.1 cuts between -0.40 and -0.39: eleven observations,
+    // -0.50 through -0.40, have an unweighted mean of -0.45.
+    expect(cvarFromReturns(returns, 0.9)).toBeCloseTo(-0.45, 14);
+    // At 99%, the cutoff includes -0.50 and -0.49, whose mean is -0.495.
+    expect(cvarFromReturns(returns, 0.99)).toBe(-0.495);
+    // Positive returns retain their sign, and ties at the cutoff are all included.
+    expect(cvarFromReturns(datedReturns([0.01, 0.02, 0.02, 0.1]), 0.5)).toBe(0.05 / 3);
+  });
+
+  it.each([
+    { values: [], expected: undefined },
+    { values: [-0.25], expected: -0.25 },
+    { values: [0.2, -0.1], expected: -0.1 },
+    { values: [0.1, 0.1, 0.2], expected: 0.1 },
+    { values: [0.3, -0.2, 0.1, -0.2], expected: -0.2 },
+    { values: Array.from({ length: 21 }, (_, index) => index / 100), expected: 0.005 },
+    { values: [-1e308, -1e307, ...Array<number>(19).fill(1.79e308)], expected: -5.5e307 },
+  ])("preserves the exact legacy default for $values", ({ values, expected }) => {
+    // Frozen outputs from the original literal-0.05 estimator, not another estimator.
+    expect(cvarFromReturns(datedReturns(values))).toBe(expected);
+    expect(cvarFromReturns(datedReturns(values), 0.95)).toBe(expected);
+  });
+
+  it.each([0, 1, -0.1, 1.1, NaN, Infinity, -Infinity])(
+    "throws a value-naming RangeError for invalid confidence %s even with no observations",
+    (confidence) => {
+      for (const returns of [[], datedReturns([-0.1, 0.1])]) {
+        expect(() => cvarFromReturns(returns, confidence)).toThrow(RangeError);
+        expect(() => cvarFromReturns(returns, confidence)).toThrow(`received ${confidence}`);
+      }
+    },
+  );
+
+  it("keeps empty and single-observation contracts at valid custom confidence levels", () => {
+    expect(cvarFromReturns([], 0.9)).toBeUndefined();
+    expect(cvarFromReturns(datedReturns([-0.25]), 0.99)).toBe(-0.25);
+  });
+
   it("calculates UPI using compounded annualized return and percent drawdowns", () => {
     const returns = datedReturns([0.1, -0.1, 0.05]);
     // Equity is 1.1, 0.99, 1.0395 and drawdowns are 0%, -10%, -5.5%.

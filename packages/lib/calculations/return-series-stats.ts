@@ -90,17 +90,28 @@ export function maxDrawdownFromReturns(
 }
 
 /**
- * Calculate CVaR at 95% in the same decimal unit and sign as the input returns.
- * The 5th-percentile cutoff uses linear interpolation between order statistics.
+ * Calculate CVaR in the same decimal unit and sign as the input returns.
+ * Confidence defaults to 0.95 and must be finite and strictly between 0 and 1.
+ * The (1 - confidence) percentile cutoff uses linear interpolation between order statistics.
  * The tail mean includes the discrete observations at or below that cutoff without fractional weighting.
+ * Returns undefined for an empty series; throws RangeError for invalid confidence, even on empty input.
  */
 export function cvarFromReturns(
   returns: ReadonlyArray<{ date: Date; return: number }>,
+  confidence = 0.95,
 ): number | undefined {
+  if (!Number.isFinite(confidence) || confidence <= 0 || confidence >= 1) {
+    throw new RangeError(
+      `Confidence must be finite and strictly between 0 and 1; received ${confidence}`,
+    );
+  }
+
   if (returns.length === 0) return undefined;
 
   const sortedReturns = returns.map((observation) => observation.return).sort((a, b) => a - b);
-  const position = (sortedReturns.length - 1) * 0.05;
+  // Preserve legacy cutoff arithmetic exactly: 1 - 0.95 !== 0.05 in floating point.
+  const tailProbability = confidence === 0.95 ? 0.05 : 1 - confidence;
+  const position = (sortedReturns.length - 1) * tailProbability;
   const lowerIndex = Math.floor(position);
   const upperIndex = Math.ceil(position);
   const fraction = position - lowerIndex;
