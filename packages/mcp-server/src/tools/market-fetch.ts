@@ -79,7 +79,8 @@ export function registerMarketFetchTools(
         "ThetaData MDDS bulk mode enumerates contracts, fetches concrete quote history in bounded batches, and reuses first-order greeks bands per expiration/day with concrete-greeks fallback for misses. " +
         "Writes to market.option_quote_minutes. The 'source' column tags Massive provider rows: 'nbbo' (real bid/ask via /v3/quotes when MASSIVE_DATA_TIER=quotes) or 'synth_close' (synthesized from /v2/aggs OHLCV close when the user's plan lacks /v3/quotes; bid=ask=close). ThetaData per-ticker rows are tagged 'nbbo'; ThetaData bulk rows are true NBBO and may persist source as NULL until the bulk row contract carries source. " +
         "Massive falls back automatically on Developer/lower plans; ThetaData (both modes) returns true NBBO. " +
-        "Returns status='unsupported' with a clear error only when the active provider lacks the requested mode (e.g., bulk-by-underlying on Massive).",
+        "Returns status='unsupported' with a clear error only when the active provider lacks the requested mode (e.g., bulk-by-underlying on Massive). " +
+        "Massive per-ticker results include requests[] with ticker/date, outcome (ok/empty/error), rows, pagesFetched and optional httpStatus/errorClass. Failed dates are discarded before caching; mixed outcomes return partial.",
       inputSchema: z.object({
         tickers: z
           .array(z.string())
@@ -146,13 +147,14 @@ export function registerMarketFetchTools(
         const mode = underlyings
           ? `bulk (${underlyings.join(",")})`
           : `per-ticker (${tickers?.length ?? 0})`;
-        // `partial` means some batches were logged-and-skipped. The structured
-        // `skipped[]` array on the result body carries the details; we surface
-        // the count in the summary so console callers see it.
+        // Declare both provider failures and enrichment skips in mixed runs.
         const partialSuffix =
-          result.status === "partial" && result.skipped
+          (result.status === "partial" && result.skipped
             ? ` — ${result.skipped.length} batch(es) skipped (see result.skipped[])`
-            : "";
+            : "") +
+          (result.requests?.some((request) => request.outcome === "error")
+            ? ` — ${result.error}`
+            : "");
         const summary =
           result.status === "unsupported"
             ? `Unsupported: ${result.error}`

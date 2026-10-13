@@ -1,4 +1,5 @@
 import type { CanonicalJsonAddress, Sha256Address } from "../provenance/canonical-json.ts";
+import type { QuoteRequestOutcome } from "../../utils/market-provider.ts";
 
 export type IngestStatus = "ok" | "partial" | "skipped" | "unsupported" | "error";
 
@@ -64,6 +65,8 @@ export interface IngestResult {
   dateRange?: { from: string; to: string };
   enrichment?: { from: string; to: string } | null;
   error?: string;
+  /** Provider receipts, including failed dates whose rows were discarded before caching. */
+  requests?: (QuoteRequestOutcome & { ticker: string; rows: number })[];
   /**
    * Batches that the ingest logged-and-skipped instead of aborting on. Present
    * only when `status === "partial"` (i.e. there is at least one skipped

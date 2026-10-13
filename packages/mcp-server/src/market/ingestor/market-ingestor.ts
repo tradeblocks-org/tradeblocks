@@ -569,9 +569,9 @@ export class MarketIngestor {
   }
 
   /**
-   * Per-ticker path: one provider call per OCC ticker over the full [from, to]
-   * range. Works on any provider that implements `fetchQuotes`. Used by
-   * callers that already know the exact contracts they care about.
+   * Per-ticker path: fetch receipts over [from, to], then write complete dates.
+   * Massive reports per-date outcomes; failed dates contain no cacheable rows.
+   * Providers without receipt support retain their existing output.
    */
   private async ingestQuotesByTicker(
     provider: MarketDataProvider,
@@ -591,11 +591,23 @@ export class MarketIngestor {
     let minDate: string | undefined;
     let maxDate: string | undefined;
     const skipped: IngestSkippedBatch[] = [];
+    const requests: NonNullable<IngestResult["requests"]> = [];
 
     for (const ticker of tickers) {
       let quotes: Awaited<ReturnType<NonNullable<MarketDataProvider["fetchQuotes"]>>>;
       try {
-        quotes = await provider.fetchQuotes(ticker, from, to);
+        const firstRequest = requests.length;
+        quotes = await provider.fetchQuotes(ticker, from, to, (receipt) => {
+          requests.push({ ticker, ...receipt, rows: 0 });
+        });
+        const rowsByDate = new Map<string, number>();
+        for (const key of quotes.keys()) {
+          const date = key.slice(0, 10);
+          rowsByDate.set(date, (rowsByDate.get(date) ?? 0) + 1);
+        }
+        for (let i = firstRequest; i < requests.length; i++) {
+          requests[i].rows = rowsByDate.get(requests[i].date) ?? 0;
+        }
       } catch (error) {
         const mapped = this.mapProviderFailure(provider, "quotes", ticker, error, "option");
         if (mapped) return mapped;
@@ -608,11 +620,23 @@ export class MarketIngestor {
       if (written.skipped.length > 0) skipped.push(...written.skipped);
     }
 
+    const failedRequests = requests.filter((request) => request.outcome === "error").length;
     return {
-      status: skipped.length > 0 ? "partial" : "ok",
+      status:
+        failedRequests > 0
+          ? failedRequests === requests.length
+            ? "error"
+            : "partial"
+          : skipped.length > 0
+            ? "partial"
+            : "ok",
       rowsWritten: totalRows,
       dateRange: minDate ? { from: minDate, to: maxDate! } : undefined,
       ...(skipped.length > 0 ? { skipped } : {}),
+      ...(requests.length > 0 ? { requests } : {}),
+      ...(failedRequests > 0
+        ? { error: `${failedRequests} quote request(s) failed; see requests[]` }
+        : {}),
     };
   }
 

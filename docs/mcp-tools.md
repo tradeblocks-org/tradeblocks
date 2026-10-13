@@ -109,6 +109,15 @@ See [Market Data Guide](market-data.md) for import examples, ticker formats, and
 For stored Greeks populated by `fetch_quotes`, see the
 [computed option-Greeks method](market-data.md#computed-option-greeks-method).
 
+Massive per-ticker `fetch_quotes` adds `requests[]` receipts with `ticker`,
+`date`, `outcome` (`ok`, `empty`, `error`), `rows`, `pagesFetched`, and optional
+`httpStatus`/`errorClass`. Failed ticker-dates are discarded before enrichment
+or caching, never represented as empty success. Mixed successful/failed dates
+return top-level `partial`; all failed dates return `error`; the summary also
+declares failures. Existing successful values, arguments, and opt-in provider
+configuration remain unchanged. Both NBBO and `synth_close` report receipts;
+ThetaData output is unchanged. See [per-request details](market-data.md#fetch_quotes).
+
 ## Underlying Registry
 
 | Tool                    | Description                                    |

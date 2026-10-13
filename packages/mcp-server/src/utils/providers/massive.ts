@@ -30,6 +30,7 @@ import type {
   BulkDownloadOptions,
   BulkDownloadResult,
   MinuteQuote,
+  QuoteRequestOutcome,
 } from "../market-provider.ts";
 import { computeLegGreeks } from "../black-scholes.ts";
 import { resolveMassiveDataTier } from "../massive-tier.ts";
@@ -285,7 +286,10 @@ async function fetchWithRetry(
 
     if (response.status === 429) {
       if (attempt === maxRetries) {
-        throw new Error("Massive.com rate limit exceeded — try again in a few minutes");
+        throw Object.assign(
+          new Error("Massive.com rate limit exceeded — try again in a few minutes"),
+          { httpStatus: response.status },
+        );
       }
       const retryAfter = response.headers.get("Retry-After");
       const backoffMs = retryAfter
@@ -432,6 +436,13 @@ export class MassiveProvider implements MarketDataProvider {
   }
 
   async fetchBars(options: FetchBarsOptions): Promise<BarRow[]> {
+    return this.fetchAggregateBars(options);
+  }
+
+  private async fetchAggregateBars(
+    options: FetchBarsOptions,
+    receipt?: Pick<QuoteRequestOutcome, "pagesFetched" | "httpStatus" | "errorClass">,
+  ): Promise<BarRow[]> {
     const apiKey = getApiKey();
     const { ticker, from, to, timespan = "day", multiplier = 1, assetClass = "stock" } = options;
 
@@ -449,12 +460,21 @@ export class MassiveProvider implements MarketDataProvider {
     while (url) {
       pageCount++;
       if (pageCount > MASSIVE_MAX_PAGES) {
+        if (receipt) receipt.errorClass = "pagination_limit";
         throw new Error(
           `Pagination safety limit reached (${MASSIVE_MAX_PAGES} pages) — possible API issue`,
         );
       }
 
+      if (receipt) {
+        receipt.httpStatus = undefined;
+        receipt.errorClass = "exception";
+      }
       const response = await fetchWithRetry(url, headers);
+      if (receipt) {
+        receipt.httpStatus = response.status;
+        receipt.errorClass = "http_status";
+      }
 
       if (response.status === 401) {
         throw new Error("MASSIVE_API_KEY rejected by Massive.com — check your key");
@@ -464,6 +484,7 @@ export class MassiveProvider implements MarketDataProvider {
         throw new Error(`Massive.com API error: HTTP ${response.status} ${response.statusText}`);
       }
 
+      if (receipt) receipt.errorClass = "invalid_payload";
       const json = await response.json();
 
       const parsed = MassiveAggregateResponseSchema.safeParse(json);
@@ -475,6 +496,10 @@ export class MassiveProvider implements MarketDataProvider {
       }
 
       const data = parsed.data;
+      if (receipt) {
+        receipt.pagesFetched++;
+        receipt.errorClass = "exception";
+      }
 
       for (const bar of data.results) {
         const row: BarRow = {
@@ -496,6 +521,7 @@ export class MassiveProvider implements MarketDataProvider {
         const nextUrlObj = new URL(data.next_url);
         const cursor = nextUrlObj.searchParams.get("cursor") ?? data.next_url;
         if (seenCursors.has(cursor)) {
+          if (receipt) receipt.errorClass = "pagination_limit";
           throw new Error(`Pagination loop detected — cursor repeated: ${cursor.slice(0, 50)}...`);
         }
         seenCursors.add(cursor);
@@ -512,24 +538,16 @@ export class MassiveProvider implements MarketDataProvider {
   }
 
   /**
-   * Fetches historical quotes (bid/ask) for an option ticker over a date range.
-   * Returns a Map keyed by "YYYY-MM-DD HH:MM" ET minute key.
-   * Any error (network, HTTP error, parse failure) silently returns an empty Map.
-   */
-  /**
-   * Fetch the last NBBO quote for each trading minute in the date range.
-   *
-   * Uses per-minute requests (`order=desc&limit=1`) in parallel batches.
-   * This is much faster than paginating through tick-level quotes: ~400
-   * small requests vs millions of raw NBBO ticks. With concurrency=20,
-   * a full day completes in ~6-7 seconds and results are cached so
-   * subsequent fetches are instant.
+   * Fetch paginated NBBO ticks, retaining the last quote per ET minute.
+   * Report each calendar day's receipt through the optional observer.
+   * Discard all pages for a failed date before returning any cacheable rows.
    */
   private async fetchQuotesForBars(
     apiTicker: string,
     headers: Record<string, string>,
     from: string,
     to: string,
+    onRequest?: (outcome: QuoteRequestOutcome) => void,
   ): Promise<Map<string, MinuteQuote>> {
     const result = new Map<string, MinuteQuote>();
 
@@ -540,8 +558,11 @@ export class MassiveProvider implements MarketDataProvider {
 
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       const day = d.getDay();
-      if (day === 0 || day === 6) continue; // skip weekends
-      const dateStr = d.toISOString().slice(0, 10);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      if (day === 0 || day === 6) {
+        onRequest?.({ date: dateStr, outcome: "empty", pagesFetched: 0 });
+        continue;
+      }
 
       // Convert RTH window (09:30-16:00 ET) to UTC using real America/New_York
       // timezone rules. Month-based DST guesses shift pre-DST March quotes by 1 hour.
@@ -554,20 +575,66 @@ export class MassiveProvider implements MarketDataProvider {
 
       const dayQuotes: MassiveQuote[] = [];
       let pages = 0;
-
+      let failure: QuoteRequestOutcome | undefined;
       while (url && pages < 50) {
-        pages++;
+        let httpStatus: number | undefined;
         try {
           const response = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
-          if (!response.ok) break;
+          httpStatus = response.status;
+          if (!response.ok) {
+            failure = {
+              date: dateStr,
+              outcome: "error",
+              httpStatus,
+              errorClass: "http_status",
+              pagesFetched: pages,
+            };
+            break;
+          }
           const json = await response.json();
           const parsed = MassiveQuotesResponseSchema.safeParse(json);
-          if (!parsed.success) break;
+          if (!parsed.success || !["OK", "DELAYED"].includes(parsed.data.status)) {
+            failure = {
+              date: dateStr,
+              outcome: "error",
+              httpStatus,
+              errorClass: "invalid_payload",
+              pagesFetched: pages,
+            };
+            break;
+          }
           dayQuotes.push(...parsed.data.results);
+          pages++;
           url = parsed.data.next_url ?? null;
-        } catch {
+        } catch (error) {
+          const name =
+            typeof error === "object" && error !== null && "name" in error ? error.name : "";
+          failure = {
+            date: dateStr,
+            outcome: "error",
+            ...(httpStatus !== undefined ? { httpStatus } : {}),
+            errorClass:
+              name === "TimeoutError" || name === "AbortError"
+                ? "timeout"
+                : name === "SyntaxError"
+                  ? "invalid_payload"
+                  : "exception",
+            pagesFetched: pages,
+          };
           break;
         }
+      }
+      if (!failure && url) {
+        failure = {
+          date: dateStr,
+          outcome: "error",
+          errorClass: "pagination_limit",
+          pagesFetched: pages,
+        };
+      }
+      if (failure) {
+        onRequest?.(failure);
+        continue;
       }
 
       // Aggregate tick quotes to minute-level NBBO (last quote per minute wins)
@@ -583,6 +650,11 @@ export class MassiveProvider implements MarketDataProvider {
       for (const [key, val] of byMinute) {
         result.set(key, val);
       }
+      onRequest?.({
+        date: dateStr,
+        outcome: byMinute.size > 0 ? "ok" : "empty",
+        pagesFetched: pages,
+      });
     }
 
     return result;
@@ -603,15 +675,43 @@ export class MassiveProvider implements MarketDataProvider {
     ticker: string,
     from: string,
     to: string,
+    onRequest?: (outcome: QuoteRequestOutcome) => void,
   ): Promise<Map<string, MinuteQuote>> {
-    const bars = await this.fetchBars({
-      ticker,
-      from,
-      to,
-      timespan: "minute",
-      multiplier: 1,
-      assetClass: "option",
-    });
+    const receipt: Pick<QuoteRequestOutcome, "pagesFetched" | "httpStatus" | "errorClass"> = {
+      pagesFetched: 0,
+    };
+    let bars: BarRow[];
+    try {
+      bars = await this.fetchAggregateBars(
+        {
+          ticker,
+          from,
+          to,
+          timespan: "minute",
+          multiplier: 1,
+          assetClass: "option",
+        },
+        receipt,
+      );
+    } catch (error) {
+      if (!onRequest) throw error;
+      const name = typeof error === "object" && error !== null && "name" in error ? error.name : "";
+      if (error instanceof Error && "httpStatus" in error && typeof error.httpStatus === "number") {
+        receipt.httpStatus = error.httpStatus;
+        receipt.errorClass = "http_status";
+      }
+      onRequest({
+        date: from,
+        outcome: "error",
+        pagesFetched: receipt.pagesFetched,
+        ...(receipt.httpStatus !== undefined ? { httpStatus: receipt.httpStatus } : {}),
+        errorClass:
+          name === "TimeoutError" || name === "AbortError"
+            ? "timeout"
+            : (receipt.errorClass ?? "exception"),
+      });
+      return new Map();
+    }
 
     const out = new Map<string, MinuteQuote>();
     for (const bar of bars) {
@@ -622,21 +722,41 @@ export class MassiveProvider implements MarketDataProvider {
       const key = `${bar.date} ${time}`;
       out.set(key, { bid: bar.close, ask: bar.close, source: "synth_close" });
     }
+    onRequest?.({
+      date: from,
+      outcome: out.size > 0 ? "ok" : "empty",
+      pagesFetched: receipt.pagesFetched,
+    });
     return out;
   }
 
-  async fetchQuotes(ticker: string, from: string, to: string): Promise<Map<string, MinuteQuote>> {
+  async fetchQuotes(
+    ticker: string,
+    from: string,
+    to: string,
+    onRequest?: (outcome: QuoteRequestOutcome) => void,
+  ): Promise<Map<string, MinuteQuote>> {
     const tier = resolveMassiveDataTier();
     if (tier !== "quotes") {
       // Developer / OHLC / trades tiers: /v3/quotes is gated. Fall back to
       // /v2/aggs minute bars and synthesize bid=ask=close. See
       // fetchQuotesViaMinuteBars JSDoc for the trade-off.
-      return this.fetchQuotesViaMinuteBars(ticker, from, to);
+      if (!onRequest || from === to) {
+        return this.fetchQuotesViaMinuteBars(ticker, from, to, onRequest);
+      }
+      const result = new Map<string, MinuteQuote>();
+      const end = new Date(to + "T00:00:00Z");
+      for (const d = new Date(from + "T00:00:00Z"); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+        const date = d.toISOString().slice(0, 10);
+        const quotes = await this.fetchQuotesViaMinuteBars(ticker, date, date, onRequest);
+        for (const [key, quote] of quotes) result.set(key, quote);
+      }
+      return result;
     }
     const apiKey = getApiKey();
     const apiTicker = toMassiveTicker(ticker, "option");
     const headers = { Authorization: `Bearer ${apiKey}` };
-    return this.fetchQuotesForBars(apiTicker, headers, from, to);
+    return this.fetchQuotesForBars(apiTicker, headers, from, to, onRequest);
   }
 
   async downloadFlatFile(date: string, assetClass: string): Promise<string | null> {

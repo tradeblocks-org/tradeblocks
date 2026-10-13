@@ -9,6 +9,11 @@ import { ensureMarketDataTables } from "../../../../src/db/market-schemas.ts";
 import { TickerRegistry } from "../../../../src/market/tickers/registry.ts";
 import type { MarketDataProvider } from "../../../../src/utils/market-provider.ts";
 import { MassiveProvider } from "../../../../src/utils/providers/massive.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { registerMarketFetchTools } from "../../../../src/tools/market-fetch.ts";
+import { closeConnection } from "../../../../src/db/connection.ts";
 
 describe("MarketIngestor.ingestQuotes", () => {
   let dataDir: string;
@@ -140,6 +145,188 @@ describe("MarketIngestor.ingestQuotes", () => {
 
     expect(result.status).toBe("ok");
     expect(result.rowsWritten).toBe(2);
+  });
+
+  it("declares mixed Massive quote requests partial and never caches a failed date", async () => {
+    const savedKey = process.env.MASSIVE_API_KEY;
+    const savedTier = process.env.MASSIVE_DATA_TIER;
+    process.env.MASSIVE_API_KEY = "test-key";
+    process.env.MASSIVE_DATA_TIER = "quotes";
+    const fetchSpy = jest.spyOn(globalThis, "fetch");
+    const quote = {
+      bid_price: 10,
+      ask_price: 11,
+      bid_size: 1,
+      ask_size: 1,
+      sequence_number: 1,
+      sip_timestamp: Date.parse("2026-01-05T14:30:00Z") * 1_000_000,
+    };
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            status: "OK",
+            request_id: "first",
+            results: [quote],
+            next_url: "https://api.massive.com/page2",
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(new Response("", { status: 403 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            status: "OK",
+            request_id: "second",
+            results: [
+              {
+                ...quote,
+                sip_timestamp: Date.parse("2026-01-06T14:30:00Z") * 1_000_000,
+              },
+            ],
+          }),
+        ),
+      );
+    try {
+      const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+      const ingestor = new MarketIngestor({
+        stores,
+        dataRoot: dataDir,
+        providerFactory: () => new MassiveProvider(),
+      });
+      const result = await ingestor.ingestQuotes({
+        tickers: ["SPXW260319C04800000"],
+        from: "2026-01-05",
+        to: "2026-01-06",
+      });
+      expect(result.status).toBe("partial");
+      expect(result.rowsWritten).toBe(1);
+      expect(result.requests).toEqual([
+        {
+          ticker: "SPXW260319C04800000",
+          date: "2026-01-05",
+          outcome: "error",
+          httpStatus: 403,
+          errorClass: "http_status",
+          pagesFetched: 1,
+          rows: 0,
+        },
+        {
+          ticker: "SPXW260319C04800000",
+          date: "2026-01-06",
+          outcome: "ok",
+          pagesFetched: 1,
+          rows: 1,
+        },
+      ]);
+      const failed = await stores.quote.readQuotes(
+        ["SPXW260319C04800000"],
+        "2026-01-05",
+        "2026-01-05",
+        [],
+      );
+      const complete = await stores.quote.readQuotes(
+        ["SPXW260319C04800000"],
+        "2026-01-06",
+        "2026-01-06",
+        [],
+      );
+      expect(failed.get("SPXW260319C04800000") ?? []).toHaveLength(0);
+      expect(complete.get("SPXW260319C04800000")).toHaveLength(1);
+    } finally {
+      fetchSpy.mockRestore();
+      if (savedKey === undefined) delete process.env.MASSIVE_API_KEY;
+      else process.env.MASSIVE_API_KEY = savedKey;
+      if (savedTier === undefined) delete process.env.MASSIVE_DATA_TIER;
+      else process.env.MASSIVE_DATA_TIER = savedTier;
+    }
+  });
+
+  it("fetch_quotes reports failures and genuine emptiness through actual MCP output", async () => {
+    const savedKey = process.env.MASSIVE_API_KEY;
+    const savedTier = process.env.MASSIVE_DATA_TIER;
+    process.env.MASSIVE_API_KEY = "test-key";
+    process.env.MASSIVE_DATA_TIER = "quotes";
+    const fetchSpy = jest.spyOn(globalThis, "fetch");
+    const server = new McpServer({ name: "quotes-test", version: "1.0.0" });
+    const client = new Client({ name: "quotes-client", version: "1.0.0" });
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    registerMarketFetchTools(server, dataDir, stores);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const scenarios = [
+        {
+          response: new Response("", { status: 403 }),
+          outcome: "error",
+          errorClass: "http_status",
+          httpStatus: 403,
+          pagesFetched: 0,
+        },
+        {
+          response: new Response(JSON.stringify({ broken: true })),
+          outcome: "error",
+          errorClass: "invalid_payload",
+          httpStatus: 200,
+          pagesFetched: 0,
+        },
+        { error: new Error("network"), outcome: "error", errorClass: "exception", pagesFetched: 0 },
+        {
+          error: new DOMException("deadline", "TimeoutError"),
+          outcome: "error",
+          errorClass: "timeout",
+          pagesFetched: 0,
+        },
+        {
+          response: new Response(
+            JSON.stringify({ status: "OK", request_id: "empty", results: [] }),
+          ),
+          outcome: "empty",
+          pagesFetched: 1,
+        },
+      ];
+      for (const scenario of scenarios) {
+        fetchSpy.mockReset();
+        if (scenario.error) fetchSpy.mockRejectedValueOnce(scenario.error);
+        else fetchSpy.mockResolvedValueOnce(scenario.response!);
+        const output = await client.callTool({
+          name: "fetch_quotes",
+          arguments: {
+            tickers: ["SPXW260319C04800000"],
+            from: "2026-01-05",
+            to: "2026-01-05",
+            provider: "massive",
+          },
+        });
+        const structured = output.structuredContent as Record<string, unknown>;
+        expect(structured.status).toBe(scenario.outcome === "error" ? "error" : "ok");
+        expect(structured.rowsWritten).toBe(0);
+        expect(structured.requests).toEqual([
+          {
+            ticker: "SPXW260319C04800000",
+            date: "2026-01-05",
+            outcome: scenario.outcome,
+            rows: 0,
+            pagesFetched: scenario.pagesFetched,
+            ...(scenario.errorClass ? { errorClass: scenario.errorClass } : {}),
+            ...(scenario.httpStatus !== undefined ? { httpStatus: scenario.httpStatus } : {}),
+          },
+        ]);
+        const text = (output.content as { text: string }[]).map((item) => item.text).join("\n");
+        if (scenario.outcome === "error") expect(text).toMatch(/Error:.*failed/);
+        else expect(text).toContain("ok: wrote 0 quote rows");
+      }
+    } finally {
+      await client.close();
+      await server.close();
+      await closeConnection();
+      fetchSpy.mockRestore();
+      if (savedKey === undefined) delete process.env.MASSIVE_API_KEY;
+      else process.env.MASSIVE_API_KEY = savedKey;
+      if (savedTier === undefined) delete process.env.MASSIVE_DATA_TIER;
+      else process.env.MASSIVE_DATA_TIER = savedTier;
+    }
   });
 
   it("errors when neither tickers nor underlyings is provided", async () => {

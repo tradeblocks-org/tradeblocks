@@ -276,6 +276,16 @@ export interface MinuteQuote {
   gamma_source?: string | null;
 }
 
+/** Provider request receipt; failed dates contribute no quote rows. */
+export interface QuoteRequestOutcome {
+  date: string;
+  outcome: "ok" | "empty" | "error";
+  httpStatus?: number;
+  errorClass?: "http_status" | "invalid_payload" | "exception" | "timeout" | "pagination_limit";
+  /** Successfully decoded pages, excluding the failing page. */
+  pagesFetched: number;
+}
+
 /** The contract every market data provider must implement. */
 export interface MarketDataProvider {
   readonly name: string;
@@ -283,8 +293,13 @@ export interface MarketDataProvider {
   capabilities(): ProviderCapabilities;
   fetchBars(options: FetchBarsOptions): Promise<BarRow[]>;
   fetchOptionSnapshot(options: FetchSnapshotOptions): Promise<FetchSnapshotResult>;
-  /** Best-effort bid/ask quotes keyed by "YYYY-MM-DD HH:MM" ET. Optional — not all providers support this. */
-  fetchQuotes?(ticker: string, from: string, to: string): Promise<Map<string, MinuteQuote>>;
+  /** Quotes keyed by ET minute. Optional observer reports request receipts when supported. */
+  fetchQuotes?(
+    ticker: string,
+    from: string,
+    to: string,
+    onRequest?: (outcome: QuoteRequestOutcome) => void,
+  ): Promise<Map<string, MinuteQuote>>;
   /**
    * Stream every contract's minute quotes for one underlying on one date via
    * the provider's wildcard/bulk endpoint. Yields chunks of `BulkQuoteRow[]`

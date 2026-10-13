@@ -307,6 +307,45 @@ Fetch option minute quotes from the configured provider and write to Parquet.
 - `from` — start date (`YYYY-MM-DD`)
 - `to` — end date (`YYYY-MM-DD`)
 
+**Massive per-request outcomes:** Per-ticker mode adds `requests[]` to the
+existing result, with one receipt per requested ticker and calendar date:
+
+```json
+{
+  "ticker": "SPY250117C00470000",
+  "date": "2025-01-07",
+  "outcome": "error",
+  "rows": 0,
+  "httpStatus": 403,
+  "errorClass": "http_status",
+  "pagesFetched": 0
+}
+```
+
+`outcome` is `ok` (rows available), `empty` (successful absence, including
+weekends skipped by the NBBO path), or `error`. `rows` counts returned minute
+quotes before enrichment, not necessarily rows written. `pagesFetched` counts
+successfully decoded pages, excluding the failed page; skipped weekends count
+zero. Errors include `httpStatus` when a response was received and an
+`errorClass`: `http_status`, `invalid_payload`, `exception`, `timeout`, or
+`pagination_limit` (the page safety cap or aggregate cursor guard).
+
+If any page fails, **all rows for that ticker-date are discarded**, before
+enrichment or quote-cache writes. Other successful dates remain available.
+The enclosing status is `error` if every request failed, otherwise `partial`
+when any request failed. The text summary declares the failure too. Genuine
+empty success still returns top-level `ok` with zero written rows.
+
+Both Massive NBBO and the `synth_close` fallback report receipts. Successful
+quote values and the existing result fields remain unchanged; no input option
+or new credential requirement is introduced. ThetaData does not implement the
+optional receipt observer; its existing output and bulk progress remain unchanged.
+The provider `fetchQuotes(ticker, from, to, onRequest?)` still returns its Map,
+and the optional observer receives `{date, outcome, httpStatus?, errorClass?,
+pagesFetched}`. Massive reports fetch failures through that observer, rather
+than throwing and losing good dates. Existing throwing behavior of the
+aggregate fallback without an observer is preserved.
+
 ### fetch_chain
 
 Fetch an option chain snapshot for an underlying on a given date.
