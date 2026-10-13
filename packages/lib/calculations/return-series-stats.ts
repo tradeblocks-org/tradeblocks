@@ -122,7 +122,15 @@ export function cvarFromReturnsAtConfidence(
   const sortedReturns = returns.map((observation) => observation.return).sort((a, b) => a - b);
   // Preserve legacy cutoff arithmetic exactly: 1 - 0.95 !== 0.05 in floating point.
   const tailProbability = confidence === 0.95 ? 0.05 : 1 - confidence;
-  const position = (sortedReturns.length - 1) * tailProbability;
+  const rawPosition = (sortedReturns.length - 1) * tailProbability;
+  // 1 - confidence can land an integral position just below its order statistic
+  // ((11 - 1) * (1 - 0.9) is 0.9999999999999998); snap rounding error, not real fractions.
+  // The literal 0.05 never undershoots, so the 95% result is unchanged.
+  const nearest = Math.round(rawPosition);
+  const position =
+    Math.abs(rawPosition - nearest) <= 8 * Number.EPSILON * Math.max(1, rawPosition)
+      ? nearest
+      : rawPosition;
   const lowerIndex = Math.floor(position);
   const upperIndex = Math.ceil(position);
   const fraction = position - lowerIndex;

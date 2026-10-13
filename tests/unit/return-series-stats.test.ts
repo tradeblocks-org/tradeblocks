@@ -68,6 +68,22 @@ describe("return-series statistics public API", () => {
   });
 
   it.each([
+    // (11 - 1) * (1 - 0.9) is 0.9999999999999998; the cutoff is the second order statistic.
+    {
+      confidence: 0.9,
+      values: Array.from({ length: 11 }, (_, index) => index / 100),
+      expected: 0.005,
+    },
+    // (6 - 1) * (1 - 0.8) is 0.9999999999999998 as well.
+    { confidence: 0.8, values: [0, 0.01, 0.02, 0.03, 0.04, 0.05], expected: 0.005 },
+  ])(
+    "keeps the order statistic at an integral $confidence cutoff despite rounding",
+    ({ confidence, values, expected }) => {
+      expect(cvarFromReturnsAtConfidence(datedReturns(values), confidence)).toBe(expected);
+    },
+  );
+
+  it.each([
     { values: [], expected: undefined },
     { values: [-0.25], expected: -0.25 },
     { values: [0.2, -0.1], expected: -0.1 },
