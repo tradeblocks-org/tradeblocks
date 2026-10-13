@@ -161,6 +161,57 @@ it.each([
   });
 });
 
+it.each([
+  [
+    "capital-per-contract to fixed",
+    { mode: "capitalPerContract", capitalPerContract: 500 },
+    { mode: "fixed", contracts: 12 },
+    2,
+    8,
+    980,
+  ],
+  [
+    "capital-per-contract to allocation",
+    { mode: "capitalPerContract", capitalPerContract: 500 },
+    { mode: "allocation", allocationPercentage: 120 },
+    2,
+    8,
+    980,
+  ],
+  [
+    "fixed to capital-per-contract",
+    { mode: "fixed", contracts: 6 },
+    { mode: "capitalPerContract", capitalPerContract: 100 },
+    6,
+    10,
+    1080,
+  ],
+  [
+    "allocation to capital-per-contract",
+    { mode: "allocation", allocationPercentage: 60 },
+    { mode: "capitalPerContract", capitalPerContract: 100 },
+    6,
+    10,
+    1080,
+  ],
+] as const)(
+  "uses the scheduled margin-cap mode gate for %s",
+  (_name, baseSizing, scheduledSizing, oldQuantity, newQuantity, endingFunds) => {
+    const value = fixture();
+    delete value.marks;
+    delete value.memberMarkedPl;
+    value.trades = value.trades.slice(0, 3);
+    value.members.a.sizing = baseSizing;
+    value.sizingSchedule!.a[0].sizing = scheduledSizing;
+    const result = replayBook(value);
+    expect(result.members[0].contractsPerEntry).toEqual([
+      { entryGroupId: "old", contracts: oldQuantity },
+      { entryGroupId: "new", contracts: newQuantity },
+    ]);
+    expect(result.endingFunds).toBe(endingFunds);
+  },
+);
+
 it("retains an admitted endpoint position and releases summed child reservations normally", () => {
   const value = fixture();
   delete value.marks;
