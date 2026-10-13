@@ -7,13 +7,24 @@ import type {
   DrawdownBudgetSearchResult,
 } from "@tradeblocks/lib";
 
-// Compile-time contract: the normalized result always carries a concrete objective.
-const declaredObjective = (
-  result: DrawdownBudgetSearchResult,
-): "returnPct" | "returnOverDrawdown" => result.declarations.objective;
-
-it("normalizes an omitted objective to a concrete declared objective", () => {
-  expect(declaredObjective(searchBookAtDrawdown(input()))).toBe("returnPct");
+// Compile-time contracts use the same public seam as runtime callers.
+it("preserves literal objectives and the legacy result annotation", () => {
+  const { objective: _objective, ...omitted } = input();
+  const legacy: "returnPct" = searchBookAtDrawdown(omitted).declarations.objective;
+  const explicit: "returnPct" = searchBookAtDrawdown({ ...input(), objective: "returnPct" })
+    .declarations.objective;
+  const ratio: "returnOverDrawdown" = searchBookAtDrawdown({
+    ...input(),
+    objective: "returnOverDrawdown",
+  }).declarations.objective;
+  const annotated: DrawdownBudgetSearchResult = searchBookAtDrawdown(omitted);
+  const annotatedObjective: "returnPct" = annotated.declarations.objective;
+  expect([legacy, explicit, ratio, annotatedObjective]).toEqual([
+    "returnPct",
+    "returnPct",
+    "returnOverDrawdown",
+    "returnPct",
+  ]);
 });
 
 it("observes committed progress without changing search results", () => {

@@ -2,6 +2,8 @@ import { replayBook } from "./book-replay.ts";
 import type { BookReplayInput, BookMember, BookReplayResult } from "./book-replay.ts";
 import { resampleStationaryBlocks } from "./monte-carlo.ts";
 
+type SearchObjective = "returnPct" | "returnOverDrawdown";
+
 export interface DrawdownBudgetSearchInput {
   replay: BookReplayInput;
   feasible?: (replay: BookReplayResult) => boolean | { ok: false; reason: string };
@@ -17,7 +19,7 @@ export interface DrawdownBudgetSearchInput {
   targetDrawdownPct: number;
   calibrationMarginPct: number;
   calibrationUsable: boolean;
-  objective?: "returnPct" | "returnOverDrawdown";
+  objective?: SearchObjective;
   nearOptimalRelativeTolerance: number;
   robust: { maxDrawdownPct: number; shrinkageFactors: number[] };
   dropOne: boolean;
@@ -41,7 +43,7 @@ export interface BookSearchEvaluation {
   executedIgnoredOnlyGroups: number;
   roundedToZero: string[];
 }
-export interface BookSearchStability {
+export interface BookSearchStability<O extends SearchObjective = "returnPct"> {
   status: "available" | "disabled" | "unavailable";
   reason: string | null;
   basis: "entry_day_cohorts_with_close_offsets";
@@ -61,13 +63,13 @@ export interface BookSearchStability {
         sourceIndices: number[];
         carriedRows: number;
       } & (
-        | { status: "available"; reason: null; search: DrawdownBudgetSearchResult }
+        | { status: "available"; reason: null; search: DrawdownBudgetSearchResult<O> }
         | { status: "unavailable"; reason: "missing_mark_coverage"; search: null }
       )
     >;
   }>;
 }
-export interface DrawdownBudgetSearchResult {
+export interface DrawdownBudgetSearchResult<O extends SearchObjective = "returnPct"> {
   status: "ok" | "refused";
   reason:
     | "no_feasible_candidate"
@@ -90,16 +92,16 @@ export interface DrawdownBudgetSearchResult {
   cardinalityUpperBound: number;
   /** Normalized request: `objective` is always present (omitted input means "returnPct"). */
   declarations: Omit<DrawdownBudgetSearchInput, "feasible" | "objective"> & {
-    objective: NonNullable<DrawdownBudgetSearchInput["objective"]>;
+    objective: O;
   };
   dropOne: Array<{
     memberId: string;
     redundant: boolean;
     best: BookSearchEvaluation | null;
     returnCostPct: number | null;
-    search: DrawdownBudgetSearchResult;
+    search: DrawdownBudgetSearchResult<O>;
   }>;
-  stability: BookSearchStability;
+  stability: BookSearchStability<O>;
   totalEvaluations: number;
   feasibilityRejections?: { count: number; reasons: Record<string, number> };
   warnings: string[];
@@ -217,9 +219,21 @@ function compareObjective(
  * Checkpoint-capable calls with feasible require feasibleId before any evaluation.
  */
 export function searchBookAtDrawdown(
+  input: Omit<DrawdownBudgetSearchInput, "objective"> & { objective?: "returnPct" },
+  options?: BookSearchOptions,
+): DrawdownBudgetSearchResult<"returnPct">;
+export function searchBookAtDrawdown<O extends SearchObjective>(
+  input: Omit<DrawdownBudgetSearchInput, "objective"> & { objective: O },
+  options?: BookSearchOptions,
+): DrawdownBudgetSearchResult<O>;
+export function searchBookAtDrawdown(
   input: DrawdownBudgetSearchInput,
   options?: BookSearchOptions,
-): DrawdownBudgetSearchResult {
+): DrawdownBudgetSearchResult<SearchObjective>;
+export function searchBookAtDrawdown(
+  input: DrawdownBudgetSearchInput,
+  options?: BookSearchOptions,
+): DrawdownBudgetSearchResult<SearchObjective> {
   if (!options?.onProgress && !options?.checkpoint && !options?.resumeFrom) return runSearch(input);
   if (input.feasible && !options.feasibleId)
     throw new RangeError("search_checkpoint_constraint_identity: feasibleId is required");
@@ -252,7 +266,7 @@ function runSearch(
   input: DrawdownBudgetSearchInput,
   execution?: SearchExecution,
   scope = "root",
-): DrawdownBudgetSearchResult {
+): DrawdownBudgetSearchResult<SearchObjective> {
   validateSearch(input);
   const ratio = input.objective === "returnOverDrawdown";
   const better = (a: BookSearchEvaluation, b: BookSearchEvaluation) =>
@@ -537,7 +551,7 @@ function runSearch(
         : !robust
           ? "no_robust_candidate"
           : null;
-  const dropOne: DrawdownBudgetSearchResult["dropOne"] = [];
+  const dropOne: DrawdownBudgetSearchResult<SearchObjective>["dropOne"] = [];
   if (winner && input.dropOne && input.calibrationUsable) {
     for (const id of ids) {
       const search = runSearch(
@@ -569,7 +583,7 @@ function runSearch(
       0,
     );
   if (feasibilityRejections) {
-    const merge = (search: DrawdownBudgetSearchResult) => {
+    const merge = (search: DrawdownBudgetSearchResult<SearchObjective>) => {
       const rejected = search.feasibilityRejections;
       if (!rejected) return;
       feasibilityRejections.count += rejected.count;
@@ -583,7 +597,7 @@ function runSearch(
   }
   const { feasible: _feasible, ...declaredInput } = input;
   const declarations = { ...declaredInput, objective: input.objective ?? "returnPct" } as const;
-  const result: DrawdownBudgetSearchResult = {
+  const result: DrawdownBudgetSearchResult<SearchObjective> = {
     status: reason ? "refused" : "ok",
     reason,
     drawdownBasis: input.replay.marks ? "offline_marked_equity" : "offline_closed_equity",
@@ -734,8 +748,8 @@ function validateSearch(input: DrawdownBudgetSearchInput): void {
 function bootstrapStability(
   input: DrawdownBudgetSearchInput,
   execution?: SearchExecution,
-): BookSearchStability {
-  const result: BookSearchStability = {
+): BookSearchStability<SearchObjective> {
+  const result: BookSearchStability<SearchObjective> = {
     status: "disabled",
     reason: null,
     basis: "entry_day_cohorts_with_close_offsets",
@@ -776,7 +790,7 @@ function bootstrapStability(
     input.stability.meanBlockDays,
     ...input.stability.sensitivityBlockDays,
   ]) {
-    const replicates: BookSearchStability["panels"][number]["replicates"] = [];
+    const replicates: BookSearchStability<SearchObjective>["panels"][number]["replicates"] = [];
     for (let replicate = 0; replicate < input.stability.replicates; replicate++) {
       const sourceIndices = resampleStationaryBlocks(
         indices,

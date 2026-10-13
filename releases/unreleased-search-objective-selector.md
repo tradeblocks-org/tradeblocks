@@ -4,4 +4,6 @@ The public `@tradeblocks/lib` calculation `searchBookAtDrawdown` now accepts opt
 
 The objective scores a single replay: the Wizzy joint study's minimum ratio over reserve/exclude policies and its CPC/factor tie-breaks still require a caller-owned wrapper, for example two searches or a `feasible`-based joint check.
 
+The generic result type defaults to the legacy `"returnPct"` literal and infers `"returnOverDrawdown"` for explicit ratio calls, preserving `declarations.objective` types without changing runtime results.
+
 Positive-return candidates with nonpositive drawdown rank first by return, positive-drawdown candidates rank next by the signed ratio, and nonpositive-return candidates with nonpositive drawdown rank last by return. Exact ties keep the first observed candidate. Non-finite ratios throw. Ratio results add `objectiveTier` and the finite winner `objectiveValue`, or null for an undefined ratio or refusal; `drawdownBasis` declares the denominator's basis. Return-cost fields remain realized-return differences. This is a library-only option: MCP tools, replay semantics, sizing helpers and provider requirements are unchanged.
