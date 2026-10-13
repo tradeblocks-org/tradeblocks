@@ -626,7 +626,7 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           );
           if (missingPl.length > 0) {
             throw new Error(
-              `marked-daily requires reported daily P/L on every daily-log row; ${missingPl.length} row(s) lack it, first ${missingPl[0].date.toISOString().slice(0, 10)}. Zero returns would be fabricated.`,
+              `marked-daily requires reported daily P/L on every daily-log row; ${missingPl.length} row(s) lack it, first ${formatDateKey(missingPl[0].date)}. Zero returns would be fabricated.`,
             );
           }
           const logs = [...block.dailyLogs].sort((a, b) => a.date.getTime() - b.date.getTime());
