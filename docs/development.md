@@ -449,6 +449,9 @@ the legacy result without new metadata. The ratio divides closed-funds return
 by the same drawdown used for feasibility, never by an unmarked substitute.
 Coordinate moves, progress best, winner, robust shrinkage, near-optimal regions,
 drop-one and every stability/sensitivity search use that same ranking.
+The objective scores a single replay: the Wizzy joint study's minimum ratio
+over reserve/exclude policies and its CPC/factor tie-breaks still require a
+caller-owned wrapper, for example two searches or a `feasible`-based joint check.
 
 The ratio has three tiers: positive return with drawdown ≤ 0 ranks first by
 return; positive drawdown ranks next by the exact signed ratio (negative returns

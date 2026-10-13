@@ -1366,3 +1366,80 @@ it("orders negative closed returns by return when open gains keep marked drawdow
     best: { weights: { a: 0.5, b: 1 }, returnPct: -4, maxDrawdownPct: 0 },
   });
 });
+
+it("rejects return-increasing ratio-degrading moves under a bounded coordinate budget", () => {
+  const value = ratioInput();
+  value.objective = "returnOverDrawdown";
+  value.replay.members.b = { ...value.replay.members.a, sizing: { mode: "fixed", contracts: 2 } };
+  value.replay.trades.push({
+    ...value.replay.trades[1],
+    id: "b",
+    entryGroupId: "b",
+    memberId: "b",
+  });
+  value.replay.simultaneousOrder.push("b");
+  value.weightBounds.b = { min: 0, max: 1 };
+  value.initialWeights = [{ a: 1, b: 1 }];
+  value.maxEvaluations = 4;
+  const result = searchBookAtDrawdown(value);
+  expect(result).toMatchObject({
+    termination: "budget",
+    k: 4,
+    objectiveValue: 6.5,
+    best: { weights: { a: 0.5, b: 0.5 }, returnPct: 26, maxDrawdownPct: 4 },
+  });
+});
+
+it("warns when shrinkage improves the ratio despite reducing realized return", () => {
+  const value = ratioInput();
+  value.objective = "returnOverDrawdown";
+  value.weightBounds.a.min = 0;
+  value.maxEvaluations = 3;
+  value.robust.shrinkageFactors = [1, 0.5];
+  const result = searchBookAtDrawdown(value);
+  expect(result).toMatchObject({
+    objectiveValue: 3,
+    best: { weights: { a: 1 }, returnPct: 30, maxDrawdownPct: 10 },
+    robust: { weights: { a: 0.5 }, returnPct: 16, maxDrawdownPct: 4 },
+    robustReturnCostPct: 14,
+  });
+  expect(result.warnings.some((warning) => warning.includes("shrinkage-only"))).toBe(true);
+});
+
+it("keeps high numeric ratios out of a zero-drawdown winner's near-optimal tier", () => {
+  const value = ratioInput();
+  value.objective = "returnOverDrawdown";
+  value.replay.members.b = { ...value.replay.members.a, sizing: { mode: "fixed", contracts: 1 } };
+  value.replay.trades.push({
+    ...value.replay.trades[1],
+    id: "b",
+    entryGroupId: "b",
+    memberId: "b",
+    netPlPerContract: 10,
+  });
+  value.replay.simultaneousOrder.push("b");
+  value.weightBounds = { a: { min: 0, max: 1 }, b: { min: 1, max: 1 } };
+  value.initialWeights = [{ a: 1, b: 1 }];
+  const result = searchBookAtDrawdown(value);
+  expect(result).toMatchObject({
+    objectiveTier: "zeroDrawdown",
+    objectiveValue: null,
+    best: { weights: { a: 0, b: 1 }, returnPct: 1, maxDrawdownPct: 0 },
+  });
+  expect(result.nearOptimal.map((e) => e.weights)).toEqual([{ a: 0, b: 1 }]);
+  expect(
+    result.evaluations.some(
+      (e) => e.feasible && e.maxDrawdownPct! > 0 && e.returnPct / e.maxDrawdownPct! > 1,
+    ),
+  ).toBe(true);
+});
+
+it("applies relative near-optimal tolerance to the magnitude of a negative ratio winner", () => {
+  const value = ratioInput();
+  value.objective = "returnOverDrawdown";
+  value.replay.trades[1].netPlPerContract = 0;
+  const result = searchBookAtDrawdown(value);
+  expect(result.objectiveValue).toBe(-1);
+  expect(result.nearOptimal.map((e) => e.weights.a)).toEqual([0.5, 1]);
+  expect(result.weightRanges.a).toEqual({ min: 0.5, max: 1 });
+});
