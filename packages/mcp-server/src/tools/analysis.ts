@@ -3,6 +3,10 @@
  *
  * Tier 2 advanced analysis MCP tools for walk-forward analysis, Monte Carlo simulation,
  * correlation analysis, tail risk, and position sizing.
+ *
+ * run_monte_carlo keeps trade-cohort defaults and adds opt-in marked-daily
+ * portfolio-log returns: the shared statistics formula, stationary blocks
+ * without synthetic trade losses, and decimal drawdown/horizon quantiles.
  */
 
 import { z } from "zod";
@@ -18,6 +22,7 @@ import {
   singleTapeWalkForwardByTrades,
   ABSOLUTE_SIZING_PERCENTAGE_ERROR,
   runMonteCarloSimulation,
+  dailyLogReturns,
   calculateCorrelationMatrix,
   calculateCorrelationAnalytics,
   performTailRiskAnalysis,
@@ -37,6 +42,17 @@ function filterByStrategy(trades: Trade[], strategy?: string): Trade[] {
   return trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
 }
 
+/** Linear-interpolated decimal quantiles of per-path marked risk and return. */
+function pathQuantiles(values: number[]) {
+  values.sort((a, b) => a - b);
+  const quantile = (p: number) => {
+    const rank = (values.length - 1) * p;
+    const lower = Math.floor(rank);
+    const upper = Math.ceil(rank);
+    return values[lower] + (values[upper] - values[lower]) * (rank - lower);
+  };
+  return { p5: quantile(0.05), p50: quantile(0.5), p95: quantile(0.95), p99: quantile(0.99) };
+}
 /**
  * Register all analysis MCP tools
  */
@@ -456,10 +472,10 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             "Size of resample pool (how many recent trades/days to sample from). If not specified, uses all available data.",
           ),
         resampleMethod: z
-          .enum(["trades", "daily", "percentage"])
+          .enum(["trades", "daily", "percentage", "marked-daily"])
           .default("trades")
           .describe(
-            "What to resample: 'trades' (individual trade P&L), 'daily' (daily aggregated returns), 'percentage' (percentage returns for compounding strategies). Under 'percentage', zeroBalancePaths is structurally 0 — per-step returns clamp at -100% of current equity, so capital can never cross zero — and probabilityOfRuin (via ruinThresholdPct) is the meaningful ruin statistic.",
+            "What to resample: 'trades' (individual trade P&L), 'daily' (date-opened trade P&L sums), 'percentage' (reconstructed trade-cohort percentage returns), or opt-in 'marked-daily' (imported portfolio daily-log returns, matching get_statistics). Marked-daily requires at least five daily-log rows, refuses strategy filters, iid and explicit worst-case injection, and uses stationary blocks without synthetic trade losses. Percentage returns clamp each loss at -100%; read probabilityOfRuin rather than zeroBalancePaths.",
           ),
         resampleMode: z
           .enum(["stationary-block", "iid"])
@@ -509,8 +525,10 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           ),
         includeWorstCase: z
           .boolean()
-          .default(true)
-          .describe("Enable worst-case scenario injection (default: true)"),
+          .optional()
+          .describe(
+            "Enable trade-derived worst-case injection (default: true for existing modes, false for marked-daily; explicit true is refused in marked-daily)",
+          ),
         worstCasePercentage: z
           .number()
           .min(0)
@@ -560,7 +578,7 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
       tradesPerYear: tradesPerYearParam,
       randomSeed,
       normalizeTo1Lot,
-      includeWorstCase,
+      includeWorstCase: includeWorstCaseParam,
       worstCasePercentage,
       worstCaseMode,
       worstCaseSizing,
@@ -568,6 +586,8 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
       historicalInitialCapital,
     }) => {
       try {
+        const markedDaily = resampleMethod === "marked-daily";
+        const includeWorstCase = includeWorstCaseParam ?? !markedDaily;
         // Reject the one incoherent combination up front, with the same
         // message the calculation library uses, so callers see it whether or
         // not injection would have created any synthetic losses.
@@ -579,6 +599,88 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
         }
 
         const block = await loadBlock(baseDir, blockId);
+        if (markedDaily) {
+          if (strategy !== undefined) {
+            throw new Error(
+              "marked-daily refuses strategy filters: the daily log represents the whole portfolio.",
+            );
+          }
+          if (includeWorstCase) {
+            throw new Error(
+              "marked-daily refuses worst-case injection: synthetic trade losses are not marked daily returns.",
+            );
+          }
+          if (resampleMode === "iid") {
+            throw new Error("marked-daily requires stationary-block resampling.");
+          }
+          if (normalizeTo1Lot) {
+            throw new Error("marked-daily cannot normalize whole-portfolio daily logs to one lot.");
+          }
+          if (!block.dailyLogs?.length) {
+            throw new Error(
+              "marked-daily requires an imported daily log; no trade-P&L fallback is available.",
+            );
+          }
+          const logs = [...block.dailyLogs].sort((a, b) => a.date.getTime() - b.date.getTime());
+          const returns = dailyLogReturns(logs).map((item) => item.return);
+          const initialCapital = initialCapitalParam ?? logs[0].netLiquidity - logs[0].dailyPl;
+          if (!Number.isFinite(initialCapital) || initialCapital <= 0) {
+            throw new Error(
+              "marked-daily requires positive initial capital; supply initialCapital if the first daily-log denominator is nonpositive.",
+            );
+          }
+          const seed = randomSeed ?? Math.floor(Math.random() * 0x100000000);
+          const params: MonteCarloParams = {
+            numSimulations,
+            simulationLength: simulationLengthParam ?? returns.length,
+            resampleWindow,
+            resampleMethod: "percentage",
+            precomputedReturns: returns,
+            resampleMode: "stationary-block",
+            meanBlockLength,
+            ruinThresholdPct,
+            initialCapital,
+            tradesPerYear: tradesPerYearParam ?? 252,
+            randomSeed: seed,
+            worstCaseEnabled: false,
+          };
+          const result = runMonteCarloSimulation([], params);
+          const drawdown = pathQuantiles(result.simulations.map((item) => item.maxDrawdown));
+          const horizonReturn = pathQuantiles(result.simulations.map((item) => item.totalReturn));
+          return createToolOutput(
+            `Marked daily Monte Carlo: ${blockId} | ${numSimulations} sims | Horizon: ${params.simulationLength} daily-log observations | 95th percentile max drawdown: ${formatPercent(drawdown.p95 * 100)}`,
+            {
+              blockId,
+              strategy: null,
+              parameters: {
+                numSimulations,
+                simulationLength: params.simulationLength,
+                resampleWindow: resampleWindow ?? null,
+                resampleMethod: "marked-daily",
+                resampleMode: "stationary-block",
+                meanBlockLength: result.effectiveMeanBlockLength,
+                ruinThresholdPct: ruinThresholdPct ?? null,
+                initialCapital,
+                tradesPerYear: params.tradesPerYear,
+                randomSeed: seed,
+                worstCaseEnabled: false,
+              },
+              markedReturns: {
+                source: "imported_daily_log",
+                returnDefinition: "dailyPl / (netLiquidity - dailyPl); 0 when denominator <= 0",
+                resampling: "stationary-block",
+                worstCaseInjection: "disabled (marked-return input)",
+                horizon: params.simulationLength,
+                horizonUnit: "daily_log_observations",
+                units: "decimal_return",
+                maxDrawdownQuantiles: { p50: drawdown.p50, p95: drawdown.p95, p99: drawdown.p99 },
+                horizonReturnQuantiles: horizonReturn,
+              },
+              statistics: result.statistics,
+              actualResamplePoolSize: result.actualResamplePoolSize,
+            },
+          );
+        }
         let trades = block.trades;
 
         // Apply strategy filter

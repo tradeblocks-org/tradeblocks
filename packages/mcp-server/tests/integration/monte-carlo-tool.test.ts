@@ -138,6 +138,16 @@ describe("run_monte_carlo input schema", () => {
 });
 
 describe("run_monte_carlo resampling echo", () => {
+  it.each(["trades", "daily", "percentage"])(
+    "preserves the seeded baseline response for %s",
+    async (resampleMethod) => {
+      const explicit = await runTool({ ...BASE_INPUT, resampleMethod });
+      expect(explicit).toMatchSnapshot();
+      if (resampleMethod === "trades") {
+        expect(await runTool(BASE_INPUT)).toEqual(explicit);
+      }
+    },
+  );
   it("reports the auto mean block length actually used", async () => {
     const { data } = await runTool(BASE_INPUT);
 

@@ -37,6 +37,39 @@ function createMockTrade(overrides: Partial<Trade> = {}): Trade {
 }
 
 describe("Monte Carlo Simulation", () => {
+  it("runs a supplied percentage pool without trades and still requires five samples", () => {
+    const params: MonteCarloParams = {
+      numSimulations: 2,
+      simulationLength: 5,
+      resampleMethod: "percentage",
+      precomputedReturns: [0.1, 0.1, 0.1, 0.1, 0.1],
+      initialCapital: 100,
+      tradesPerYear: 252,
+      randomSeed: 42,
+    };
+    const result = runMonteCarloSimulation([], params);
+    for (const simulation of result.simulations) {
+      expect(simulation.finalValue).toBeCloseTo(161.051, 10);
+    }
+    expect(() =>
+      runMonteCarloSimulation([], {
+        ...params,
+        precomputedReturns: [0.1, 0.1, 0.1, 0.1],
+      }),
+    ).toThrow("Found 4 samples, need at least 5");
+    expect(() =>
+      runMonteCarloSimulation([], {
+        ...params,
+        precomputedReturns: [],
+      }),
+    ).toThrow("Found 0 samples, need at least 5");
+    expect(() =>
+      runMonteCarloSimulation([], {
+        ...params,
+        resampleMethod: "trades",
+      }),
+    ).toThrow("need at least 10");
+  });
   describe("getTradeResamplePool", () => {
     it("should return all trades when no resample window specified", () => {
       const trades = [

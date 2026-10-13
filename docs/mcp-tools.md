@@ -154,6 +154,71 @@ For stored Greeks populated by `fetch_quotes`, see the
 | `what_if_scaling`             | What-if analysis for position sizing changes                 |
 | `paired_bootstrap_comparison` | Paired bootstrap intervals for two strategy runs             |
 
+### Monte Carlo input series and marked-account risk
+
+`run_monte_carlo` defaults remain trade-based. Select `resampleMethod` explicitly
+when interpreting account risk:
+
+- `trades` (default): reported trade P/L dollars, sorted by **date opened**;
+  optional `normalizeTo1Lot` divides each trade's P/L by its contract count.
+- `daily`: sums those trade P/L dollars by **date opened**, keeping only dates
+  with trades. These are opening-date cohorts, not daily marked-account P/L,
+  and do not include idle days.
+- `percentage`: reconstructs capital from the first trade's
+  `fundsAtClose - pl` (or `historicalInitialCapital`), divides each opening-date
+  ordered trade's P/L by running capital, and adds that P/L to capital before
+  the next trade. Nonpositive capital yields zero returns for subsequent trades.
+  It is a trade-cohort reconstruction, not imported daily NLV risk.
+- `marked-daily` (opt-in): uses the imported **whole-portfolio daily log**, sorted
+  by its calendar dates, including every provided row and idle day. It calls
+  the same library `dailyLogReturns` calculation used by `get_statistics`:
+  `dailyPl / (netLiquidity - dailyPl)` as a decimal, or zero when that denominator
+  is nonpositive. No external-flow adjustment or adjacent-row reconstruction
+  is performed. Deposits/withdrawals therefore affect the denominator through
+  reported NLV; the `withdrawn` column is not separately added back or deducted.
+  This is not a separately cash-flow-neutralized time-weighted return. With no
+  external flows and consistent daily P/L, the denominator equals prior NLV,
+  so the formula equals `NLV_t / NLV_(t-1) - 1`. The first row uses its reported
+  P/L and NLV to infer the pre-observation balance rather than dropping that row.
+
+Existing modes require at least ten trades and a pool of at least five samples.
+They default to stationary-block resampling and support `resampleMode: "iid"`
+and synthetic trade-loss injection. `marked-daily` requires at least five
+daily-log samples after `resampleWindow`; missing/short logs return an error,
+**never** a trade-P/L fallback. Strategy filters (including an explicitly
+supplied `"all"`), one-lot normalization, `resampleMode: "iid"`, and explicit
+`includeWorstCase: true` are refused. Marked mode uses stationary blocks and
+disables trade-derived synthetic losses; both choices are declared in the
+result. `includeWorstCase` defaults to false only for this mode.
+
+`simulationLength` is the number of sampled observations, not elapsed calendar
+days. When omitted it is the trade count for existing modes and the full daily-log
+row count for marked mode; an explicit length retains the minimum of ten.
+`resampleWindow` selects the most recent observations. Marked mode infers starting
+capital from the first row's `netLiquidity - dailyPl`; supply a positive
+`initialCapital` if that value is nonpositive. Annualization defaults to 252
+observations/year for marked mode and can be overridden by `tradesPerYear`.
+Percentage and marked paths compound their returns and clamp per-step losses at
+-100% of current equity; use `ruinThresholdPct`/`probabilityOfRuin` for ruin risk.
+
+Marked output contains:
+
+- `parameters.randomSeed`: the supplied seed or a generated replayable seed;
+- `parameters.meanBlockLength`: the effective requested or auto block length
+  (auto is rounded cube root of the actual pool size);
+- `markedReturns.source`, `returnDefinition`, `resampling`,
+  `worstCaseInjection`, `horizon`, `horizonUnit: "daily_log_observations"`,
+  and `units: "decimal_return"`;
+- `markedReturns.maxDrawdownQuantiles`: p50, p95, p99 of each path's maximum
+  peak-to-trough decline, expressed as positive decimal depths;
+- `markedReturns.horizonReturnQuantiles`: p5, p50, p95, p99 of the compounded
+  total return at the declared horizon (negative values are losses).
+
+Quantiles interpolate linearly between sorted paths at rank `(N - 1) * p`.
+These differ from the existing `percentileBands`, which contain terminal
+**equity dollars**, not return or maximum-drawdown quantiles. Existing modes'
+response shape, defaults and seeded results are unchanged.
+
 ## Edge Decay
 
 | Tool                               | Description                                          |

@@ -1110,7 +1110,7 @@ function calculateSharpeRatio(returns: number[], periodsPerYear: number): number
 /**
  * Run Monte Carlo simulation
  *
- * @param trades - Historical trade data
+ * @param trades - Historical trade data; may be empty for precomputed percentage returns
  * @param params - Simulation parameters
  * @returns MonteCarloResult with all simulations and analysis
  */
@@ -1119,7 +1119,9 @@ export function runMonteCarloSimulation(
   params: MonteCarloParams,
 ): MonteCarloResult {
   // Validate inputs
-  if (trades.length < 10) {
+  const hasPrecomputedReturns =
+    params.resampleMethod === "percentage" && params.precomputedReturns !== undefined;
+  if (!hasPrecomputedReturns && trades.length < 10) {
     throw new Error(
       `Insufficient trades for Monte Carlo simulation. Found ${trades.length} trades, need at least 10.`,
     );
@@ -1164,10 +1166,10 @@ export function runMonteCarloSimulation(
     resamplePool = dailyPLs;
   } else {
     // Percentage returns resampling (for compounding strategies)
-    if (params.precomputedReturns && params.precomputedReturns.length > 0) {
+    if (hasPrecomputedReturns) {
       // Use pre-computed returns directly (e.g., margin-based returns)
       const precomputedPool = getPercentageResamplePool(
-        params.precomputedReturns,
+        params.precomputedReturns!,
         params.resampleWindow,
       );
       actualResamplePoolSize = precomputedPool.length;

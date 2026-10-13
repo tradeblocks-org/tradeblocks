@@ -53,6 +53,23 @@ function hasDailyLog(entries?: DailyLogEntry[]): entries is DailyLogEntry[] {
   return !!entries?.length;
 }
 
+/**
+ * Imported daily-log decimal returns used by portfolio Sharpe and Sortino.
+ * The denominator is current net liquidity minus reported daily P/L, not the
+ * adjacent log's NLV. External flows are not independently adjusted; a
+ * nonpositive denominator produces zero, matching the statistics methodology.
+ * Preserves input order; callers sampling time blocks must supply sorted logs.
+ */
+export function dailyLogReturns(dailyLogs: DailyLogEntry[]): DailyReturnWithDate[] {
+  return dailyLogs.map((entry) => {
+    const previousValue = entry.netLiquidity - entry.dailyPl;
+    return {
+      date: new Date(entry.date),
+      return: previousValue > 0 ? entry.dailyPl / previousValue : 0,
+    };
+  });
+}
+
 /** Annual percentage growth between the earliest and latest marked daily-log observations. */
 export function markedCagrFromDailyLogs(dailyLogs: DailyLogEntry[]): number | undefined {
   if (dailyLogs.length < 2) return undefined;
@@ -752,15 +769,7 @@ export class PortfolioStatsCalculator {
     dailyLogEntries?: DailyLogEntry[],
   ): DailyReturnWithDate[] {
     if (dailyLogEntries && dailyLogEntries.length > 0) {
-      return dailyLogEntries.map((entry) => {
-        // Calculate previous day's portfolio value (net liquidity minus today's P/L)
-        const previousValue = entry.netLiquidity - entry.dailyPl;
-        const dailyReturn = previousValue > 0 ? entry.dailyPl / previousValue : 0;
-        return {
-          date: new Date(entry.date),
-          return: dailyReturn,
-        };
-      });
+      return dailyLogReturns(dailyLogEntries);
     }
 
     // Calculate from trade data
