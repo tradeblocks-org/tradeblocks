@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   buildRealizedEquityCurveByCloseDate,
   buildRealizedDrawdownSeries,
@@ -208,6 +209,66 @@ describe("public close-date realized calculations", () => {
 
   it.each([0, 21, 1.5, NaN, Infinity])("refuses invalid episode count %s", (count) => {
     expect(() => buildRealizedDrawdownAttributionByCloseDate(trades, 5, count)).toThrow(RangeError);
+  });
+
+  it.each([0, -100])("reports zero percentage depth for a nonpositive peak of %s", (peak) => {
+    const loss = { ...trade("2026-01-05", "2026-01-05", -50), fundsAtClose: peak - 50 };
+    expect(buildRealizedDrawdownAttributionByCloseDate([loss], 5, 1)?.episodes).toMatchObject([
+      {
+        drawdownPeriod: {
+          peakEquity: peak,
+          troughEquity: peak - 50,
+          maxDrawdown: 50,
+          maxDrawdownPct: 0,
+        },
+        periodStats: { totalTrades: 1, totalPl: -50 },
+      },
+    ]);
+  });
+
+  it("keeps the earliest equal trough and stops attribution at that trade", () => {
+    const tape = [
+      trade("2026-01-05", "2026-01-05", 100, "Peak"),
+      trade("2026-01-06", "2026-01-06", -200, "First trough"),
+      trade("2026-01-07", "2026-01-07", 50, "Rebound"),
+      trade("2026-01-08", "2026-01-08", -50, "Equal trough"),
+    ];
+    expect(buildRealizedDrawdownAttributionByCloseDate(tape, 5, 1)?.episodes).toMatchObject([
+      {
+        drawdownPeriod: { troughDate: "2026-01-06", troughEquity: 900 },
+        periodStats: { totalTrades: 1, totalPl: -200 },
+        attribution: [{ strategy: "First trough", pl: -200, trades: 1 }],
+      },
+    ]);
+  });
+
+  it("preserves local-midnight calendar keys when UTC slicing would shift the day", () => {
+    const output = execFileSync(
+      process.execPath,
+      [
+        "--experimental-strip-types",
+        "--input-type=module",
+        "-e",
+        `
+      import { buildRealizedDrawdownAttributionByCloseDate } from "@tradeblocks/lib";
+      const dates = [5, 6, 7].map(day => new Date(2026, 0, day));
+      const tape = [100, -200, 200].map((pl, index) => ({
+        dateOpened: dates[index], dateClosed: dates[index], pl,
+        fundsAtClose: 1000 + pl, strategy: "A",
+      }));
+      const result = buildRealizedDrawdownAttributionByCloseDate(tape, 5, 1);
+      console.log(JSON.stringify({
+        utcDates: dates.map(date => date.toISOString().slice(0, 10)),
+        period: result.episodes[0].drawdownPeriod,
+      }));
+    `,
+      ],
+      { cwd: process.cwd(), env: { ...process.env, TZ: "Pacific/Kiritimati" }, encoding: "utf8" },
+    );
+    expect(JSON.parse(output)).toMatchObject({
+      utcDates: ["2026-01-04", "2026-01-05", "2026-01-06"],
+      period: { peakDate: "2026-01-05", troughDate: "2026-01-06", recoveryDate: "2026-01-07" },
+    });
   });
 
   it("accepts an evidenced starting amount without changing direct callers' default", () => {

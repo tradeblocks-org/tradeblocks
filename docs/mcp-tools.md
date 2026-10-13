@@ -305,7 +305,8 @@ an `episodes` list ranked by largest dollar depth, then earlier peak trade.
 Equity uses reported trade P/L in close-date/time order; exact timestamp ties
 retain input order. Recovery to or above the previous peak ends an episode;
 the latest equal peak starts the next one. An unrecovered final episode is
-included with `recoveryDate: null`. Each list entry contains `drawdownPeriod`,
+included with `recoveryDate: null`. Equal troughs keep the earliest trough trade,
+and attribution stops at that trade. Each list entry contains `drawdownPeriod`,
 `periodStats`, and `attribution`; peak minus trough equals `maxDrawdown`, and
 `maxDrawdownPct` is that depth divided by peak equity times 100 (zero for a
 nonpositive peak, matching the legacy convention).
