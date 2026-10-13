@@ -122,6 +122,9 @@ export interface MonteCarloParams {
    * treated as "no threshold requested" and probabilityOfRuin is omitted.
    */
   ruinThresholdPct?: number;
+
+  /** Opt in to top-level p50/p95/p99 max-drawdown quantiles; statistics stays unchanged. */
+  includeMaxDrawdownQuantiles?: boolean;
 }
 
 /**
@@ -279,6 +282,12 @@ export interface MonteCarloResult {
 
   /** Statistical summary */
   statistics: SimulationStatistics;
+
+  /**
+   * Present only when includeMaxDrawdownQuantiles is true. Nonnegative decimal
+   * drawdown depths (0.1 = 10%), linearly interpolated at rank (N - 1) * p.
+   */
+  maxDrawdownQuantiles?: { p50: number; p95: number; p99: number };
 
   /** Parameters used for this simulation */
   parameters: MonteCarloParams;
@@ -1108,11 +1117,29 @@ function calculateSharpeRatio(returns: number[], periodsPerYear: number): number
 }
 
 /**
+ * Summarize a nonempty array of decimal per-path risk depths or horizon returns.
+ * Sorts the supplied array in place and interpolates at rank (N - 1) * p.
+ * Drawdown inputs are nonnegative depths; horizon returns remain signed decimals.
+ * @returns p5, p50, p95 and p99 in the same units as the supplied values
+ */
+export function pathQuantiles(values: number[]) {
+  values.sort((a, b) => a - b);
+  const quantile = (p: number) => {
+    const rank = (values.length - 1) * p;
+    const lower = Math.floor(rank);
+    const upper = Math.ceil(rank);
+    return values[lower] + (values[upper] - values[lower]) * (rank - lower);
+  };
+  return { p5: quantile(0.05), p50: quantile(0.5), p95: quantile(0.95), p99: quantile(0.99) };
+}
+
+/**
  * Run Monte Carlo simulation
  *
  * @param trades - Historical trade data; may be empty for precomputed percentage returns
  * @param params - Simulation parameters
  * @returns MonteCarloResult with all simulations and analysis
+ * Opt-in maxDrawdownQuantiles is separate from the unchanged statistics summary.
  */
 export function runMonteCarloSimulation(
   trades: Trade[],
@@ -1333,11 +1360,17 @@ export function runMonteCarloSimulation(
 
   // Calculate statistics
   const statistics = calculateStatistics(simulations, ruinThresholdPct);
+  const quantiles = params.includeMaxDrawdownQuantiles
+    ? pathQuantiles(simulations.map((simulation) => simulation.maxDrawdown))
+    : undefined;
 
   return {
     simulations,
     percentiles,
     statistics,
+    ...(quantiles
+      ? { maxDrawdownQuantiles: { p50: quantiles.p50, p95: quantiles.p95, p99: quantiles.p99 } }
+      : {}),
     parameters: params,
     timestamp,
     actualResamplePoolSize,

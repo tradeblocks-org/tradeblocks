@@ -22,6 +22,7 @@ import {
   singleTapeWalkForwardByTrades,
   ABSOLUTE_SIZING_PERCENTAGE_ERROR,
   runMonteCarloSimulation,
+  pathQuantiles,
   dailyLogReturns,
   calculateCorrelationMatrix,
   calculateCorrelationAnalytics,
@@ -42,17 +43,6 @@ function filterByStrategy(trades: Trade[], strategy?: string): Trade[] {
   return trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
 }
 
-/** Linear-interpolated decimal quantiles of per-path marked risk and return. */
-function pathQuantiles(values: number[]) {
-  values.sort((a, b) => a - b);
-  const quantile = (p: number) => {
-    const rank = (values.length - 1) * p;
-    const lower = Math.floor(rank);
-    const upper = Math.ceil(rank);
-    return values[lower] + (values[upper] - values[lower]) * (rank - lower);
-  };
-  return { p5: quantile(0.05), p50: quantile(0.5), p95: quantile(0.95), p99: quantile(0.99) };
-}
 /**
  * Register all analysis MCP tools
  */
@@ -651,9 +641,10 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
             tradesPerYear: tradesPerYearParam ?? 252,
             randomSeed: seed,
             worstCaseEnabled: false,
+            includeMaxDrawdownQuantiles: true,
           };
           const result = runMonteCarloSimulation([], params);
-          const drawdown = pathQuantiles(result.simulations.map((item) => item.maxDrawdown));
+          const drawdown = result.maxDrawdownQuantiles!;
           const horizonReturn = pathQuantiles(result.simulations.map((item) => item.totalReturn));
           return createToolOutput(
             `Marked daily Monte Carlo: ${blockId} | ${numSimulations} sims | Horizon: ${params.simulationLength} daily-log observations | 95th percentile max drawdown: ${formatPercent(drawdown.p95 * 100)}`,

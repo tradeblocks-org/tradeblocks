@@ -246,6 +246,13 @@ These differ from the existing `percentileBands`, which contain terminal
 **equity dollars**, not return or maximum-drawdown quantiles. Existing modes'
 response shape, defaults and seeded results are unchanged.
 
+The marked handler uses the library's `pathQuantiles` implementation for both
+summaries. Library callers can request `includeMaxDrawdownQuantiles: true` in
+`runMonteCarloSimulation` to receive top-level `maxDrawdownQuantiles` (p50, p95,
+p99), with the same nonnegative decimal depths and interpolation. Omit the
+option to preserve the complete existing result shape; `statistics` is unchanged
+even when opted in. The MCP marked output shape and quantile arithmetic are unchanged.
+
 ### Marginal contribution: optional expected shortfall
 
 `marginal_contribution` accepts `includeTailRisk: true` and optional

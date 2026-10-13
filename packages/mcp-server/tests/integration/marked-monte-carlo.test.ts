@@ -7,6 +7,7 @@ import {
   getDefaultEnvironment,
   StdioClientTransport,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { pathQuantiles, runMonteCarloSimulation } from "@tradeblocks/lib";
 
 const packageDir = fileURLToPath(new URL("../../", import.meta.url));
 let root: string;
@@ -214,6 +215,24 @@ it("declares a generated seed that replays the same marked run and honors the re
     meanBlockLength: 3,
   });
   expect(repeated.structuredContent).toEqual(result.structuredContent);
+  const library = runMonteCarloSimulation([], {
+    numSimulations: 100,
+    simulationLength: 10,
+    resampleWindow: 5,
+    resampleMethod: "percentage",
+    precomputedReturns: [0, 50 / 1000, 50 / 1050, -150 / 1100, -50 / 950, -50 / 900],
+    resampleMode: "stationary-block",
+    meanBlockLength: 3,
+    initialCapital: 1000,
+    tradesPerYear: 252,
+    randomSeed: data.parameters.randomSeed,
+    worstCaseEnabled: false,
+    includeMaxDrawdownQuantiles: true,
+  });
+  expect(data.markedReturns.maxDrawdownQuantiles).toEqual(library.maxDrawdownQuantiles);
+  expect(data.markedReturns.horizonReturnQuantiles).toEqual(
+    pathQuantiles(library.simulations.map((simulation) => simulation.totalReturn)),
+  );
   const dd = data.markedReturns.maxDrawdownQuantiles;
   const ret = data.markedReturns.horizonReturnQuantiles;
   expect(dd.p99).toBeGreaterThanOrEqual(dd.p95);

@@ -1,0 +1,115 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`preserves the complete omitted-option baseline and every existing output when opted in 1`] = `
+{
+  "actualResamplePoolSize": 5,
+  "effectiveMeanBlockLength": null,
+  "effectiveWorstCaseReplacementProbability": null,
+  "parameters": {
+    "initialCapital": 1000,
+    "numSimulations": 4,
+    "precomputedReturns": [
+      -0.5,
+      -0.5,
+      -0.5,
+      -0.5,
+      -0.5,
+    ],
+    "randomSeed": 42,
+    "resampleMethod": "percentage",
+    "resampleMode": "iid",
+    "simulationLength": 1,
+    "tradesPerYear": 252,
+  },
+  "percentiles": {
+    "p25": [
+      -0.5,
+    ],
+    "p5": [
+      -0.5,
+    ],
+    "p50": [
+      -0.5,
+    ],
+    "p75": [
+      -0.5,
+    ],
+    "p95": [
+      -0.5,
+    ],
+    "steps": [
+      1,
+    ],
+  },
+  "simulations": [
+    {
+      "annualizedReturn": -1,
+      "equityCurve": [
+        -0.5,
+      ],
+      "finalValue": 500,
+      "maxDrawdown": 0.5,
+      "ruined": false,
+      "sharpeRatio": 0,
+      "totalReturn": -0.5,
+      "touchedZero": false,
+    },
+    {
+      "annualizedReturn": -1,
+      "equityCurve": [
+        -0.5,
+      ],
+      "finalValue": 500,
+      "maxDrawdown": 0.5,
+      "ruined": false,
+      "sharpeRatio": 0,
+      "totalReturn": -0.5,
+      "touchedZero": false,
+    },
+    {
+      "annualizedReturn": -1,
+      "equityCurve": [
+        -0.5,
+      ],
+      "finalValue": 500,
+      "maxDrawdown": 0.5,
+      "ruined": false,
+      "sharpeRatio": 0,
+      "totalReturn": -0.5,
+      "touchedZero": false,
+    },
+    {
+      "annualizedReturn": -1,
+      "equityCurve": [
+        -0.5,
+      ],
+      "finalValue": 500,
+      "maxDrawdown": 0.5,
+      "ruined": false,
+      "sharpeRatio": 0,
+      "totalReturn": -0.5,
+      "touchedZero": false,
+    },
+  ],
+  "statistics": {
+    "meanAnnualizedReturn": -1,
+    "meanFinalValue": 500,
+    "meanMaxDrawdown": 0.5,
+    "meanSharpeRatio": 0,
+    "meanTotalReturn": -0.5,
+    "medianAnnualizedReturn": -1,
+    "medianFinalValue": 500,
+    "medianMaxDrawdown": 0.5,
+    "medianTotalReturn": -0.5,
+    "probabilityOfProfit": 0,
+    "stdFinalValue": 0,
+    "valueAtRisk": {
+      "p10": -0.5,
+      "p25": -0.5,
+      "p5": -0.5,
+    },
+    "zeroBalancePaths": 0,
+  },
+  "timestamp": 2026-01-01T00:00:00.000Z,
+}
+`;
