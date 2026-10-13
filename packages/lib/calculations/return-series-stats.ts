@@ -125,10 +125,12 @@ export function cvarFromReturnsAtConfidence(
   const rawPosition = (sortedReturns.length - 1) * tailProbability;
   // 1 - confidence can land an integral position just below its order statistic
   // ((11 - 1) * (1 - 0.9) is 0.9999999999999998); snap rounding error, not real fractions.
+  // The absolute error of 1 - confidence is about one ulp near 1, so the position error
+  // scales with the observation count, not with the position itself.
   // The literal 0.05 never undershoots, so the 95% result is unchanged.
   const nearest = Math.round(rawPosition);
   const position =
-    Math.abs(rawPosition - nearest) <= 8 * Number.EPSILON * Math.max(1, rawPosition)
+    Math.abs(rawPosition - nearest) <= 8 * Number.EPSILON * Math.max(1, sortedReturns.length - 1)
       ? nearest
       : rawPosition;
   const lowerIndex = Math.floor(position);

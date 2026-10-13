@@ -76,6 +76,13 @@ describe("return-series statistics public API", () => {
     },
     // (6 - 1) * (1 - 0.8) is 0.9999999999999998 as well.
     { confidence: 0.8, values: [0, 0.01, 0.02, 0.03, 0.04, 0.05], expected: 0.005 },
+    // (2001 - 1) * (1 - 0.9995) is 0.9999999999998899: cancellation in 1 - confidence
+    // dominates, so the tolerance must scale with the observation count.
+    {
+      confidence: 0.9995,
+      values: Array.from({ length: 2001 }, (_, index) => index / 1000),
+      expected: 0.0005,
+    },
   ])(
     "keeps the order statistic at an integral $confidence cutoff despite rounding",
     ({ confidence, values, expected }) => {
