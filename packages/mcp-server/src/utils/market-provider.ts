@@ -282,7 +282,7 @@ export interface QuoteRequestOutcome {
   outcome: "ok" | "empty" | "error";
   httpStatus?: number;
   errorClass?: "http_status" | "invalid_payload" | "exception" | "timeout" | "pagination_limit";
-  /** Successfully decoded pages, excluding the failing page. */
+  /** Successfully decoded pages, excluding the failing page; synth_close dates share their range's count. */
   pagesFetched: number;
 }
 

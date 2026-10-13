@@ -116,7 +116,11 @@ or caching, never represented as empty success. Mixed successful/failed dates
 return top-level `partial`; all failed dates return `error`; the summary also
 declares failures. Existing successful values, arguments, and opt-in provider
 configuration remain unchanged. Both NBBO and `synth_close` report receipts;
-ThetaData output is unchanged. See [per-request details](market-data.md#fetch_quotes).
+NBBO-skipped weekends emit no receipt and do not count as success.
+`synth_close` retains one paginated range fetch, deriving per-date receipts
+with a shared range page count; a failed range marks every date `error` and
+discards all its rows. ThetaData output is unchanged.
+See [per-request details](market-data.md#fetch_quotes).
 
 ## Underlying Registry
 

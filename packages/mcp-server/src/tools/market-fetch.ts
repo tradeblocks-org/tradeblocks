@@ -80,7 +80,7 @@ export function registerMarketFetchTools(
         "Writes to market.option_quote_minutes. The 'source' column tags Massive provider rows: 'nbbo' (real bid/ask via /v3/quotes when MASSIVE_DATA_TIER=quotes) or 'synth_close' (synthesized from /v2/aggs OHLCV close when the user's plan lacks /v3/quotes; bid=ask=close). ThetaData per-ticker rows are tagged 'nbbo'; ThetaData bulk rows are true NBBO and may persist source as NULL until the bulk row contract carries source. " +
         "Massive falls back automatically on Developer/lower plans; ThetaData (both modes) returns true NBBO. " +
         "Returns status='unsupported' with a clear error only when the active provider lacks the requested mode (e.g., bulk-by-underlying on Massive). " +
-        "Massive per-ticker results include requests[] with ticker/date, outcome (ok/empty/error), rows, pagesFetched and optional httpStatus/errorClass. Failed dates are discarded before caching; mixed outcomes return partial.",
+        "Massive per-ticker results include requests[] with ticker/date, outcome (ok/empty/error), rows, pagesFetched and optional httpStatus/errorClass. Failed dates are discarded before caching; mixed outcomes return partial. NBBO-skipped weekends have no receipt. synth_close uses one paginated range fetch; a failed range marks all dates error, with shared range page counts.",
       inputSchema: z.object({
         tickers: z
           .array(z.string())

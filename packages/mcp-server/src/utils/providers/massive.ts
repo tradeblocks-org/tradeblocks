@@ -559,10 +559,7 @@ export class MassiveProvider implements MarketDataProvider {
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       const day = d.getDay();
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      if (day === 0 || day === 6) {
-        onRequest?.({ date: dateStr, outcome: "empty", pagesFetched: 0 });
-        continue;
-      }
+      if (day === 0 || day === 6) continue;
 
       // Convert RTH window (09:30-16:00 ET) to UTC using real America/New_York
       // timezone rules. Month-based DST guesses shift pre-DST March quotes by 1 hour.
@@ -670,6 +667,8 @@ export class MassiveProvider implements MarketDataProvider {
    * Tagged source='synth_close' in Task 6 so consumers can distinguish from
    * true NBBO (locked-spread NBBO can also have bid==ask, so the source
    * column is the authoritative signal — not the bid/ask equality).
+   * One paginated range fetch serves every date, with or without an observer.
+   * Receipts share the range's page count; a failed range discards all dates.
    */
   private async fetchQuotesViaMinuteBars(
     ticker: string,
@@ -680,7 +679,8 @@ export class MassiveProvider implements MarketDataProvider {
     const receipt: Pick<QuoteRequestOutcome, "pagesFetched" | "httpStatus" | "errorClass"> = {
       pagesFetched: 0,
     };
-    let bars: BarRow[];
+    let bars: BarRow[] = [];
+    let failure: Omit<QuoteRequestOutcome, "date"> | undefined;
     try {
       bars = await this.fetchAggregateBars(
         {
@@ -700,8 +700,7 @@ export class MassiveProvider implements MarketDataProvider {
         receipt.httpStatus = error.httpStatus;
         receipt.errorClass = "http_status";
       }
-      onRequest({
-        date: from,
+      failure = {
         outcome: "error",
         pagesFetched: receipt.pagesFetched,
         ...(receipt.httpStatus !== undefined ? { httpStatus: receipt.httpStatus } : {}),
@@ -709,11 +708,11 @@ export class MassiveProvider implements MarketDataProvider {
           name === "TimeoutError" || name === "AbortError"
             ? "timeout"
             : (receipt.errorClass ?? "exception"),
-      });
-      return new Map();
+      };
     }
 
     const out = new Map<string, MinuteQuote>();
+    const populatedDates = onRequest ? new Set<string>() : undefined;
     for (const bar of bars) {
       if (!bar.time) continue;
       const time = bar.time.slice(0, 5); // "HH:MM"
@@ -721,12 +720,23 @@ export class MassiveProvider implements MarketDataProvider {
       if (time < "09:30" || time > "16:00") continue;
       const key = `${bar.date} ${time}`;
       out.set(key, { bid: bar.close, ask: bar.close, source: "synth_close" });
+      populatedDates?.add(bar.date);
     }
-    onRequest?.({
-      date: from,
-      outcome: out.size > 0 ? "ok" : "empty",
-      pagesFetched: receipt.pagesFetched,
-    });
+    if (onRequest) {
+      const end = new Date(to + "T00:00:00");
+      for (const d = new Date(from + "T00:00:00"); d <= end; d.setDate(d.getDate() + 1)) {
+        const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        onRequest(
+          failure
+            ? { date, ...failure }
+            : {
+                date,
+                outcome: populatedDates!.has(date) ? "ok" : "empty",
+                pagesFetched: receipt.pagesFetched,
+              },
+        );
+      }
+    }
     return out;
   }
 
@@ -741,17 +751,7 @@ export class MassiveProvider implements MarketDataProvider {
       // Developer / OHLC / trades tiers: /v3/quotes is gated. Fall back to
       // /v2/aggs minute bars and synthesize bid=ask=close. See
       // fetchQuotesViaMinuteBars JSDoc for the trade-off.
-      if (!onRequest || from === to) {
-        return this.fetchQuotesViaMinuteBars(ticker, from, to, onRequest);
-      }
-      const result = new Map<string, MinuteQuote>();
-      const end = new Date(to + "T00:00:00Z");
-      for (const d = new Date(from + "T00:00:00Z"); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-        const date = d.toISOString().slice(0, 10);
-        const quotes = await this.fetchQuotesViaMinuteBars(ticker, date, date, onRequest);
-        for (const [key, quote] of quotes) result.set(key, quote);
-      }
-      return result;
+      return this.fetchQuotesViaMinuteBars(ticker, from, to, onRequest);
     }
     const apiKey = getApiKey();
     const apiTicker = toMassiveTicker(ticker, "option");

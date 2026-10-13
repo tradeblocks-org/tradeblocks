@@ -308,7 +308,8 @@ Fetch option minute quotes from the configured provider and write to Parquet.
 - `to` — end date (`YYYY-MM-DD`)
 
 **Massive per-request outcomes:** Per-ticker mode adds `requests[]` to the
-existing result, with one receipt per requested ticker and calendar date:
+existing result, with receipts for fetched ticker-dates. NBBO skips weekends
+without a provider request or receipt, so skipped days cannot count as success.
 
 ```json
 {
@@ -322,18 +323,26 @@ existing result, with one receipt per requested ticker and calendar date:
 }
 ```
 
-`outcome` is `ok` (rows available), `empty` (successful absence, including
-weekends skipped by the NBBO path), or `error`. `rows` counts returned minute
-quotes before enrichment, not necessarily rows written. `pagesFetched` counts
-successfully decoded pages, excluding the failed page; skipped weekends count
-zero. Errors include `httpStatus` when a response was received and an
+`outcome` is `ok` (rows available), `empty` (successful absence), or `error`.
+`rows` counts returned minute quotes before enrichment, not necessarily rows
+written. `pagesFetched` counts successfully decoded pages, excluding the
+failed page. Errors include `httpStatus` when a response was received and an
 `errorClass`: `http_status`, `invalid_payload`, `exception`, `timeout`, or
 `pagination_limit` (the page safety cap or aggregate cursor guard).
 
+The `synth_close` fallback retains one paginated aggregate range fetch, even
+with an observer. It derives each calendar date's `ok`/`empty` receipt from the
+returned rows. If the range fails, all rows from it are discarded and **every
+date in the range** receives `error`, since no complete date can be established.
+Its receipts share the range-level `pagesFetched` count; do not sum those
+counts as independent network requests. Adding the observer does not multiply
+aggregate requests or change retries.
+
 If any page fails, **all rows for that ticker-date are discarded**, before
 enrichment or quote-cache writes. Other successful dates remain available.
-The enclosing status is `error` if every request failed, otherwise `partial`
-when any request failed. The text summary declares the failure too. Genuine
+The enclosing status is `error` if every fetched request failed (NBBO-skipped
+weekends do not participate), otherwise `partial` when any request failed.
+The text summary declares the failure too. Genuine
 empty success still returns top-level `ok` with zero written rows.
 
 Both Massive NBBO and the `synth_close` fallback report receipts. Successful

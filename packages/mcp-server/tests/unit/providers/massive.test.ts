@@ -1220,6 +1220,111 @@ describe("MassiveProvider.fetchQuotes — tier-aware endpoint selection", () => 
     ]);
   });
 
+  it.each(["ERROR", "DELAYED"])(
+    "classifies a valid HTTP-200 quote payload with status %s",
+    async (status) => {
+      process.env.MASSIVE_DATA_TIER = "quotes";
+      fetchSpy.mockResolvedValueOnce(
+        mockResponse({
+          status,
+          request_id: "semantic-status",
+          results: [
+            {
+              bid_price: 12,
+              ask_price: 13,
+              bid_size: 1,
+              ask_size: 1,
+              sequence_number: 1,
+              sip_timestamp: 1736260200000 * 1_000_000,
+            },
+          ],
+        }),
+      );
+      const outcomes: unknown[] = [];
+      const quotes = await new MassiveProvider().fetchQuotes(
+        "SPX250107C05000000",
+        "2025-01-07",
+        "2025-01-07",
+        (outcome) => outcomes.push(outcome),
+      );
+      if (status === "ERROR") {
+        expect(quotes.size).toBe(0);
+        expect(outcomes).toEqual([
+          {
+            date: "2025-01-07",
+            outcome: "error",
+            httpStatus: 200,
+            errorClass: "invalid_payload",
+            pagesFetched: 0,
+          },
+        ]);
+      } else {
+        expect([...quotes]).toEqual([["2025-01-07 09:30", { bid: 12, ask: 13, source: "nbbo" }]]);
+        expect(outcomes).toEqual([{ date: "2025-01-07", outcome: "ok", pagesFetched: 1 }]);
+      }
+    },
+  );
+
+  it.each(["success", "http_error", "page_two_error"])(
+    "keeps one synth_close range fetch and derives each date receipt on %s",
+    async (scenario) => {
+      process.env.MASSIVE_DATA_TIER = "ohlc";
+      const base = {
+        status: "OK",
+        request_id: "range",
+        ticker: "O:SPX250107C05000000",
+        queryCount: 1,
+      };
+      if (scenario === "http_error") {
+        fetchSpy.mockResolvedValueOnce(new Response("", { status: 403 }));
+      } else {
+        fetchSpy.mockResolvedValueOnce(
+          mockResponse({
+            ...base,
+            next_url: "https://api.massive.com/page2",
+            results: [{ ...VALID_BAR, t: 1736260200000 }],
+          }),
+        );
+        fetchSpy.mockResolvedValueOnce(
+          scenario === "page_two_error"
+            ? new Response("", { status: 503 })
+            : mockResponse({ ...base, results: [{ ...VALID_BAR, t: 1736433000000 }] }),
+        );
+      }
+      const outcomes: unknown[] = [];
+      const quotes = await new MassiveProvider().fetchQuotes(
+        "SPX250107C05000000",
+        "2025-01-07",
+        "2025-01-09",
+        (outcome) => outcomes.push(outcome),
+      );
+      expect(fetchSpy).toHaveBeenCalledTimes(scenario === "http_error" ? 1 : 2);
+      expect(fetchSpy.mock.calls[0][0]).toContain("/range/1/minute/2025-01-07/2025-01-09");
+      if (scenario === "success") {
+        expect([...quotes]).toEqual([
+          ["2025-01-07 09:30", { bid: 101, ask: 101, source: "synth_close" }],
+          ["2025-01-09 09:30", { bid: 101, ask: 101, source: "synth_close" }],
+        ]);
+        expect(outcomes).toEqual([
+          { date: "2025-01-07", outcome: "ok", pagesFetched: 2 },
+          { date: "2025-01-08", outcome: "empty", pagesFetched: 2 },
+          { date: "2025-01-09", outcome: "ok", pagesFetched: 2 },
+        ]);
+      } else {
+        expect(quotes.size).toBe(0);
+        expect(outcomes).toEqual(
+          ["2025-01-07", "2025-01-08", "2025-01-09"].map((date) => ({
+            date,
+            outcome: "error",
+            httpStatus: scenario === "http_error" ? 403 : 503,
+            errorClass: "http_status",
+            pagesFetched: scenario === "http_error" ? 0 : 1,
+          })),
+        );
+      }
+    },
+  );
+
   it.each(["quotes", "ohlc"])(
     "reports invalid payload, exception and timeout on %s",
     async (tier) => {
@@ -1370,8 +1475,6 @@ describe("MassiveProvider.fetchQuotes — tier-aware endpoint selection", () => 
     ).toEqual(["2025-01-03T14:30:00Z", "2025-01-06T14:30:00Z"]);
     expect(result.receipts.map((r: { date: string }) => r.date)).toEqual([
       "2025-01-03",
-      "2025-01-04",
-      "2025-01-05",
       "2025-01-06",
     ]);
   });

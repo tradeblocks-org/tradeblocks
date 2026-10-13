@@ -7,3 +7,7 @@ Failed ticker-dates discard every fetched page before enrichment and quote-cache
 The provider Map return and successful quote values are preserved. An optional `fetchQuotes` observer carries receipts without throwing away good dates. Market-data integrations remain opt-in and CSV import still needs no provider key. No retry or tier policy is changed.
 
 NBBO date iteration now preserves the requested calendar days in every host timezone, including east-of-UTC hosts.
+
+NBBO-skipped weekends emit no receipt, rather than counting as empty success. A Friday–Sunday request whose only trading day failed therefore returns `error`, not `partial`.
+
+`synth_close` keeps its existing single paginated range fetch with or without an observer; request count and retry policy are unchanged. Per-date receipts are derived from the range rows, and each receipt reports the same range-level page count. If any range page fails, all range rows are discarded and every date in the range reports `error`.

@@ -147,6 +147,48 @@ describe("MarketIngestor.ingestQuotes", () => {
     expect(result.rowsWritten).toBe(2);
   });
 
+  it("reports error when the only trading day in a Fri–Sun range fails", async () => {
+    const savedKey = process.env.MASSIVE_API_KEY;
+    const savedTier = process.env.MASSIVE_DATA_TIER;
+    process.env.MASSIVE_API_KEY = "test-key";
+    process.env.MASSIVE_DATA_TIER = "quotes";
+    const fetchSpy = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("", { status: 403 }));
+    try {
+      const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+      const result = await new MarketIngestor({
+        stores,
+        dataRoot: dataDir,
+        providerFactory: () => new MassiveProvider(),
+      }).ingestQuotes({
+        tickers: ["SPXW260319C04800000"],
+        from: "2026-01-09",
+        to: "2026-01-11",
+      });
+      expect(result.status).toBe("error");
+      expect(result.rowsWritten).toBe(0);
+      expect(result.requests).toEqual([
+        {
+          ticker: "SPXW260319C04800000",
+          date: "2026-01-09",
+          outcome: "error",
+          httpStatus: 403,
+          errorClass: "http_status",
+          pagesFetched: 0,
+          rows: 0,
+        },
+      ]);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchSpy.mockRestore();
+      if (savedKey === undefined) delete process.env.MASSIVE_API_KEY;
+      else process.env.MASSIVE_API_KEY = savedKey;
+      if (savedTier === undefined) delete process.env.MASSIVE_DATA_TIER;
+      else process.env.MASSIVE_DATA_TIER = savedTier;
+    }
+  });
+
   it("declares mixed Massive quote requests partial and never caches a failed date", async () => {
     const savedKey = process.env.MASSIVE_API_KEY;
     const savedTier = process.env.MASSIVE_DATA_TIER;
