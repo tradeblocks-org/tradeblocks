@@ -113,6 +113,63 @@ it("keeps multi-child quantity and shared reservation across schedule changes an
   expect(value).toEqual(before);
 });
 
+it("disables new groups without changing held quantities, marks or reservations, then reinstates sizing", () => {
+  const value = fixture();
+  value.sizingSchedule!.a = [
+    { effectiveDate: "2025-02-01", disabled: true },
+    {
+      effectiveDate: "2025-02-02",
+      sizing: { mode: "fixed", contracts: 8 },
+      maxContractsPerTrade: null,
+      maxAllocationAmount: null,
+      maxOpenTrades: null,
+    },
+  ];
+  value.trades[3].timeOpened = "16:01:00";
+  if (value.marks?.mode !== "child") throw new Error("Fixture requires child marks");
+  value.marks.values.push(
+    { tradeId: "endpoint", date: "2025-02-02", netOpenPlPerContract: -2 },
+    { tradeId: "endpoint", date: "2025-02-03", netOpenPlPerContract: 3 },
+  );
+  const result = replayBook(value);
+  expect(result.members[0]).toMatchObject({
+    entryGroups: 3,
+    executedGroups: 2,
+    zeroGroups: 0,
+    disabledGroups: 1,
+    contractsPerEntry: [
+      { entryGroupId: "old", contracts: 6 },
+      { entryGroupId: "new", contracts: 0 },
+      { entryGroupId: "endpoint", contracts: 4 },
+    ],
+  });
+  expect(result.census).toMatchObject({
+    disabledGroups: 1,
+    zeroGroups: 0,
+    closedRows: 2,
+    openRows: 1,
+    openGroups: 1,
+  });
+  expect(result.equity.map(({ equity }) => equity)).toEqual([1000, 1000, 1060, 1180]);
+  expect(result.marked!.equity.map(({ equity }) => equity)).toEqual([982, 958, 1094, 1192]);
+  expect(result.marked!.members![0].daily.map(({ pl }) => pl)).toEqual([-18, -24, 136, 98]);
+  const workaround = structuredClone(value);
+  workaround.sizingSchedule!.a[0] = {
+    effectiveDate: "2025-02-01",
+    sizing: { mode: "fixed", contracts: 0 },
+    maxContractsPerTrade: null,
+    maxAllocationAmount: null,
+    maxOpenTrades: null,
+  };
+  const zero = replayBook(workaround);
+  expect(result.equity).toEqual(zero.equity);
+  expect(result.marked).toEqual(zero.marked);
+  expect(result.members[0].contractsPerEntry).toEqual(zero.members[0].contractsPerEntry);
+  expect(zero.census.zeroGroups).toBe(1);
+  expect(zero.census).not.toHaveProperty("disabledGroups");
+  expect(zero.members[0]).not.toHaveProperty("disabledGroups");
+});
+
 it("matches the entry-month pseudo-member construction with non-binding concurrency", () => {
   const value = fixture();
   const scheduled = replayBook(value);
@@ -324,3 +381,77 @@ it.each([
   change(value);
   expect(() => replayBook(value)).toThrow(error);
 });
+
+it("ignores disabled sizing/caps even with minimum-one and preserves real-member concurrency on reinstatement", () => {
+  const value = fixture();
+  delete value.marks;
+  delete value.memberMarkedPl;
+  value.members.a.minimumOne = true;
+  value.sizingSchedule!.a = [
+    {
+      effectiveDate: "2025-02-01",
+      disabled: true,
+      sizing: { mode: "fixed", contracts: -1 },
+      maxContractsPerTrade: 0,
+      maxAllocationAmount: -1,
+      maxOpenTrades: -1,
+    },
+    {
+      effectiveDate: "2025-02-02",
+      disabled: false,
+      sizing: { mode: "fixed", contracts: 2 },
+      maxContractsPerTrade: null,
+      maxAllocationAmount: null,
+      maxOpenTrades: 1,
+    },
+  ];
+  value.trades.push({
+    ...value.trades[3],
+    id: "resumed",
+    entryGroupId: "resumed",
+    dateOpened: "2025-02-03",
+    timeOpened: "16:01:00",
+  });
+  const result = replayBook(value);
+  expect(result.members[0].contractsPerEntry).toEqual([
+    { entryGroupId: "old", contracts: 6 },
+    { entryGroupId: "new", contracts: 0 },
+    { entryGroupId: "endpoint", contracts: 0 },
+    { entryGroupId: "resumed", contracts: 2 },
+  ]);
+  expect(result.census).toMatchObject({ disabledGroups: 1, zeroGroups: 1 });
+  value.members.a.removed = true;
+  expect(replayBook(value).members[0]).toMatchObject({ executedGroups: 0, disabledGroups: 1 });
+});
+
+it("rejects non-boolean disabled state and incomplete reinstatement declarations", () => {
+  const value = fixture();
+  Object.assign(value.sizingSchedule!.a[0], { disabled: "true" });
+  expect(() => replayBook(value)).toThrow(/sizingSchedule disabled/);
+  value.sizingSchedule!.a = [
+    { effectiveDate: "2025-02-01", disabled: true },
+    { effectiveDate: "2025-02-02", disabled: false } as BookSizingScheduleEntry,
+  ];
+  expect(() => replayBook(value)).toThrow(/sizingSchedule sizing/);
+});
+
+it.each(["exclude", "reserve"] as const)(
+  "counts disabled mark-only groups separately with ignored BP %s",
+  (policy) => {
+    const value = fixture();
+    delete value.marks;
+    delete value.memberMarkedPl;
+    const ignored: BookReplayInput = {
+      ...value,
+      ignoredRows: "markOnly",
+      ignoredBuyingPower: policy,
+      sizingSchedule: { a: [{ effectiveDate: "2025-02-01", disabled: true }] },
+      trades: value.trades.map((trade) => ({ ...trade, ignored: true })),
+    };
+    expect(replayBook(ignored).census).toMatchObject({
+      disabledGroups: 2,
+      zeroGroups: 0,
+      ignoredPositions: { entryGroups: 3, disabledGroups: 2, zeroGroups: 0, closedRows: 2 },
+    });
+  },
+);

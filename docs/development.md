@@ -153,9 +153,13 @@ An endpoint close beyond that axis remains open; no terminal mark is invented.
 
 Optional `sizingSchedule: Record<string, BookSizingScheduleEntry[]>` supplies
 strictly increasing ET calendar dates (YYYY-MM-DD) as `effectiveDate` per known member.
-Each entry declares complete `sizing`, `maxContractsPerTrade`,
-`maxAllocationAmount`, and `maxOpenTrades` (null means uncapped). The latest
-entry dated on or before a group's entry date replaces those fields; before
+Each active entry declares complete `sizing`, `maxContractsPerTrade`,
+`maxAllocationAmount`, and `maxOpenTrades` (null means uncapped), with `disabled`
+omitted or `false`. An entry `{ effectiveDate, disabled: true }` prevents new
+groups from being admitted from that date. Sizing and caps are optional and
+ignored while disabled, even if supplied with invalid values. A later active
+entry reinstates the member using that entry's complete sizing and caps.
+The latest entry dated on or before a group's entry date applies; before
 the first date, the base member declaration applies. Entries do not inherit
 from earlier entries. Empty lists leave the base unchanged.
 `removed`, `ignoreMarginRequirements`, and `minimumOne` remain fixed member
@@ -164,6 +168,13 @@ unlike a pseudo-member construction, where each segment has its own open count.
 Admitted groups retain their quantity and ordinary buying-power release rules
 across schedule changes; funds and marks use one continuous ledger. Member
 attribution remains per real member.
+Disabling never forces an exit: earlier positions retain their admitted
+quantity and reservation and close normally, including multi-child groups.
+When any disabled entry is supplied, member summaries and census add
+`disabledGroups` (also in `census.ignoredPositions` for mark-only inputs).
+These groups still appear in `entryGroups` and `contractsPerEntry` with zero
+contracts, but not in `zeroGroups`; they have no marks or realized P/L.
+Without a disabled entry these new counters are absent, preserving output.
 The supplied schedule is echoed in `declarations`; duplicate/unsorted dates,
 unknown members, invalid sizing/caps and unsupported fields are refused.
 Effective dates need not appear on the replay's `dates` axis.

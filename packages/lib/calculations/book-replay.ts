@@ -17,10 +17,16 @@ export interface BookMember {
   minimumOne: boolean;
   maxOpenTrades: number | null;
 }
-export type BookSizingScheduleEntry = Pick<
-  BookMember,
-  "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades"
-> & { effectiveDate: string };
+/** Active entries replace complete sizing/caps; disabled entries ignore any supplied sizing/caps. */
+export type BookSizingScheduleEntry = { effectiveDate: string } & (
+  | (Pick<
+      BookMember,
+      "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades"
+    > & { disabled?: false })
+  | (Partial<
+      Pick<BookMember, "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades">
+    > & { disabled: true })
+);
 export interface BookTrade {
   id: string;
   memberId: string;
@@ -62,7 +68,7 @@ interface BookReplayBaseInput {
   dates: string[];
   trades: BookTrade[];
   members: Record<string, BookMember>;
-  /** Ordered complete sizing/caps by member. Base applies before the first effective date. */
+  /** Ordered complete sizing/caps or disabled states by member; base applies before the first date. */
   sizingSchedule?: Record<string, BookSizingScheduleEntry[]>;
   reservationMode: "sharedEntryGroup" | "sumChildren";
   sharedEntryGroupBuyingPower: "equalPackageMaximum";
@@ -83,6 +89,8 @@ export interface BookMemberResult {
   entryGroups: number;
   executedGroups: number;
   zeroGroups: number;
+  /** Present only when at least one disabled schedule entry is supplied. */
+  disabledGroups?: number;
   totalContracts: number;
   maxContractsPerTrade: number;
   contractsPerEntry: Array<{ entryGroupId: string; contracts: number }>;
@@ -107,6 +115,7 @@ export interface BookReplayResult {
     executedGroups: number;
     executedIgnoredOnlyGroups: number;
     zeroGroups: number;
+    disabledGroups?: number;
     closedRows: number;
     openRows: number;
     openGroups: number;
@@ -114,6 +123,7 @@ export interface BookReplayResult {
       entryGroups: number;
       executedGroups: number;
       zeroGroups: number;
+      disabledGroups?: number;
       executedRows: number;
       closedRows: number;
       openRows: number;
@@ -133,20 +143,27 @@ export interface BookReplayResult {
  * realized net P/L plus remaining open marks, differenced from zero on day one.
  * Fees are already included in net inputs; ignored mark-only closes realize no cash.
  * Missing marks are refused, and endpoint positions remain open. Attribution requires marks.
- * sizingSchedule selects complete sizing/caps on each group's entry date (inclusive).
- * Before its first date the base applies. Member flags stay fixed; concurrency counts
- * the real member across segments. Existing quantities/reservations never resize,
- * and funds and marks continue without resets. Declarations echo the supplied schedule.
- * Without the option, the result shape and replay behavior are unchanged.
+ * sizingSchedule selects complete sizing/caps or disabled state on each entry date (inclusive).
+ * Disabled entries need no sizing/caps; any supplied values are ignored. A later active
+ * entry reinstates its complete sizing/caps. Before the first date the base applies.
+ * Fixed member flags (including removed) still apply; concurrency counts the real member.
+ * Held quantities/reservations never resize or exit early, including across disable dates.
+ * Funds, marks and member attribution continue without resets. Disabled groups are counted
+ * separately from zero groups, with additive disabledGroups only when disabled state is supplied.
+ * Declarations echo the schedule. Without disabled state, output is unchanged.
  */
 export function replayBook(input: BookReplayInput): BookReplayResult {
   validateReplay(input);
   const markOnly = input.ignoredRows === "markOnly";
   const countIgnoredBuyingPower = input.ignoredBuyingPower === "reserve";
+  const reportsDisabled = Object.values(input.sizingSchedule ?? {}).some((schedule) =>
+    schedule.some((entry) => entry.disabled === true),
+  );
   const ignoredPositions = {
     entryGroups: 0,
     executedGroups: 0,
     zeroGroups: 0,
+    ...(reportsDisabled ? { disabledGroups: 0 } : {}),
     executedRows: 0,
     closedRows: 0,
     openRows: 0,
@@ -161,6 +178,7 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
     entryGroups: 0,
     executedGroups: 0,
     zeroGroups: 0,
+    ...(reportsDisabled ? { disabledGroups: 0 } : {}),
     totalContracts: 0,
     maxContractsPerTrade: 0,
     contractsPerEntry: [],
@@ -304,6 +322,16 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
             else high = middle;
           }
           if (low > 0) rule = schedule[low - 1];
+        }
+        if ("disabled" in rule && rule.disabled === true) {
+          summary.entryGroups++;
+          summary.disabledGroups!++;
+          summary.contractsPerEntry.push({ entryGroupId: group.entryGroupId, contracts: 0 });
+          if (group.children.some((child) => child.ignored)) {
+            ignoredPositions.entryGroups++;
+            ignoredPositions.disabledGroups!++;
+          }
+          continue;
         }
         // An all-ignored excluded group still needs unit economics for sizing, not capacity.
         const bp = group.bp || group.children[0].buyingPowerPerContract;
@@ -472,6 +500,9 @@ export function replayBook(input: BookReplayInput): BookReplayResult {
       executedGroups: members.reduce((n, m) => n + m.executedGroups, 0),
       executedIgnoredOnlyGroups,
       zeroGroups: members.reduce((n, m) => n + m.zeroGroups, 0),
+      ...(reportsDisabled
+        ? { disabledGroups: members.reduce((n, m) => n + m.disabledGroups!, 0) }
+        : {}),
       closedRows,
       openRows: open.reduce((n, g) => n + g.remaining, 0),
       openGroups: open.length,
@@ -607,6 +638,7 @@ function validateReplay(input: BookReplayInput): void {
             (key) =>
               ![
                 "effectiveDate",
+                "disabled",
                 "sizing",
                 "maxContractsPerTrade",
                 "maxAllocationAmount",
@@ -615,6 +647,9 @@ function validateReplay(input: BookReplayInput): void {
           )
         )
           fail("sizingSchedule fields");
+        if (entry.disabled !== undefined && typeof entry.disabled !== "boolean")
+          fail("sizingSchedule disabled");
+        if (entry.disabled === true) continue;
         if (!entry.sizing) fail("sizingSchedule sizing");
         validateSizing(entry, input.members[memberId].ignoreMarginRequirements);
       }

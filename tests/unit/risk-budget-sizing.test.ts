@@ -448,6 +448,12 @@ it("refuses a scheduled replay because weights scale only base declarations", ()
   expect(() => sizeBookAtEqualStandaloneRisk(sizingInput(replay))).toThrow(
     /^Invalid risk sizing: replay\.sizingSchedule is not supported/,
   );
+  replay.sizingSchedule = {
+    a: [{ effectiveDate: replay.dates[0], disabled: true }],
+  };
+  expect(() => sizeBookAtEqualStandaloneRisk(sizingInput(replay))).toThrow(
+    /^Invalid risk sizing: replay\.sizingSchedule is not supported/,
+  );
 });
 
 it.each([0, 1, -0.1, 1.1, NaN, Infinity])(

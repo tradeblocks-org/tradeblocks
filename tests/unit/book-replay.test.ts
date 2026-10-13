@@ -109,7 +109,7 @@ it("keeps the omitted-option result identical to the pre-change marked replay ba
     mode: "child",
     values: [{ tradeId: "t", date: value.dates[0], netOpenPlPerContract: -40 }],
   };
-  expect(replayBook(value)).toEqual(defaultReplayBaseline);
+  expect(JSON.stringify(replayBook(value))).toBe(JSON.stringify(defaultReplayBaseline));
   value.memberMarkedPl = false;
   expect(replayBook(value).marked).not.toHaveProperty("members");
 });

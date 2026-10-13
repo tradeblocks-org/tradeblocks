@@ -520,6 +520,10 @@ it("refuses a scheduled replay because candidate weights scale only base declara
     ],
   };
   expect(() => searchBookAtDrawdown(value)).toThrow(/replay\.sizingSchedule is not supported/);
+  value.replay.sizingSchedule = {
+    a: [{ effectiveDate: "2025-01-02", disabled: true }],
+  };
+  expect(() => searchBookAtDrawdown(value)).toThrow(/replay\.sizingSchedule is not supported/);
 });
 
 it("distinguishes true removal from capped zero allocation and reoptimizes drop-one", () => {

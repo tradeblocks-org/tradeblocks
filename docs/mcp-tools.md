@@ -49,10 +49,14 @@ Replay calculations are not themselves a stored quote's revision/provenance.
 The separate offline `@tradeblocks/lib` calculation `replayBook` now accepts an
 optional per-member `sizingSchedule` (see
 [offline book replay](development.md#offline-book-replay-and-drawdown-budget-search)).
-Each effective-date entry supplies complete sizing and caps; selection uses
-the entry date inclusively, with the base declaration before the first date.
-Open quantities and reservations are not resized, and concurrency and marked
-attribution stay per real member in one continuous ledger. This is not an
+Each active effective-date entry supplies complete sizing and caps; selection
+uses the entry date inclusively, with the base declaration before the first date.
+`{ effectiveDate, disabled: true }` blocks new entries; sizing/caps are optional
+and ignored while disabled. A later active entry reinstates its complete sizing.
+Held positions keep their quantities and reservations and close normally, with
+no forced exit. Disabled groups have additive `disabledGroups` counters rather
+than being folded into `zeroGroups`. Concurrency and marked attribution stay
+per real member in one continuous ledger. This is not an
 argument to `replay_trade` or any MCP tool; their interfaces are unchanged.
 
 ## Exit Trigger Analysis
