@@ -439,11 +439,29 @@ than select one by fit. These are offline simulation options, not evidence of
 native producer parity. Bootstrap entry cohorts preserve the same ignored-row
 policy, child offsets and supplied marks.
 
-Search maximizes ending realized `returnPct` subject to drawdown at most
+Search defaults to ending realized `returnPct` subject to drawdown at most
 `targetDrawdownPct - calibrationMarginPct`: it uses the marked drawdown when
 complete marks are supplied, otherwise the closed-equity drawdown, and reports
-that risk basis as `drawdownBasis`, separately from the closed-funds return
-objective. A nonpositive marked path is never ranked.
+that risk basis as `drawdownBasis`. A nonpositive marked-equity path is never ranked.
+Optional `objective: "returnPct" | "returnOverDrawdown"` selects the ranking;
+omitting it normalizes `declarations.objective` to `"returnPct"` and preserves
+the legacy result without new metadata. The ratio divides closed-funds return
+by the same drawdown used for feasibility, never by an unmarked substitute.
+Coordinate moves, progress best, winner, robust shrinkage, near-optimal regions,
+drop-one and every stability/sensitivity search use that same ranking.
+
+The ratio has three tiers: positive return with drawdown ≤ 0 ranks first by
+return; positive drawdown ranks next by the exact signed ratio (negative returns
+remain negative); nonpositive return with drawdown ≤ 0 ranks last by return.
+Exact ties retain the first observed candidate. Non-finite ratios throw rather
+than silently win. Replay drawdown is nonnegative; a negative final return
+necessarily has positive drawdown, so negative-return/nonpositive-drawdown
+paths are unreachable through replay. Zero-return/zero-drawdown paths can occur.
+Ratio results add `objectiveTier: "zeroDrawdown" | "ratio" | "nonPositiveReturn" | null`
+and `objectiveValue`: the finite winner ratio, or null for undefined ratios or
+refusal. Near-optimal tolerance applies within the winner's tier, to ratio or
+return as appropriate. Return-cost fields still report realized-return differences,
+not objective-score differences. Feasibility, the ceiling and search algorithm are unchanged.
 Declare bounds, initial vectors, descending or other finite `steps`, weight and
 allocation decimal precision, and `maxEvaluations`. A zero weight means true
 removal. Positive weights scale allocation, fixed counts, dollar caps and,
@@ -488,7 +506,7 @@ metrics and feasibility verdicts—not full replay results. Prepared weights,
 economic keys and rounded-to-zero member lists are reconstructed rather than
 stored in successful journal entries. Object key order
 does not change identity; array order does. A changed request, policy or
-constraint ID throws `search_checkpoint_identity_mismatch`. Consumed
+constraint ID (including any objective change) throws `search_checkpoint_identity_mismatch`. Consumed
 `missing_mark_coverage` outcomes are journaled separately as named errors, not
 metrics. Resume reconstructs deterministic control flow and seeded cohorts,
 but skips saved replay evaluations, saved feasibility calls and saved missing-mark
