@@ -1119,8 +1119,10 @@ export function runMonteCarloSimulation(
   params: MonteCarloParams,
 ): MonteCarloResult {
   // Validate inputs
+  // A non-empty supplied return series is the sample, so the trade-count guard does not apply.
+  // An empty one keeps the legacy fallback to trade-derived percentage returns.
   const hasPrecomputedReturns =
-    params.resampleMethod === "percentage" && params.precomputedReturns !== undefined;
+    params.resampleMethod === "percentage" && (params.precomputedReturns?.length ?? 0) > 0;
   if (!hasPrecomputedReturns && trades.length < 10) {
     throw new Error(
       `Insufficient trades for Monte Carlo simulation. Found ${trades.length} trades, need at least 10.`,

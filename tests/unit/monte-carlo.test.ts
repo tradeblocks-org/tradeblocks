@@ -57,12 +57,13 @@ describe("Monte Carlo Simulation", () => {
         precomputedReturns: [0.1, 0.1, 0.1, 0.1],
       }),
     ).toThrow("Found 4 samples, need at least 5");
+    // An empty series keeps the legacy trade fallback, so the trade-count guard applies.
     expect(() =>
       runMonteCarloSimulation([], {
         ...params,
         precomputedReturns: [],
       }),
-    ).toThrow("Found 0 samples, need at least 5");
+    ).toThrow("need at least 10");
     expect(() =>
       runMonteCarloSimulation([], {
         ...params,
