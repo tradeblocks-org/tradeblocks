@@ -3,6 +3,7 @@ import {
   sizeBookAtEqualStandaloneRisk,
   bookExpectedShortfallContributions,
   replayBook,
+  cvarFromReturnsAtConfidence,
   type BookReplayInput,
 } from "@tradeblocks/lib";
 
@@ -221,3 +222,231 @@ it("does not mutate caller input or enable replay attribution by default", () =>
   expect(input).toEqual(before);
   expect(replayBook(input).marked?.members).toBeUndefined();
 });
+
+function sizingInput(replay = fixture()) {
+  return {
+    replay,
+    risk: { method: "markedMaxDrawdownPct" as const },
+    standaloneTarget: 10,
+    bookBudget: 100,
+    memberWeightDomains: { a: [1], b: [1] },
+    commonFactors: [1],
+  };
+}
+
+function equityFixture(startingFunds: number, equity: number[]): BookReplayInput {
+  const dates = equity.map((_, i) => {
+    const date = new Date("2020-01-01T00:00:00Z");
+    date.setUTCDate(date.getUTCDate() + i);
+    return date.toISOString().slice(0, 10);
+  });
+  let prior = startingFunds;
+  return {
+    ...fixture(),
+    startingFunds,
+    dates,
+    members: {
+      a: { ...fixture().members.a, sizing: { mode: "fixed", contracts: 1 } },
+    },
+    simultaneousOrder: ["a"],
+    trades: equity.map((funds, i) => {
+      const netPlPerContract = funds - prior;
+      prior = funds;
+      return {
+        id: String(i),
+        memberId: "a",
+        entryGroupId: String(i),
+        dateOpened: dates[i],
+        timeOpened: "09:30:00",
+        dateClosed: dates[i],
+        timeClosed: "16:00:00",
+        buyingPowerPerContract: 0.001,
+        netPlPerContract,
+        ignored: false,
+      };
+    }),
+    marks: { mode: "child", values: [] },
+  };
+}
+
+it.each([4, 11, 21, 101, 2001])(
+  "matches the public ES estimator across confidence levels at n=%i",
+  (n) => {
+    let funds = 100000;
+    const equity = Array.from({ length: n }, (_, i) => {
+      funds *= 1 + (((i * 17) % 101) - 50) / 100000;
+      return funds;
+    });
+    const input = equityFixture(100000, equity);
+    const replay = replayBook(input);
+    let prior = input.startingFunds;
+    const returns = replay.marked!.equity.map(({ date, equity: current }) => {
+      const row = { date: new Date(`${date}T12:00:00Z`), return: (current - prior) / prior };
+      prior = current;
+      return row;
+    });
+    for (const confidence of [0.5, 0.8, 0.9, 0.95, 0.99, 0.9995]) {
+      const result = bookExpectedShortfallContributions(input, confidence);
+      expect(result.bookExpectedShortfall).toBe(-cvarFromReturnsAtConfidence(returns, confidence)!);
+      expect(result.reconciliationResidual).toBeCloseTo(0, 14);
+    }
+  },
+);
+
+it("snaps an undershot integral cutoff onto zero and includes its discrete ties", () => {
+  // (11 - 1) * (1 - .9) undershoots 1. Without snapping, interpolation
+  // from -.5 to 0 is strictly negative and excludes all ten zero-return days.
+  const input = equityFixture(6, Array(11).fill(3));
+  const result = bookExpectedShortfallContributions(input, 0.9);
+  expect(result.tailDates).toEqual(input.dates);
+  expect(result.bookExpectedShortfall).toBe(
+    -cvarFromReturnsAtConfidence(
+      input.dates.map((date, i) => ({ date: new Date(date), return: i === 0 ? -0.5 : 0 })),
+      0.9,
+    )!,
+  );
+  expect(result.reconciliationResidual).toBeCloseTo(0, 14);
+});
+
+it("interpolates adjacent representable returns onto the upper cutoff observation", () => {
+  // These cash flows produce -.5000000000000001 and -.5. Their midpoint
+  // rounds to -.5, so both observations enter the tail. Flooring or omitting
+  // interpolation excludes day two, despite the very small return difference.
+  const input = equityFixture(6, [2.999999999999999, ...Array(10).fill(1.4999999999999996)]);
+  const result = bookExpectedShortfallContributions(input, 0.95);
+  expect(result.tailDates).toEqual(input.dates.slice(0, 2));
+  expect(result.bookExpectedShortfall).toBe(0.5);
+  expect(result.reconciliationResidual).toBeCloseTo(0, 14);
+});
+
+it("preserves the 95% literal arithmetic at a representable midpoint", () => {
+  // Returns are -.5 and -.49999999999999994. Literal .05 puts the
+  // midpoint at the lower observation; 1-.95 moves it to the upper one.
+  const input = equityFixture(6, [3, ...Array(10).fill(1.5000000000000002)]);
+  const result = bookExpectedShortfallContributions(input, 0.95);
+  expect(result.tailDates).toEqual([input.dates[0]]);
+  expect(result.bookExpectedShortfall).toBe(0.5);
+  expect(result.reconciliationResidual).toBeCloseTo(0, 14);
+});
+
+it("prefers the smaller common factor when floors make realized returns tie", () => {
+  const result = sizeBookAtEqualStandaloneRisk({
+    ...sizingInput(),
+    commonFactors: [0.59, 0.5],
+  });
+  expect(result.commonFactor).toBe(0.5);
+  expect(result.members.map((m) => m.bookContracts)).toEqual([[5], [5]]);
+});
+
+it("scales allocation-amount caps with member weights and the common factor", () => {
+  const input = fixture();
+  input.members.a.maxAllocationAmount = 300;
+  const result = sizeBookAtEqualStandaloneRisk({
+    ...sizingInput(input),
+    memberWeightDomains: { a: [2], b: [1] },
+    commonFactors: [2],
+  });
+  // Unit BP is $100: reference cap $600 admits six, final cap $1200 admits twelve.
+  expect(result.members[0].referenceStandaloneContracts).toEqual([6]);
+  expect(result.members[0].finalStandaloneContracts).toEqual([12]);
+  expect(result.members[0].bookContracts).toEqual([12]);
+});
+
+it("keeps a one-contract cap fixed even below unit weight", () => {
+  const input = fixture();
+  input.members.a.maxContractsPerTrade = 1;
+  input.members.b.maxContractsPerTrade = 1;
+  const result = sizeBookAtEqualStandaloneRisk({
+    ...sizingInput(input),
+    memberWeightDomains: { a: [0.5], b: [0.5] },
+    commonFactors: [0.5],
+  });
+  // Scaled search caps floor to zero at .5; fixed caps admit one at both stages.
+  expect(result.budgetStatus).toBe("attained");
+  expect(result.members.map((m) => m.referenceStandaloneContracts)).toEqual([[1], [1]]);
+  expect(result.members.map((m) => m.bookContracts)).toEqual([[1], [1]]);
+});
+
+it("does not fit a zero-trade standalone replay even when it is nearer the target", () => {
+  const result = sizeBookAtEqualStandaloneRisk({
+    ...sizingInput(),
+    standaloneTarget: 0,
+    memberWeightDomains: { a: [0.01, 1], b: [0.01, 1] },
+  });
+  expect(result.members.map((m) => m.referenceWeight)).toEqual([1, 1]);
+  expect(result.members.map((m) => m.referenceStandaloneContracts)).toEqual([[10], [10]]);
+});
+
+it("distinguishes book cap binding from standalone binding after another member's gains", () => {
+  const input = fixture();
+  input.dates.push("2025-01-06");
+  input.trades[1].dateOpened = "2025-01-03";
+  input.trades[1].dateClosed = "2025-01-06";
+  input.trades[1].timeOpened = "16:01:00";
+  input.members.b.maxContractsPerTrade = 10;
+  input.marks!.values[1].date = "2025-01-03";
+  const result = sizeBookAtEqualStandaloneRisk(sizingInput(input));
+  // A adds $10000 before B opens. Book B requests eleven; standalone B
+  // requests ten. The cap clips only the book counterfactual.
+  expect(result.members[1]).toMatchObject({
+    bookCapBinding: true,
+    finalCapBinding: false,
+    bookContracts: [10],
+    finalStandaloneContracts: [10],
+  });
+});
+
+it.each([0, -1, 0.12345678901])(
+  "refuses invalid member and common weights %s at the domain seam",
+  (weight) => {
+    expect(() =>
+      sizeBookAtEqualStandaloneRisk({
+        ...sizingInput(),
+        memberWeightDomains: { a: [weight], b: [1] },
+      }),
+    ).toThrow(/a requires positive finite weights with at most 10 decimals/);
+    expect(() =>
+      sizeBookAtEqualStandaloneRisk({
+        ...sizingInput(),
+        commonFactors: [weight],
+      }),
+    ).toThrow(/commonFactors requires positive finite weights with at most 10 decimals/);
+  },
+);
+
+it("refuses negative standalone targets and book budgets before replaying", () => {
+  expect(() =>
+    sizeBookAtEqualStandaloneRisk({
+      ...sizingInput(),
+      standaloneTarget: -1,
+    }),
+  ).toThrow(/targets must be finite and nonnegative/);
+  expect(() =>
+    sizeBookAtEqualStandaloneRisk({
+      ...sizingInput(),
+      bookBudget: -1,
+    }),
+  ).toThrow(/targets must be finite and nonnegative/);
+});
+
+it.each([0, 1, -0.1, 1.1, NaN, Infinity])(
+  "validates standalone ES confidence %s even without trades",
+  (confidence) => {
+    const input = fixture();
+    input.trades = [];
+    input.marks = { mode: "child", values: [] };
+    expect(() =>
+      sizeBookAtEqualStandaloneRisk({
+        ...sizingInput(input),
+        risk: { method: "standaloneExpectedShortfall", confidence },
+      }),
+    ).toThrow(/Confidence must be finite and strictly between 0 and 1/);
+    input.startingFunds = 0;
+    expect(() =>
+      sizeBookAtEqualStandaloneRisk({
+        ...sizingInput(input),
+        risk: { method: "standaloneExpectedShortfall", confidence },
+      }),
+    ).toThrow(/Confidence must be finite and strictly between 0 and 1/);
+  },
+);
