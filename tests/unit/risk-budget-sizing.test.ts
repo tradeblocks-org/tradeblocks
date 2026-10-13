@@ -444,7 +444,7 @@ it("refuses a scheduled replay because weights scale only base declarations", ()
     ],
   };
   expect(() => sizeBookAtEqualStandaloneRisk(sizingInput(replay))).toThrow(
-    /replay\.sizingSchedule is not supported/,
+    /^Invalid risk sizing: replay\.sizingSchedule is not supported/,
   );
 });
 
