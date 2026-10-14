@@ -81,6 +81,20 @@ TradeBlocks never calls Option Omega. Install both MCP servers, TradeBlocks and 
 
 Capture is verified against OO's staging MCP server. See the [4.0.0 release notes](releases/v4.0.0.md).
 
+## User daily datasets
+
+Since 4.1.0, the MCP server imports your own numeric or categorical CSV series with
+`import_daily_dataset`, lists them with `list_daily_datasets`, removes them with
+`delete_daily_dataset`, and discovers built-in and dataset fields with `list_analysis_fields`.
+Use `<dataset>.<column>` fields in profile filters, predictive reports, regime analysis and
+threshold sweeps. User datasets are stored separately from market data and need no provider key.
+
+Both MCP imports and new web Static Datasets declare when each column was known: date-only
+close values become available the next calendar day at 00:00 ET; date-only open values require
+a known-by time; timestamped values are as-of. Existing web datasets retain their values with
+a `legacy-same-day` warning until timing is declared. See the [dataset tools reference](docs/mcp-tools.md#market-analysis)
+and [4.1.0 release notes](releases/v4.1.0.md), including changes to existing analysis results.
+
 ## Features Overview
 
 ### Web Dashboard

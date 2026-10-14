@@ -530,6 +530,16 @@ such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO times
 | `delete_daily_dataset`       | Remove a dataset and its registered fields                                          |
 | `list_analysis_fields`       | Discover built-in and dataset fields at runtime                                     |
 
+Since 4.1.0, user daily datasets use `<dataset>.<column>` field names in profile filters,
+predictive reports, regime analysis and threshold sweeps. `import_daily_dataset` takes
+`name`, exactly one of inline `content` or `csvPath` under the server's data root, and optional
+`ticker`, `columnTiming` and `knownBy` (`HH:mm` ET). Re-import replaces the named dataset
+atomically, without changing market data or requiring provider credentials. Date-only close
+values are available the following calendar day at 00:00 ET; date-only open values require
+`knownBy`; timestamped rows are as-of. Sparse columns carry forward their latest available
+observation without a freshness cutoff. See the [dataset tools reference](../../docs/mcp-tools.md#market-analysis)
+and [4.1.0 behavior changes](../../releases/v4.1.0.md#behavior-changes).
+
 ### Strategy Profile Tools
 
 | Tool                      | Description                                                  |

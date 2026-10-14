@@ -1,9 +1,0 @@
-# Unreleased — Marginal contribution expected shortfall
-
-The MCP `marginal_contribution` tool accepts opt-in `includeTailRisk: true` and `tailConfidence` (default `0.95`). The added `tailRisk` section reports baseline and removed-strategy expected shortfall / CVaR, using the public `cvarFromReturnsAtConfidence` estimator. Invalid confidence is a tool error; empty arms report null with a reason, not zero.
-
-This is **incremental (leave-one-out), non-additive** realized-trade analysis: the changes do not sum to book ES and are not Euler or marked-account attribution. Values are signed decimal returns; `changeVsBaseline` is removed-arm ES minus baseline ES, so a positive change means removing that strategy reduces tail loss. Each arm uses exactly its existing Sharpe/Sortino return series and the original initial capital, with its own close-date extent explicitly reported by observation count and date range. Existing responses and ratio calculations are unchanged without the opt-in.
-
-The public `PortfolioStatsCalculator.calculateDailyReturnsWithDates(trades, dailyLogEntries?)` method exposes the existing dated ratio-return series for consumers needing other measures on the same basis. It retains the calculator's current close-date grouping, prior-equity denominator, business-day filling and weekend-trade handling. No estimator defaults changed.
-
-The dated-return method shares `calculatePortfolioStats`' basis-aware net mapping: gross-before-fees trades deduct opening and closing fees once, while net-includes-fees trades are not charged again. This keeps every ES numerator and prior-equity denominator on the same net series as Sharpe/Sortino. `rebuildEquityCurve(useNetPl)` alone changes funds, not the reported trade P/L; the dated-return method performs the P/L normalization without mutating caller trades.
