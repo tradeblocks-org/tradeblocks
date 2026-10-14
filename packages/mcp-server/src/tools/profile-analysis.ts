@@ -29,6 +29,7 @@ import { withSyncedBlock } from "./middleware/sync-middleware.ts";
 import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.ts";
 import { syncAllBlocks } from "../sync/index.ts";
 import type { EntryFilter } from "../models/strategy-profile.ts";
+import { listDatasets, resolveTradeDatasets, runtimeFieldCatalog } from "../db/dataset-schemas.ts";
 
 // =============================================================================
 // Utility Functions (local to this module)
@@ -164,13 +165,14 @@ interface TradeWithMarket {
   market: Record<string, unknown>;
 }
 
-function partitionMarketFilters(entryFilters: EntryFilter[]) {
+function partitionMarketFilters(entryFilters: EntryFilter[], catalog: { field: string }[]) {
   const filters: EntryFilter[] = [];
   const unresolvable: { field: string; reason: string }[] = [];
   for (const filter of entryFilters) {
     if (filter.source === "execution") continue;
     const field = filter.field;
     if (
+      catalog.some((entry) => entry.field === field) ||
       OPEN_KNOWN_FIELDS.has(field) ||
       CLOSE_KNOWN_FIELDS.has(field) ||
       STATIC_FIELDS.has(field) ||
@@ -226,6 +228,7 @@ async function loadTradesAndMarket(
   const result = await conn.runAndReadAll(sql, params);
   const marketRecords = resultToRecords(result);
   const marketMap = recordsByTickerDate(marketRecords);
+  const datasets = await listDatasets(conn);
 
   // Match trades to market records
   const matched: TradeWithMarket[] = [];
@@ -234,7 +237,10 @@ async function loadTradesAndMarket(
   for (const trade of trades) {
     const lookup = getTradeLookupKey(trade);
     const key = marketTickerDateKey(lookup.ticker, lookup.date);
-    const market = marketMap.get(key);
+    const datasetValues = resolveTradeDatasets(datasets, trade).values;
+    const builtIn = marketMap.get(key);
+    const market =
+      builtIn || Object.keys(datasetValues).length ? { ...builtIn, ...datasetValues } : undefined;
     if (market) {
       matched.push({ trade, market });
     } else {
@@ -332,8 +338,24 @@ export async function handleAnalyzeStructureFit(
     strategyName,
   );
 
-  const marketFilters = partitionMarketFilters(profile.entryFilters);
+  const marketFilters = partitionMarketFilters(
+    profile.entryFilters,
+    await runtimeFieldCatalog(conn),
+  );
   const warnings: string[] = [...marketFilters.warnings];
+  const uncovered = marketFilters.filters
+    .filter(
+      (filter) =>
+        filter.field.includes(".") &&
+        !matched.some(({ market }) => market[filter.field] !== undefined),
+    )
+    .map((filter) => filter.field);
+  if (uncovered.length)
+    return createToolOutput(`Uncovered dataset fields: ${uncovered.join(", ")}`, {
+      error: "uncovered_fields",
+      fields: uncovered,
+      warnings,
+    });
 
   if (allTrades.length === 0) {
     return createToolOutput(
@@ -582,7 +604,10 @@ export async function handleValidateEntryFilters(
     );
   }
 
-  const { filters, unresolvable, warnings } = partitionMarketFilters(marketFilters);
+  const { filters, unresolvable, warnings } = partitionMarketFilters(
+    marketFilters,
+    await runtimeFieldCatalog(conn),
+  );
   if (filters.length === 0) {
     return createToolOutput(
       `No resolvable market filters for '${strategyName}': ${warnings.join(" ")}`,
@@ -596,6 +621,19 @@ export async function handleValidateEntryFilters(
     blockId,
     strategyName,
   );
+  const uncovered = filters
+    .filter(
+      (filter) =>
+        filter.field.includes(".") &&
+        !matched.some(({ market }) => market[filter.field] !== undefined),
+    )
+    .map((filter) => filter.field);
+  if (uncovered.length)
+    return createToolOutput(`Uncovered dataset fields: ${uncovered.join(", ")}`, {
+      error: "uncovered_fields",
+      fields: uncovered,
+      warnings,
+    });
 
   if (executionFilters.length > 0) {
     warnings.push(

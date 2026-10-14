@@ -37,6 +37,7 @@ import {
 import { checkDataAvailability } from "../utils/data-availability.ts";
 import { getProfile } from "../db/profile-schemas.ts";
 import type { MarketStores } from "../market/stores/index.ts";
+import { listDatasets, resolveTradeDatasets } from "../db/dataset-schemas.ts";
 
 // =============================================================================
 // Types
@@ -1216,6 +1217,7 @@ export function registerMarketDataTools(
 
           // Query DuckDB for lookahead-free market data
           const conn = await getConnection(baseDir);
+          const datasets = await listDatasets(conn);
 
           // Check data availability and collect warnings
           const resolvedTickerET = normalizeTicker(ticker || "") || DEFAULT_MARKET_TICKER;
@@ -1304,6 +1306,7 @@ export function registerMarketDataTools(
 
             const commissions = trade.openingCommissionsFees + trade.closingCommissionsFees;
 
+            const datasetMatch = resolveTradeDatasets(datasets, trade);
             const baseTrade: Record<string, unknown> = {
               dateOpened: lookup.date,
               ticker: lookup.ticker,
@@ -1315,6 +1318,9 @@ export function registerMarketDataTools(
               premium: trade.premium,
               reasonForClose: trade.reasonForClose || null,
               commissions,
+              customFields: trade.customFields ?? {},
+              datasetFields: datasetMatch.values,
+              datasetProvenance: datasetMatch.provenance,
             };
 
             if (!marketData) {

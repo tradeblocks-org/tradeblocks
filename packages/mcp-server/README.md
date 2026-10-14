@@ -525,6 +525,10 @@ such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO times
 | `analyze_regime_performance` | Analyze P&L by market regime                                                       |
 | `suggest_filters`            | Suggest trade filters based on market conditions                                   |
 | `calculate_orb`              | Opening range breakout analysis from intraday bars                                 |
+| `import_daily_dataset`       | Import or replace a user Static Dataset with per-column timing                     |
+| `list_daily_datasets`        | List user datasets, fields, timing and coverage                                    |
+| `delete_daily_dataset`       | Remove a dataset and its registered fields                                         |
+| `list_analysis_fields`       | Discover built-in and dataset fields at runtime                                    |
 
 ### Strategy Profile Tools
 

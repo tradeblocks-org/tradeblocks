@@ -21,6 +21,7 @@ import { registerPerformanceTools } from "./tools/performance.ts";
 import { registerReportTools } from "./tools/reports.ts";
 import { registerImportTools } from "./tools/imports.ts";
 import { registerMarketDataTools } from "./tools/market-data.ts";
+import { registerDatasetTools } from "./tools/datasets.ts";
 import { registerMarketImportTools } from "./tools/market-imports.ts";
 import { registerMarketEnrichmentTools } from "./tools/market-enrichment.ts";
 import { registerSQLTools } from "./tools/sql.ts";
@@ -217,6 +218,7 @@ export function registerTradeBlocksCoreTools(
   registerMarketImportTools(server, baseDir, marketStores);
   registerMarketEnrichmentTools(server, baseDir, marketStores);
   registerMarketDataTools(server, baseDir, marketStores);
+  registerDatasetTools(server, baseDir);
   registerSQLTools(server, baseDir);
   registerSchemaTools(server, baseDir);
   registerEdgeDecayTools(server, baseDir);

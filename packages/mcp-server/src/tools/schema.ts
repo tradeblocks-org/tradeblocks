@@ -29,6 +29,7 @@ import {
   DAILY_STATIC_FIELDS,
   CONTEXT_OPEN_FIELDS,
 } from "../utils/field-timing.ts";
+import { runtimeFieldCatalog } from "../db/dataset-schemas.ts";
 
 // ============================================================================
 // Types for output structure
@@ -68,6 +69,13 @@ interface VixTenorInfo {
 }
 
 interface DatabaseSchemaOutput {
+  analysisFields: {
+    field: string;
+    type: string;
+    timing: string;
+    knownBy: string | null;
+    source: string;
+  }[];
   schemas: Record<string, SchemaInfo>;
   examples: typeof EXAMPLE_QUERIES;
   lagTemplate: {
@@ -314,6 +322,7 @@ export function registerSchemaTools(server: McpServer, baseDir: string): void {
 
       // Build output
       const result: DatabaseSchemaOutput = {
+        analysisFields: await runtimeFieldCatalog(conn),
         schemas,
         examples: EXAMPLE_QUERIES,
         lagTemplate: generateLagTemplate(),

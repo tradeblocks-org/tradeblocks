@@ -96,6 +96,7 @@ Capture is verified against OO's staging MCP server. See the [4.0.0 release note
 - SQL analytics layer (`run_sql` + `describe_database`) for flexible data exploration
 - Massive.com API integration for automated market data import
 - Market data import and enrichment (`import_market_csv` + `enrich_market_data`)
+- User Static Dataset import (`import_daily_dataset`) with shared CSV parsing and causal per-column timing; discover fields with `list_analysis_fields`.
 - Trade replay with MFE/MAE analysis using historical option minute bars
 - Lookahead-free trade enrichment with market context (VIX regimes, intraday timing)
 - Works with Claude Desktop, Claude Code, Codex CLI, Gemini CLI, ChatGPT, Google AI Studio

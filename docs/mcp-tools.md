@@ -146,6 +146,21 @@ See [per-request details](market-data.md#fetch_quotes).
 | `find_predictive_fields`     | Identify which market fields predict trade outcomes              |
 | `filter_curve`               | Equity curve with/without a candidate market filter applied      |
 | `get_field_statistics`       | Distribution statistics for any market or trade field            |
+| `import_daily_dataset`       | Import or replace a Static Dataset CSV with declared timing      |
+| `list_daily_datasets`        | List datasets, fields, timing and coverage                       |
+| `delete_daily_dataset`       | Delete a dataset and unregister its fields                       |
+| `list_analysis_fields`       | Runtime catalog of built-in and dataset analysis fields          |
+
+Static Dataset CSVs use the same parser as the web app: timestamp first, then numeric or
+categorical columns. `import_daily_dataset` takes `name`, exactly one of inline `content` or
+`csvPath` under the data root, optional `ticker`, `columnTiming`, and `knownBy` (HH:mm ET).
+Default timing is close. Date-only close values are available D+1 at 00:00 ET; date-only
+open values require knownBy; timestamped values are as-of. All consumers select the latest
+value available at or before trade entry, including sparse series. There is no freshness
+limit. Values live only in analytics.duckdb's `datasets.dataset` and `datasets.value`, not
+market tables or Parquet. Re-import atomically replaces a named dataset.
+`enrich_trades` retains CSV `customFields` and returns `datasetFields` plus
+`datasetProvenance` (source timestamp and available-at instant) so carry-forward age is visible.
 
 ## Strategy Profiles
 
