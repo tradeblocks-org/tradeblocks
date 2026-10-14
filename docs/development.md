@@ -142,6 +142,25 @@ inference nor MCP tools, and adds no bootstrap option or provider requirement.
 `@tradeblocks/lib` exports `replayBook(BookReplayInput)` and
 `searchBookAtDrawdown(DrawdownBudgetSearchInput)`. Both are pure calculations:
 they make no provider calls, read no profiles and add no market-data requirement.
+Within one search, replay tape validation, immutable entry-group shapes, mark
+indexing and chronological event ordering are prepared once, lazily at the first
+uncached evaluation. Robust and drop-one evaluations reuse that tape; bootstrap
+replicates prepare their own resampled tapes. Member and schedule validation,
+buying-power calculations and all mutable replay state remain fresh per candidate.
+Standalone calls still prepare and validate their own input by default. For many
+short searches over the same tape, call `prepareReplayTape(input)` once and pass
+its opaque, frozen handle as `replayBook(input, { preparedTape })` or through the
+existing `searchBookAtDrawdown(input, { preparedTape, ...otherOptions })` options.
+The handle owns a detached tape snapshot, not an identity-keyed cache. Each public
+call compares a canonical value fingerprint covering the session axis, trade
+economics/identity/date/time, marks, ordering, starting funds and tape policies.
+Hash collisions cannot admit stale data: the full canonical values must also
+match. Changed invariant inputs throw `prepared_replay_tape_mismatch`; changing
+member sizing/caps/flags, schedules or reporting options remains allowed and is
+validated per replay. Prepare separate handles for different ignored-buying-power
+policies. Bootstrap resamples never reuse the original handle. Handles are local
+runtime objects, not serialized checkpoints, and do not change checkpoint identity.
+
 The replay accepts net dollars and buying power **per strategy contract**, an
 explicit session axis, member sizing rules and simultaneous member ordering.
 It sizes whole contracts from closed funds at each entry. All close cash flows
