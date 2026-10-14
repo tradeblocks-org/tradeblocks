@@ -151,7 +151,9 @@ Standalone calls still prepare and validate their own input by default. For many
 short searches over the same tape, call `prepareReplayTape(input)` once and pass
 its opaque, frozen handle as `replayBook(input, { preparedTape })` or through the
 existing `searchBookAtDrawdown(input, { preparedTape, ...otherOptions })` options.
-The handle owns a detached tape snapshot, not an identity-keyed cache. Each public
+The frozen handle is only a token; its detached snapshot and indexes live in a
+module-private WeakMap keyed by that token, not an input-identity cache. Reflection
+on the token cannot reach the prepared data. Each public
 call compares a canonical value fingerprint covering the session axis, trade
 economics/identity/date/time, marks, ordering, starting funds and tape policies.
 Hash collisions cannot admit stale data: the full canonical values must also
@@ -160,6 +162,13 @@ member sizing/caps/flags, schedules or reporting options remains allowed and is
 validated per replay. Prepare separate handles for different ignored-buying-power
 policies. Bootstrap resamples never reuse the original handle. Handles are local
 runtime objects, not serialized checkpoints, and do not change checkpoint identity.
+Fingerprint matching deliberately preserves exact declarations: omitted
+`ignoredRows` and explicit `"exclude"` are distinct, and changing reservation
+mode or liquidity threshold also requires a new handle, even when a particular
+tape produces equivalent results. This conservative refusal preserves the
+once-validated declaration context rather than promising semantic equivalence.
+Callers can always prepare a new handle or omit the optional handle and use
+ordinary replay/search; an equivalent input is never otherwise refused.
 
 The replay accepts net dollars and buying power **per strategy contract**, an
 explicit session axis, member sizing rules and simultaneous member ordering.

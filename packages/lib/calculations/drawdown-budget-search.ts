@@ -234,12 +234,7 @@ export function searchBookAtDrawdown(
   options?: BookSearchOptions,
 ): DrawdownBudgetSearchResult<SearchObjective> {
   if (!options?.onProgress && !options?.checkpoint && !options?.resumeFrom)
-    return runSearch(
-      input,
-      undefined,
-      "root",
-      createSearchReplay(input.replay, options?.preparedTape),
-    );
+    return runSearch(input, undefined, "root", undefined, options?.preparedTape);
   if (input.feasible && !options.feasibleId)
     throw new RangeError("search_checkpoint_constraint_identity: feasibleId is required");
   const { feasible, ...economicRequest } = input;
@@ -260,12 +255,7 @@ export function searchBookAtDrawdown(
     cursor: 0,
     onProgress: options.onProgress,
   };
-  const result = runSearch(
-    input,
-    execution,
-    "root",
-    createSearchReplay(input.replay, options.preparedTape),
-  );
+  const result = runSearch(input, execution, "root", undefined, options.preparedTape);
   if (execution.cursor !== execution.checkpoint.evaluations.length)
     throw new RangeError("search_checkpoint_invalid: unused evaluations");
   result.checkpoint = structuredClone(execution.checkpoint);
@@ -276,9 +266,11 @@ function runSearch(
   input: DrawdownBudgetSearchInput<SearchObjective>,
   execution?: SearchExecution,
   scope = "root",
-  replayCandidate = createSearchReplay(input.replay),
+  replayCandidate?: (members: Record<string, BookMember>) => BookReplayResult,
+  preparedTape?: PreparedReplayTape,
 ): DrawdownBudgetSearchResult<SearchObjective> {
   validateSearch(input);
+  const runReplayCandidate = replayCandidate ?? createSearchReplay(input.replay, preparedTape);
   const ratio = input.objective === "returnOverDrawdown";
   const better = (a: BookSearchEvaluation, b: BookSearchEvaluation) =>
     compareObjective(a, b, ratio) > 0;
@@ -359,7 +351,7 @@ function runSearch(
     } else {
       let replay: BookReplayResult;
       try {
-        replay = replayCandidate(members);
+        replay = runReplayCandidate(members);
       } catch (error) {
         if (
           execution &&
@@ -575,7 +567,7 @@ function runSearch(
         },
         execution,
         `dropOne/${id}`,
-        replayCandidate,
+        runReplayCandidate,
       );
       dropOne.push({
         memberId: id,

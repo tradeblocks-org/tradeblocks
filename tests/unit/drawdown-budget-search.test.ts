@@ -1623,8 +1623,7 @@ it("reuses a frozen caller-held tape across short searches and refuses mutated i
       replay.marks = { mode: "child", values: [] };
     },
     (replay: typeof value.replay) => {
-      replay.simultaneousOrder.reverse();
-      replay.simultaneousOrder.push("b");
+      replay.simultaneousGroupOrder = { a: ["win", "loss"] };
     },
     (replay: typeof value.replay) => {
       replay.reservationMode = "sumChildren";
@@ -1643,4 +1642,68 @@ it("reuses a frozen caller-held tape across short searches and refuses mutated i
   expect(JSON.stringify(replayBook(original, { preparedTape }))).toBe(
     JSON.stringify(replayBook(original)),
   );
+});
+
+it("exposes no mutable prepared data through reflection on the tape token", () => {
+  const replay = input().replay;
+  const preparedTape = prepareReplayTape(replay);
+  const keys = Reflect.ownKeys(preparedTape);
+  expect(Object.getOwnPropertySymbols(preparedTape)).toEqual(
+    keys.filter((key) => typeof key === "symbol"),
+  );
+  for (const key of keys) {
+    const value = Reflect.get(preparedTape, key);
+    expect(value === null || (typeof value !== "object" && typeof value !== "function")).toBe(true);
+  }
+  expect(JSON.stringify(replayBook(replay, { preparedTape }))).toBe(
+    JSON.stringify(replayBook(replay)),
+  );
+});
+
+it("preserves search validation errors before checking a mismatched tape", () => {
+  const value = input();
+  const preparedTape = prepareReplayTape(value.replay);
+  value.replay.trades[0].netPlPerContract--;
+  value.maxEvaluations = 0;
+  let expected: unknown;
+  try {
+    searchBookAtDrawdown(value);
+  } catch (error) {
+    expected = error;
+  }
+  expect(expected).toBeInstanceOf(RangeError);
+  expect(() => searchBookAtDrawdown(value, { preparedTape })).toThrow((expected as Error).message);
+  expect(() => searchBookAtDrawdown(value, { preparedTape, checkpoint: true })).toThrow(
+    (expected as Error).message,
+  );
+});
+
+it("leaves ordinary replay and new handles available after conservative tape refusal", () => {
+  const value = input();
+  const preparedTape = prepareReplayTape(value.replay);
+  for (const patch of [
+    { ignoredRows: "exclude" as const },
+    { liquidityThresholdContracts: 100 },
+    { reservationMode: "sumChildren" as const },
+  ]) {
+    const replay = {
+      ...value.replay,
+      ignoredRows: undefined,
+      ignoredBuyingPower: undefined,
+      ...patch,
+    };
+    const fresh = replayBook(replay);
+    expect(() => replayBook(replay, { preparedTape })).toThrow("prepared_replay_tape_mismatch");
+    expect(JSON.stringify(replayBook(replay, { preparedTape: prepareReplayTape(replay) }))).toBe(
+      JSON.stringify(fresh),
+    );
+    expect(() => searchBookAtDrawdown({ ...value, replay }, { preparedTape })).toThrow(
+      "prepared_replay_tape_mismatch",
+    );
+    expect(
+      JSON.stringify(
+        searchBookAtDrawdown({ ...value, replay }, { preparedTape: prepareReplayTape(replay) }),
+      ),
+    ).toBe(JSON.stringify(searchBookAtDrawdown({ ...value, replay })));
+  }
 });

@@ -34,13 +34,15 @@ interface PreparedReplay {
 }
 const preparedTapeBrand: unique symbol = Symbol("preparedReplayTape");
 export interface PreparedReplayTape {
-  readonly [preparedTapeBrand]: TapeHandleData;
+  readonly [preparedTapeBrand]: true;
 }
 interface TapeHandleData {
   readonly fingerprint: number;
   readonly canonical: string;
   readonly prepared: PreparedReplay;
 }
+// Explicit caller-held tokens own their private payload; this is not an input cache.
+const preparedTapes = new WeakMap<PreparedReplayTape, TapeHandleData>();
 
 function canonicalTape(input: BookReplayInput): string {
   const marks =
@@ -97,17 +99,17 @@ export function prepareReplayTapeInternal(input: BookReplayInput): PreparedRepla
   const canonical = canonicalTape(input);
   // Detach the tape: mutating its source must not corrupt another matching caller.
   const snapshot = structuredClone(input);
-  return Object.freeze({
-    [preparedTapeBrand]: Object.freeze({
-      canonical,
-      fingerprint: tapeHash(canonical),
-      prepared: prepareReplay(snapshot),
-    }),
+  const handle: PreparedReplayTape = Object.freeze({ [preparedTapeBrand]: true as const });
+  preparedTapes.set(handle, {
+    canonical,
+    fingerprint: tapeHash(canonical),
+    prepared: prepareReplay(snapshot),
   });
+  return handle;
 }
 
 function checkedTape(input: BookReplayInput, handle: PreparedReplayTape): PreparedReplay {
-  const tape = handle?.[preparedTapeBrand];
+  const tape = preparedTapes.get(handle);
   let canonical: string;
   try {
     canonical = canonicalTape(input);
