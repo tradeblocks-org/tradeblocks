@@ -395,12 +395,14 @@ describe("validate_entry_filters", () => {
     const data = parseToolData(result);
     // Jan 9 is an XNYS closure: its prior-session fields remain no_data, not unknown.
     expect(data.baseline).toMatchObject({ tradeCount: 7 });
+    expect(data.no_filters).toMatchObject({ tradeCount: 10 });
     expect(data.per_filter).toMatchObject({
       "Low VIX": { entered: { tradeCount: 7 }, filtered_out: { tradeCount: 3 }, no_data_count: 1 },
     });
     expect(Object.keys(data.per_filter as object)).toEqual(["Low VIX"]);
     expect(data.ablation).toEqual({
-      single: { "Low VIX": expect.objectContaining({ tradeCount: 11 }) },
+      // Removing a filter preserves the common covered pool; Jan 9 remains unavailable.
+      single: { "Low VIX": expect.objectContaining({ tradeCount: 10 }) },
       pairs: {},
     });
     expect(data.unresolvable_filters).toEqual([

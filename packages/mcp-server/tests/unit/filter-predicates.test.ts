@@ -284,3 +284,22 @@ it.each(["", "  ", null, undefined])(
     expect(predicate.test({ "blank.x": 0 })).toBe(true);
   },
 );
+
+it("requires observations for both operands of a cross-field predicate", () => {
+  const predicate = buildFilterPredicate({
+    field: "Gap_Pct",
+    operator: "<",
+    value: "prev_VIX_Close",
+  });
+  expect(predicate.hasData({ Gap_Pct: 0.2, prev_VIX_Close: 17 })).toBe(true);
+  expect(predicate.hasData({ Gap_Pct: 0.2 })).toBe(false);
+  expect(predicate.hasData({ prev_VIX_Close: 17 })).toBe(false);
+  expect(predicate.hasData({ Gap_Pct: 0.2, prev_VIX_Close: NaN })).toBe(false);
+});
+
+it("resolves a bare close comparison operand from prior-day data, never the raw same-day close", () => {
+  const predicate = buildFilterPredicate({ field: "VIX_Open", operator: "<", value: "VIX_Close" });
+  expect(predicate.test({ VIX_Open: 20, VIX_Close: 25, prev_VIX_Close: 15 })).toBe(false);
+  expect(predicate.hasData({ VIX_Open: 20, VIX_Close: 25 })).toBe(false);
+  expect(predicate.test({ VIX_Open: 20, VIX_Close: 25 })).toBe(false);
+});

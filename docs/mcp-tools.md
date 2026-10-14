@@ -211,7 +211,21 @@ filters are still analyzed; if none are resolvable, it returns `error: "no_resol
 naming the fields. `analyze_structure_fit` reports the same exclusions while retaining
 its known-field and fixed dimensions. Both tools include the exclusions in their summary
 and warnings. A known field with a missing value on a date is not an unknown field:
-existing missing-data reporting (including `no_data_count` in filter validation) is unchanged.
+`no_data_count` reports missing observations independently of the covered analysis pool.
+
+Profile coverage is per field, not satisfied by an unrelated dataset value.
+`validate_entry_filters` uses trades covered by every requested filter (including any
+cross-field comparison operand) for its baselines, comparisons and ablations. Dataset-only
+filters work without built-in market rows. Missing-market warnings always count absent
+built-in market rows, even when dataset observations are available.
+Bare close-derived comparison operands use `prev_*` values even when the joined record
+also contains the raw same-day close; missing prior observations are not covered.
+`analyze_structure_fit` groups each dimension only over observations for that dimension
+and returns `dimension_baselines` for those covered pools; update hints compare against
+the corresponding covered baseline. With no dataset dimension involved, `overall` retains
+the existing market-row baseline. When dataset dimensions are used, that overall pool also
+includes trades with observations for the selected dataset dimensions, never unrelated
+dataset fields. Time-of-day uses valid trade times independently of market coverage.
 
 ## Advanced Analysis
 

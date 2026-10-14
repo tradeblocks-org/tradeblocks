@@ -508,3 +508,159 @@ test("blank cells remain numeric, carry forward, and expose aggregate source age
   });
   expect(preset.structuredContent).not.toHaveProperty("datasetAge");
 });
+
+async function createCoverageFixture(datasetOnly: boolean) {
+  await mkdir(path.join(baseDir, "coverage"));
+  const header =
+    "Date Opened,Time Opened,Opening Price,Legs,Premium,Closing Price,Date Closed,Time Closed,Avg. Closing Cost,Reason For Close,P/L,No. of Contracts,Funds at Close,Margin Req.,Strategy,Opening Commissions + Fees,Closing Commissions + Fees";
+  await writeFile(
+    path.join(baseDir, "coverage", "tradelog.csv"),
+    [
+      header,
+      "2025-01-03,10:00:00,1,SPX Put Spread,1,0,2025-01-03,15:00:00,0,Profit Target,100,1,10000,500,Test,0,0",
+      "2025-01-06,10:00:00,1,SPX Put Spread,1,0,2025-01-06,15:00:00,0,Stop,-50,1,10000,500,Test,0,0",
+    ].join("\n"),
+  );
+  const conn = await upgradeToReadWrite(baseDir);
+  if (!datasetOnly)
+    await conn.run(
+      "INSERT INTO market.enriched (ticker, date, Gap_Pct, Day_of_Week) VALUES ('SPX', '2025-01-03', 0.2, 5)",
+    );
+  await upsertProfile(conn, {
+    blockId: "coverage",
+    strategyName: "Test",
+    structureType: "iron_condor",
+    greeksBias: "theta_positive",
+    thesis: "",
+    legs: [],
+    entryFilters: [
+      { field: datasetOnly ? "extra.x" : "Gap_Pct", operator: ">", value: -1, source: "market" },
+    ],
+    exitRules: [],
+    expectedRegimes: [],
+    keyMetrics: {},
+  });
+}
+
+test("unrelated dataset values do not inflate built-in profile baselines or hide missing market rows", async () => {
+  await createCoverageFixture(false);
+  const input = { blockId: "coverage", strategyName: "Test", minTrades: 1, maxAblationFilters: 8 };
+  const beforeFit = await handleAnalyzeStructureFit(input, baseDir);
+  const beforeValidation = await handleValidateEntryFilters(input, baseDir);
+  await handlers.import_daily_dataset({ name: "extra", content: "date,x\n2025-01-02,1" });
+  const fit = await handleAnalyzeStructureFit(input, baseDir);
+  const validation = await handleValidateEntryFilters(input, baseDir);
+  expect(fit.structuredContent?.warnings).toEqual(beforeFit.structuredContent?.warnings);
+  expect(validation.structuredContent?.warnings).toEqual(
+    beforeValidation.structuredContent?.warnings,
+  );
+  expect(fit.structuredContent?.warnings).toEqual(
+    expect.arrayContaining([expect.stringContaining("1 of 2 trades had no matching market data")]),
+  );
+  expect(fit.structuredContent?.overall).toEqual(beforeFit.structuredContent?.overall);
+  expect(fit.structuredContent?.overall).toEqual(
+    expect.objectContaining({ tradeCount: 1, totalPl: 100 }),
+  );
+  expect(fit.structuredContent?.dimension_baselines).toEqual(
+    expect.objectContaining({
+      day_of_week: expect.objectContaining({ tradeCount: 1 }),
+      Gap_Pct: expect.objectContaining({ tradeCount: 1 }),
+      time_of_day: expect.objectContaining({ tradeCount: 2 }),
+    }),
+  );
+  expect(validation.structuredContent?.no_filters).toEqual(
+    beforeValidation.structuredContent?.no_filters,
+  );
+  expect(validation.structuredContent?.no_filters).toEqual(
+    expect.objectContaining({ tradeCount: 1, totalPl: 100 }),
+  );
+  expect(validation.structuredContent?.per_filter).toEqual(
+    expect.objectContaining({ "Gap_Pct > -1": expect.objectContaining({ no_data_count: 1 }) }),
+  );
+  const conn = await upgradeToReadWrite(baseDir);
+  await upsertProfile(conn, {
+    blockId: "coverage",
+    strategyName: "Test",
+    structureType: "iron_condor",
+    greeksBias: "theta_positive",
+    thesis: "",
+    legs: [],
+    entryFilters: [
+      { field: "Gap_Pct", operator: ">", value: -1, source: "market" },
+      { field: "extra.x", operator: ">", value: -1, source: "market" },
+    ],
+    exitRules: [],
+    expectedRegimes: [],
+    keyMetrics: {},
+  });
+  const mixedValidation = await handleValidateEntryFilters(input, baseDir);
+  expect(mixedValidation.structuredContent?.no_filters).toEqual(
+    expect.objectContaining({ tradeCount: 1, totalPl: 100 }),
+  );
+  expect(mixedValidation.structuredContent?.datasetAge).toEqual({
+    "extra.x": { attachments: 1, medianAgeDays: 1, maxAgeDays: 1, olderThan3Days: 0 },
+  });
+  const mixedFit = await handleAnalyzeStructureFit(input, baseDir);
+  expect(mixedFit.structuredContent?.dimension_baselines).toEqual(
+    expect.objectContaining({
+      Gap_Pct: expect.objectContaining({ tradeCount: 1 }),
+      "extra.x": expect.objectContaining({ tradeCount: 2 }),
+    }),
+  );
+  await upsertProfile(conn, {
+    blockId: "coverage",
+    strategyName: "Test",
+    structureType: "iron_condor",
+    greeksBias: "theta_positive",
+    thesis: "",
+    legs: [],
+    entryFilters: [{ field: "Gap_Pct", operator: "<", value: "extra.x", source: "market" }],
+    exitRules: [],
+    expectedRegimes: [],
+    keyMetrics: {},
+  });
+  const operandValidation = await handleValidateEntryFilters(input, baseDir);
+  expect(operandValidation.structuredContent?.no_filters).toEqual(
+    expect.objectContaining({ tradeCount: 1, totalPl: 100 }),
+  );
+  expect(operandValidation.structuredContent?.datasetAge).toEqual({
+    "extra.x": { attachments: 1, medianAgeDays: 1, maxAgeDays: 1, olderThan3Days: 0 },
+  });
+});
+
+test("dataset-only profile filters include covered trades without market rows", async () => {
+  await handlers.import_daily_dataset({ name: "extra", content: "date,x\n2025-01-02,1" });
+  await createCoverageFixture(true);
+  const input = { blockId: "coverage", strategyName: "Test", minTrades: 1, maxAblationFilters: 8 };
+  const validation = await handleValidateEntryFilters(input, baseDir);
+  expect(validation.structuredContent?.no_filters).toEqual(
+    expect.objectContaining({ tradeCount: 2, totalPl: 50 }),
+  );
+  expect(validation.structuredContent?.per_filter).toEqual(
+    expect.objectContaining({
+      "extra.x > -1": expect.objectContaining({
+        entered: expect.objectContaining({ tradeCount: 2 }),
+        no_data_count: 0,
+      }),
+    }),
+  );
+  expect(validation.structuredContent?.warnings).toEqual(
+    expect.arrayContaining([expect.stringContaining("2 of 2 trades had no matching market data")]),
+  );
+  const fit = await handleAnalyzeStructureFit(input, baseDir);
+  expect(fit.structuredContent?.overall).toEqual(
+    expect.objectContaining({ tradeCount: 2, totalPl: 50 }),
+  );
+  expect(fit.structuredContent?.dimensions).toEqual(
+    expect.objectContaining({
+      "extra.x": { "1": expect.objectContaining({ tradeCount: 2 }) },
+      day_of_week: {},
+    }),
+  );
+  expect(fit.structuredContent?.dimension_baselines).toEqual(
+    expect.objectContaining({
+      "extra.x": expect.objectContaining({ tradeCount: 2 }),
+      day_of_week: expect.objectContaining({ tradeCount: 0 }),
+    }),
+  );
+});

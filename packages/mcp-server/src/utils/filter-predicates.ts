@@ -19,6 +19,10 @@ import type { AnalysisField } from "../db/dataset-schemas.ts";
 export interface FilterPredicate {
   /** Evaluate this predicate against a market data record */
   test: (market: Record<string, unknown>) => boolean;
+  /** Whether the field and any cross-field comparison operand are observed. */
+  hasData: (market: Record<string, unknown>) => boolean;
+  /** Logical fields consumed, including a cross-field comparison operand. */
+  fields: string[];
   /** The actual field key used for lookup (may have prev_ prefix) */
   fieldKey: string;
   /** Whether the field was detected as close-derived and lagged */
@@ -85,21 +89,12 @@ function isCrossFieldRef(value: unknown): value is string {
 }
 
 /**
- * Resolve a cross-field reference value. If the value is a string that
- * already exists as a key in the market record, use it as-is. Otherwise,
- * if the bare field name (without prev_ prefix) is close-derived, try
- * the prev_ prefixed version.
+ * Close-derived comparison operands always use prior-day values, even when the
+ * joined record also contains a raw same-day close. Dataset and explicit prev_
+ * references already name their resolved entry-time value.
  */
 function resolveFieldRef(refName: string, market: Record<string, unknown>): number {
-  // Direct lookup first (handles cases like "prev_VIX_Close" spelled out)
-  if (refName in market) {
-    return getNum(market, refName);
-  }
-  // If the ref looks like a bare close-derived field, try prev_ prefix
-  if (CLOSE_KNOWN_FIELDS.has(refName)) {
-    return getNum(market, `prev_${refName}`);
-  }
-  return NaN;
+  return getNum(market, CLOSE_KNOWN_FIELDS.has(refName) ? `prev_${refName}` : refName);
 }
 
 /**
@@ -129,6 +124,24 @@ export function buildFilterPredicate(
   const fieldKey = builtinClose ? `prev_${filter.field}` : filter.field;
 
   const { operator, value } = filter;
+  const numericComparison =
+    operator === ">" || operator === "<" || operator === ">=" || operator === "<=";
+  const referencedField =
+    isCrossFieldRef(value) &&
+    (numericComparison ||
+      (operator === "==" && entry?.type !== "categorical" && resolveDayName(value) === null))
+      ? value
+      : undefined;
+  const hasData = (market: Record<string, unknown>): boolean => {
+    const raw = getRaw(market, fieldKey);
+    if (raw === null || raw === undefined || (typeof raw === "number" && !Number.isFinite(raw)))
+      return false;
+    if ((numericComparison || operator === "between") && !Number.isFinite(getNum(market, fieldKey)))
+      return false;
+    if (referencedField !== undefined)
+      return Number.isFinite(resolveFieldRef(referencedField, market));
+    return true;
+  };
 
   const test = (market: Record<string, unknown>): boolean => {
     // For "in" and "==" operators, we may need raw value access
@@ -204,5 +217,11 @@ export function buildFilterPredicate(
     }
   };
 
-  return { test, fieldKey, isLagged };
+  return {
+    test,
+    hasData,
+    fields: referencedField === undefined ? [filter.field] : [filter.field, referencedField],
+    fieldKey,
+    isLagged,
+  };
 }
