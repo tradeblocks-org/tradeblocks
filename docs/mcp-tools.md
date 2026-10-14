@@ -162,6 +162,14 @@ market tables or Parquet. Re-import atomically replaces a named dataset.
 `enrich_trades` retains CSV `customFields` and returns `datasetFields` plus
 `datasetProvenance` (source timestamp and available-at instant) so carry-forward age is visible.
 
+Blank or whitespace-only cells are not observations: imports omit them and causal joins
+carry forward the last real value. They do not change a numeric column into a categorical
+column, and missing numeric values never become zero during filter evaluation.
+When dataset fields participate in aggregate analysis, `datasetAge` reports each field's
+attachment count, median/max source-to-entry age in Eastern calendar days, and
+`olderThan3Days` count. This is visibility only, not a freshness limit. Calls using no
+dataset fields retain their prior output shape.
+
 `find_predictive_fields` ranks registered numeric dataset fields and built-in market fields
 alongside trade fields. `filter_curve` accepts these names directly (for example `signal.score`
 or `RSI_14`); both use the same entry-time values as `enrich_trades`. Dataset fields with no

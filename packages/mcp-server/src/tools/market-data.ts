@@ -174,7 +174,8 @@ function resultToRecords(result: {
  */
 function getNum(record: Record<string, unknown>, field: string): number {
   const val = record[field];
-  if (val === null || val === undefined) return NaN;
+  if (val === null || val === undefined || (typeof val === "string" && val.trim() === ""))
+    return NaN;
   if (typeof val === "bigint") return Number(val);
   return val as number;
 }

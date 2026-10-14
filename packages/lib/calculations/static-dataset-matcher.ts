@@ -84,7 +84,14 @@ export function resolveDatasetColumnAtTime(
   let index = columns.get(column);
   if (!index) {
     index = rows
-      .filter((row) => row.values[column] !== undefined)
+      .filter((row) => {
+        const value = row.values[column];
+        return (
+          value !== undefined &&
+          value !== null &&
+          (typeof value !== "string" || value.trim() !== "")
+        );
+      })
       .map((row) => ({
         row,
         time: getDatasetValueAvailableAt(dataset, row, column).getTime(),
@@ -110,10 +117,7 @@ function matchDatasetValues(
   dataset: StaticDataset,
   rows: StaticDatasetRow[],
 ): StaticDatasetRow | null {
-  if (
-    dataset.timingMode !== "declared" ||
-    !["nearest-before", "exact"].includes(dataset.matchStrategy)
-  ) {
+  if (dataset.timingMode !== "declared") {
     return matchTradeToDataset(trade, rows, dataset.matchStrategy);
   }
   const entry = combineDateAndTime(trade.dateOpened, trade.timeOpened);
@@ -121,11 +125,7 @@ function matchDatasetValues(
   let source: StaticDatasetRow | null = null;
   for (const column of dataset.columns) {
     const match = resolveDatasetColumnAtTime(dataset, rows, column, entry);
-    if (
-      !match ||
-      (dataset.matchStrategy === "exact" && match.availableAt.getTime() !== entry.getTime())
-    )
-      continue;
+    if (!match) continue;
     values[column] = match.value;
     source = match.row;
   }
@@ -563,7 +563,7 @@ export function getMatchedFieldValue(
   }
 
   if (!datasetInfo.dataset.columns.includes(columnName)) {
-    throw new Error(`Unknown dataset column: ${columnName}`);
+    return null;
   }
   const matchedRow = matchDatasetValues(trade, datasetInfo.dataset, datasetInfo.rows);
   if (!matchedRow) {

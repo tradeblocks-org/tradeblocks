@@ -135,3 +135,52 @@ it("keeps legacy IndexedDB numbers unchanged until an explicit timing update", a
     await deleteDatabase();
   }
 });
+
+it("skips blank observations and carries forward the last real value", async () => {
+  const parsed = await processStaticDatasetContent(
+    "date,x\n2025-01-02,1.5\n2025-01-03, \n2025-01-06,2.5",
+    { name: "blank", fileName: "blank.csv" },
+  );
+  expect(parsed.errors).toEqual([]);
+  expect(parsed.rows[1].values).toEqual({});
+  const rows = parsed.rows.map((row) => ({ ...row, datasetId: parsed.dataset.id }));
+  expect(
+    resolveDatasetColumnAtTime(parsed.dataset, rows, "x", new Date("2025-01-04T15:00:00Z"))?.value,
+  ).toBe(1.5);
+  const legacyBlank = [
+    ...rows,
+    {
+      datasetId: parsed.dataset.id,
+      timestamp: new Date("2025-01-03T05:00:00Z"),
+      dateOnly: true,
+      values: { x: "  " },
+    },
+  ];
+  expect(
+    resolveDatasetColumnAtTime(parsed.dataset, legacyBlank, "x", new Date("2025-01-04T15:00:00Z"))
+      ?.value,
+  ).toBe(1.5);
+});
+
+it.each(["same-day", "nearest-after", "nearest", "exact", "nearest-before"] as const)(
+  "honors declared availability with stored strategy %s",
+  async (matchStrategy) => {
+    const parsed = await processStaticDatasetContent("date,x\n2025-01-02,1.5\n2025-01-03,2.5", {
+      name: "declared",
+      fileName: "declared.csv",
+      matchStrategy,
+    });
+    const data = [
+      {
+        dataset: parsed.dataset,
+        rows: parsed.rows.map((row) => ({ ...row, datasetId: parsed.dataset.id })),
+      },
+    ];
+    expect(
+      getMatchedValuesForTrade(
+        { dateOpened: new Date("2025-01-03"), timeOpened: "10:00:00" } as Trade,
+        data,
+      ),
+    ).toEqual({ declared: { x: 1.5 } });
+  },
+);

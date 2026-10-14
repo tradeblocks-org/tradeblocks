@@ -380,9 +380,19 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
               </Tooltip>
             </TooltipProvider>
           </div>
-          <Select value={dataset.matchStrategy} onValueChange={handleStrategyChange}>
+          <Select
+            value={dataset.timingMode === "declared" ? "nearest-before" : dataset.matchStrategy}
+            onValueChange={handleStrategyChange}
+            disabled={dataset.timingMode === "declared"}
+          >
             <SelectTrigger className="h-8 text-xs">
-              <SelectValue>{MATCH_STRATEGY_LABELS[dataset.matchStrategy]}</SelectValue>
+              <SelectValue>
+                {
+                  MATCH_STRATEGY_LABELS[
+                    dataset.timingMode === "declared" ? "nearest-before" : dataset.matchStrategy
+                  ]
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {(Object.keys(MATCH_STRATEGY_LABELS) as MatchStrategy[]).map((strategy) => (
@@ -397,6 +407,11 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
               ))}
             </SelectContent>
           </Select>
+          {dataset.timingMode === "declared" && (
+            <p className="text-xs text-muted-foreground">
+              Declared timing always uses the latest value available at trade entry.
+            </p>
+          )}
         </div>
 
         {/* Footer */}

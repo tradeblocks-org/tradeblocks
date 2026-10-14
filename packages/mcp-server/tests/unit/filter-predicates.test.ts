@@ -275,3 +275,12 @@ describe("buildFilterPredicate", () => {
     });
   });
 });
+
+it.each(["", "  ", null, undefined])(
+  "does not interpret missing numeric observation %p as zero",
+  (value) => {
+    const predicate = buildFilterPredicate({ field: "blank.x", operator: ">", value: -1 });
+    expect(predicate.test({ "blank.x": value })).toBe(false);
+    expect(predicate.test({ "blank.x": 0 })).toBe(true);
+  },
+);

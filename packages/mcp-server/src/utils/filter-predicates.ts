@@ -58,7 +58,8 @@ function resolveDayName(value: unknown): number | null {
  */
 function getNum(record: Record<string, unknown>, key: string): number {
   const val = record[key];
-  if (val === null || val === undefined) return NaN;
+  if (val === null || val === undefined || (typeof val === "string" && val.trim() === ""))
+    return NaN;
   const num = Number(val);
   return num;
 }
@@ -68,7 +69,8 @@ function getNum(record: Record<string, unknown>, key: string): number {
  * Returns undefined if the key is missing.
  */
 function getRaw(record: Record<string, unknown>, key: string): unknown {
-  return record[key];
+  const value = record[key];
+  return typeof value === "string" && value.trim() === "" ? undefined : value;
 }
 
 /**

@@ -3,6 +3,7 @@ import { resolveAnalysisFields, requireCoveredField } from "../../utils/trade-an
 import { sweepThresholds } from "../../utils/threshold-sweep.ts";
 import { computeSliceStats } from "../../utils/analysis-stats.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
+import { datasetAgeOutput } from "../../db/dataset-schemas.ts";
 
 export async function suggestFieldFilters(
   baseDir: string,
@@ -11,7 +12,7 @@ export async function suggestFieldFilters(
   fields: string[],
   minImprovementPct: number,
 ) {
-  const { catalog, values } = await resolveAnalysisFields(baseDir, trades);
+  const { catalog, values, datasetAge } = await resolveAnalysisFields(baseDir, trades);
   const suggestions: {
     filter: string;
     condition: { field: string; operator: string; value: number | string; lagged: boolean };
@@ -81,6 +82,7 @@ export async function suggestFieldFilters(
     suggestedFilters: suggestions,
     compositeSuggestions: [],
     coverage,
+    ...datasetAgeOutput(datasetAge, fields),
     minImprovementThreshold: minImprovementPct,
   });
 }
@@ -92,7 +94,7 @@ export async function analyzeFieldRegimes(
   field: string,
   bins?: number[],
 ) {
-  const { catalog, values } = await resolveAnalysisFields(baseDir, trades);
+  const { catalog, values, datasetAge } = await resolveAnalysisFields(baseDir, trades);
   requireCoveredField(field, catalog, values);
   const entry = catalog.find((entry) => entry.field === field)!;
   if (bins && entry.type !== "numeric") throw new Error(`Bins require a numeric field: ${field}`);
@@ -155,6 +157,7 @@ export async function analyzeFieldRegimes(
       blockId,
       field,
       bins: cuts,
+      ...datasetAgeOutput(datasetAge, [field]),
       tradesTotal: trades.length,
       tradesMatched: pool.length,
       tradesUnmatched: uncovered,

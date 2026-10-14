@@ -117,7 +117,15 @@ export function datasetFields(entries: StoredDataset[]): AnalysisField[] {
   return entries.flatMap(({ dataset, rows, source }) =>
     dataset.columns.map((column) => ({
       field: `${dataset.name}.${column}`,
-      type: rows.every((row) => typeof row.values[column] === "number") ? "numeric" : "categorical",
+      type: rows
+        .map((row) => row.values[column])
+        .filter(
+          (value) =>
+            typeof value === "number" || (typeof value === "string" && value.trim() !== ""),
+        )
+        .every((value) => typeof value === "number")
+        ? "numeric"
+        : "categorical",
       timing: dataset.columnTiming![column],
       knownBy: dataset.knownBy ?? null,
       source,
@@ -159,4 +167,70 @@ export function resolveTradeDatasets(entries: StoredDataset[], trade: Trade) {
     }
   }
   return { values, provenance };
+}
+
+export interface DatasetFieldAge {
+  attachments: number;
+  medianAgeDays: number;
+  maxAgeDays: number;
+  olderThan3Days: number;
+}
+
+const easternCalendar = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function easternDayNumber(date: Date): number {
+  const parts = easternCalendar.formatToParts(date);
+  return (
+    Date.UTC(
+      Number(parts.find((part) => part.type === "year")!.value),
+      Number(parts.find((part) => part.type === "month")!.value) - 1,
+      Number(parts.find((part) => part.type === "day")!.value),
+    ) / 86400000
+  );
+}
+
+/** Age is source-to-entry Eastern calendar days, not a freshness limit. */
+export function summarizeDatasetAge(
+  trades: Trade[],
+  matches: { provenance: Record<string, { sourceTimestamp: string }> }[],
+): Record<string, DatasetFieldAge> {
+  const ages = new Map<string, number[]>();
+  for (let i = 0; i < trades.length; i++) {
+    const entryDay = easternDayNumber(
+      combineDateAndTime(trades[i].dateOpened, trades[i].timeOpened),
+    );
+    for (const [field, provenance] of Object.entries(matches[i].provenance)) {
+      const samples = ages.get(field) ?? [];
+      samples.push(entryDay - easternDayNumber(new Date(provenance.sourceTimestamp)));
+      ages.set(field, samples);
+    }
+  }
+  return Object.fromEntries(
+    [...ages].map(([field, samples]) => {
+      samples.sort((a, b) => a - b);
+      const middle = Math.floor(samples.length / 2);
+      return [
+        field,
+        {
+          attachments: samples.length,
+          medianAgeDays:
+            samples.length % 2 ? samples[middle] : (samples[middle - 1] + samples[middle]) / 2,
+          maxAgeDays: samples[samples.length - 1],
+          olderThan3Days: samples.filter((age) => age > 3).length,
+        },
+      ];
+    }),
+  );
+}
+
+export function datasetAgeOutput(summary: Record<string, DatasetFieldAge>, fields: string[]) {
+  const selected = Object.fromEntries(
+    fields.filter((field) => summary[field]).map((field) => [field, summary[field]]),
+  );
+  return Object.keys(selected).length ? { datasetAge: selected } : {};
 }

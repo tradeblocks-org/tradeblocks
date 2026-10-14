@@ -314,7 +314,8 @@ export async function processStaticDatasetFile(
     // Parse data values
     const values: Record<string, number | string> = {};
     for (const column of dataColumns) {
-      values[column] = parseValue(rawRow[column]);
+      const value = parseValue(rawRow[column]);
+      if (value !== "") values[column] = value;
     }
 
     rows.push({
@@ -357,7 +358,7 @@ export async function processStaticDatasetFile(
     for (const row of rows) {
       const filteredValues: Record<string, number | string> = {};
       for (const column of nonEmptyColumns) {
-        filteredValues[column] = row.values[column];
+        if (row.values[column] !== undefined) filteredValues[column] = row.values[column];
       }
       row.values = filteredValues;
     }
@@ -500,7 +501,8 @@ export async function processStaticDatasetContent(
     // Parse data values
     const values: Record<string, number | string> = {};
     for (const column of dataColumns) {
-      values[column] = parseValue(rawRow[column]);
+      const value = parseValue(rawRow[column]);
+      if (value !== "") values[column] = value;
     }
 
     rows.push({
@@ -543,7 +545,7 @@ export async function processStaticDatasetContent(
     for (const row of rows) {
       const filteredValues: Record<string, number | string> = {};
       for (const column of nonEmptyColumns) {
-        filteredValues[column] = row.values[column];
+        if (row.values[column] !== undefined) filteredValues[column] = row.values[column];
       }
       row.values = filteredValues;
     }

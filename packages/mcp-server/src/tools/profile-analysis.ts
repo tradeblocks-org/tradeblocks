@@ -29,7 +29,14 @@ import { withSyncedBlock } from "./middleware/sync-middleware.ts";
 import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.ts";
 import { syncAllBlocks } from "../sync/index.ts";
 import type { EntryFilter } from "../models/strategy-profile.ts";
-import { listDatasets, resolveTradeDatasets, runtimeFieldCatalog } from "../db/dataset-schemas.ts";
+import {
+  listDatasets,
+  resolveTradeDatasets,
+  runtimeFieldCatalog,
+  summarizeDatasetAge,
+  datasetAgeOutput,
+  type DatasetFieldAge,
+} from "../db/dataset-schemas.ts";
 
 // =============================================================================
 // Utility Functions (local to this module)
@@ -102,7 +109,8 @@ function recordsByTickerDate(
 
 function getNum(record: Record<string, unknown>, field: string): number {
   const val = record[field];
-  if (val === null || val === undefined) return NaN;
+  if (val === null || val === undefined || (typeof val === "string" && val.trim() === ""))
+    return NaN;
   if (typeof val === "bigint") return Number(val);
   return val as number;
 }
@@ -201,6 +209,7 @@ async function loadTradesAndMarket(
   matched: TradeWithMarket[];
   unmatchedCount: number;
   allTrades: Trade[];
+  datasetAge: Record<string, DatasetFieldAge>;
 }> {
   const block = await loadBlock(baseDir, blockId);
   let trades = filterByStrategy(block.trades, strategyName);
@@ -216,7 +225,7 @@ async function loadTradesAndMarket(
   }
 
   if (trades.length === 0) {
-    return { matched: [], unmatchedCount: 0, allTrades: [] };
+    return { matched: [], unmatchedCount: 0, allTrades: [], datasetAge: {} };
   }
 
   // Collect unique trade keys for market query
@@ -229,15 +238,16 @@ async function loadTradesAndMarket(
   const marketRecords = resultToRecords(result);
   const marketMap = recordsByTickerDate(marketRecords);
   const datasets = await listDatasets(conn);
+  const datasetMatches = trades.map((trade) => resolveTradeDatasets(datasets, trade));
 
   // Match trades to market records
   const matched: TradeWithMarket[] = [];
   let unmatchedCount = 0;
 
-  for (const trade of trades) {
+  for (const [index, trade] of trades.entries()) {
     const lookup = getTradeLookupKey(trade);
     const key = marketTickerDateKey(lookup.ticker, lookup.date);
-    const datasetValues = resolveTradeDatasets(datasets, trade).values;
+    const datasetValues = datasetMatches[index].values;
     const builtIn = marketMap.get(key);
     const market =
       builtIn || Object.keys(datasetValues).length ? { ...builtIn, ...datasetValues } : undefined;
@@ -248,7 +258,12 @@ async function loadTradesAndMarket(
     }
   }
 
-  return { matched, unmatchedCount, allTrades: trades };
+  return {
+    matched,
+    unmatchedCount,
+    allTrades: trades,
+    datasetAge: summarizeDatasetAge(trades, datasetMatches),
+  };
 }
 
 /**
@@ -335,7 +350,7 @@ export async function handleAnalyzeStructureFit(
   }
 
   // Load trades + market data
-  const { matched, unmatchedCount, allTrades } = await loadTradesAndMarket(
+  const { matched, unmatchedCount, allTrades, datasetAge } = await loadTradesAndMarket(
     baseDir,
     blockId,
     strategyName,
@@ -553,6 +568,10 @@ export async function handleAnalyzeStructureFit(
   return createToolOutput(summaryText, {
     overall,
     dimensions,
+    ...datasetAgeOutput(
+      datasetAge,
+      marketFilters.filters.map((filter) => filter.field),
+    ),
     profile_update_hints: profileUpdateHints,
     unresolvable_filters: marketFilters.unresolvable,
     warnings,
@@ -633,7 +652,7 @@ export async function handleValidateEntryFilters(
   }
 
   // Load trades + market data
-  const { matched, unmatchedCount, allTrades } = await loadTradesAndMarket(
+  const { matched, unmatchedCount, allTrades, datasetAge } = await loadTradesAndMarket(
     baseDir,
     blockId,
     strategyName,
@@ -703,7 +722,7 @@ export async function handleValidateEntryFilters(
 
     for (const { trade, market } of matched) {
       const raw = getRaw(market, predicate.fieldKey);
-      if (raw === null || raw === undefined) {
+      if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
         noDataCount++;
         continue;
       }
@@ -873,6 +892,10 @@ export async function handleValidateEntryFilters(
     baseline,
     no_filters: noFiltersStats,
     per_filter: perFilter,
+    ...datasetAgeOutput(
+      datasetAge,
+      filters.map((filter) => filter.field),
+    ),
     unresolvable_filters: unresolvable,
     ablation: {
       single: ablationSingle,

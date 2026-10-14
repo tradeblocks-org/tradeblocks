@@ -363,3 +363,128 @@ test("profile filters use close carry-forward and open known-by rather than same
     ]),
   );
 });
+
+test("blank cells remain numeric, carry forward, and expose aggregate source age without a freshness limit", async () => {
+  const imported = await handlers.import_daily_dataset({
+    name: "blank",
+    content: "date,x\n2025-01-02,1.5\n2025-01-03, \n2025-01-06,2.5",
+  });
+  expect(data(imported).fields).toEqual([
+    expect.objectContaining({ field: "blank.x", type: "numeric" }),
+  ]);
+  await mkdir(path.join(baseDir, "blank"));
+  const header =
+    "Date Opened,Time Opened,Opening Price,Legs,Premium,Closing Price,Date Closed,Time Closed,Avg. Closing Cost,Reason For Close,P/L,No. of Contracts,Funds at Close,Margin Req.,Strategy,Opening Commissions + Fees,Closing Commissions + Fees";
+  const dates = [
+    "2025-01-02",
+    ...Array(5).fill("2025-01-04"),
+    ...Array(5).fill("2025-01-10"),
+  ] as string[];
+  await writeFile(
+    path.join(baseDir, "blank", "tradelog.csv"),
+    [
+      header,
+      ...dates.map(
+        (date, i) =>
+          `${date},10:00:00,1,SPX Put Spread,1,0,${date},15:00:00,0,Profit Target,${i > 5 ? -50 : 100},1,10000,500,Test,0,0`,
+      ),
+    ].join("\n"),
+  );
+  const conn = await upgradeToReadWrite(baseDir);
+  await conn.run(
+    "INSERT INTO market.enriched (ticker, date, Day_of_Week, Gap_Pct) VALUES ('SPX', '2025-01-02', 5, 0)",
+  );
+  await upsertProfile(conn, {
+    blockId: "blank",
+    strategyName: "Test",
+    structureType: "iron_condor",
+    greeksBias: "theta_positive",
+    thesis: "",
+    legs: [],
+    entryFilters: [{ field: "blank.x", operator: ">", value: -1, source: "market" }],
+    exitRules: [],
+    expectedRegimes: [],
+    keyMetrics: {},
+  });
+  const server = {
+    registerTool(
+      name: string,
+      _config: unknown,
+      handler: (input: Record<string, unknown>) => Promise<ToolOutput>,
+    ) {
+      handlers[name] = handler;
+    },
+  } as unknown as McpServer;
+  registerPredictiveTools(server, baseDir);
+  registerMarketDataTools(
+    server,
+    baseDir,
+    createMarketStores({
+      get conn() {
+        return getCurrentConnection();
+      },
+      dataDir: baseDir,
+      parquetMode: false,
+      tickers: new TickerRegistry([{ underlying: "SPX", roots: ["SPX", "SPXW"] }]),
+    }),
+  );
+  const enriched = await handlers.enrich_trades({
+    blockId: "blank",
+    limit: 50,
+    offset: 0,
+    includeOutcomeFields: false,
+    includeIntradayContext: false,
+  });
+  const attached = enriched.structuredContent?.trades as {
+    datasetFields: Record<string, number>;
+  }[];
+  expect(attached[0].datasetFields).toEqual({});
+  expect(attached[1].datasetFields).toEqual({ "blank.x": 1.5 });
+  expect(attached[6].datasetFields).toEqual({ "blank.x": 2.5 });
+  const validation = await handleValidateEntryFilters(
+    { blockId: "blank", strategyName: "Test", minTrades: 1, maxAblationFilters: 8 },
+    baseDir,
+  );
+  expect(validation.structuredContent?.per_filter).toEqual(
+    expect.objectContaining({
+      "blank.x > -1": expect.objectContaining({
+        no_data_count: 1,
+        entered: expect.objectContaining({ tradeCount: 10 }),
+      }),
+    }),
+  );
+  const fit = await handleAnalyzeStructureFit(
+    { blockId: "blank", strategyName: "Test", minTrades: 1 },
+    baseDir,
+  );
+  const outputs = [
+    validation,
+    fit,
+    await handlers.filter_curve({
+      blockId: "blank",
+      field: "blank.x",
+      mode: "both",
+      thresholds: [2],
+      percentileSteps: [50],
+    }),
+    await handlers.find_predictive_fields({
+      blockId: "blank",
+      targetField: "pl",
+      minSamples: 10,
+      includeCustomFields: true,
+    }),
+    await handlers.suggest_filters({ blockId: "blank", fields: ["blank.x"], minImprovementPct: 1 }),
+    await handlers.analyze_regime_performance({ blockId: "blank", field: "blank.x", bins: [2] }),
+  ];
+  for (const output of outputs) {
+    expect(output.isError ? output.content : null).toBeNull();
+    expect(output.structuredContent?.datasetAge).toEqual({
+      "blank.x": { attachments: 10, medianAgeDays: 3, maxAgeDays: 4, olderThan3Days: 5 },
+    });
+  }
+  const preset = await handlers.analyze_regime_performance({
+    blockId: "blank",
+    segmentBy: "dayOfWeek",
+  });
+  expect(preset.structuredContent).not.toHaveProperty("datasetAge");
+});

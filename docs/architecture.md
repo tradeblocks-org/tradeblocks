@@ -92,8 +92,9 @@ Existing IndexedDB datasets load as `legacy-same-day` without changing their num
 Static Datasets displays a warning and a **Set column timing** action. Older rows did
 not retain CSV precision: the user must explicitly choose dates-only or per-row
 timestamps when setting timing; mixed-precision legacy files must be re-imported.
-Same-day, nearest-after and nearest are labelled **non-causal (lookahead)** and remain
-available for exploratory web comparisons, not causal entry analysis.
+Declared datasets always select the latest value available at entry, regardless of any stored
+match strategy. The web app disables strategy selection for them. Legacy datasets retain
+same-day, nearest-after and nearest exploratory strategies with their lookahead warning.
 
 Daily-log custom fields are a separate, unchanged contract: they still join on the
 trade's calendar date and have no availability declarations. Close-derived values

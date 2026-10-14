@@ -16,6 +16,7 @@ import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
 import { requireCoveredField } from "../../utils/trade-analysis-fields.ts";
 import { sweepThresholds } from "../../utils/threshold-sweep.ts";
+import { datasetAgeOutput } from "../../db/dataset-schemas.ts";
 
 /**
  * Register predictive-related report tools
@@ -127,6 +128,11 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             fieldsWithSufficientData: fieldsWithData,
             rankedFields,
             fieldsSkipped: skippedFields,
+            ...datasetAgeOutput(resolved.datasetAge, [
+              targetField,
+              ...rankedFields.map(({ field }) => field),
+              ...skippedFields.map(({ field }) => field),
+            ]),
           };
 
           // Add profile context when strategyName is provided
@@ -414,6 +420,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           const structuredData = {
             blockId,
             field,
+            ...datasetAgeOutput(resolved.datasetAge, [field]),
             mode,
             filters: {
               strategy: strategy ?? null,

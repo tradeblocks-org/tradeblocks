@@ -1,6 +1,11 @@
 import type { Trade } from "@tradeblocks/lib";
 import { getConnection } from "../db/connection.ts";
-import { listDatasets, resolveTradeDatasets, runtimeFieldCatalog } from "../db/dataset-schemas.ts";
+import {
+  listDatasets,
+  resolveTradeDatasets,
+  runtimeFieldCatalog,
+  summarizeDatasetAge,
+} from "../db/dataset-schemas.ts";
 import { buildLookaheadFreeQuery, CLOSE_KNOWN_FIELDS } from "./field-timing.ts";
 import { marketTickerDateKey, resolveTradeTicker } from "./ticker.ts";
 
@@ -8,6 +13,7 @@ export async function resolveAnalysisFields(baseDir: string, trades: Trade[]) {
   const conn = await getConnection(baseDir);
   const datasets = await listDatasets(conn);
   const catalog = await runtimeFieldCatalog(conn);
+  const datasetMatches = trades.map((trade) => resolveTradeDatasets(datasets, trade));
   const keys = trades.map((trade) => {
     const date = new Date(trade.dateOpened);
     const midnightUtc = date.getUTCHours() === 0 && date.getUTCMinutes() === 0;
@@ -37,18 +43,21 @@ export async function resolveAnalysisFields(baseDir: string, trades: Trade[]) {
   const values = trades.map((trade, i) => {
     const row = market.get(marketTickerDateKey(keys[i].ticker, keys[i].date));
     const result: Record<string, number | string> = {
-      ...resolveTradeDatasets(datasets, trade).values,
+      ...datasetMatches[i].values,
     };
     for (const entry of catalog) {
       if (entry.source !== "market") continue;
       const value =
         row?.[CLOSE_KNOWN_FIELDS.has(entry.field) ? `prev_${entry.field}` : entry.field];
-      if ((typeof value === "number" && Number.isFinite(value)) || typeof value === "string")
+      if (
+        (typeof value === "number" && Number.isFinite(value)) ||
+        (typeof value === "string" && value.trim() !== "")
+      )
         result[entry.field] = value as number | string;
     }
     return result;
   });
-  return { catalog, values };
+  return { catalog, values, datasetAge: summarizeDatasetAge(trades, datasetMatches) };
 }
 
 export function requireCoveredField(

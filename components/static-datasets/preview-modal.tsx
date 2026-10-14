@@ -204,11 +204,18 @@ export function PreviewModal({ open, onOpenChange, dataset }: PreviewModalProps)
             <div className="flex items-center gap-2">
               <span>Match Strategy:</span>
               <Select
-                value={matchStrategy}
+                value={dataset?.timingMode === "declared" ? "nearest-before" : matchStrategy}
+                disabled={dataset?.timingMode === "declared"}
                 onValueChange={(v) => handleMatchStrategyChange(v as MatchStrategy)}
               >
                 <SelectTrigger className="h-7 w-[160px] text-xs">
-                  <SelectValue>{MATCH_STRATEGY_LABELS[matchStrategy]}</SelectValue>
+                  <SelectValue>
+                    {
+                      MATCH_STRATEGY_LABELS[
+                        dataset?.timingMode === "declared" ? "nearest-before" : matchStrategy
+                      ]
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(Object.keys(MATCH_STRATEGY_LABELS) as MatchStrategy[]).map((strategy) => (
@@ -223,6 +230,11 @@ export function PreviewModal({ open, onOpenChange, dataset }: PreviewModalProps)
                   ))}
                 </SelectContent>
               </Select>
+              {dataset?.timingMode === "declared" && (
+                <span className="text-xs">
+                  Declared timing always uses the latest value available at trade entry.
+                </span>
+              )}
             </div>
           </DialogDescription>
         </DialogHeader>
