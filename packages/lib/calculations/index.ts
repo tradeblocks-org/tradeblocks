@@ -9,6 +9,7 @@ export * from "./return-series-stats.ts";
 export * from "./realized-performance.ts";
 export * from "./marked-equity.ts";
 export * from "./book-replay.ts";
+export * from "./replay-calibration.ts";
 export * from "./drawdown-budget-search.ts";
 export * from "./field-analysis.ts";
 export * from "./single-tape-walk-forward.ts";

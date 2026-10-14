@@ -155,6 +155,50 @@ those comparisons as unavailable rather than reporting the substitution as
 measured evidence. This additive library calculation changes neither bootstrap
 inference nor MCP tools, and adds no bootstrap option or provider requirement.
 
+#### Replay and native-ledger calibration
+
+`compareReplayToNative(expected, observed, tolerances?)` is exported from
+`@tradeblocks/lib` and its calculations entrypoint. Both sides are
+`CalibrationLedger`: `entries` with stable `id`, `memberId`, positive whole
+`quantity` and `netPlPerContract`; `markedEquity` as dated account equity;
+`endingCash`; and `openPositions` with stable entry IDs, member IDs and remaining
+whole quantities. Partial-close rows need distinct stable IDs. Only executed
+entries belong in this ledger, not zero-quantity attempts.
+
+Normalize both sides to net USD per **entry contract** before comparing. Fees
+must already be accounted for, and corporate-action normalization remains the
+caller's responsibility. No replay result is required: a frozen prediction can
+supply the same ledger. Project replay quantities from `members[].contractsPerEntry`
+and the corresponding input trades; use its marked curve, not its closed curve.
+
+If a starting-funds observation precedes the first session, declare the same
+seed date and starting funds on **both** curves. A seed present on only one side
+is a curve-date failure, never silently added by the comparator.
+
+Entries, member identities and quantities compare exactly. Per-unit P&L compares
+integer cents rounded to the nearest cent, with exact half cents away from zero.
+Ending cash uses the same cent rounding and defaults to zero USD tolerance.
+Pass `{ cashUsd, markedDrawdownPp }` to declare other non-negative tolerances.
+Marked maximum drawdown is running-peak-to-trough percent, computed with
+`drawdownEpisodesFromEquity` on both curves. Its default inclusive ceiling is
+0.01 percentage point; only machine roundoff at that ceiling is absorbed.
+
+The result returns `PASS` or `FAIL`, per-check mismatches, the tolerances used,
+all dated curve residuals and four labeled maximum-episode peak/trough residuals
+when both curves have a drawdown. Residual delta is observed minus expected, in
+USD; DD delta is in percentage points. A curve without drawdown has depth zero
+and no episode, not an invented trough. Curve values need not agree to pass the
+DD check: every residual is still exposed for caller investigation.
+
+Missing/extra curve dates are a named failure with absent values and deltas
+reported as `null`; dates are never intersected or interpolated. Duplicate IDs,
+non-finite numbers, invalid/non-increasing calendar dates, non-positive equity,
+empty curves, invalid quantities and negative/non-finite tolerances throw
+`RangeError`. Terminal open positions must reference their own entries and may
+not exceed entry quantities. Empty executed-entry and open-position sets are
+valid. Evidence provenance, verdict retention and tolerance policy belong to
+the caller; the library neither stores verdicts nor authorizes relaxed ceilings.
+
 #### Offline book replay and drawdown-budget search
 
 `@tradeblocks/lib` exports `replayBook(input: BookReplayInput, options?: BookReplayOptions)` and
