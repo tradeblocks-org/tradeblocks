@@ -20,3 +20,19 @@
 The fit budget then excludes carried members; replayed drawdown measures the combined schedule.
 
 Existing exports and behaviour are unchanged, including `replayBook`, `searchBookAtDrawdown` and `singleTapeWalkForwardByTrades`. No provider, file or network access is added. Results screen and order candidates; they are not broker or backtester evidence.
+
+## Optional execution-fact audit
+
+`replayBook(input, { audit })` now accepts a `BookReplayAudit` observer.
+It reports detached, deeply frozen entry-sizing stages and session-opening held
+position state. Unknown facts use the exported `ReadonlyFact<T>` union; null
+limits remain distinct from zero. Observers do not change execution or fees.
+Invalid/duplicate origin dates are refused and callback failures abort replay.
+No audit facts are allocated when the observer is omitted.
+
+`walkForwardBook(request, { audit })` forwards the observer with the policy
+only into final continuous replays, not fitting or search. The additive
+`BookReplayAudit`, `EntrySizingFact`, `OriginPositionFact`, `ReadonlyFact` and
+`WalkForwardBookOptions` types are exported through the library entrypoints.
+Existing callers and output shapes are unchanged; callbacks never enter
+declarations, tape identity or checkpoints.

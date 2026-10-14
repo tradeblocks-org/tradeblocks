@@ -3,6 +3,77 @@ import type { PreparedReplayTape } from "./book-replay-prepared.ts";
 export type { PreparedReplayTape } from "./book-replay-prepared.ts";
 export interface BookReplayOptions {
   preparedTape?: PreparedReplayTape;
+  audit?: BookReplayAudit;
+}
+
+/** Unknown facts are distinct from measured zero and an absent cap (null). */
+export type ReadonlyFact<T> =
+  | { readonly status: "available"; readonly value: T }
+  | { readonly status: "unavailable"; readonly reason: string };
+
+export interface EntrySizingFact {
+  readonly memberId: string;
+  readonly entryGroupId: string;
+  readonly sourceRows: readonly { readonly id: string; readonly ignored: boolean }[];
+  readonly date: string;
+  readonly time: string;
+  /** Zero-based ordinal in the complete event stream, including closes. */
+  readonly eventOrdinal: number;
+  readonly allIgnored: boolean;
+  readonly fundsAtEntry: number;
+  readonly effectiveRuleDate: string | null;
+  readonly sizing: ReadonlyFact<Readonly<BookSizing>>;
+  readonly maxContractsPerTrade: ReadonlyFact<number | null>;
+  readonly maxAllocationAmount: ReadonlyFact<number | null>;
+  readonly maxOpenTrades: ReadonlyFact<number | null>;
+  readonly minimumOne: boolean;
+  readonly removed: boolean;
+  readonly ignoreMarginRequirements: boolean;
+  readonly reservedBuyingPowerBefore: number;
+  readonly availableBuyingPowerBefore: number;
+  readonly packageBuyingPower: number;
+  readonly sizingBuyingPower: number;
+  readonly memberOpenGroupsBefore: number;
+  readonly rawQuantity: ReadonlyFact<number>;
+  readonly flooredQuantity: ReadonlyFact<number>;
+  readonly afterMinimumOne: ReadonlyFact<number>;
+  readonly contractCapLimit: ReadonlyFact<number | null>;
+  readonly allocationCapLimit: ReadonlyFact<number | null>;
+  readonly buyingPowerLimit: ReadonlyFact<number | null>;
+  readonly afterContractCap: ReadonlyFact<number>;
+  readonly afterAllocationCap: ReadonlyFact<number>;
+  readonly afterBuyingPowerAdmission: ReadonlyFact<number>;
+  readonly finalQuantity: number;
+  readonly rejectionReasons: readonly ("disabled" | "removed" | "insolvent" | "max_open")[];
+  readonly buyingPowerAdmissionApplied: boolean;
+}
+
+export interface OriginPositionFact {
+  readonly date: string;
+  readonly timing: "session_open_before_events";
+  readonly closedFunds: number;
+  readonly precedingCloseMarkedEquity: ReadonlyFact<{
+    readonly date: string;
+    readonly equity: number;
+  }>;
+  readonly reservedBuyingPower: number;
+  readonly members: readonly { readonly memberId: string; readonly openGroups: number }[];
+  readonly heldGroups: readonly {
+    readonly memberId: string;
+    readonly entryGroupId: string;
+    readonly dateOpened: string;
+    readonly timeOpened: string;
+    readonly entryQuantity: number;
+    readonly remainingChildIds: readonly string[];
+    readonly remainingReservedBuyingPower: number;
+  }[];
+}
+
+/** Detached, frozen facts; callback failures abort replay. No facts are built when omitted. */
+export interface BookReplayAudit {
+  readonly originDates: readonly string[];
+  readonly onEntry: (fact: EntrySizingFact) => void;
+  readonly onOrigin: (fact: OriginPositionFact) => void;
 }
 
 /** Prepare an immutable, caller-held tape; mismatched invariant inputs are refused. */
@@ -165,5 +236,5 @@ export interface BookReplayResult {
  * Without the option, the result shape and replay behavior are unchanged.
  */
 export function replayBook(input: BookReplayInput, options?: BookReplayOptions): BookReplayResult {
-  return replayBookInternal(input, options?.preparedTape);
+  return replayBookInternal(input, options?.preparedTape, options?.audit);
 }

@@ -12,6 +12,9 @@ import type {
   BookTrade,
   BookSizingScheduleEntry,
   BookDisabledScheduleEntry,
+  BookReplayAudit,
+  EntrySizingFact,
+  ReadonlyFact,
 } from "./book-replay.ts";
 
 interface ReplayGroupShape {
@@ -125,10 +128,11 @@ function checkedTape(input: BookReplayInput, handle: PreparedReplayTape): Prepar
 export function replayBookInternal(
   input: BookReplayInput,
   preparedTape?: PreparedReplayTape,
+  audit?: BookReplayAudit,
 ): BookReplayResult {
   const prepared = preparedTape ? checkedTape(input, preparedTape) : undefined;
   validateReplay(input, prepared !== undefined);
-  return runReplay(input, prepared ?? prepareReplay(input));
+  return runReplay(input, prepared ?? prepareReplay(input), audit);
 }
 /** Internal search seam; deliberately not exported by the package entrypoint. */
 export function createSearchReplay(
@@ -144,7 +148,12 @@ export function createSearchReplay(
   };
 }
 
-function runReplay(input: BookReplayInput, prepared: PreparedReplay): BookReplayResult {
+function runReplay(
+  input: BookReplayInput,
+  prepared: PreparedReplay,
+  audit?: BookReplayAudit,
+): BookReplayResult {
+  const origins = audit ? checkedAuditOrigins(input, audit) : undefined;
   const markOnly = input.ignoredRows === "markOnly";
   const countIgnoredBuyingPower = input.ignoredBuyingPower === "reserve";
   const reportsDisabled = Object.values(input.sizingSchedule ?? {}).some((schedule) =>
@@ -230,6 +239,46 @@ function runReplay(input: BookReplayInput, prepared: PreparedReplay): BookReplay
   const equity: DatedEquity[] = [];
   let cursor = 0;
   for (const date of input.dates) {
+    if (audit && origins!.has(date)) {
+      emitAudit(audit.onOrigin, {
+        date,
+        timing: "session_open_before_events",
+        closedFunds: funds,
+        precedingCloseMarkedEquity: markedEquity.length
+          ? available({ ...markedEquity[markedEquity.length - 1] })
+          : unavailable("preceding_close_mark_unavailable"),
+        reservedBuyingPower: reserved,
+        members: input.simultaneousOrder.map((memberId) => ({
+          memberId,
+          openGroups: openCounts[memberId],
+        })),
+        heldGroups: [...activeGroups].map((group) => {
+          const remaining = group.children.filter((child) => child.dateClosed >= date);
+          return {
+            memberId: group.memberId,
+            entryGroupId: group.entryGroupId,
+            dateOpened: group.children[0].dateOpened,
+            timeOpened: group.children[0].timeOpened,
+            entryQuantity: group.quantity,
+            remainingChildIds: remaining.map((child) => child.id),
+            remainingReservedBuyingPower:
+              group.quantity *
+              (input.reservationMode === "sharedEntryGroup"
+                ? group.remainingBuyingPowerChildren > 0
+                  ? group.bp
+                  : 0
+                : remaining.reduce(
+                    (sum, child) =>
+                      sum +
+                      (!child.ignored || countIgnoredBuyingPower
+                        ? child.buyingPowerPerContract
+                        : 0),
+                    0,
+                  )),
+          };
+        }),
+      });
+    }
     let closingCashFlow = 0;
     while (cursor < events.length && events[cursor].date <= date) {
       const event = events[cursor++];
@@ -249,7 +298,20 @@ function runReplay(input: BookReplayInput, prepared: PreparedReplay): BookReplay
           }
           if (low > 0) rule = schedule[low - 1];
         }
+        const fact = audit
+          ? entryFact(
+              group,
+              event.date,
+              cursor - 1,
+              rule,
+              member,
+              funds,
+              reserved,
+              openCounts[group.memberId],
+            )
+          : undefined;
         if ("disabled" in rule && rule.disabled === true) {
+          if (audit) emitAudit(audit.onEntry, fact!);
           summary.entryGroups++;
           summary.disabledGroups!++;
           summary.contractsPerEntry.push({
@@ -271,23 +333,45 @@ function runReplay(input: BookReplayInput, prepared: PreparedReplay): BookReplay
             : rule.sizing.mode === "fixed"
               ? rule.sizing.contracts
               : Math.floor(Math.max(0, funds) / rule.sizing.capitalPerContract);
+        if (fact) {
+          fact.rawQuantity = available(
+            rule.sizing.mode === "allocation"
+              ? (Math.max(0, funds) * rule.sizing.allocationPercentage) / 100 / bp
+              : rule.sizing.mode === "fixed"
+                ? rule.sizing.contracts
+                : Math.max(0, funds) / rule.sizing.capitalPerContract,
+          );
+          fact.flooredQuantity = available(quantity);
+        }
         if (member.minimumOne && funds > 0) quantity = Math.max(1, quantity);
+        if (fact) fact.afterMinimumOne = available(quantity);
         if (rule.maxContractsPerTrade !== null)
           quantity = Math.min(quantity, rule.maxContractsPerTrade);
+        if (fact) fact.afterContractCap = available(quantity);
         if (rule.maxAllocationAmount !== null)
           quantity = Math.min(quantity, Math.floor(rule.maxAllocationAmount / bp));
+        if (fact) fact.afterAllocationCap = available(quantity);
         if (
           group.bp > 0 &&
           !member.ignoreMarginRequirements &&
           rule.sizing.mode !== "capitalPerContract"
         )
           quantity = Math.min(quantity, Math.floor(Math.max(0, funds - reserved) / group.bp));
+        if (fact) fact.afterBuyingPowerAdmission = available(quantity);
         if (
           member.removed ||
           funds <= 0 ||
           (rule.maxOpenTrades !== null && openCounts[group.memberId] >= rule.maxOpenTrades)
         )
           quantity = 0;
+        if (fact) {
+          fact.finalQuantity = quantity;
+          if (member.removed) fact.rejectionReasons.push("removed");
+          if (funds <= 0) fact.rejectionReasons.push("insolvent");
+          if (rule.maxOpenTrades !== null && openCounts[group.memberId] >= rule.maxOpenTrades)
+            fact.rejectionReasons.push("max_open");
+          emitAudit(audit!.onEntry, fact);
+        }
         group.quantity = quantity;
         reserved += quantity * group.bp;
         if (quantity > 0) {
@@ -796,4 +880,101 @@ function validateReplay(input: BookReplayInput, prepared = false): void {
 function clockSeconds(time: string): number {
   const [hours, minutes, seconds] = time.split(":").map(Number);
   return hours * 3600 + minutes * 60 + seconds;
+}
+
+function checkedAuditOrigins(input: BookReplayInput, audit: BookReplayAudit): Set<string> {
+  const dates = new Set(input.dates);
+  const origins = new Set<string>();
+  for (const date of audit.originDates) {
+    if (!dates.has(date) || origins.has(date))
+      throw new RangeError("invalid_book_replay_audit_origin");
+    origins.add(date);
+  }
+  return origins;
+}
+
+function available<T>(value: T): ReadonlyFact<T> {
+  return { status: "available", value };
+}
+
+function unavailable(reason: string): { readonly status: "unavailable"; readonly reason: string } {
+  return { status: "unavailable", reason };
+}
+
+function freezeFact(value: object): void {
+  for (const child of Object.values(value))
+    if (child !== null && typeof child === "object") freezeFact(child);
+  Object.freeze(value);
+}
+
+function emitAudit<T extends object>(callback: (fact: T) => void, fact: T): void {
+  freezeFact(fact);
+  try {
+    callback(fact);
+  } catch (cause) {
+    throw new Error("book_replay_audit_callback", { cause });
+  }
+}
+
+function entryFact(
+  group: ReplayGroupShape & { bp: number },
+  date: string,
+  eventOrdinal: number,
+  rule: BookMember | BookSizingScheduleEntry | BookDisabledScheduleEntry,
+  member: BookMember,
+  funds: number,
+  reserved: number,
+  openGroups: number,
+): Omit<{ -readonly [K in keyof EntrySizingFact]: EntrySizingFact[K] }, "rejectionReasons"> & {
+  rejectionReasons: Array<"disabled" | "removed" | "insolvent" | "max_open">;
+} {
+  const disabled = "disabled" in rule && rule.disabled === true;
+  const active = disabled ? undefined : (rule as BookMember | BookSizingScheduleEntry);
+  const bp = group.bp || group.children[0].buyingPowerPerContract;
+  const bpApplies =
+    active !== undefined &&
+    group.bp > 0 &&
+    !member.ignoreMarginRequirements &&
+    active.sizing.mode !== "capitalPerContract";
+  return {
+    memberId: group.memberId,
+    entryGroupId: group.entryGroupId,
+    sourceRows: group.children.map((child) => ({ id: child.id, ignored: child.ignored })),
+    date,
+    time: group.children[0].timeOpened,
+    eventOrdinal,
+    allIgnored: group.children.every((child) => child.ignored),
+    fundsAtEntry: funds,
+    effectiveRuleDate: "effectiveDate" in rule ? rule.effectiveDate : null,
+    sizing: active ? available({ ...active.sizing }) : unavailable("disabled"),
+    maxContractsPerTrade: active ? available(active.maxContractsPerTrade) : unavailable("disabled"),
+    maxAllocationAmount: active ? available(active.maxAllocationAmount) : unavailable("disabled"),
+    maxOpenTrades: active ? available(active.maxOpenTrades) : unavailable("disabled"),
+    minimumOne: member.minimumOne,
+    removed: member.removed,
+    ignoreMarginRequirements: member.ignoreMarginRequirements,
+    reservedBuyingPowerBefore: reserved,
+    availableBuyingPowerBefore: Math.max(0, funds - reserved),
+    packageBuyingPower: group.bp,
+    sizingBuyingPower: bp,
+    memberOpenGroupsBefore: openGroups,
+    rawQuantity: unavailable("disabled"),
+    flooredQuantity: unavailable("disabled"),
+    afterMinimumOne: unavailable("disabled"),
+    contractCapLimit: active ? available(active.maxContractsPerTrade) : unavailable("disabled"),
+    allocationCapLimit: active
+      ? available(
+          active.maxAllocationAmount === null ? null : Math.floor(active.maxAllocationAmount / bp),
+        )
+      : unavailable("disabled"),
+    buyingPowerLimit: active
+      ? available(bpApplies ? Math.floor(Math.max(0, funds - reserved) / group.bp) : null)
+      : unavailable("disabled"),
+    afterContractCap: unavailable("disabled"),
+    afterAllocationCap: unavailable("disabled"),
+    afterBuyingPowerAdmission: unavailable("disabled"),
+    finalQuantity: 0,
+    rejectionReasons: disabled ? ["disabled"] : [],
+    buyingPowerAdmissionApplied: bpApplies,
+  };
 }

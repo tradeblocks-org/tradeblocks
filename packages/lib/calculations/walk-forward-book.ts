@@ -5,6 +5,9 @@ import {
   type BookReplayResult,
   type BookSizingScheduleEntry,
   type BookDisabledScheduleEntry,
+  type BookReplayAudit,
+  type EntrySizingFact,
+  type OriginPositionFact,
 } from "./book-replay.ts";
 import { drawdownEpisodesFromEquity } from "./marked-equity.ts";
 
@@ -56,6 +59,14 @@ export interface WalkForwardBookInput {
     fold: BookFold;
     previous: Record<string, BookFoldRule>;
   }) => BookFoldFit;
+}
+/** Audit only final continuous replays, not caller-owned fitting/search calculations. */
+export interface WalkForwardBookOptions {
+  audit?: {
+    readonly originDates: BookReplayAudit["originDates"];
+    readonly onEntry: (policy: "reserve" | "exclude", fact: EntrySizingFact) => void;
+    readonly onOrigin: (policy: "reserve" | "exclude", fact: OriginPositionFact) => void;
+  };
 }
 export interface BookParticipation {
   pass: boolean;
@@ -217,7 +228,10 @@ function attainment(replay: BookReplayResult, input: BookReplayInput, start: str
 }
 
 /** Pure offline screening: causal fitting, frozen rules and one continuous ledger per policy. */
-export function walkForwardBook(request: WalkForwardBookInput): WalkForwardBookResult {
+export function walkForwardBook(
+  request: WalkForwardBookInput,
+  options?: WalkForwardBookOptions,
+): WalkForwardBookResult {
   const { input, folds, fit, policies } = request;
   if (
     !folds.length ||
@@ -314,7 +328,20 @@ export function walkForwardBook(request: WalkForwardBookInput): WalkForwardBookR
         ? { ...input, sizingSchedule: schedule, ignoredBuyingPower: policy }
         : { ...input, sizingSchedule: schedule };
     const preparedTape = prepareReplayTape(replayInput);
-    const replay = replayBook(replayInput, { preparedTape });
+    const audit = options?.audit;
+    const replay = replayBook(
+      replayInput,
+      audit
+        ? {
+            preparedTape,
+            audit: {
+              originDates: audit.originDates,
+              onEntry: (fact) => audit.onEntry(policy, fact),
+              onOrigin: (fact) => audit.onOrigin(policy, fact),
+            },
+          }
+        : { preparedTape },
+    );
     ledger.replays++;
     return {
       policy,

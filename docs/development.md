@@ -204,10 +204,10 @@ the caller; the library neither stores verdicts nor authorizes relaxed ceilings.
 `@tradeblocks/lib` exports `replayBook(input: BookReplayInput, options?: BookReplayOptions)` and
 `searchBookAtDrawdown(input: DrawdownBudgetSearchInput, options?: BookSearchOptions)`. Both are pure calculations:
 they make no provider calls, read no profiles and add no market-data requirement.
-`BookReplayOptions` contains only `preparedTape?: PreparedReplayTape`; omit it
-for ordinary replay, or supply a handle from `prepareReplayTape(input)` to reuse
-validated tape preparation as described below. Reporting flags and
-`sizingSchedule` belong to the input, not this options argument.
+`BookReplayOptions` accepts `preparedTape?: PreparedReplayTape` to reuse validated
+tape preparation and `audit?: BookReplayAudit` to observe execution facts.
+Omit the options for ordinary replay. Reporting flags and `sizingSchedule`
+belong to the input, not this options argument.
 Within one search, replay tape validation, immutable entry-group shapes, mark
 indexing and chronological event ordering are prepared once, lazily at the first
 uncached evaluation. Robust and drop-one evaluations reuse that tape; bootstrap
@@ -235,6 +235,34 @@ tape produces equivalent results. This conservative refusal preserves the
 once-validated declaration context rather than promising semantic equivalence.
 Callers can always prepare a new handle or omit the optional handle and use
 ordinary replay/search; an equivalent input is never otherwise refused.
+
+The optional `audit` observer supplies `originDates`, `onEntry(fact)` and
+`onOrigin(fact)`. Origin dates must be unique members of the replay session
+axis; invalid dates throw `invalid_book_replay_audit_origin` before replay.
+Facts are detached and deeply frozen. A callback exception aborts with
+`book_replay_audit_callback`, retaining the original error as its `cause`.
+Callbacks are runtime options, never part of input declarations, prepared-tape
+identity or search checkpoints. When omitted, no audit facts are constructed.
+
+`EntrySizingFact` records entry-contract quantities, not split-adjusted exit
+units: source row identities/ignored flags, actual event ordinal (including
+closes), entry time, closed funds after same-time closes, effective rule and
+caps, occupancy and buying power before admission, raw/floored/minimum-one
+sizing, then quantities after contract cap, allocation cap, BP admission and
+final rejection. Numeric candidate limits expose all tight ties; equality is
+not itself clipping. CPC sizing never uses BP admission. `ReadonlyFact<T>`
+distinguishes `{ status: "available", value }` from
+`{ status: "unavailable", reason }`; an available null limit means uncapped,
+not zero. Disabled rules report ignored sizing/caps and unreached stages as
+unavailable, with a disabled rejection rather than invented quantities.
+
+`OriginPositionFact` describes session opening **before any event that session**,
+even on dates with no entries: closed funds, prior completed-session marked
+equity when available, reservations, member occupancy and held groups with
+original entry quantities, remaining child IDs and remaining reservations.
+The first session has no preceding-close mark; it is unavailable, not a
+same-session mark or zero. Held quantities do not resize when rules change.
+No facts alter execution, marks, P/L or fees.
 
 The replay accepts net dollars and buying power **per strategy contract**, an
 explicit session axis, member sizing rules and simultaneous member ordering.
@@ -329,6 +357,13 @@ with separate prepared handles. Held positions retain quantities, reservations
 and funds across folds. Participation separates `scheduled-disabled`,
 `active-zero` and `active-participating` entries, both overall and per fold.
 The result says **offline screening, not OO evidence**.
+
+`walkForwardBook(request, options?: WalkForwardBookOptions)` accepts an optional
+`audit` with `originDates`, `onEntry(policy, fact)` and `onOrigin(policy, fact)`.
+It forwards the observer only to final continuous policy replays, preserving
+each policy separately. Fitting/search replays receive no observer; no additional
+replay is performed and computation-ledger counts are unchanged. Omitting the
+option leaves existing results and declarations unchanged.
 
 `fitBookAtEqualRisk(training, recipe, previous?)` is the optional public, book-generic
 marked-DD recipe: standalone risk references, a caller-declared common-factor
