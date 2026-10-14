@@ -105,7 +105,15 @@ export async function replaceDataset(conn: DuckDBConnection, entry: StoredDatase
   }
 }
 
-export function datasetFields(entries: StoredDataset[]) {
+export interface AnalysisField {
+  field: string;
+  type: "numeric" | "categorical";
+  timing: "open" | "close";
+  knownBy: string | null;
+  source: string;
+}
+
+export function datasetFields(entries: StoredDataset[]): AnalysisField[] {
   return entries.flatMap(({ dataset, rows, source }) =>
     dataset.columns.map((column) => ({
       field: `${dataset.name}.${column}`,
@@ -117,16 +125,18 @@ export function datasetFields(entries: StoredDataset[]) {
   );
 }
 
-export async function runtimeFieldCatalog(conn: DuckDBConnection) {
+export async function runtimeFieldCatalog(conn: DuckDBConnection): Promise<AnalysisField[]> {
   const entries = await listDatasets(conn);
   return [
-    ...[...OPEN_KNOWN_FIELDS, ...CLOSE_KNOWN_FIELDS, ...STATIC_FIELDS].map((field) => ({
-      field,
-      type: "numeric",
-      timing: CLOSE_KNOWN_FIELDS.has(field) ? "close" : "open",
-      knownBy: null,
-      source: "market",
-    })),
+    ...[...OPEN_KNOWN_FIELDS, ...CLOSE_KNOWN_FIELDS, ...STATIC_FIELDS].map<AnalysisField>(
+      (field) => ({
+        field,
+        type: "numeric",
+        timing: CLOSE_KNOWN_FIELDS.has(field) ? "close" : "open",
+        knownBy: null,
+        source: "market",
+      }),
+    ),
     ...datasetFields(entries),
   ];
 }

@@ -11,6 +11,7 @@
 
 import { CLOSE_KNOWN_FIELDS } from "./field-timing.ts";
 import type { EntryFilter } from "../models/strategy-profile.ts";
+import type { AnalysisField } from "../db/dataset-schemas.ts";
 
 /**
  * A compiled filter predicate with metadata about the field key used.
@@ -116,9 +117,14 @@ function resolveFieldRef(refName: string, market: Record<string, unknown>): numb
  * @param filter - Entry filter specification
  * @returns Compiled predicate with metadata
  */
-export function buildFilterPredicate(filter: EntryFilter): FilterPredicate {
-  const isLagged = CLOSE_KNOWN_FIELDS.has(filter.field);
-  const fieldKey = isLagged ? `prev_${filter.field}` : filter.field;
+export function buildFilterPredicate(
+  filter: EntryFilter,
+  catalog: AnalysisField[] = [],
+): FilterPredicate {
+  const entry = catalog.find((entry) => entry.field === filter.field);
+  const builtinClose = CLOSE_KNOWN_FIELDS.has(filter.field);
+  const isLagged = builtinClose || entry?.timing === "close";
+  const fieldKey = builtinClose ? `prev_${filter.field}` : filter.field;
 
   const { operator, value } = filter;
 
@@ -128,6 +134,7 @@ export function buildFilterPredicate(filter: EntryFilter): FilterPredicate {
       const raw = getRaw(market, fieldKey);
       if (raw === null || raw === undefined) return false;
       if (!Array.isArray(value)) return false;
+      if (entry?.type === "categorical") return value.some((item) => item === raw);
       // Try day-of-week name resolution for each element
       return value.some((v) => {
         const dayNum = resolveDayName(v);
@@ -139,6 +146,7 @@ export function buildFilterPredicate(filter: EntryFilter): FilterPredicate {
     if (operator === "==") {
       const raw = getRaw(market, fieldKey);
       if (raw === null || raw === undefined) return false;
+      if (entry?.type === "categorical") return value === raw;
       // Day-of-week name resolution (e.g., "Tuesday" == 2)
       const dayNum = resolveDayName(value);
       if (dayNum !== null) return Number(raw) === dayNum;

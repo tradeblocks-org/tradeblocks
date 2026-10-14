@@ -12,12 +12,16 @@ import {
   upgradeToReadWrite,
 } from "../../src/db/connection.ts";
 import { upsertProfile } from "../../src/db/profile-schemas.ts";
-import { handleValidateEntryFilters } from "../../src/tools/profile-analysis.ts";
-import { mkdir, writeFile } from "node:fs/promises";
+import {
+  handleValidateEntryFilters,
+  handleAnalyzeStructureFit,
+} from "../../src/tools/profile-analysis.ts";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { registerPredictiveTools } from "../../src/tools/reports/predictive.ts";
 import { registerMarketDataTools } from "../../src/tools/market-data.ts";
 import { createMarketStores } from "../../src/market/stores/index.ts";
 import { TickerRegistry } from "../../src/market/tickers/registry.ts";
+import { writeEnrichedTickerPartition } from "../../src/db/market-datasets.ts";
 
 let baseDir: string;
 const handlers: Record<string, (input: Record<string, unknown>) => Promise<ToolOutput>> = {};
@@ -49,11 +53,33 @@ function data(output: ToolOutput) {
 }
 
 test("import, replace, discover and delete a daily dataset through tool handlers", async () => {
+  const conn = await upgradeToReadWrite(baseDir);
+  await conn.run(
+    "INSERT INTO market.enriched (ticker, date, RSI_14) VALUES ('SPX', '2025-01-02', 50)",
+  );
+  await writeEnrichedTickerPartition(conn, {
+    dataDir: baseDir,
+    ticker: "SPX",
+    date: "2025-01-02",
+    selectQuery: "SELECT * FROM market.enriched",
+  });
+  await closeConnection();
+  const partition = path.join(
+    baseDir,
+    "market",
+    "enriched",
+    "ticker=SPX",
+    "date=2025-01-02",
+    "data.parquet",
+  );
+  const marketBytes = await readFile(partition);
   const imported = await handlers.import_daily_dataset({
     name: "signal",
     content: "date,score,state\n2025-01-02,0.0001,calm\n2025-01-03,0.0002,hot",
   });
   expect(imported.isError).not.toBe(true);
+  await closeConnection();
+  expect(await readFile(partition)).toEqual(marketBytes);
   expect(data(imported).fields).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ field: "signal.score", type: "numeric", timing: "close" }),
@@ -201,6 +227,18 @@ test("profile filters use close carry-forward and open known-by rather than same
   [0.0003, 0.0005, 0.0007].forEach((expected, i) =>
     expect(smallThresholds[i]).toBeCloseTo(expected, 12),
   );
+  const smallFit = await handleAnalyzeStructureFit(
+    { blockId: "sample", strategyName: "Test", minTrades: 1 },
+    baseDir,
+  );
+  expect(smallFit.structuredContent?.dimensions).toEqual(
+    expect.objectContaining({
+      "signal.score": {
+        "0.0001": expect.objectContaining({ tradeCount: 1, totalPl: 100 }),
+        "0.0009": expect.objectContaining({ tradeCount: 1, totalPl: -50 }),
+      },
+    }),
+  );
   const suggestions = await handlers.suggest_filters({
     blockId: "sample",
     fields: ["signal.score", "signal.state"],
@@ -216,6 +254,112 @@ test("profile filters use close carry-forward and open known-by rather than same
         condition: expect.objectContaining({ field: "signal.state", operator: "==", value: "hot" }),
         newWinRate: 100,
       }),
+    ]),
+  );
+  const numeric = await handlers.analyze_regime_performance({
+    blockId: "sample",
+    field: "signal.score",
+    bins: [0.0005],
+  });
+  expect(numeric.structuredContent?.segments).toEqual([
+    expect.objectContaining({ segmentValue: 0, tradeCount: 1, totalPl: 100 }),
+    expect.objectContaining({ segmentValue: 1, tradeCount: 1, totalPl: -50 }),
+  ]);
+  const categorical = await handlers.analyze_regime_performance({
+    blockId: "sample",
+    field: "signal.state",
+  });
+  expect(categorical.structuredContent?.segments).toEqual([
+    expect.objectContaining({ segment: "calm", tradeCount: 1, totalPl: 100 }),
+    expect.objectContaining({ segment: "hot", tradeCount: 1, totalPl: -50 }),
+  ]);
+  const quantiles = await handlers.analyze_regime_performance({
+    blockId: "sample",
+    field: "signal.score",
+  });
+  expect(quantiles.structuredContent?.tradesMatched).toBe(2);
+  expect(quantiles.structuredContent?.segments).toHaveLength(2);
+  const unknown = await handlers.analyze_regime_performance({
+    blockId: "sample",
+    field: "missing.value",
+  });
+  expect(unknown.isError).toBe(true);
+  expect(unknown.content).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ text: expect.stringContaining("missing.value") }),
+    ]),
+  );
+  await upgradeToReadWrite(baseDir);
+  await upsertProfile(await getConnection(baseDir), {
+    blockId: "sample",
+    strategyName: "Test",
+    structureType: "iron_condor",
+    greeksBias: "theta_positive",
+    thesis: "",
+    legs: [],
+    entryFilters: [{ field: "signal.state", operator: "==", value: "calm", source: "market" }],
+    exitRules: [],
+    expectedRegimes: [],
+    keyMetrics: {},
+  });
+  const categoryFilter = await handleValidateEntryFilters(
+    { blockId: "sample", strategyName: "Test", minTrades: 1, maxAblationFilters: 8 },
+    baseDir,
+  );
+  expect(categoryFilter.structuredContent?.per_filter).toEqual(
+    expect.objectContaining({
+      'signal.state == "calm"': expect.objectContaining({
+        entered: expect.objectContaining({ tradeCount: 1, totalPl: 100 }),
+      }),
+    }),
+  );
+  const fit = await handleAnalyzeStructureFit(
+    { blockId: "sample", strategyName: "Test", minTrades: 1 },
+    baseDir,
+  );
+  expect(fit.structuredContent?.dimensions).toEqual(
+    expect.objectContaining({
+      "signal.state": expect.objectContaining({
+        calm: expect.objectContaining({ tradeCount: 1, totalPl: 100 }),
+        hot: expect.objectContaining({ tradeCount: 1, totalPl: -50 }),
+      }),
+    }),
+  );
+  const csv = (await readFile(path.join(baseDir, "sample", "tradelog.csv"), "utf8")).split("\n");
+  await writeFile(
+    path.join(baseDir, "sample", "tradelog.csv"),
+    [csv[0], ...Array.from({ length: 5 }, () => csv.slice(1)).flat()].join("\n"),
+  );
+  const conn = await getConnection(baseDir);
+  await conn.run(
+    "INSERT INTO market.enriched (ticker, date, Day_of_Week, Gap_Pct, Is_Opex) VALUES ('SPX', '2025-01-03', 6, 0, 0), ('SPX', '2025-01-06', 2, 0, 0)",
+  );
+  const defaults = await handlers.suggest_filters({ blockId: "sample", minImprovementPct: 3 });
+  expect(defaults.structuredContent?.suggestedFilters).toEqual([
+    expect.objectContaining({
+      filter: "Skip Mondays",
+      tradesRemoved: 5,
+      newWinRate: 100,
+      newTotalPl: 500,
+    }),
+  ]);
+  const preset = await handlers.analyze_regime_performance({
+    blockId: "sample",
+    segmentBy: "dayOfWeek",
+  });
+  expect(preset.structuredContent?.segments).toEqual([
+    expect.objectContaining({ segment: "Monday", tradeCount: 5, totalPl: -250 }),
+    expect.objectContaining({ segment: "Friday", tradeCount: 5, totalPl: 500 }),
+  ]);
+  const predictive = await handlers.find_predictive_fields({
+    blockId: "sample",
+    targetField: "pl",
+    minSamples: 10,
+    includeCustomFields: true,
+  });
+  expect(predictive.structuredContent?.rankedFields).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ field: "signal.score", sampleSize: 10, direction: "negative" }),
     ]),
   );
 });

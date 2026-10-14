@@ -510,25 +510,25 @@ such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO times
 
 ### Market Data Tools
 
-| Tool                         | Description                                                                        |
-| ---------------------------- | ---------------------------------------------------------------------------------- |
-| `import_market_csv`          | Import market data CSV with column mapping                                         |
-| `import_from_database`       | Import from external DuckDB databases                                              |
-| `import_flat_file`           | Import a local Parquet or CSV flat file for a ticker/timespan                      |
-| `fetch_bars`                 | Fetch daily or intraday OHLCV bars from configured provider                        |
-| `fetch_quotes`               | Fetch option minute quotes from configured provider                                |
-| `fetch_chain`                | Fetch option chain snapshot for an underlying on a given date                      |
-| `compute_vix_context`        | Compute cross-ticker VIX regime fields for a date range                            |
-| `refresh_market_data`        | Composite daily refresh: fetch bars, auto-fire VIX context, return coverage report |
-| `enrich_market_data`         | Compute ~40 derived indicators from raw OHLCV                                      |
-| `enrich_trades`              | Enrich trades with market context (lookahead-free)                                 |
-| `analyze_regime_performance` | Analyze P&L by market regime                                                       |
-| `suggest_filters`            | Suggest trade filters based on market conditions                                   |
-| `calculate_orb`              | Opening range breakout analysis from intraday bars                                 |
-| `import_daily_dataset`       | Import or replace a user Static Dataset with per-column timing                     |
-| `list_daily_datasets`        | List user datasets, fields, timing and coverage                                    |
-| `delete_daily_dataset`       | Remove a dataset and its registered fields                                         |
-| `list_analysis_fields`       | Discover built-in and dataset fields at runtime                                    |
+| Tool                         | Description                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------- |
+| `import_market_csv`          | Import market data CSV with column mapping                                          |
+| `import_from_database`       | Import from external DuckDB databases                                               |
+| `import_flat_file`           | Import a local Parquet or CSV flat file for a ticker/timespan                       |
+| `fetch_bars`                 | Fetch daily or intraday OHLCV bars from configured provider                         |
+| `fetch_quotes`               | Fetch option minute quotes from configured provider                                 |
+| `fetch_chain`                | Fetch option chain snapshot for an underlying on a given date                       |
+| `compute_vix_context`        | Compute cross-ticker VIX regime fields for a date range                             |
+| `refresh_market_data`        | Composite daily refresh: fetch bars, auto-fire VIX context, return coverage report  |
+| `enrich_market_data`         | Compute ~40 derived indicators from raw OHLCV                                       |
+| `enrich_trades`              | Enrich trades with causal market/dataset values, provenance and custom fields       |
+| `analyze_regime_performance` | Analyze P&L by presets or any registered field (numeric bins or categorical values) |
+| `suggest_filters`            | Default market filters or optional fields with generic threshold/exclusion sweeps   |
+| `calculate_orb`              | Opening range breakout analysis from intraday bars                                  |
+| `import_daily_dataset`       | Import or replace a user Static Dataset with per-column timing                      |
+| `list_daily_datasets`        | List user datasets, fields, timing and coverage                                     |
+| `delete_daily_dataset`       | Remove a dataset and its registered fields                                          |
+| `list_analysis_fields`       | Discover built-in and dataset fields at runtime                                     |
 
 ### Strategy Profile Tools
 

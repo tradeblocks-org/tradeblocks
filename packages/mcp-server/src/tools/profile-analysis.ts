@@ -255,14 +255,17 @@ async function loadTradesAndMarket(
  * Create numeric bucket labels from data values.
  * Divides sorted values into ~4 quartile-based ranges.
  */
-function createNumericBuckets(values: number[]): { label: string; min: number; max: number }[] {
+function createNumericBuckets(
+  values: number[],
+  preserveScale = false,
+): { label: string; min: number; max: number }[] {
   if (values.length === 0) return [];
   const sorted = [...values].sort((a, b) => a - b);
 
   const uniqueValues = [...new Set(sorted)];
   if (uniqueValues.length <= 4) {
     return uniqueValues.map((v) => ({
-      label: String(Math.round(v * 100) / 100),
+      label: String(preserveScale ? v : Math.round(v * 100) / 100),
       min: v,
       max: v,
     }));
@@ -276,7 +279,7 @@ function createNumericBuckets(values: number[]): { label: string; min: number; m
     if (start > sorted.length - 1) break;
     const min = sorted[start];
     const max = sorted[end];
-    const r = (n: number) => Math.round(n * 100) / 100;
+    const r = (n: number) => (preserveScale ? n : Math.round(n * 100) / 100);
     buckets.push({
       label: min === max ? `${r(min)}` : `${r(min)} to ${r(max)}`,
       min,
@@ -338,10 +341,8 @@ export async function handleAnalyzeStructureFit(
     strategyName,
   );
 
-  const marketFilters = partitionMarketFilters(
-    profile.entryFilters,
-    await runtimeFieldCatalog(conn),
-  );
+  const catalog = await runtimeFieldCatalog(conn);
+  const marketFilters = partitionMarketFilters(profile.entryFilters, catalog);
   const warnings: string[] = [...marketFilters.warnings];
   const uncovered = marketFilters.filters
     .filter(
@@ -430,8 +431,23 @@ export async function handleAnalyzeStructureFit(
 
   // --- Profile-derived dimensions from entry_filters (market-source only) ---
   for (const filter of marketFilters.filters) {
-    const predicate = buildFilterPredicate(filter);
+    const predicate = buildFilterPredicate(filter, catalog);
     const fieldKey = predicate.fieldKey;
+    if (catalog.find((entry) => entry.field === filter.field)?.type === "categorical") {
+      const groups = new Map<string, number[]>();
+      for (const { trade, market } of matched) {
+        const value = market[fieldKey];
+        if (value === undefined || value === null) continue;
+        const label = String(value);
+        const pls = groups.get(label) ?? [];
+        pls.push(trade.pl);
+        groups.set(label, pls);
+      }
+      dimensions[filter.field] = Object.fromEntries(
+        [...groups].map(([label, pls]) => [label, computeSliceStats(pls)]),
+      );
+      continue;
+    }
 
     // Collect numeric values for this field from matched trades
     const fieldValues: { val: number; pl: number }[] = [];
@@ -446,7 +462,10 @@ export async function handleAnalyzeStructureFit(
     if (fieldValues.length === 0) continue;
 
     // Create buckets from the data
-    const buckets = createNumericBuckets(fieldValues.map((f) => f.val));
+    const buckets = createNumericBuckets(
+      fieldValues.map((f) => f.val),
+      filter.field.includes("."),
+    );
     if (buckets.length === 0) continue;
 
     const filterBuckets: Record<string, number[]> = {};
@@ -604,10 +623,8 @@ export async function handleValidateEntryFilters(
     );
   }
 
-  const { filters, unresolvable, warnings } = partitionMarketFilters(
-    marketFilters,
-    await runtimeFieldCatalog(conn),
-  );
+  const catalog = await runtimeFieldCatalog(conn);
+  const { filters, unresolvable, warnings } = partitionMarketFilters(marketFilters, catalog);
   if (filters.length === 0) {
     return createToolOutput(
       `No resolvable market filters for '${strategyName}': ${warnings.join(" ")}`,
@@ -662,7 +679,7 @@ export async function handleValidateEntryFilters(
   }
 
   // Build predicates for market-testable filters only
-  const predicates: FilterPredicate[] = filters.map((f) => buildFilterPredicate(f));
+  const predicates: FilterPredicate[] = filters.map((f) => buildFilterPredicate(f, catalog));
 
   // No-filters baseline: all matched trades
   const noFiltersPls = matched.map((m) => m.trade.pl);

@@ -32,12 +32,18 @@ TradeBlocks is an options trading analytics platform with two main components:
 
 ### analytics.duckdb (trades database)
 
-| Table                        | Purpose                                                       |
-| ---------------------------- | ------------------------------------------------------------- |
-| `trades.trade_data`          | Individual trade records synced from CSV                      |
-| `trades.reporting_data`      | Reported/live trades for backtest vs actual comparison        |
-| `trades._sync_metadata`      | Block sync state tracking                                     |
-| `profiles.strategy_profiles` | Strategy profile storage (structure, filters, exits, regimes) |
+| Table                        | Purpose                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| `trades.trade_data`          | Individual trade records synced from CSV                                  |
+| `trades.reporting_data`      | Reported/live trades for backtest vs actual comparison                    |
+| `trades._sync_metadata`      | Block sync state tracking                                                 |
+| `profiles.strategy_profiles` | Strategy profile storage (structure, filters, exits, regimes)             |
+| `datasets.dataset`           | User Static Dataset metadata, ticker, timing, source and import timestamp |
+| `datasets.value`             | Long-format user dataset values with timestamp and date-only precision    |
+
+These on-demand tables are isolated from the market catalog and Parquet store. MCP consumers
+resolve each column through the shared Static Dataset availability implementation in TypeScript;
+the runtime field catalog joins built-in market fields and registered `dataset.column` names.
 
 ### market.duckdb (market database)
 

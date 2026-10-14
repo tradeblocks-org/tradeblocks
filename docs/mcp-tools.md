@@ -171,6 +171,12 @@ available value in the selected trades are refused explicitly.
 thresholds; categorical fields test exclusions by value. Omitting fields preserves the existing
 hand-authored defaults. Shared sweeps preserve numeric scale without two-decimal rounding.
 
+`analyze_regime_performance` accepts `field` instead of a preset `segmentBy`. Categorical
+fields group by value. Numeric fields use `bins` as strictly increasing cut points, with
+lower-inclusive/upper-exclusive intervals and unbounded tails; omitted bins use quartiles.
+Existing preset calls retain their behavior. Unknown and entirely uncovered fields are named
+and refused; partial coverage is reported.
+
 ## Strategy Profiles
 
 | Tool                   | Description                                                  |
