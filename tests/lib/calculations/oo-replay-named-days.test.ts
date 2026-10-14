@@ -8,7 +8,7 @@ import { describe, expect, it } from "@jest/globals";
 import cases from "./oo-replay-named-days.fixture.json";
 
 describe("OO replay v2 saved valuation days", () => {
-  // Read-only #4148 exports: original OO curves/trades and market bid/ask sides,
+  // Read-only native exports: original OO curves/trades and market bid/ask sides,
   // not replay-derived marks. Both book dates and the standalone BWB fallback
   // would fail under the previous 2×-fee/raw-mid open-position rule.
   it.each(cases)("reconciles $name on $date to an OO cent", (sample) => {

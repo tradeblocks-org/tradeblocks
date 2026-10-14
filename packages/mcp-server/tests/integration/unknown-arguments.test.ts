@@ -1,5 +1,5 @@
 /**
- * Undeclared arguments are refused, not silently dropped (enterprise#4197).
+ * Undeclared arguments are refused, not silently dropped.
  *
  * Runs the production stdio server, hosting one TradeBlocksPlugin tool, so the refusal is
  * proven through the registration path and SDK validation a client reaches, for every

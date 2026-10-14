@@ -1,5 +1,5 @@
 /**
- * Unknown-argument refusal (enterprise#4197)
+ * Unknown-argument refusal
  *
  * A plain Zod object strips keys it does not declare, so a client sending an option
  * this server does not support (a newer plugin's `dailyLogPath` sent to an older

@@ -1,5 +1,5 @@
 /**
- * A tool whose input cannot be made strict is refused at registration (enterprise#4197),
+ * A tool whose input cannot be made strict is refused at registration,
  * naming the tool, rather than registered with undeclared arguments silently dropped.
  * The call-time refusal is proven over MCP in tests/integration/unknown-arguments.test.ts.
  */

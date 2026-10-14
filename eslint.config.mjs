@@ -78,6 +78,6 @@ export default tseslint.config(
     },
   },
   // Must be last: turns off ESLint stylistic rules that conflict with Prettier
-  // (Prettier owns formatting). See ADR 0037 (enterprise).
+  // (Prettier owns formatting).
   eslintConfigPrettier,
 );

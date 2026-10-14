@@ -365,7 +365,7 @@ export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = 
       },
     );
     // Bracket every tool call in a connection lease (#445) and refuse undeclared
-    // arguments (enterprise#4197), before anything registers, so core tools and
+    // arguments before anything registers, so core tools and
     // plugin tools are both covered without a per-tool opt-in. See
     // tools/middleware/connection-lease.ts and tools/middleware/strict-arguments.ts.
     const leasedServer = leaseToolHandlers(refuseUnknownArguments(server));

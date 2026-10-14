@@ -7,7 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-// Owned by the tradeblocks-skills plugin (#4167); the server does not install or invoke it.
+// Owned by the tradeblocks-skills plugin; the server does not install or invoke it.
 const captureSkill = "/tradeblocks:oo-capture";
 // Pinned older plugin installs have oo-capture without saved-portfolio capture.
 const portfolioCaptureCondition = `the running client's ${captureSkill} skill describes saved-portfolio capture (older plugin versions capture only saved backtests and runs)`;
@@ -38,7 +38,7 @@ export function registerWorkflowPrompts(server: McpServer): void {
   const prompts = new Map<string, { args: z.ZodObject<PromptArgs>; render: RenderPrompt }>();
   const register = (name: string, config: PromptConfig, render: RenderPrompt) => {
     server.registerPrompt(name, config, render);
-    // Strict: an argument the prompt does not declare is refused, not dropped (enterprise#4197).
+    // Strict: an argument the prompt does not declare is refused, not dropped.
     prompts.set(name, { args: z.strictObject(config.argsSchema), render });
   };
 
