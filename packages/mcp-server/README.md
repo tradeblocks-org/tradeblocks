@@ -538,6 +538,13 @@ such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO times
 | `validate_entry_filters`  | Test each entry filter's contribution to edge                |
 | `portfolio_structure_map` | Regime x structure coverage matrix across strategies         |
 
+`validate_entry_filters` names unknown market fields with reasons in
+`unresolvable_filters`, warnings, and its summary; they are excluded from ablation
+so known filters remain analyzable. If all market filters are unknown, it returns
+`error: "no_resolvable_filters"`. `analyze_structure_fit` reports the same exclusions
+and keeps its remaining dimensions. Known fields with missing daily values retain
+their existing missing-data treatment.
+
 ### Import Tools
 
 | Tool         | Description                                              |

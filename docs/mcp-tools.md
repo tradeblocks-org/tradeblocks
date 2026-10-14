@@ -165,6 +165,14 @@ See [per-request details](market-data.md#fetch_quotes).
 | `portfolio_structure_map`  | Regime x structure coverage matrix across all strategies    |
 | `suggest_strategy_matches` | Find strategies that match specific market conditions       |
 
+`validate_entry_filters` reports unknown market filter fields in `unresolvable_filters`
+with a reason and excludes them from per-filter results and ablation. Remaining known
+filters are still analyzed; if none are resolvable, it returns `error: "no_resolvable_filters"`
+naming the fields. `analyze_structure_fit` reports the same exclusions while retaining
+its known-field and fixed dimensions. Both tools include the exclusions in their summary
+and warnings. A known field with a missing value on a date is not an unknown field:
+existing missing-data reporting (including `no_data_count` in filter validation) is unchanged.
+
 ## Advanced Analysis
 
 | Tool                          | Description                                                  |

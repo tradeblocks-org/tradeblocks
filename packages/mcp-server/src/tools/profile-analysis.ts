@@ -15,13 +15,20 @@ import type { Trade } from "@tradeblocks/lib";
 import { getConnection } from "../db/connection.ts";
 import { getProfile, listProfiles } from "../db/profile-schemas.ts";
 import { filterByStrategy } from "./shared/filters.ts";
-import { buildLookaheadFreeQuery, type MarketLookupKey } from "../utils/field-timing.ts";
+import {
+  buildLookaheadFreeQuery,
+  type MarketLookupKey,
+  OPEN_KNOWN_FIELDS,
+  CLOSE_KNOWN_FIELDS,
+  STATIC_FIELDS,
+} from "../utils/field-timing.ts";
 import { DEFAULT_MARKET_TICKER, marketTickerDateKey, resolveTradeTicker } from "../utils/ticker.ts";
 import { computeSliceStats, type SliceStats } from "../utils/analysis-stats.ts";
 import { buildFilterPredicate, type FilterPredicate } from "../utils/filter-predicates.ts";
 import { withSyncedBlock } from "./middleware/sync-middleware.ts";
 import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.ts";
 import { syncAllBlocks } from "../sync/index.ts";
+import type { EntryFilter } from "../models/strategy-profile.ts";
 
 // =============================================================================
 // Utility Functions (local to this module)
@@ -155,6 +162,29 @@ function getRaw(record: Record<string, unknown>, field: string): unknown {
 interface TradeWithMarket {
   trade: Trade;
   market: Record<string, unknown>;
+}
+
+function partitionMarketFilters(entryFilters: EntryFilter[]) {
+  const filters: EntryFilter[] = [];
+  const unresolvable: { field: string; reason: string }[] = [];
+  for (const filter of entryFilters) {
+    if (filter.source === "execution") continue;
+    const field = filter.field;
+    if (
+      OPEN_KNOWN_FIELDS.has(field) ||
+      CLOSE_KNOWN_FIELDS.has(field) ||
+      STATIC_FIELDS.has(field) ||
+      (field.startsWith("prev_") && CLOSE_KNOWN_FIELDS.has(field.slice(5)))
+    ) {
+      filters.push(filter);
+    } else {
+      unresolvable.push({ field, reason: "unknown market field; not available to this tool" });
+    }
+  }
+  const warnings = unresolvable.map(
+    ({ field, reason }) => `Market filter '${field}' excluded: ${reason}.`,
+  );
+  return { filters, unresolvable, warnings };
 }
 
 /**
@@ -302,7 +332,8 @@ export async function handleAnalyzeStructureFit(
     strategyName,
   );
 
-  const warnings: string[] = [];
+  const marketFilters = partitionMarketFilters(profile.entryFilters);
+  const warnings: string[] = [...marketFilters.warnings];
 
   if (allTrades.length === 0) {
     return createToolOutput(
@@ -376,7 +407,7 @@ export async function handleAnalyzeStructureFit(
   dimensions["time_of_day"] = todStats;
 
   // --- Profile-derived dimensions from entry_filters (market-source only) ---
-  for (const filter of profile.entryFilters.filter((f) => f.source !== "execution")) {
+  for (const filter of marketFilters.filters) {
     const predicate = buildFilterPredicate(filter);
     const fieldKey = predicate.fieldKey;
 
@@ -476,12 +507,13 @@ export async function handleAnalyzeStructureFit(
 
   // Summary text
   const dimNames = Object.keys(dimensions).join(", ");
-  const summaryText = `Structure fit analysis for '${strategyName}': ${matched.length} trades analyzed across ${Object.keys(dimensions).length} dimensions (${dimNames}). Overall win rate: ${overall.winRate.toFixed(1)}%, avg P&L: $${overall.avgPl.toFixed(2)}. ${profileUpdateHints.length} update hint(s).`;
+  const summaryText = `Structure fit analysis for '${strategyName}': ${matched.length} trades analyzed across ${Object.keys(dimensions).length} dimensions (${dimNames}). Overall win rate: ${overall.winRate.toFixed(1)}%, avg P&L: $${overall.avgPl.toFixed(2)}. ${profileUpdateHints.length} update hint(s). ${marketFilters.warnings.join(" ")}`;
 
   return createToolOutput(summaryText, {
     overall,
     dimensions,
     profile_update_hints: profileUpdateHints,
+    unresolvable_filters: marketFilters.unresolvable,
     warnings,
     profile: {
       strategyName: profile.strategyName,
@@ -550,14 +582,20 @@ export async function handleValidateEntryFilters(
     );
   }
 
+  const { filters, unresolvable, warnings } = partitionMarketFilters(marketFilters);
+  if (filters.length === 0) {
+    return createToolOutput(
+      `No resolvable market filters for '${strategyName}': ${warnings.join(" ")}`,
+      { error: "no_resolvable_filters", unresolvable_filters: unresolvable, warnings },
+    );
+  }
+
   // Load trades + market data
   const { matched, unmatchedCount, allTrades } = await loadTradesAndMarket(
     baseDir,
     blockId,
     strategyName,
   );
-
-  const warnings: string[] = [];
 
   if (executionFilters.length > 0) {
     warnings.push(
@@ -586,7 +624,6 @@ export async function handleValidateEntryFilters(
   }
 
   // Build predicates for market-testable filters only
-  const filters = marketFilters;
   const predicates: FilterPredicate[] = filters.map((f) => buildFilterPredicate(f));
 
   // No-filters baseline: all matched trades
@@ -775,12 +812,13 @@ export async function handleValidateEntryFilters(
   // Summary text
   const execNote =
     executionFilters.length > 0 ? ` (${executionFilters.length} execution filter(s) skipped)` : "";
-  const summaryText = `Filter validation for '${strategyName}': ${filters.length} market filter(s) analyzed across ${matched.length} trades${execNote}. Baseline (all market filters): ${baseline.tradeCount} trades, win rate ${baseline.winRate.toFixed(1)}%, avg P&L $${baseline.avgPl.toFixed(2)}. ${profileUpdateHints.length} update hint(s).`;
+  const summaryText = `Filter validation for '${strategyName}': ${filters.length} market filter(s) analyzed across ${matched.length} trades${execNote}. Baseline (resolvable market filters): ${baseline.tradeCount} trades, win rate ${baseline.winRate.toFixed(1)}%, avg P&L $${baseline.avgPl.toFixed(2)}. ${profileUpdateHints.length} update hint(s). ${unresolvable.length > 0 ? warnings.slice(0, unresolvable.length).join(" ") : ""}`;
 
   return createToolOutput(summaryText, {
     baseline,
     no_filters: noFiltersStats,
     per_filter: perFilter,
+    unresolvable_filters: unresolvable,
     ablation: {
       single: ablationSingle,
       pairs: ablationPairs,

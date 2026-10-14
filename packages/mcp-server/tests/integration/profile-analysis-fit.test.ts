@@ -327,6 +327,92 @@ describe("analyze_structure_fit", () => {
 });
 
 describe("validate_entry_filters", () => {
+  it("refuses all-unknown filters before attempting trade analysis", async () => {
+    const conn = await getConnection(tempDir);
+    await createProfile(conn, "block-1", "Iron Condor", {
+      entryFilters: [
+        { field: "custom_signal", operator: ">", value: 0 },
+        { field: "typo_signal", operator: "<", value: 1 },
+        { field: "time_window", operator: ">", value: 0, source: "execution" },
+      ],
+    });
+    const result = await handleValidateEntryFilters(
+      { blockId: "block-1", strategyName: "Iron Condor" },
+      tempDir,
+    );
+    const data = parseToolData(result);
+    expect(data.error).toBe("no_resolvable_filters");
+    expect(data.unresolvable_filters).toEqual([
+      { field: "custom_signal", reason: expect.any(String) },
+      { field: "typo_signal", reason: expect.any(String) },
+    ]);
+    expect(result.content[0].text).toContain("custom_signal");
+    expect(result.content[0].text).toContain("typo_signal");
+    expect(data.baseline).toBeUndefined();
+  });
+
+  it("reports unknown structure-fit dimensions while retaining known and fixed dimensions", async () => {
+    const conn = await getConnection(tempDir);
+    await insertMarketData(conn, MARKET_DATES);
+    await createBlockWithTrades(tempDir, "block-1", TRADES);
+    await createProfile(conn, "block-1", "Iron Condor", {
+      entryFilters: [
+        { field: "VIX_Close", operator: "<", value: 20 },
+        { field: "custom_signal", operator: ">", value: 0 },
+      ],
+    });
+    const result = await handleAnalyzeStructureFit(
+      { blockId: "block-1", strategyName: "Iron Condor", minTrades: 1 },
+      tempDir,
+    );
+    const data = parseToolData(result);
+    expect(data.overall).toMatchObject({ tradeCount: 11 });
+    const dimensions = data.dimensions as Record<string, Record<string, { tradeCount: number }>>;
+    expect(Object.values(dimensions.VIX_Close).reduce((n, s) => n + s.tradeCount, 0)).toBe(10);
+    expect(dimensions.day_of_week).toBeDefined();
+    expect(dimensions.custom_signal).toBeUndefined();
+    expect(data.unresolvable_filters).toEqual([
+      { field: "custom_signal", reason: expect.any(String) },
+    ]);
+    expect(result.content[0].text).toContain("custom_signal");
+  });
+
+  it("names unknown filters without emptying the known-filter baseline or ablation", async () => {
+    const conn = await getConnection(tempDir);
+    await insertMarketData(conn, MARKET_DATES);
+    await createBlockWithTrades(tempDir, "block-1", TRADES);
+    await createProfile(conn, "block-1", "Iron Condor", {
+      entryFilters: [
+        { field: "VIX_Close", operator: "<", value: 20, description: "Low VIX" },
+        { field: "custom_signal", operator: ">", value: 0 },
+      ],
+    });
+
+    const result = await handleValidateEntryFilters(
+      { blockId: "block-1", strategyName: "Iron Condor", minTrades: 1 },
+      tempDir,
+    );
+    const data = parseToolData(result);
+    // Jan 9 is an XNYS closure: its prior-session fields remain no_data, not unknown.
+    expect(data.baseline).toMatchObject({ tradeCount: 7 });
+    expect(data.per_filter).toMatchObject({
+      "Low VIX": { entered: { tradeCount: 7 }, filtered_out: { tradeCount: 3 }, no_data_count: 1 },
+    });
+    expect(Object.keys(data.per_filter as object)).toEqual(["Low VIX"]);
+    expect(data.ablation).toEqual({
+      single: { "Low VIX": expect.objectContaining({ tradeCount: 11 }) },
+      pairs: {},
+    });
+    expect(data.unresolvable_filters).toEqual([
+      expect.objectContaining({
+        field: "custom_signal",
+        reason: expect.stringContaining("unknown"),
+      }),
+    ]);
+    expect((data.warnings as string[]).some((w) => w.includes("custom_signal"))).toBe(true);
+    expect(result.content[0].text).toContain("custom_signal");
+  });
+
   it("splits trades into entered vs filtered_out per filter", async () => {
     const conn = await getConnection(tempDir);
     await insertMarketData(conn, MARKET_DATES);
