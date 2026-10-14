@@ -66,8 +66,22 @@ describe("marginal contribution tail risk through MCP stdio", () => {
   });
 
   it("preserves the pre-tail default response byte for byte", async () => {
-    expect(await call({})).toMatchSnapshot();
-    expect(await call({ includeTailRisk: false, tailConfidence: 0 })).toEqual(await call({}));
+    // Keep the snapshot's original publication date: newer rates must not change
+    // this compatibility check, including the embedded JSON resource response.
+    const result = await call({});
+    const normalized = JSON.parse(
+      JSON.stringify(result, (key, value: unknown) => {
+        if (key === "dataThrough") {
+          expect(value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+          return "2026-10-08";
+        }
+        return typeof value === "string"
+          ? value.replace(/("dataThrough":")\d{4}-\d{2}-\d{2}(")/g, "$12026-10-08$2")
+          : value;
+      }),
+    );
+    expect(normalized).toMatchSnapshot();
+    expect(await call({ includeTailRisk: false, tailConfidence: 0 })).toEqual(result);
   });
 
   it("reports signed ES and a positive removal improvement on the ratio arms", async () => {
