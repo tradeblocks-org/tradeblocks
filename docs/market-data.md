@@ -461,11 +461,17 @@ exact. Empty `writeQuotes` batches are no-ops.
 Supply a complete ticker-date batch: a later batch for the same ticker
 replaces that ticker's earlier minutes rather than appending to them. Bulk
 ingestion collects a complete underlying-date batch before writing. Per-ticker
-`fetch_quotes` also accumulates accepted rows across its requested tickers and
-publishes each underlying-date partition once per call, including earlier
-successful tickers when a later provider request fails. Repeated ticker
-arguments retain the last accepted batch without duplicating stored rows.
-A fresh partition requires no merge read.
+`fetch_quotes` also accumulates accepted rows across its requested tickers.
+After each complete ticker, it flushes and clears all pending partitions when
+their accepted rows reach `PENDING_QUOTE_FLUSH_ROW_THRESHOLD = 32,768`; the
+final flush publishes whatever remains, including earlier successful tickers
+when a later provider request fails. Pending rows are bounded by the threshold
+plus one ticker's accepted batch, not a strict hard cap: a single ticker is
+still collected whole. A 79-ticker, 391-minute date (30,889 rows) stays in one
+publication; larger requests may publish the same partition in several
+flushes, retaining tickers from previous flushes through merge-on-write.
+Repeated ticker arguments retain the last accepted batch without duplicating
+stored rows. A fresh partition requires no merge read.
 
 Quote-partition writes use read-merge-replace without a per-partition lock;
 callers must serialize concurrent writers to the same `(underlying, date)`.

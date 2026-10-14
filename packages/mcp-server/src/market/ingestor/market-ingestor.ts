@@ -39,6 +39,9 @@ export interface MarketIngestorDeps {
 
 type PendingQuotePartitions = Map<string, Map<string, Map<string, QuoteRow[]>>>;
 
+// Keeps 79 full-session tickers (30,889 rows) together; checked after each complete ticker.
+const PENDING_QUOTE_FLUSH_ROW_THRESHOLD = 32_768;
+
 // When `applyQuoteGreeks` fails to resolve the underlying price for more than
 // this fraction of the rows that actually attempted underlying-price lookup,
 // the batch is suspected of a coverage gap (partial-day spot bars, missing
@@ -595,6 +598,7 @@ export class MarketIngestor {
     const skipped: IngestSkippedBatch[] = [];
     const requests: NonNullable<IngestResult["requests"]> = [];
     const pending: PendingQuotePartitions = new Map();
+    let pendingRows = 0;
 
     try {
       for (const ticker of tickers) {
@@ -618,6 +622,16 @@ export class MarketIngestor {
           throw error;
         }
         const written = await this.collectQuotesForTicker(provider, ticker, quotes, pending);
+        pendingRows += written.pendingRowsDelta;
+        if (pendingRows >= PENDING_QUOTE_FLUSH_ROW_THRESHOLD) {
+          try {
+            await this.publishQuotePartitions(pending);
+          } finally {
+            // Do not retry an unsuccessful publication in the outer finally flush.
+            pending.clear();
+            pendingRows = 0;
+          }
+        }
         totalRows += written.rowsWritten;
         if (written.minDate && (!minDate || written.minDate < minDate)) minDate = written.minDate;
         if (written.maxDate && (!maxDate || written.maxDate > maxDate)) maxDate = written.maxDate;
@@ -902,6 +916,7 @@ export class MarketIngestor {
     pending: PendingQuotePartitions,
   ): Promise<{
     rowsWritten: number;
+    pendingRowsDelta: number;
     minDate?: string;
     maxDate?: string;
     skipped: IngestSkippedBatch[];
@@ -936,6 +951,7 @@ export class MarketIngestor {
     }
 
     let rowsWritten = 0;
+    let pendingRowsDelta = 0;
     let minDate: string | undefined;
     let maxDate: string | undefined;
     const skipped: IngestSkippedBatch[] = [];
@@ -1013,12 +1029,13 @@ export class MarketIngestor {
         dates.set(date, tickers);
       }
       // Repeated ticker arguments keep the last accepted batch, just as repeated writes did.
+      pendingRowsDelta += enriched.rows.length - (tickers.get(ticker)?.length ?? 0);
       tickers.set(ticker, enriched.rows);
       rowsWritten += rows.length;
       if (!minDate || date < minDate) minDate = date;
       if (!maxDate || date > maxDate) maxDate = date;
     }
-    return { rowsWritten, minDate, maxDate, skipped };
+    return { rowsWritten, pendingRowsDelta, minDate, maxDate, skipped };
   }
 
   private async publishQuotePartitions(pending: PendingQuotePartitions): Promise<void> {

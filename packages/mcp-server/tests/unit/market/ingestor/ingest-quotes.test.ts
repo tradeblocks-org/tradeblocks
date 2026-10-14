@@ -281,6 +281,68 @@ describe("MarketIngestor.ingestQuotes", () => {
     },
   );
 
+  it.each([
+    { tickerCount: 79, batchSizes: [30_889] },
+    { tickerCount: 85, batchSizes: [32_844, 391] },
+  ])(
+    "bounds pending quote rows across $tickerCount full-day tickers",
+    async ({ tickerCount, batchSizes }) => {
+      const { stores, writeSpy } = await batchStores();
+      try {
+        const requested = Array.from(
+          { length: tickerCount },
+          (_, i) => `SPXW260319C${String((4800 + i) * 1000).padStart(8, "0")}`,
+        );
+        const provider: MarketDataProvider = {
+          ...batchProvider(),
+          fetchQuotes: async () =>
+            new Map(
+              Array.from({ length: 391 }, (_, i) => {
+                const minute = 9 * 60 + 30 + i;
+                const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+                return [
+                  `${batchDate} ${time}`,
+                  {
+                    bid: 10,
+                    ask: 12,
+                    delta: 0.5,
+                    gamma: 0.125,
+                    theta: -0.25,
+                    vega: 0.75,
+                    iv: 0.25,
+                  },
+                ] as const;
+              }),
+            ),
+        };
+        const result = await new MarketIngestor({
+          stores,
+          dataRoot: dataDir,
+          providerFactory: () => provider,
+        }).ingestQuotes({ tickers: requested, from: batchDate, to: batchDate });
+        expect(result).toEqual({
+          status: "ok",
+          rowsWritten: tickerCount * 391,
+          dateRange: { from: batchDate, to: batchDate },
+        });
+        expect(writeSpy.mock.calls.map(([, , rows]) => rows.length)).toEqual(batchSizes);
+        const readBack = await stores.quote.readQuotes(
+          [...requested, unrelatedTicker],
+          batchDate,
+          batchDate,
+        );
+        expect(readBack.size).toBe(tickerCount + 1);
+        for (const ticker of requested) {
+          expect(readBack.get(ticker)).toHaveLength(391);
+          expect(readBack.get(ticker)?.[0].bid).toBe(10);
+        }
+        expect(readBack.get(unrelatedTicker)?.[0].bid).toBe(30);
+      } finally {
+        writeSpy.mockRestore();
+      }
+    },
+  );
+
   it("reports error when the only trading day in a Fri–Sun range fails", async () => {
     const savedKey = process.env.MASSIVE_API_KEY;
     const savedTier = process.env.MASSIVE_DATA_TIER;
