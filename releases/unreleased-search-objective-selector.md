@@ -2,7 +2,7 @@
 
 The public `@tradeblocks/lib` calculation `searchBookAtDrawdown` now accepts `objective: "returnPct" | "returnOverDrawdown"` (the field stays required, as before). Existing return-objective callers retain their types and serialized results. The ratio ranks realized return against marked maximum drawdown when marks are supplied, otherwise closed-equity drawdown, under the existing feasibility and drawdown ceiling. The same ranking applies to coordinate moves, progress, robust selection, near-optimal regions, drop-one and stability/sensitivity searches. Changing the objective refuses checkpoint resume.
 
-The objective scores a single replay: the Wizzy joint study's minimum ratio over reserve/exclude policies and its CPC/factor tie-breaks still require a caller-owned wrapper, for example two searches or a `feasible`-based joint check.
+The objective scores a single replay: optimizing the minimum ratio over reserve/exclude policies with CPC/factor tie-breaks still requires a caller-owned wrapper, for example two searches or a `feasible`-based joint check.
 
 The generic input and result types both default to the legacy `"returnPct"` literal, preserving existing annotated requests as well as result annotations. Use `DrawdownBudgetSearchInput<"returnOverDrawdown">` for annotated ratio requests; fresh literals still infer the selected objective. `declarations.objective` retains that literal without changing feasibility typing or runtime results.
 

@@ -452,7 +452,7 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           .min(10)
           .optional()
           .describe(
-            "Number of trades/days to project forward. If not specified, uses the number of historical trades.",
+            "Number of trades/days to project forward (daily-log rows in marked-daily mode). If not specified, uses the number of historical trades, or daily-log rows in marked-daily mode.",
           ),
         resampleWindow: z
           .number()

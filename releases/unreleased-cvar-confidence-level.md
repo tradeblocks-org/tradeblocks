@@ -14,4 +14,4 @@ With a valid confidence, an empty series returns `undefined`, and a single obser
 
 `cvarFromReturns(returns)` is unchanged. It still takes one argument, returns the same 95% result bit for bit, and still works as a point-free callback, as in `series.map(cvarFromReturns)`. Existing MCP tools and the other risk estimators are also unchanged.
 
-**Enterprise Console:** Console pins this module's file hash in its estimator-ownership guard, so its re-vendor must update that pin.
+Consumers that pin this module's file hash must update that pin when adopting the new estimator.

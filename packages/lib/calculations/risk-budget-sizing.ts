@@ -199,7 +199,7 @@ function contractEffects(input: BookReplayInput, result: BookReplayResult, id: s
 }
 
 /**
- * Two-stage CPC-only fit for the all-CPC #4479 caller books. Non-CPC members are refused.
+ * Two-stage CPC-only fit. Non-CPC members are refused.
  * Fit each standalone marked risk nearest its target over the explicit finite weight domain,
  * then select the highest-return qualifying book over common factors (ties prefer the first).
  * Fixed contract caps are passed through memberCapPolicies at every search; contracts stay whole.

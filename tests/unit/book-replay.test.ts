@@ -117,7 +117,7 @@ it("keeps the omitted-option result identical to the pre-change marked replay ba
 it("reproduces the OO TSLA split row with caller-scaled entry-basis P/L and marks", () => {
   // OO run 3voZFuA90wct0I5L0npE: adjusted 2022-08-24 RDC row, closed
   // 2022-08-25 10:55; q6, profit $120, fees $0, BP $46,169.60.
-  // #4479 retained mark: $23 1/3 per adjusted contract on 2022-08-24.
+  // Retained native mark: $23 1/3 per adjusted contract on 2022-08-24.
   // This isolates that row at OO's $600,000 seed, not the full book's DD.
   const adjustedQuantity = 6;
   const factor = 3;

@@ -118,6 +118,24 @@ The lib's walk-forward period endpoints are calendar-day keys, and the MCP
 response reports them unchanged as `YYYY-MM-DD`. Runtime timestamps elsewhere
 in the computation remain instants.
 
+#### CVaR at a chosen confidence
+
+`cvarFromReturnsAtConfidence(returns, confidence)` accepts a readonly array of
+`{ date: Date, return: number }` observations, with returns expressed as signed
+decimals (0.01 means 1%). It returns signed-decimal CVaR: a loss is negative,
+not a loss-positive expected-shortfall value. Negate the result when reporting
+loss-positive ES.
+
+The estimator linearly interpolates the `(1 - confidence)` percentile cutoff,
+then averages every observation at or below it, including all cutoff ties,
+without fractional weighting. It does not mutate the input. Confidence must be
+finite and strictly between 0 and 1; invalid confidence throws `RangeError`,
+even for an empty series. With valid confidence, an empty series returns
+`undefined` and a singleton returns its sole return. For example,
+`cvarFromReturnsAtConfidence(returns, 0.99)` estimates CVaR99.
+`cvarFromReturns(returns)` remains the one-argument CVaR95 calculation, including
+its existing behavior as a point-free callback.
+
 #### Paired bootstrap and multiple-testing adjustment
 
 `pairedPathBlockBootstrap` recomputes a caller-supplied two-path statistic on
@@ -139,9 +157,13 @@ inference nor MCP tools, and adds no bootstrap option or provider requirement.
 
 #### Offline book replay and drawdown-budget search
 
-`@tradeblocks/lib` exports `replayBook(BookReplayInput)` and
-`searchBookAtDrawdown(DrawdownBudgetSearchInput)`. Both are pure calculations:
+`@tradeblocks/lib` exports `replayBook(input: BookReplayInput, options?: BookReplayOptions)` and
+`searchBookAtDrawdown(input: DrawdownBudgetSearchInput, options?: BookSearchOptions)`. Both are pure calculations:
 they make no provider calls, read no profiles and add no market-data requirement.
+`BookReplayOptions` contains only `preparedTape?: PreparedReplayTape`; omit it
+for ordinary replay, or supply a handle from `prepareReplayTape(input)` to reuse
+validated tape preparation as described below. Reporting flags and
+`sizingSchedule` belong to the input, not this options argument.
 Within one search, replay tape validation, immutable entry-group shapes, mark
 indexing and chronological event ordering are prepared once, lazily at the first
 uncached evaluation. Robust and drop-one evaluations reuse that tape; bootstrap
@@ -331,8 +353,8 @@ result exactly; false does not add `marked.members`. No MCP tool exposes
 
 `sizeBookAtEqualStandaloneRisk({ replay, risk, standaloneTarget, bookBudget,
 memberWeightDomains, commonFactors, feasible?, bookBudgetRisk? })` composes replay, fixed-cap search evaluations
-and the public confidence estimator. It is **CPC-only**, matching the all-CPC #4479
-caller books; any non-CPC member throws `Unsupported sizing: member <id> must use
+and the public confidence estimator. It is **CPC-only**; any non-CPC member
+throws `Unsupported sizing: member <id> must use
 capitalPerContract`, including removed members. Supply complete marks and positive,
 finite, explicitly enumerated member weights and common factors (at most ten decimal
 places). Weight multiplies sizing: CPC is divided by weight, so larger weight means
@@ -393,8 +415,8 @@ const feasible = (replay: BookReplayResult) =>
 ```
 
 Policies must use `replay.declarations`, the candidate's own declarations, rather
-than compare them against a captured full-book input. For example, #4479's WFA
-unplanned-removal check (`run-wfa.mts:37`) rejects the helper's deliberate removal
+than compare them against a captured full-book input. For example, an
+unplanned-removal check rejects the helper's deliberate removal
 of other members during standalone fitting if it compares against the full book.
 Likewise, a policy closing over a full-book replay, such as parity's `scale()`,
 must construct its alternate-hypothesis replay from the candidate's declarations,
@@ -415,8 +437,8 @@ stages. To compare hypotheses, run the helper once for each declaration. To
 require one common candidate to satisfy both, the caller's deterministic policy
 can replay the alternate hypothesis using the original replay input plus the
 candidate's `declarations.members` (including standalone removal flags), then
-check both results, as the #4479 caller does with the search. Separate fits need
-not choose identical weights. There is no combined-hypothesis optimizer.
+check both results. Separate fits need not choose identical weights.
+There is no combined-hypothesis optimizer.
 The helper uses fixed-weight search evaluations, not checkpoints: no `feasibleId`
 is needed or accepted here. Callers using `searchBookAtDrawdown` checkpointing
 directly must supply the same deterministic policy and `feasibleId` at save and
@@ -477,8 +499,8 @@ untyped JavaScript caller that omits it also gets `"returnPct"`). The ratio divi
 by the same drawdown used for feasibility, never by an unmarked substitute.
 Coordinate moves, progress best, winner, robust shrinkage, near-optimal regions,
 drop-one and every stability/sensitivity search use that same ranking.
-The objective scores a single replay: the Wizzy joint study's minimum ratio
-over reserve/exclude policies and its CPC/factor tie-breaks still require a
+The objective scores a single replay: optimizing the minimum ratio over
+reserve/exclude policies with CPC/factor tie-breaks still requires a
 caller-owned wrapper, for example two searches or a `feasible`-based joint check.
 The input and result types `DrawdownBudgetSearchInput<O = "returnPct">` and
 `DrawdownBudgetSearchResult<O = "returnPct">` preserve the legacy literal on
