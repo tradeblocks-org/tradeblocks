@@ -124,7 +124,7 @@ export default function StaticDatasetsPage() {
 
         {/* Loading State */}
         {!isInitialized && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-6">
             {[1, 2, 3].map((i) => (
               <Card key={i} className="animate-pulse">
                 <CardContent className="p-6">
@@ -174,7 +174,7 @@ export default function StaticDatasetsPage() {
 
         {/* Dataset Grid */}
         {isInitialized && filteredDatasets.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-6">
             {filteredDatasets.map((dataset) => (
               <DatasetCard
                 key={dataset.id}

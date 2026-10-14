@@ -650,6 +650,7 @@ export {
   getAllStaticDatasets,
   updateStaticDatasetMatchStrategy,
   updateStaticDatasetName,
+  updateStaticDatasetTiming,
   deleteStaticDataset,
   isDatasetNameTaken,
   getStaticDatasetCount,

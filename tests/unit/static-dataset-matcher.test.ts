@@ -684,7 +684,7 @@ describe("getMatchedFieldValue", () => {
     expect(value).toBeNull();
   });
 
-  it("returns null for non-existent column", () => {
+  it("refuses a non-existent column rather than reporting missing data", () => {
     const trade = createTrade("2024-01-15", "10:00:00");
 
     const datasets = [
@@ -694,9 +694,9 @@ describe("getMatchedFieldValue", () => {
       },
     ];
 
-    const value = getMatchedFieldValue(trade, "vix.nonexistent", datasets);
-
-    expect(value).toBeNull();
+    expect(() => getMatchedFieldValue(trade, "vix.nonexistent", datasets)).toThrow(
+      "Unknown dataset column",
+    );
   });
 
   it("returns null for invalid field format", () => {

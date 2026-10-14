@@ -2,7 +2,8 @@
  * Static Datasets Store - CRUD operations for static dataset metadata
  */
 
-import type { StaticDataset, MatchStrategy } from "../models/static-dataset.ts";
+import type { StaticDataset, MatchStrategy, DatasetTiming } from "../models/static-dataset.ts";
+import { validateDatasetTiming } from "../calculations/static-dataset-matcher.ts";
 import { STORES, withReadTransaction, withWriteTransaction, promisifyRequest } from "./index.ts";
 
 /**
@@ -22,7 +23,7 @@ export async function getStaticDataset(id: string): Promise<StaticDataset | null
   return withReadTransaction(STORES.STATIC_DATASETS, async (transaction) => {
     const store = transaction.objectStore(STORES.STATIC_DATASETS);
     const result = await promisifyRequest(store.get(id));
-    return result ?? null;
+    return result ? { ...result, timingMode: result.timingMode ?? "legacy-same-day" } : null;
   });
 }
 
@@ -34,7 +35,7 @@ export async function getStaticDatasetByName(name: string): Promise<StaticDatase
     const store = transaction.objectStore(STORES.STATIC_DATASETS);
     const index = store.index("name");
     const result = await promisifyRequest(index.get(name));
-    return result ?? null;
+    return result ? { ...result, timingMode: result.timingMode ?? "legacy-same-day" } : null;
   });
 }
 
@@ -46,14 +47,31 @@ export async function getAllStaticDatasets(): Promise<StaticDataset[]> {
     const store = transaction.objectStore(STORES.STATIC_DATASETS);
     const result = await promisifyRequest(store.getAll());
     // Sort by upload date (newest first)
-    return result.sort((a, b) => {
-      const dateA = new Date(a.uploadedAt).getTime();
-      const dateB = new Date(b.uploadedAt).getTime();
-      return dateB - dateA;
-    });
+    return result
+      .map((dataset) => ({ ...dataset, timingMode: dataset.timingMode ?? "legacy-same-day" }))
+      .sort((a, b) => {
+        const dateA = new Date(a.uploadedAt).getTime();
+        const dateB = new Date(b.uploadedAt).getTime();
+        return dateB - dateA;
+      });
   });
 }
 
+/** Explicit opt-in; stored row timestamps and values are never rewritten. */
+export async function updateStaticDatasetTiming(
+  id: string,
+  timing: DatasetTiming,
+  hasDateOnly: boolean,
+): Promise<void> {
+  await withWriteTransaction(STORES.STATIC_DATASETS, async (transaction) => {
+    const store = transaction.objectStore(STORES.STATIC_DATASETS);
+    const existing = await promisifyRequest(store.get(id));
+    if (!existing) throw new Error(`Static dataset with id ${id} not found`);
+    const updated: StaticDataset = { ...existing, ...timing, timingMode: "declared" };
+    validateDatasetTiming(updated, hasDateOnly);
+    await promisifyRequest(store.put(updated));
+  });
+}
 /**
  * Update a static dataset's match strategy
  */

@@ -15,10 +15,10 @@ export type MatchStrategy = "exact" | "same-day" | "nearest-before" | "nearest-a
  */
 export const MATCH_STRATEGY_LABELS: Record<MatchStrategy, string> = {
   exact: "Exact",
-  "same-day": "Same Day",
+  "same-day": "Same Day — non-causal (lookahead)",
   "nearest-before": "Nearest Before",
-  "nearest-after": "Nearest After",
-  nearest: "Nearest",
+  "nearest-after": "Nearest After — non-causal (lookahead)",
+  nearest: "Nearest — non-causal (lookahead)",
 };
 
 /**
@@ -31,6 +31,16 @@ export const MATCH_STRATEGY_DESCRIPTIONS: Record<MatchStrategy, string> = {
   "nearest-after": "Match to the earliest row at or after the trade time",
   nearest: "Match to the closest row on the same day",
 };
+
+export type DatasetColumnTiming = "close" | "open";
+
+export interface DatasetTiming {
+  columnTiming: Record<string, DatasetColumnTiming>;
+  /** HH:mm in America/New_York; required for date-only open columns. */
+  knownBy?: string;
+  /** Explicit precision for older rows, whose original CSV precision was not saved. */
+  dateOnly?: boolean;
+}
 
 /**
  * Static dataset metadata - stored separately from rows for efficient listing
@@ -62,6 +72,12 @@ export interface StaticDataset {
 
   /** How to match trade timestamps to dataset rows */
   matchStrategy: MatchStrategy;
+
+  /** Missing metadata is explicitly normalized to legacy-same-day on storage reads. */
+  timingMode?: "declared" | "legacy-same-day";
+  columnTiming?: Record<string, DatasetColumnTiming>;
+  knownBy?: string;
+  dateOnly?: boolean;
 }
 
 /**
@@ -74,6 +90,9 @@ export interface StaticDatasetRow {
 
   /** Timestamp parsed from first column of CSV */
   timestamp: Date;
+
+  /** Preserves date-only precision; explicit midnight timestamps remain as-of. */
+  dateOnly?: boolean;
 
   /** All other column values, keyed by column name */
   values: Record<string, number | string>;

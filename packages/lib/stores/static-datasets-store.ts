@@ -6,12 +6,18 @@
  */
 
 import { create } from "zustand";
-import type { StaticDataset, StaticDatasetRow, MatchStrategy } from "../models/static-dataset.ts";
+import type {
+  StaticDataset,
+  StaticDatasetRow,
+  MatchStrategy,
+  DatasetTiming,
+} from "../models/static-dataset.ts";
 import {
   getAllStaticDatasets,
   createStaticDataset,
   updateStaticDatasetMatchStrategy,
   updateStaticDatasetName,
+  updateStaticDatasetTiming,
   isDatasetNameTaken,
 } from "../db/static-datasets-store.ts";
 import {
@@ -62,9 +68,11 @@ interface StaticDatasetsState {
     file: File,
     name: string,
     onProgress?: (progress: ParseProgress) => void,
+    timing?: DatasetTiming,
   ) => Promise<{ success: boolean; error?: string; dataset?: StaticDataset }>;
   deleteDataset: (id: string) => Promise<void>;
   updateMatchStrategy: (id: string, strategy: MatchStrategy) => Promise<void>;
+  updateTiming: (id: string, timing: DatasetTiming) => Promise<void>;
   renameDataset: (id: string, newName: string) => Promise<{ success: boolean; error?: string }>;
   getDatasetRows: (id: string) => Promise<StaticDatasetRow[]>;
   clearCachedRows: (id?: string) => void;
@@ -126,7 +134,7 @@ export const useStaticDatasetsStore = create<StaticDatasetsState>((set, get) => 
   },
 
   // Upload a new dataset
-  uploadDataset: async (file, name, onProgress) => {
+  uploadDataset: async (file, name, onProgress, timing) => {
     // Trim name to prevent whitespace-only or padded names
     const trimmedName = name.trim();
 
@@ -148,6 +156,7 @@ export const useStaticDatasetsStore = create<StaticDatasetsState>((set, get) => 
         name: trimmedName,
         fileName: file.name,
         progressCallback: onProgress,
+        ...timing,
       });
 
       // Check for errors
@@ -227,6 +236,24 @@ export const useStaticDatasetsStore = create<StaticDatasetsState>((set, get) => 
         error: error instanceof Error ? error.message : "Failed to update match strategy",
       });
     }
+  },
+
+  updateTiming: async (id, timing) => {
+    const rows = await get().getDatasetRows(id);
+    if (rows.some((row) => row.dateOnly === undefined) && timing.dateOnly === undefined) {
+      throw new Error("Choose date-only or timestamped precision for legacy rows");
+    }
+    await updateStaticDatasetTiming(
+      id,
+      timing,
+      rows.some((row) => row.dateOnly ?? timing.dateOnly),
+    );
+    set((state) => ({
+      datasets: state.datasets.map((dataset) =>
+        dataset.id === id ? { ...dataset, ...timing, timingMode: "declared" } : dataset,
+      ),
+    }));
+    get().invalidateMatchStatsForDataset(id);
   },
 
   // Rename a dataset

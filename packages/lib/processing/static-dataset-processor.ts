@@ -6,7 +6,13 @@
  */
 
 import { CSVParser, type CSVParseResult, type ParseProgress } from "./csv-parser.ts";
-import type { StaticDataset, StaticDatasetRow, MatchStrategy } from "../models/static-dataset.ts";
+import type {
+  StaticDataset,
+  StaticDatasetRow,
+  MatchStrategy,
+  DatasetTiming,
+} from "../models/static-dataset.ts";
+import { validateDatasetTiming } from "../calculations/static-dataset-matcher.ts";
 
 /**
  * Result of processing a static dataset CSV
@@ -28,6 +34,8 @@ export interface ProcessStaticDatasetOptions {
   fileName: string;
   /** Default match strategy */
   matchStrategy?: MatchStrategy;
+  columnTiming?: DatasetTiming["columnTiming"];
+  knownBy?: string;
   /** Progress callback */
   progressCallback?: (progress: ParseProgress) => void;
 }
@@ -311,6 +319,7 @@ export async function processStaticDatasetFile(
 
     rows.push({
       timestamp,
+      dateOnly: !/[T :]/.test(timestampValue.trim()) && !/^\d{9,13}$/.test(timestampValue.trim()),
       values,
     });
   }
@@ -367,7 +376,20 @@ export async function processStaticDatasetFile(
     },
     columns: nonEmptyColumns,
     matchStrategy: options.matchStrategy ?? "nearest-before",
+    timingMode: "declared",
+    columnTiming:
+      options.columnTiming ??
+      Object.fromEntries(nonEmptyColumns.map((column) => [column, "close"])),
+    knownBy: options.knownBy,
   };
+  try {
+    validateDatasetTiming(
+      dataset,
+      rows.some((row) => row.dateOnly),
+    );
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
 
   return {
     dataset,
@@ -483,6 +505,7 @@ export async function processStaticDatasetContent(
 
     rows.push({
       timestamp,
+      dateOnly: !/[T :]/.test(timestampValue.trim()) && !/^\d{9,13}$/.test(timestampValue.trim()),
       values,
     });
   }
@@ -539,7 +562,20 @@ export async function processStaticDatasetContent(
     },
     columns: nonEmptyColumns,
     matchStrategy: options.matchStrategy ?? "nearest-before",
+    timingMode: "declared",
+    columnTiming:
+      options.columnTiming ??
+      Object.fromEntries(nonEmptyColumns.map((column) => [column, "close"])),
+    knownBy: options.knownBy,
   };
+  try {
+    validateDatasetTiming(
+      dataset,
+      rows.some((row) => row.dateOnly),
+    );
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
 
   return {
     dataset,

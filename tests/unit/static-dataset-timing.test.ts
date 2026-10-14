@@ -1,0 +1,137 @@
+import {
+  processStaticDatasetContent,
+  getMatchedValuesForTrade,
+  getMatchedFieldValue,
+  resolveDatasetColumnAtTime,
+  getDatasetValueAvailableAt,
+  validateDatasetTiming,
+  createStaticDataset,
+  getStaticDataset,
+  getStaticDatasetByName,
+  getAllStaticDatasets,
+  updateStaticDatasetTiming,
+  deleteDatabase,
+  type Trade,
+} from "../../packages/lib";
+
+it("does not expose a date-only close value until the following day", async () => {
+  const parsed = await processStaticDatasetContent("date,signal\n2024-03-08,42", {
+    name: "model",
+    fileName: "model.csv",
+  });
+  const data = [
+    {
+      dataset: parsed.dataset,
+      rows: parsed.rows.map((row) => ({ ...row, datasetId: parsed.dataset.id })),
+    },
+  ];
+  const trade = { dateOpened: new Date("2024-03-08"), timeOpened: "09:45:00" } as Trade;
+  expect(getMatchedValuesForTrade(trade, data)).toEqual({});
+  expect(getMatchedValuesForTrade({ ...trade, dateOpened: new Date("2024-03-11") }, data)).toEqual({
+    model: { signal: 42 },
+  });
+});
+
+it("resolves mixed open/close columns independently, with known-by and DST", async () => {
+  const parsed = await processStaticDatasetContent("date,opening,closing\n2024-03-11,10,20", {
+    name: "mixed",
+    fileName: "mixed.csv",
+    columnTiming: { opening: "open", closing: "close" },
+    knownBy: "09:30",
+  });
+  expect(parsed.errors).toEqual([]);
+  const rows = parsed.rows.map((row) => ({ ...row, datasetId: parsed.dataset.id }));
+  expect(
+    resolveDatasetColumnAtTime(parsed.dataset, rows, "opening", new Date("2024-03-11T13:29:59Z")),
+  ).toBeNull();
+  expect(
+    resolveDatasetColumnAtTime(parsed.dataset, rows, "opening", new Date("2024-03-11T13:30:00Z"))
+      ?.value,
+  ).toBe(10);
+  expect(getDatasetValueAvailableAt(parsed.dataset, rows[0], "closing").toISOString()).toBe(
+    "2024-03-12T04:00:00.000Z",
+  );
+  const data = [{ dataset: parsed.dataset, rows }];
+  expect(
+    getMatchedFieldValue(
+      { dateOpened: new Date(2024, 2, 11), timeOpened: "09:45" } as Trade,
+      "mixed.opening",
+      data,
+    ),
+  ).toBe(10);
+  expect(
+    getMatchedValuesForTrade(
+      { dateOpened: new Date(2024, 2, 11), timeOpened: "09:45" } as Trade,
+      data,
+    ),
+  ).toEqual({ mixed: { opening: 10 } });
+  expect(() => resolveDatasetColumnAtTime(parsed.dataset, rows, "missing", new Date())).toThrow(
+    "Unknown dataset column",
+  );
+});
+
+it("refuses date-only open without known-by and unknown timing columns", async () => {
+  const parsed = await processStaticDatasetContent("date,signal\n2020-01-02,42", {
+    name: "model",
+    fileName: "m.csv",
+    columnTiming: { signal: "open" },
+  });
+  expect(parsed.errors).toEqual([expect.stringContaining("requires a known-by")]);
+  expect(() => validateDatasetTiming({ ...parsed.dataset, knownBy: "25:00" }, true)).toThrow(
+    "HH:mm",
+  );
+  expect(() =>
+    validateDatasetTiming(
+      { ...parsed.dataset, columnTiming: { signal: "close", typo: "close" } },
+      true,
+    ),
+  ).toThrow("Unknown dataset column");
+});
+
+it("treats explicit midnight timestamps as-of, not as date-only closes", async () => {
+  const parsed = await processStaticDatasetContent("date,signal\n2024-01-15T00:00:00-05:00,42", {
+    name: "model",
+    fileName: "m.csv",
+  });
+  const rows = parsed.rows.map((row) => ({ ...row, datasetId: parsed.dataset.id }));
+  expect(
+    resolveDatasetColumnAtTime(parsed.dataset, rows, "signal", new Date("2024-01-15T04:59:59Z")),
+  ).toBeNull();
+  expect(
+    resolveDatasetColumnAtTime(parsed.dataset, rows, "signal", new Date("2024-01-15T05:00:00Z"))
+      ?.value,
+  ).toBe(42);
+});
+
+it("keeps legacy IndexedDB numbers unchanged until an explicit timing update", async () => {
+  const parsed = await processStaticDatasetContent("date,signal\n2020-01-02,42", {
+    name: "legacy",
+    fileName: "old.csv",
+  });
+  const { timingMode: _mode, columnTiming: _timing, ...legacy } = parsed.dataset;
+  await createStaticDataset(legacy);
+  try {
+    const loaded = (await getStaticDataset(legacy.id))!;
+    expect(loaded.timingMode).toBe("legacy-same-day");
+    expect((await getStaticDatasetByName("legacy"))?.timingMode).toBe("legacy-same-day");
+    expect((await getAllStaticDatasets())[0].timingMode).toBe("legacy-same-day");
+    const rows = parsed.rows.map(({ dateOnly: _precision, ...row }) => ({
+      ...row,
+      datasetId: legacy.id,
+    }));
+    const trade = { dateOpened: new Date(2020, 0, 2), timeOpened: "09:45" } as Trade;
+    expect(getMatchedValuesForTrade(trade, [{ dataset: loaded, rows }])).toEqual({
+      legacy: { signal: 42 },
+    });
+    await updateStaticDatasetTiming(
+      legacy.id,
+      { columnTiming: { signal: "close" }, dateOnly: true },
+      true,
+    );
+    const updated = (await getStaticDataset(legacy.id))!;
+    expect(updated.timingMode).toBe("declared");
+    expect(getMatchedValuesForTrade(trade, [{ dataset: updated, rows }])).toEqual({});
+  } finally {
+    await deleteDatabase();
+  }
+});

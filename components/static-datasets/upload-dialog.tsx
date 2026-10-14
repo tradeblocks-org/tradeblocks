@@ -16,7 +16,8 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Upload, FileText, AlertCircle, Loader2 } from "lucide-react";
 import { CSVParser } from "@tradeblocks/lib";
-import { suggestDatasetName } from "@tradeblocks/lib";
+import { suggestDatasetName, processStaticDatasetFile, type DatasetTiming } from "@tradeblocks/lib";
+import { TimingEditor } from "./timing-editor";
 import { useStaticDatasetsStore } from "@tradeblocks/lib/stores";
 import type { ParseProgress } from "@tradeblocks/lib";
 
@@ -33,11 +34,13 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStep, setUploadStep] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [timing, setTiming] = useState<DatasetTiming>({ columnTiming: {} });
 
   const uploadDataset = useStaticDatasetsStore((state) => state.uploadDataset);
   const validateName = useStaticDatasetsStore((state) => state.validateName);
 
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
@@ -55,6 +58,18 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
     const suggestedName = suggestDatasetName(selectedFile.name);
     setName(suggestedName);
     setNameError(null);
+    setColumns([]);
+    try {
+      const preview = await processStaticDatasetFile(selectedFile, {
+        name: suggestedName,
+        fileName: selectedFile.name,
+      });
+      if (preview.errors.length) throw new Error(preview.errors.join("; "));
+      setColumns(preview.dataset.columns);
+      setTiming({ columnTiming: preview.dataset.columnTiming ?? {} });
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Could not read CSV");
+    }
   }, []);
 
   const handleNameChange = useCallback(
@@ -101,7 +116,7 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
       }
     };
 
-    const result = await uploadDataset(file, name.trim(), handleProgress);
+    const result = await uploadDataset(file, name.trim(), handleProgress, timing);
 
     if (result.success) {
       // Reset and close
@@ -116,7 +131,7 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
     }
 
     setIsUploading(false);
-  }, [file, name, nameError, uploadDataset, onOpenChange]);
+  }, [file, name, nameError, uploadDataset, onOpenChange, timing]);
 
   const handleClose = useCallback(() => {
     if (isUploading) return;
@@ -132,7 +147,7 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Upload Static Dataset</DialogTitle>
           <DialogDescription>
@@ -203,6 +218,15 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
             </div>
           )}
 
+          {file && columns.length > 0 && (
+            <TimingEditor
+              columns={columns}
+              value={timing}
+              onChange={setTiming}
+              disabled={isUploading}
+            />
+          )}
+
           {/* Upload Progress */}
           {isUploading && (
             <div className="space-y-2">
@@ -229,7 +253,7 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
           </Button>
           <Button
             onClick={handleUpload}
-            disabled={!file || !name.trim() || !!nameError || isUploading}
+            disabled={!file || !columns.length || !name.trim() || !!nameError || isUploading}
           >
             {isUploading ? (
               <>

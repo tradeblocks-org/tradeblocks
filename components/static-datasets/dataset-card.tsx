@@ -41,6 +41,8 @@ import type { StaticDataset, MatchStrategy } from "@tradeblocks/lib";
 import { MATCH_STRATEGY_LABELS, MATCH_STRATEGY_DESCRIPTIONS } from "@tradeblocks/lib";
 import { useStaticDatasetsStore, makeMatchStatsCacheKey } from "@tradeblocks/lib/stores";
 import type { Trade } from "@tradeblocks/lib";
+import { TimingEditor } from "./timing-editor";
+import type { DatasetTiming } from "@tradeblocks/lib";
 
 interface DatasetCardProps {
   dataset: StaticDataset;
@@ -56,6 +58,17 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
   const [editName, setEditName] = useState(dataset.name);
   const [nameError, setNameError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editingTiming, setEditingTiming] = useState(false);
+  const [timing, setTiming] = useState<DatasetTiming>({
+    columnTiming:
+      dataset.columnTiming ??
+      Object.fromEntries(dataset.columns.map((column) => [column, "close"])),
+    knownBy: dataset.knownBy,
+    dateOnly: dataset.dateOnly,
+  });
+  const [timingError, setTimingError] = useState<string | null>(null);
+  const [savingTiming, setSavingTiming] = useState(false);
+  const updateTiming = useStaticDatasetsStore((state) => state.updateTiming);
 
   const updateMatchStrategy = useStaticDatasetsStore((state) => state.updateMatchStrategy);
   const renameDataset = useStaticDatasetsStore((state) => state.renameDataset);
@@ -100,6 +113,7 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
       month: "short",
       day: "numeric",
       year: "numeric",
+      timeZone: "America/New_York",
     }).format(new Date(date));
 
   const formatDateTime = (date: Date) =>
@@ -213,6 +227,68 @@ export function DatasetCard({ dataset, onPreview, trades, blockId }: DatasetCard
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {dataset.timingMode !== "declared" && (
+          <div role="alert" className="rounded-md border p-3 space-y-2 text-sm">
+            <p className="font-medium">Legacy same-day timing — possible lookahead</p>
+            <p>
+              Existing numbers are unchanged. Declare when each column was known to use causal
+              matching.
+            </p>
+          </div>
+        )}
+        {!editingTiming ? (
+          <Button variant="outline" size="sm" onClick={() => setEditingTiming(true)}>
+            Set column timing
+          </Button>
+        ) : (
+          <div className="space-y-3">
+            <TimingEditor
+              columns={dataset.columns}
+              value={timing}
+              onChange={setTiming}
+              legacy={dataset.timingMode !== "declared" || dataset.dateOnly !== undefined}
+              disabled={savingTiming}
+            />
+            <p className="text-xs text-muted-foreground">
+              Saving explicitly changes analysis matches; source values are preserved.
+            </p>
+            {timingError && (
+              <p role="alert" className="text-sm text-destructive">
+                {timingError}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                disabled={savingTiming}
+                onClick={async () => {
+                  setSavingTiming(true);
+                  setTimingError(null);
+                  try {
+                    await updateTiming(dataset.id, timing);
+                    setEditingTiming(false);
+                  } catch (error) {
+                    setTimingError(
+                      error instanceof Error ? error.message : "Could not save timing",
+                    );
+                  } finally {
+                    setSavingTiming(false);
+                  }
+                }}
+              >
+                Save timing
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={savingTiming}
+                onClick={() => setEditingTiming(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
         {/* Stats */}
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary" className="text-xs">

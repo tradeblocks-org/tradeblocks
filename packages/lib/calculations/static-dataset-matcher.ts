@@ -14,6 +14,123 @@ import type {
   DatasetMatchStats,
 } from "../models/static-dataset.ts";
 
+/** Refuse incomplete timing declarations rather than silently omitting a user field. */
+export function validateDatasetTiming(dataset: StaticDataset, hasDateOnly: boolean): void {
+  if (dataset.knownBy !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(dataset.knownBy)) {
+    throw new Error("Known-by time must be HH:mm Eastern Time");
+  }
+  for (const column of Object.keys(dataset.columnTiming ?? {})) {
+    if (!dataset.columns.includes(column)) throw new Error(`Unknown dataset column: ${column}`);
+  }
+  for (const column of dataset.columns) {
+    const timing = dataset.columnTiming?.[column];
+    if (timing !== "open" && timing !== "close")
+      throw new Error(`Declare open or close timing for ${column}`);
+    if (hasDateOnly && timing === "open" && !dataset.knownBy) {
+      throw new Error(`Date-only open column ${column} requires a known-by time (ET)`);
+    }
+  }
+}
+
+/** Date-only close is available from the following calendar day, never on D. */
+export function getDatasetValueAvailableAt(
+  dataset: StaticDataset,
+  row: Pick<StaticDatasetRow, "timestamp" | "dateOnly">,
+  column: string,
+): Date {
+  if (!dataset.columns.includes(column)) throw new Error(`Unknown dataset column: ${column}`);
+  if (dataset.timingMode !== "declared") return new Date(row.timestamp);
+  const timing = dataset.columnTiming?.[column];
+  if (timing !== "close" && timing !== "open")
+    throw new Error(`Declare open or close timing for ${column}`);
+  if (!(row.dateOnly ?? dataset.dateOnly)) return new Date(row.timestamp);
+  const day = getDateOnly(new Date(row.timestamp));
+  if (timing === "open") {
+    if (!dataset.knownBy || !/^([01]\d|2[0-3]):[0-5]\d$/.test(dataset.knownBy)) {
+      throw new Error(`Date-only open column ${column} requires a known-by time (ET)`);
+    }
+    return combineDateAndTime(new Date(`${day}T00:00:00Z`), dataset.knownBy);
+  }
+  const next = new Date(`${day}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return combineDateAndTime(next, "00:00");
+}
+
+// Dataset metadata and row arrays are immutable snapshots; timing edits replace metadata.
+type AvailabilityIndex = Array<{ row: StaticDatasetRow; time: number }>;
+const availabilityIndexes = new WeakMap<
+  StaticDataset,
+  WeakMap<StaticDatasetRow[], Map<string, AvailabilityIndex>>
+>();
+
+/** Pure causal join, shared by browser analysis and server dataset consumers. */
+export function resolveDatasetColumnAtTime(
+  dataset: StaticDataset,
+  rows: StaticDatasetRow[],
+  column: string,
+  entryTime: Date,
+): { value: number | string; row: StaticDatasetRow; availableAt: Date } | null {
+  if (!dataset.columns.includes(column)) throw new Error(`Unknown dataset column: ${column}`);
+  let rowIndexes = availabilityIndexes.get(dataset);
+  if (!rowIndexes) {
+    rowIndexes = new WeakMap();
+    availabilityIndexes.set(dataset, rowIndexes);
+  }
+  let columns = rowIndexes.get(rows);
+  if (!columns) {
+    columns = new Map();
+    rowIndexes.set(rows, columns);
+  }
+  let index = columns.get(column);
+  if (!index) {
+    index = rows
+      .filter((row) => row.values[column] !== undefined)
+      .map((row) => ({
+        row,
+        time: getDatasetValueAvailableAt(dataset, row, column).getTime(),
+      }))
+      .sort((a, b) => a.time - b.time);
+    columns.set(column, index);
+  }
+  let left = 0;
+  let right = index.length;
+  const time = entryTime.getTime();
+  while (left < right) {
+    const mid = Math.floor((left + right) / 2);
+    if (index[mid].time <= time) left = mid + 1;
+    else right = mid;
+  }
+  if (!left) return null;
+  const match = index[left - 1];
+  return { value: match.row.values[column], row: match.row, availableAt: new Date(match.time) };
+}
+
+function matchDatasetValues(
+  trade: Trade,
+  dataset: StaticDataset,
+  rows: StaticDatasetRow[],
+): StaticDatasetRow | null {
+  if (
+    dataset.timingMode !== "declared" ||
+    !["nearest-before", "exact"].includes(dataset.matchStrategy)
+  ) {
+    return matchTradeToDataset(trade, rows, dataset.matchStrategy);
+  }
+  const entry = combineDateAndTime(trade.dateOpened, trade.timeOpened);
+  const values: Record<string, number | string> = {};
+  let source: StaticDatasetRow | null = null;
+  for (const column of dataset.columns) {
+    const match = resolveDatasetColumnAtTime(dataset, rows, column, entry);
+    if (
+      !match ||
+      (dataset.matchStrategy === "exact" && match.availableAt.getTime() !== entry.getTime())
+    )
+      continue;
+    values[column] = match.value;
+    source = match.row;
+  }
+  return source ? { ...source, values } : null;
+}
 /**
  * Combine trade date and time into a single timestamp
  *
@@ -310,7 +427,7 @@ export function matchTradeToDatasetWithDetails(
   rows: StaticDatasetRow[],
 ): DatasetMatchResult {
   const tradeTimestamp = combineDateAndTime(trade.dateOpened, trade.timeOpened);
-  const matchedRow = matchTradeToDataset(trade, rows, dataset.matchStrategy);
+  const matchedRow = matchDatasetValues(trade, dataset, rows);
 
   let matchedTimestamp: Date | null = null;
   let timeDifferenceMs: number | null = null;
@@ -378,14 +495,14 @@ export function calculateMatchStats(
     const tradeTimestamp = combineDateAndTime(trade.dateOpened, trade.timeOpened);
     const tradeTime = tradeTimestamp.getTime();
 
-    // Check if trade is outside dataset date range
-    if (tradeTime < datasetStart || tradeTime > datasetEnd) {
+    // Causal carry-forward can legitimately match after the last source date.
+    if (tradeTime < datasetStart || (dataset.timingMode !== "declared" && tradeTime > datasetEnd)) {
       outsideDateRange++;
       continue;
     }
 
     // Try to match
-    const match = matchTradeToDataset(trade, rows, dataset.matchStrategy);
+    const match = matchDatasetValues(trade, dataset, rows);
     if (match) {
       matchedTrades++;
     }
@@ -413,7 +530,7 @@ export function getMatchedValuesForTrade(
   const result: Record<string, Record<string, number | string>> = {};
 
   for (const { dataset, rows } of datasets) {
-    const matchedRow = matchTradeToDataset(trade, rows, dataset.matchStrategy);
+    const matchedRow = matchDatasetValues(trade, dataset, rows);
 
     if (matchedRow) {
       result[dataset.name] = { ...matchedRow.values };
@@ -445,11 +562,10 @@ export function getMatchedFieldValue(
     return null;
   }
 
-  const matchedRow = matchTradeToDataset(
-    trade,
-    datasetInfo.rows,
-    datasetInfo.dataset.matchStrategy,
-  );
+  if (!datasetInfo.dataset.columns.includes(columnName)) {
+    throw new Error(`Unknown dataset column: ${columnName}`);
+  }
+  const matchedRow = matchDatasetValues(trade, datasetInfo.dataset, datasetInfo.rows);
   if (!matchedRow) {
     return null;
   }
