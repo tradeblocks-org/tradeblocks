@@ -11,12 +11,17 @@
  * sorted ticker|time|strike keys.
  */
 import { describe, it, expect } from "@jest/globals";
+import { readFileSync, readdirSync } from "fs";
+import { join } from "path";
 import {
   ParquetQuoteStore,
   ParquetChainStore,
   DuckdbQuoteStore,
   DuckdbChainStore,
   hasQuoteGreeks,
+  createMarketParquetViews,
+  writeQuoteMinutesPartition,
+  writeSpotPartition,
 } from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
@@ -182,6 +187,179 @@ describe("ParquetQuoteStore source round-trip", () => {
     expect(persisted[0].source).toBe("synth_close");
     expect(persisted[1].source).toBe("nbbo");
     await conn.close();
+  });
+});
+
+describe("ParquetQuoteStore partition updates", () => {
+  const date = "2025-01-07";
+  const tickerA = "SPXW250107C05000000";
+  const tickerB = "SPXW250107P05000000";
+
+  it("replaces incoming tickers and preserves every other ticker's rows and columns", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      const store = new ParquetQuoteStore(fixture.ctx);
+      const rows: QuoteRow[] = [tickerA, tickerB].flatMap((occ_ticker) =>
+        ["09:30", "09:31"].map((time) => ({
+          occ_ticker,
+          timestamp: `${date} ${time}`,
+          bid: 10,
+          ask: 12,
+          source: "nbbo" as const,
+          delta: 0.5,
+          gamma: 0.125,
+          theta: -0.25,
+          vega: 0.75,
+          iv: 0.25,
+          greeks_source: "computed" as const,
+          greeks_revision: 3,
+          rate_type: "sofr",
+          rate_value: 0.0432,
+          gamma_source: "computed",
+        })),
+      );
+      await store.writeQuotes("SPX", date, rows);
+      await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
+      const before = await fixture.ctx.conn.runAndReadAll(
+        `SELECT * FROM market.option_quote_minutes WHERE ticker = '${tickerB}' ORDER BY time`,
+      );
+      const replacement: QuoteRow = { ...rows[0], bid: 20, ask: 24, source: "synth_close" };
+      const replacements = [replacement, { ...replacement, timestamp: `${date} 09:32` }];
+      await store.writeQuotes("SPX", date, replacements);
+      const readBack = await store.readQuotes([tickerA, tickerB], date, date);
+      expect(readBack.get(tickerA)).toEqual(replacements);
+      expect(readBack.get(tickerB)).toEqual(rows.filter((row) => row.occ_ticker === tickerB));
+      const after = await fixture.ctx.conn.runAndReadAll(
+        `SELECT * FROM market.option_quote_minutes WHERE ticker = '${tickerB}' ORDER BY time`,
+      );
+      expect(after.getRows()).toEqual(before.getRows());
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  function quoteSelect(count: number): string {
+    return `SELECT 'SPX' AS underlying, '${date}' AS date, '${tickerA}' AS ticker,
+      '09:' || lpad(CAST(i AS VARCHAR), 2, '0') AS time,
+      10.0::DOUBLE AS bid, 12.0::DOUBLE AS ask FROM range(${count}) AS t(i)`;
+  }
+
+  it("refuses shrinking publications by name before changing any existing bytes", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      const store = new ParquetQuoteStore(fixture.ctx);
+      const partition = { underlying: "SPX", date };
+      await store.writeFromSelect(partition, quoteSelect(8));
+      const dir = join(
+        fixture.ctx.dataDir,
+        "market/option_quote_minutes/underlying=SPX",
+        `date=${date}`,
+      );
+      const file = join(dir, "data.parquet");
+      const before = readFileSync(file);
+      for (const count of [3, 0]) {
+        await expect(store.writeFromSelect(partition, quoteSelect(count))).rejects.toMatchObject({
+          name: "QuotePartitionShrinkError",
+          message: expect.stringMatching(
+            new RegExp(
+              `underlying=SPX/date=${date}.*existing=8.*candidate=${count}.*threshold=0\\.5`,
+            ),
+          ),
+        });
+        expect(readFileSync(file)).toEqual(before);
+        expect(readdirSync(dir)).toEqual(["data.parquet"]);
+        expect((await store.readQuotes([tickerA], date, date)).get(tickerA)).toHaveLength(8);
+      }
+      // Exactly half is allowed, not mistaken for "less than half".
+      expect(await store.writeFromSelect(partition, quoteSelect(4))).toEqual({ rowCount: 4 });
+      expect((await store.readQuotes([tickerA], date, date)).get(tickerA)).toHaveLength(4);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("allows empty and tiny partitions to grow through whole-partition import", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      const store = new ParquetQuoteStore(fixture.ctx);
+      const partition = { underlying: "SPX", date };
+      for (const count of [0, 1, 8]) {
+        expect(await store.writeFromSelect(partition, quoteSelect(count))).toEqual({
+          rowCount: count,
+        });
+        const rows = await store.readQuotes([tickerA], date, date);
+        expect(rows.get(tickerA) ?? []).toHaveLength(count);
+      }
+      const tinyDate = "2025-01-08";
+      await store.writeFromSelect(
+        { underlying: "SPX", date: tinyDate },
+        quoteSelect(1).replaceAll(date, tinyDate),
+      );
+      await expect(
+        store.writeFromSelect(
+          { underlying: "SPX", date: tinyDate },
+          quoteSelect(0).replaceAll(date, tinyDate),
+        ),
+      ).rejects.toMatchObject({ name: "QuotePartitionShrinkError" });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("preserves legacy DOUBLE greeks and stored metadata without rounding retained rows", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      const store = new ParquetQuoteStore(fixture.ctx);
+      await writeQuoteMinutesPartition(fixture.ctx.conn, {
+        dataDir: fixture.ctx.dataDir,
+        underlying: "SPX",
+        date,
+        selectQuery: `SELECT *, 11.25::DOUBLE AS mid, 1234567890123456789::BIGINT AS last_updated_ns,
+          'nbbo' AS source, 0.123456789012345::DOUBLE AS delta, 0.012345678901234::DOUBLE AS gamma,
+          -0.23456789012345::DOUBLE AS theta, 0.34567890123456::DOUBLE AS vega,
+          0.45678901234567::DOUBLE AS iv, 'computed' AS greeks_source, 3 AS greeks_revision,
+          'sofr' AS rate_type, 0.04321::DOUBLE AS rate_value, 'computed' AS gamma_source
+          FROM (${quoteSelect(2).replaceAll(tickerA, tickerB)})`,
+      });
+      await createMarketParquetViews(fixture.ctx.conn, fixture.ctx.dataDir);
+      const before = (
+        await fixture.ctx.conn.runAndReadAll(
+          "SELECT * FROM market.option_quote_minutes ORDER BY time",
+        )
+      ).getRows();
+      await store.writeQuotes("SPX", date, [
+        { occ_ticker: tickerA, timestamp: `${date} 09:30`, bid: 1, ask: 2 },
+      ]);
+      expect((await store.readQuotes([tickerB], date, date)).get(tickerB)?.[0].delta).toBe(
+        0.123456789012345,
+      );
+      const after = (
+        await fixture.ctx.conn.runAndReadAll(
+          `SELECT * FROM market.option_quote_minutes WHERE ticker = '${tickerB}' ORDER BY time`,
+        )
+      ).getRows();
+      expect(after).toEqual(before);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("does not apply the quote shrink guard to spot partition publications", async () => {
+    const fixture = await buildStoreFixture({ parquetMode: true });
+    try {
+      for (const count of [8, 1]) {
+        expect(
+          await writeSpotPartition(fixture.ctx.conn, {
+            dataDir: fixture.ctx.dataDir,
+            ticker: "SPX",
+            date,
+            selectQuery: `SELECT '${date}' AS date, '09:30' AS time, i AS close FROM range(${count}) t(i)`,
+          }),
+        ).toMatchObject({ rowCount: count });
+      }
+    } finally {
+      fixture.cleanup();
+    }
   });
 });
 

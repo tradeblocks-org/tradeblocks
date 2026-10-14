@@ -18,7 +18,7 @@
 
 import type { DuckDBConnection } from "@duckdb/node-api";
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import * as fs from "fs/promises";
 import * as path from "path";
 import type {
@@ -143,6 +143,35 @@ async function exactFileFingerprint(filePath: string, rows: number): Promise<Exa
 
 function escapeSqlLiteral(value: string): string {
   return value.replaceAll("'", "''");
+}
+
+const MIN_QUOTE_PARTITION_ROW_FRACTION = 0.5;
+
+class QuotePartitionShrinkError extends Error {
+  constructor(partition: Record<string, string>, existing: number, candidate: number) {
+    super(
+      `Quote partition shrink refused: underlying=${partition.underlying}/date=${partition.date}; ` +
+        `existing=${existing}, candidate=${candidate}, threshold=${MIN_QUOTE_PARTITION_ROW_FRACTION}`,
+    );
+    this.name = "QuotePartitionShrinkError";
+  }
+}
+
+async function assertQuotePartitionRowCount(
+  conn: DuckDBConnection,
+  targetPath: string,
+  provenance: WriteParquetProvenanceOpts | undefined,
+  candidate: number,
+): Promise<void> {
+  // Canonical quote writes carry this dataset identity even outside a provenance attempt.
+  if (provenance?.dataset !== "option_quote_minutes" || !existsSync(targetPath)) return;
+  const reader = await conn.runAndReadAll(
+    `SELECT COUNT(*) FROM read_parquet('${escapeSqlLiteral(targetPath)}', hive_partitioning=false)`,
+  );
+  const existing = Number(reader.getRows()[0][0]);
+  if (candidate < existing * MIN_QUOTE_PARTITION_ROW_FRACTION) {
+    throw new QuotePartitionShrinkError(provenance.partition, existing, candidate);
+  }
 }
 
 async function inspectPreparedParquet(
@@ -304,6 +333,7 @@ export async function writeParquetAtomic(
             await conn.runAndReadAll(`SELECT COUNT(*)::INTEGER AS cnt FROM "${stagingName}"`)
           ).getRows()[0][0],
         );
+    await assertQuotePartitionRowCount(conn, targetPath, provenance, rowCount);
     const logicalCoverage = inspected?.coverage;
     const quality = provenanceAttempt ? resolveQuality(rowCount, provenance!.quality) : undefined;
     const fingerprint = provenanceAttempt

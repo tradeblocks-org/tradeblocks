@@ -715,12 +715,10 @@ export class MarketIngestor {
 
   /**
    * Consume the entire bulk-quote stream for one (underlying, date) and write
-   * once at the end. Mid-stream flushing is NOT safe here: `writeQuotes` ->
-   * `writeParquetAtomic` performs `COPY ... TO '<partitionFile>'` which
-   * *overwrites* the partition — splitting one day into multiple writes would
-   * leave only the final flush on disk. Peak heap is ~O(rows × row-size) per
-   * underlying per day (~700MB for a full SPX day), which matches what the
-   * old wildcard-bulk drain script ran at before it was retired.
+   * once at the end. writeQuotes replaces all rows for each incoming ticker,
+   * so splitting one ticker's minutes across flushes would lose earlier minutes.
+   * Peak heap is ~O(rows × row-size) per underlying per day (~700MB for a full
+   * SPX day), matching the old wildcard-bulk drain script.
    */
   private async drainBulkQuotes(
     provider: MarketDataProvider,

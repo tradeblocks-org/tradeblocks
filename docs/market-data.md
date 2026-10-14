@@ -445,6 +445,46 @@ Examples:
 | `import_from_api { target_table: "intraday", ticker: "SPX", timespan: "1m", from, to }` | `fetch_bars { tickers: ["SPX"], timespan: "1m", from, to }`                                                                |
 | `import_from_api { target_table: "date_context", from, to }`                            | `fetch_bars { tickers: ["VIX","VIX9D","VIX3M"], timespan: "1d", from, to }` followed by `compute_vix_context { from, to }` |
 
+## Quote-partition writes and shrink protection
+
+Parquet minute quotes share one file per `(underlying, date)`:
+`market/option_quote_minutes/underlying=X/date=YYYY-MM-DD/data.parquet`.
+`ParquetQuoteStore.writeQuotes(underlying, date, quotes)`, including per-ticker
+`fetch_quotes`, replaces **all minutes for exactly the tickers present in the
+incoming batch**, not the entire date. Every existing row for another ticker
+is retained, including stored prices, timestamps, Greeks and source/rate
+provenance. Retained legacy DOUBLE Greeks are not rounded to REAL. Incoming
+Greeks still use REAL storage. Empty `writeQuotes` batches are no-ops.
+
+Supply a complete ticker-date batch: a later batch for the same ticker
+replaces that ticker's earlier minutes rather than appending to them. Bulk
+ingestion collects a complete underlying-date batch before writing. A fresh
+partition requires no merge read.
+
+In contrast, Parquet `writeFromSelect`, used by `import_flat_file` for
+`option_quotes`, intentionally replaces the **whole partition** with the
+selected rows. Use a complete underlying-date selection for that entrance.
+The DuckDB adapter uses keyed `INSERT OR REPLACE`; it does not delete other
+contracts or minutes absent from its input.
+
+Both Parquet entrances publish through `writeQuoteMinutesPartition`, retaining
+canonical columns, `(ticker, time)` ordering, atomic replacement and existing
+provenance recording. The atomic writer privately guards quote publications:
+`MIN_QUOTE_PARTITION_ROW_FRACTION = 0.5` refuses a candidate with fewer than
+half the existing rows. Exactly half is accepted. This catches large
+accidental truncations while allowing smaller corrections; it is not proof
+that a day's coverage is complete.
+
+Refusal throws `QuotePartitionShrinkError`, whose message names the underlying
+and date, existing row count, candidate row count and threshold. It happens
+before file replacement or provenance publication; the existing file remains
+unchanged and the prepared sidecar is removed. There is no force option.
+The check compares row counts, not compressed bytes, and applies even to tiny
+partitions. Fresh/empty partitions and growth from any size are allowed, so
+full-day imports can restore a truncated partition. An empty `writeFromSelect`
+refuses against any nonempty partition. Other datasets, including spot
+partitions, are unaffected.
+
 ## Quote-store read projections
 
 Quote-price-only consumers can skip Greek columns entirely. The exported

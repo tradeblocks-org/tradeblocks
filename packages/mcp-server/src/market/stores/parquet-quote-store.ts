@@ -127,12 +127,29 @@ export class ParquetQuoteStore extends QuoteStore {
       } finally {
         appender.closeSync();
       }
+      let selectQuery = `SELECT * FROM "${staging}"`;
+      const existingFile = path.join(
+        resolveMarketDir(this.ctx.dataDir),
+        "option_quote_minutes",
+        `underlying=${underlying}`,
+        `date=${date}`,
+        "data.parquet",
+      );
+      if (existsSync(existingFile)) {
+        const source = readParquetFilesSql([existingFile]);
+        const columns = await describeQueryColumns(this.ctx.conn, `SELECT * FROM ${source}`);
+        // Do not cast retained greeks to REAL: legacy DOUBLE values must survive unchanged.
+        const projection = quoteParquetCanonicalProjection(columns, "q");
+        selectQuery += ` UNION ALL
+          SELECT ${projection} FROM ${source} AS q
+          WHERE q.ticker NOT IN (SELECT ticker FROM "${staging}")`;
+      }
       await writeQuoteMinutesPartition(this.ctx.conn, {
         dataDir: this.ctx.dataDir,
         underlying,
         date,
-        selectQuery: `SELECT * FROM "${staging}"`,
-        quality: { inputRows: quotes.length, droppedRows: 0 },
+        selectQuery,
+        quality: { kind: "writer-input-complete" },
       });
     } finally {
       try {
