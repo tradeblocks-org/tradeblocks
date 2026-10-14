@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import { describe, it, expect, afterAll } from "@jest/globals";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { closeConnection, loadBlock } from "../../src/test-exports.ts";
+import { closeConnection, getConnection, loadBlock } from "../../src/test-exports.ts";
 import { registerImportTools } from "../../src/tools/imports.ts";
 import { registerFieldTools } from "../../src/tools/reports/fields.ts";
 import { enrichTrades } from "../../src/tools/reports/helpers.ts";
@@ -35,6 +35,8 @@ const DATES = ["2022-07-08", "2023-05-05", "2024-05-02", "2025-05-02", "2026-05-
 async function fixture(run: (root: string, call: CallTool) => Promise<void>) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "tb-pl-pct-import-"));
   await fs.mkdir(path.join(root, "blocks"));
+  // Mirror server startup before middleware reopens the singleton for this fixture root.
+  await getConnection(root);
   const handlers = new Map<string, Handler>();
   const server = {
     registerTool(name: string, _config: unknown, handler: Handler) {

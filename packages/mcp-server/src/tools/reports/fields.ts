@@ -12,8 +12,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
-import { enrichTrades } from "./helpers.ts";
+import { enrichAnalysisTrades } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
+import { datasetAgeOutput } from "../../db/dataset-schemas.ts";
 
 /**
  * Register field-related report tools
@@ -29,7 +30,9 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
         blockId: z.string().describe("Block folder name"),
         field: z
           .string()
-          .describe("Field name to analyze (e.g., 'openingVix', 'pl', 'rom', 'mfePercent')"),
+          .describe(
+            "Trade, built-in market, or registered dataset field (e.g., 'pl', 'RSI_14', 'signal.score')",
+          ),
         strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         startDate: z.string().optional().describe("Filter by start date (YYYY-MM-DD)"),
         endDate: z.string().optional().describe("Filter by end date (YYYY-MM-DD)"),
@@ -64,7 +67,8 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
           }
 
           // Enrich trades
-          const enrichedTrades = enrichTrades(trades);
+          const resolved = await enrichAnalysisTrades(baseDir, trades);
+          const enrichedTrades = resolved.trades;
 
           // Extract field values
           const values: number[] = [];
@@ -103,6 +107,7 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
             },
             statistics,
             percentiles,
+            ...datasetAgeOutput(resolved.datasetAge, [field]),
             histogram,
           };
 

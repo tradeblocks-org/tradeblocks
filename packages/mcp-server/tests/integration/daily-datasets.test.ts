@@ -18,6 +18,7 @@ import {
 } from "../../src/tools/profile-analysis.ts";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { registerPredictiveTools } from "../../src/tools/reports/predictive.ts";
+import { registerFieldTools } from "../../src/tools/reports/fields.ts";
 import { registerMarketDataTools } from "../../src/tools/market-data.ts";
 import { createMarketStores } from "../../src/market/stores/index.ts";
 import { TickerRegistry } from "../../src/market/tickers/registry.ts";
@@ -416,6 +417,24 @@ test("blank cells remain numeric, carry forward, and expose aggregate source age
     },
   } as unknown as McpServer;
   registerPredictiveTools(server, baseDir);
+  registerFieldTools(server, baseDir);
+  const fieldStatistics = await handlers.get_field_statistics({
+    blockId: "blank",
+    field: "blank.x",
+    histogramBuckets: 3,
+  });
+  expect(fieldStatistics.structuredContent?.statistics).toEqual(
+    expect.objectContaining({ count: 10, min: 1.5, max: 2.5, sum: 20, avg: 2, median: 2 }),
+  );
+  const tradeStatistics = await handlers.get_field_statistics({
+    blockId: "blank",
+    field: "pl",
+    histogramBuckets: 3,
+  });
+  expect(tradeStatistics.structuredContent?.statistics).toEqual(
+    expect.objectContaining({ count: 11, min: -50, max: 100, sum: 350 }),
+  );
+  expect(tradeStatistics.structuredContent).not.toHaveProperty("datasetAge");
   registerMarketDataTools(
     server,
     baseDir,
@@ -458,6 +477,7 @@ test("blank cells remain numeric, carry forward, and expose aggregate source age
     baseDir,
   );
   const outputs = [
+    fieldStatistics,
     validation,
     fit,
     await handlers.filter_curve({

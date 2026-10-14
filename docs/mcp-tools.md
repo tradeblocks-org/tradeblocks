@@ -137,19 +137,19 @@ See [per-request details](market-data.md#fetch_quotes).
 
 ## Market Analysis
 
-| Tool                         | Description                                                      |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `analyze_regime_performance` | Analyze P&L by market regime (VIX levels, term structure, trend) |
-| `suggest_filters`            | Suggest entry filters based on losing trade analysis             |
-| `calculate_orb`              | Opening range breakout analysis from intraday bars               |
-| `enrich_trades`              | Add market context to trades (lookahead-free temporal joins)     |
-| `find_predictive_fields`     | Identify which market fields predict trade outcomes              |
-| `filter_curve`               | Equity curve with/without a candidate market filter applied      |
-| `get_field_statistics`       | Distribution statistics for any market or trade field            |
-| `import_daily_dataset`       | Import or replace a Static Dataset CSV with declared timing      |
-| `list_daily_datasets`        | List datasets, fields, timing and coverage                       |
-| `delete_daily_dataset`       | Delete a dataset and unregister its fields                       |
-| `list_analysis_fields`       | Runtime catalog of built-in and dataset analysis fields          |
+| Tool                         | Description                                                            |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| `analyze_regime_performance` | Analyze P&L by market regime (VIX levels, term structure, trend)       |
+| `suggest_filters`            | Suggest entry filters based on losing trade analysis                   |
+| `calculate_orb`              | Opening range breakout analysis from intraday bars                     |
+| `enrich_trades`              | Add market context to trades (lookahead-free temporal joins)           |
+| `find_predictive_fields`     | Identify which market fields predict trade outcomes                    |
+| `filter_curve`               | Equity curve with/without a candidate market filter applied            |
+| `get_field_statistics`       | Distribution statistics for market, trade or registered dataset fields |
+| `import_daily_dataset`       | Import or replace a Static Dataset CSV with declared timing            |
+| `list_daily_datasets`        | List datasets, fields, timing and coverage                             |
+| `delete_daily_dataset`       | Delete a dataset and unregister its fields                             |
+| `list_analysis_fields`       | Runtime catalog of built-in and dataset analysis fields                |
 
 Static Dataset CSVs use the same parser as the web app: timestamp first, then numeric or
 categorical columns. `import_daily_dataset` takes `name`, exactly one of inline `content` or
@@ -174,6 +174,8 @@ dataset fields retain their prior output shape.
 alongside trade fields. `filter_curve` accepts these names directly (for example `signal.score`
 or `RSI_14`); both use the same entry-time values as `enrich_trades`. Dataset fields with no
 available value in the selected trades are refused explicitly.
+`get_field_statistics` also accepts registered dataset columns and built-in market fields,
+using these same causal values and dataset age summaries.
 
 `suggest_filters.fields` optionally selects registered fields: numeric fields sweep percentile
 thresholds; categorical fields test exclusions by value. Omitting fields preserves the existing
