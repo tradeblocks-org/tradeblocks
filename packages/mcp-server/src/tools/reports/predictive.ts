@@ -10,16 +10,12 @@ import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
 import { rankPredictiveTradeFields } from "@tradeblocks/lib";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
-import {
-  enrichAnalysisTrades,
-  getTradeFieldValue,
-  percentile,
-  type EnrichedTrade,
-} from "./helpers.ts";
+import { enrichAnalysisTrades, getTradeFieldValue, type EnrichedTrade } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
 import { requireCoveredField } from "../../utils/trade-analysis-fields.ts";
+import { sweepThresholds } from "../../utils/threshold-sweep.ts";
 
 /**
  * Register predictive-related report tools
@@ -288,29 +284,13 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             totalPl: Math.round(baselineTotalPl * 100) / 100,
           };
 
-          // Generate thresholds
-          let thresholdsToTest: number[];
-
-          if (thresholds && thresholds.length > 0) {
-            // Use custom thresholds
-            thresholdsToTest = [...thresholds].sort((a, b) => a - b);
-          } else {
-            // Auto-generate from percentiles
-            const sorted = [...fieldValues].sort((a, b) => a - b);
-            thresholdsToTest = [];
-
-            for (const p of percentileSteps) {
-              const value = percentile(sorted, p);
-              // Round to 2 decimal places for cleaner output
-              const rounded = Math.round(value * 100) / 100;
-              // Avoid duplicates
-              if (!thresholdsToTest.includes(rounded)) {
-                thresholdsToTest.push(rounded);
-              }
-            }
-
-            thresholdsToTest.sort((a, b) => a - b);
-          }
+          const sweeps = sweepThresholds(
+            tradesWithField,
+            (trade) => getTradeFieldValue(trade, field),
+            thresholds,
+            percentileSteps,
+          );
+          const thresholdsToTest = sweeps.map(({ threshold }) => threshold);
 
           // Minimum sample size for reliable statistics
           const MIN_SAMPLE_SIZE = 30;
@@ -372,25 +352,10 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
 
           const thresholdResults: ThresholdResult[] = [];
 
-          for (const threshold of thresholdsToTest) {
-            const result: ThresholdResult = { threshold };
-
-            if (mode === "lt" || mode === "both") {
-              const ltTrades = tradesWithField.filter((trade) => {
-                const value = getTradeFieldValue(trade, field);
-                return value !== null && value < threshold;
-              });
-              result.lt = calculateMetrics(ltTrades);
-            }
-
-            if (mode === "gt" || mode === "both") {
-              const gtTrades = tradesWithField.filter((trade) => {
-                const value = getTradeFieldValue(trade, field);
-                return value !== null && value > threshold;
-              });
-              result.gt = calculateMetrics(gtTrades);
-            }
-
+          for (const sweep of sweeps) {
+            const result: ThresholdResult = { threshold: sweep.threshold };
+            if (mode === "lt" || mode === "both") result.lt = calculateMetrics(sweep.lt);
+            if (mode === "gt" || mode === "both") result.gt = calculateMetrics(sweep.gt);
             thresholdResults.push(result);
           }
 

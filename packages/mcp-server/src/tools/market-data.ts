@@ -38,6 +38,7 @@ import { checkDataAvailability } from "../utils/data-availability.ts";
 import { getProfile } from "../db/profile-schemas.ts";
 import type { MarketStores } from "../market/stores/index.ts";
 import { listDatasets, resolveTradeDatasets } from "../db/dataset-schemas.ts";
+import { suggestFieldFilters } from "./shared/field-analysis.ts";
 
 // =============================================================================
 // Types
@@ -520,6 +521,13 @@ export function registerMarketDataTools(
         "Uses market.enriched + market.spot_daily LEFT JOIN VIX tickers + market.enriched_context. Returns warnings when market data is partially missing.",
       inputSchema: z.object({
         blockId: z.string().describe("Block ID to analyze"),
+        fields: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe(
+            "Sweep numeric thresholds or categorical exclusions for these built-in or dataset fields. Omit to keep default suggestions.",
+          ),
         strategy: z.string().optional().describe("Filter to specific strategy"),
         strategyName: z
           .string()
@@ -536,7 +544,7 @@ export function registerMarketDataTools(
     },
     withFullSync(
       baseDir,
-      async ({ blockId, strategy, strategyName, minImprovementPct = 3, ticker }) => {
+      async ({ blockId, strategy, strategyName, minImprovementPct = 3, ticker, fields }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
           let trades = block.trades;
@@ -577,6 +585,9 @@ export function registerMarketDataTools(
               isError: true,
             };
           }
+
+          if (fields)
+            return await suggestFieldFilters(baseDir, blockId, trades, fields, minImprovementPct);
 
           // Collect unique trade keys (ticker+date) and query DuckDB for market data
           const tradeKeys = uniqueTradeLookupKeys(trades);

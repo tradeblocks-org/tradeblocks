@@ -167,6 +167,10 @@ alongside trade fields. `filter_curve` accepts these names directly (for example
 or `RSI_14`); both use the same entry-time values as `enrich_trades`. Dataset fields with no
 available value in the selected trades are refused explicitly.
 
+`suggest_filters.fields` optionally selects registered fields: numeric fields sweep percentile
+thresholds; categorical fields test exclusions by value. Omitting fields preserves the existing
+hand-authored defaults. Shared sweeps preserve numeric scale without two-decimal rounding.
+
 ## Strategy Profiles
 
 | Tool                   | Description                                                  |

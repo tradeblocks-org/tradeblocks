@@ -184,4 +184,38 @@ test("profile filters use close carry-forward and open known-by rather than same
       gt: expect.objectContaining({ count: 1, totalPl: -50 }),
     }),
   ]);
+  await handlers.import_daily_dataset({
+    name: "signal",
+    content: "date,score,state\n2025-01-02,0.0001,calm\n2025-01-03,0.0009,hot",
+  });
+  const smallCurve = await handlers.filter_curve({
+    blockId: "sample",
+    field: "signal.score",
+    mode: "both",
+    percentileSteps: [25, 50, 75],
+  });
+  const smallThresholds = (smallCurve.structuredContent?.thresholds as { threshold: number }[]).map(
+    ({ threshold }) => threshold,
+  );
+  expect(smallThresholds).toHaveLength(3);
+  [0.0003, 0.0005, 0.0007].forEach((expected, i) =>
+    expect(smallThresholds[i]).toBeCloseTo(expected, 12),
+  );
+  const suggestions = await handlers.suggest_filters({
+    blockId: "sample",
+    fields: ["signal.score", "signal.state"],
+    minImprovementPct: 1,
+  });
+  expect(suggestions.structuredContent?.suggestedFilters).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        condition: expect.objectContaining({ field: "signal.score", operator: ">" }),
+        newWinRate: 100,
+      }),
+      expect.objectContaining({
+        condition: expect.objectContaining({ field: "signal.state", operator: "==", value: "hot" }),
+        newWinRate: 100,
+      }),
+    ]),
+  );
 });
