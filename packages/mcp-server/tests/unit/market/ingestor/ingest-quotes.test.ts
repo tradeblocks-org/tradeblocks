@@ -5,6 +5,7 @@ import { join } from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { MarketIngestor } from "../../../../src/market/ingestor/index.ts";
 import { createMarketStores } from "../../../../src/market/stores/index.ts";
+import { ParquetQuoteStore } from "../../../../src/market/stores/parquet-quote-store.ts";
 import { ensureMarketDataTables } from "../../../../src/db/market-schemas.ts";
 import { TickerRegistry } from "../../../../src/market/tickers/registry.ts";
 import type { MarketDataProvider } from "../../../../src/utils/market-provider.ts";
@@ -146,6 +147,139 @@ describe("MarketIngestor.ingestQuotes", () => {
     expect(result.status).toBe("ok");
     expect(result.rowsWritten).toBe(2);
   });
+
+  const batchDate = "2026-01-05";
+  const batchTickers = ["SPXW260319C04800000", "SPXW260319C04900000", "SPXW260319P04800000"];
+  const unrelatedTicker = "SPXW260319P04900000";
+
+  function batchProvider(failure?: "throw" | "mapped"): MarketDataProvider {
+    return {
+      name: "massive",
+      capabilities: () => ({
+        tradeBars: true,
+        quotes: true,
+        greeks: true,
+        flatFiles: false,
+        bulkByRoot: false,
+        perTicker: true,
+        minuteBars: true,
+        dailyBars: true,
+      }),
+      fetchBars: async () => [],
+      fetchOptionSnapshot: async () => ({ contracts: [] }),
+      fetchQuotes: async (ticker, _from, _to, onRequest) => {
+        if (failure && ticker === batchTickers[2]) {
+          throw new Error(failure === "mapped" ? "HTTP 403 Forbidden" : "provider disconnected");
+        }
+        onRequest?.({ date: batchDate, outcome: "ok", pagesFetched: 1 });
+        return new Map([
+          [
+            `${batchDate} 09:30`,
+            {
+              bid: 10,
+              ask: 12,
+              delta: 0.5,
+              gamma: 0.125,
+              theta: -0.25,
+              vega: 0.75,
+              iv: 0.25,
+            },
+          ],
+        ]);
+      },
+    };
+  }
+
+  async function batchStores() {
+    const writeSpy = jest.spyOn(ParquetQuoteStore.prototype, "writeQuotes");
+    const stores = createMarketStores({ conn, dataDir, parquetMode: true, tickers });
+    await stores.quote.writeQuotes("SPXW", batchDate, [
+      {
+        occ_ticker: unrelatedTicker,
+        timestamp: `${batchDate} 09:31`,
+        bid: 30,
+        ask: 32,
+      },
+    ]);
+    writeSpy.mockClear();
+    return { stores, writeSpy };
+  }
+
+  it.each([false, true])(
+    "publishes a multi-ticker fetch once per partition (duplicate ticker: %s)",
+    async (duplicate) => {
+      const { stores, writeSpy } = await batchStores();
+      try {
+        const requested = duplicate ? [...batchTickers, batchTickers[0]] : batchTickers;
+        const result = await new MarketIngestor({
+          stores,
+          dataRoot: dataDir,
+          providerFactory: () => batchProvider(),
+        }).ingestQuotes({ tickers: requested, from: batchDate, to: batchDate });
+        expect(result).toEqual({
+          status: "ok",
+          rowsWritten: requested.length,
+          dateRange: { from: batchDate, to: batchDate },
+          requests: requested.map((ticker) => ({
+            ticker,
+            date: batchDate,
+            outcome: "ok",
+            pagesFetched: 1,
+            rows: 1,
+          })),
+        });
+        expect(writeSpy).toHaveBeenCalledTimes(1);
+        const readBack = await stores.quote.readQuotes(
+          [...batchTickers, unrelatedTicker],
+          batchDate,
+          batchDate,
+        );
+        for (const ticker of batchTickers) {
+          expect(readBack.get(ticker)).toHaveLength(1);
+          expect(readBack.get(ticker)?.[0].bid).toBe(10);
+        }
+        expect(readBack.get(unrelatedTicker)).toHaveLength(1);
+        expect(readBack.get(unrelatedTicker)?.[0].bid).toBe(30);
+      } finally {
+        writeSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each(["throw", "mapped"] as const)(
+    "publishes earlier tickers once when the third provider call fails (%s)",
+    async (failure) => {
+      const { stores, writeSpy } = await batchStores();
+      try {
+        const pending = new MarketIngestor({
+          stores,
+          dataRoot: dataDir,
+          providerFactory: () => batchProvider(failure),
+        }).ingestQuotes({ tickers: batchTickers, from: batchDate, to: batchDate });
+        if (failure === "throw") {
+          await expect(pending).rejects.toThrow("provider disconnected");
+        } else {
+          await expect(pending).resolves.toMatchObject({ status: "unsupported", rowsWritten: 0 });
+        }
+        expect(writeSpy).toHaveBeenCalledTimes(1);
+        const readBack = await stores.quote.readQuotes(
+          [...batchTickers, unrelatedTicker],
+          batchDate,
+          batchDate,
+        );
+        expect([...readBack.keys()].sort()).toEqual(
+          [...batchTickers.slice(0, 2), unrelatedTicker].sort(),
+        );
+        for (const ticker of batchTickers.slice(0, 2)) {
+          expect(readBack.get(ticker)).toHaveLength(1);
+          expect(readBack.get(ticker)?.[0].bid).toBe(10);
+        }
+        expect(readBack.get(unrelatedTicker)?.[0].bid).toBe(30);
+      } finally {
+        writeSpy.mockRestore();
+      }
+    },
+  );
 
   it("reports error when the only trading day in a Fri–Sun range fails", async () => {
     const savedKey = process.env.MASSIVE_API_KEY;

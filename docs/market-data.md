@@ -454,12 +454,21 @@ Parquet minute quotes share one file per `(underlying, date)`:
 incoming batch**, not the entire date. Every existing row for another ticker
 is retained, including stored prices, timestamps, Greeks and source/rate
 provenance. Retained legacy DOUBLE Greeks are not rounded to REAL. Incoming
-Greeks still use REAL storage. Empty `writeQuotes` batches are no-ops.
+Greeks are staged as REAL; when retained rows carry legacy DOUBLE Greeks,
+the merged file widens incoming Greeks to DOUBLE. Retained values are always
+exact. Empty `writeQuotes` batches are no-ops.
 
 Supply a complete ticker-date batch: a later batch for the same ticker
 replaces that ticker's earlier minutes rather than appending to them. Bulk
-ingestion collects a complete underlying-date batch before writing. A fresh
-partition requires no merge read.
+ingestion collects a complete underlying-date batch before writing. Per-ticker
+`fetch_quotes` also accumulates accepted rows across its requested tickers and
+publishes each underlying-date partition once per call, including earlier
+successful tickers when a later provider request fails. Repeated ticker
+arguments retain the last accepted batch without duplicating stored rows.
+A fresh partition requires no merge read.
+
+Quote-partition writes use read-merge-replace without a per-partition lock;
+callers must serialize concurrent writers to the same `(underlying, date)`.
 
 In contrast, Parquet `writeFromSelect`, used by `import_flat_file` for
 `option_quotes`, intentionally replaces the **whole partition** with the
@@ -484,6 +493,9 @@ partitions. Fresh/empty partitions and growth from any size are allowed, so
 full-day imports can restore a truncated partition. An empty `writeFromSelect`
 refuses against any nonempty partition. Other datasets, including spot
 partitions, are unaffected.
+If the existing partition file is unreadable, both write entrances refuse with
+the underlying DuckDB error and leave the file untouched; move the corrupt
+file aside before re-importing that date.
 
 ## Quote-store read projections
 

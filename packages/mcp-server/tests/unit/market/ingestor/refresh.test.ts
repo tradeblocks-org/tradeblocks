@@ -1069,7 +1069,7 @@ describe("MarketIngestor.refresh", () => {
 
   it("trips coverage_gap on the per-ticker path when enrichment reads return empty", async () => {
     // Mirror of the bulk-path coverage_gap test on the per-ticker
-    // writeQuotesForTicker branch. The per-ticker code path emits its own
+    // collectQuotesForTicker branch. The per-ticker code path emits its own
     // coverageGapEntry call site; without this test, regressions there would
     // slip through the bulk-only assertions. Uses fetchQuotes (per-ticker)
     // rather than fetchBulkQuotes, routed via quoteTickers on refresh.
@@ -1186,7 +1186,7 @@ describe("MarketIngestor.refresh", () => {
 
   it("trips coverage_gap on the per-ticker path when only the compute-mode subset fails (mixed-source partition)", async () => {
     // Mirror of the bulk-path mixed-source coverage_gap test on the
-    // per-ticker writeQuotesForTicker branch. The canonical per-ticker
+    // per-ticker collectQuotesForTicker branch. The canonical per-ticker
     // test above covers the every-row-fails shape (1/1 = 1.0 under both
     // numerators); this case proves the sharpened denominator —
     // `missingUnderlyingRows / (missingUnderlyingRows + computedRows)` —
@@ -1615,7 +1615,7 @@ describe("MarketIngestor.refresh", () => {
 
   it("trips compute_failure on the per-ticker path when black-scholes fails after lookup succeeds", async () => {
     // Per-ticker mirror of the bulk-path compute_failure test. The
-    // writeQuotesForTicker call site emits its own computeFailureEntry call;
+    // collectQuotesForTicker call site emits its own computeFailureEntry call;
     // without this test, regressions on that branch would slip past the
     // bulk-only assertion. Mirrors the structure of the per-ticker
     // coverage_gap mirrors — same shape, distinct reason channel.

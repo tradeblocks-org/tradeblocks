@@ -37,6 +37,8 @@ export interface MarketIngestorDeps {
   providerFactory?: () => MarketDataProvider;
 }
 
+type PendingQuotePartitions = Map<string, Map<string, Map<string, QuoteRow[]>>>;
+
 // When `applyQuoteGreeks` fails to resolve the underlying price for more than
 // this fraction of the rows that actually attempted underlying-price lookup,
 // the batch is suspected of a coverage gap (partial-day spot bars, missing
@@ -592,32 +594,38 @@ export class MarketIngestor {
     let maxDate: string | undefined;
     const skipped: IngestSkippedBatch[] = [];
     const requests: NonNullable<IngestResult["requests"]> = [];
+    const pending: PendingQuotePartitions = new Map();
 
-    for (const ticker of tickers) {
-      let quotes: Awaited<ReturnType<NonNullable<MarketDataProvider["fetchQuotes"]>>>;
-      try {
-        const firstRequest = requests.length;
-        quotes = await provider.fetchQuotes(ticker, from, to, (receipt) => {
-          requests.push({ ticker, ...receipt, rows: 0 });
-        });
-        const rowsByDate = new Map<string, number>();
-        for (const key of quotes.keys()) {
-          const date = key.slice(0, 10);
-          rowsByDate.set(date, (rowsByDate.get(date) ?? 0) + 1);
+    try {
+      for (const ticker of tickers) {
+        let quotes: Map<string, MinuteQuote>;
+        try {
+          const firstRequest = requests.length;
+          quotes = await provider.fetchQuotes(ticker, from, to, (receipt) => {
+            requests.push({ ticker, ...receipt, rows: 0 });
+          });
+          const rowsByDate = new Map<string, number>();
+          for (const key of quotes.keys()) {
+            const date = key.slice(0, 10);
+            rowsByDate.set(date, (rowsByDate.get(date) ?? 0) + 1);
+          }
+          for (let i = firstRequest; i < requests.length; i++) {
+            requests[i].rows = rowsByDate.get(requests[i].date) ?? 0;
+          }
+        } catch (error) {
+          const mapped = this.mapProviderFailure(provider, "quotes", ticker, error, "option");
+          if (mapped) return mapped;
+          throw error;
         }
-        for (let i = firstRequest; i < requests.length; i++) {
-          requests[i].rows = rowsByDate.get(requests[i].date) ?? 0;
-        }
-      } catch (error) {
-        const mapped = this.mapProviderFailure(provider, "quotes", ticker, error, "option");
-        if (mapped) return mapped;
-        throw error;
+        const written = await this.collectQuotesForTicker(provider, ticker, quotes, pending);
+        totalRows += written.rowsWritten;
+        if (written.minDate && (!minDate || written.minDate < minDate)) minDate = written.minDate;
+        if (written.maxDate && (!maxDate || written.maxDate > maxDate)) maxDate = written.maxDate;
+        if (written.skipped.length > 0) skipped.push(...written.skipped);
       }
-      const written = await this.writeQuotesForTicker(provider, ticker, quotes);
-      totalRows += written.rowsWritten;
-      if (written.minDate && (!minDate || written.minDate < minDate)) minDate = written.minDate;
-      if (written.maxDate && (!maxDate || written.maxDate > maxDate)) maxDate = written.maxDate;
-      if (written.skipped.length > 0) skipped.push(...written.skipped);
+    } finally {
+      // Earlier successful tickers must persist even if a later provider request fails.
+      await this.publishQuotePartitions(pending);
     }
 
     const failedRequests = requests.filter((request) => request.outcome === "error").length;
@@ -887,10 +895,11 @@ export class MarketIngestor {
     return { rowsWritten: totalRows, skipped };
   }
 
-  private async writeQuotesForTicker(
+  private async collectQuotesForTicker(
     provider: MarketDataProvider,
     ticker: string,
     quotes: Map<string, MinuteQuote>,
+    pending: PendingQuotePartitions,
   ): Promise<{
     rowsWritten: number;
     minDate?: string;
@@ -943,7 +952,7 @@ export class MarketIngestor {
         const message = error instanceof Error ? error.message : String(error);
         // Warn is still emitted for live tail-following — the load-bearing
         // signal is `result.skipped[]` / `status: "partial"`.
-        console.warn("[writeQuotesForTicker] enrichQuoteRows failed; skipping batch", {
+        console.warn("[collectQuotesForTicker] enrichQuoteRows failed; skipping batch", {
           underlying,
           date,
           ticker,
@@ -973,7 +982,7 @@ export class MarketIngestor {
         rows: rows.length,
       });
       if (gap) {
-        console.warn("[writeQuotesForTicker] coverage gap; skipping batch", {
+        console.warn("[collectQuotesForTicker] coverage gap; skipping batch", {
           underlying,
           date,
           ticker,
@@ -983,7 +992,7 @@ export class MarketIngestor {
         skipped.push(gap);
       }
       if (computeFailure) {
-        console.warn("[writeQuotesForTicker] compute failure; skipping batch", {
+        console.warn("[collectQuotesForTicker] compute failure; skipping batch", {
           underlying,
           date,
           ticker,
@@ -993,12 +1002,35 @@ export class MarketIngestor {
         skipped.push(computeFailure);
       }
       if (gap || computeFailure) continue;
-      await this.deps.stores.quote.writeQuotes(underlying, date, enriched.rows);
+      let dates = pending.get(underlying);
+      if (!dates) {
+        dates = new Map();
+        pending.set(underlying, dates);
+      }
+      let tickers = dates.get(date);
+      if (!tickers) {
+        tickers = new Map();
+        dates.set(date, tickers);
+      }
+      // Repeated ticker arguments keep the last accepted batch, just as repeated writes did.
+      tickers.set(ticker, enriched.rows);
       rowsWritten += rows.length;
       if (!minDate || date < minDate) minDate = date;
       if (!maxDate || date > maxDate) maxDate = date;
     }
     return { rowsWritten, minDate, maxDate, skipped };
+  }
+
+  private async publishQuotePartitions(pending: PendingQuotePartitions): Promise<void> {
+    for (const [underlying, dates] of pending) {
+      for (const [date, tickers] of dates) {
+        const rows: QuoteRow[] = [];
+        for (const batch of tickers.values()) {
+          for (const row of batch) rows.push(row);
+        }
+        await this.deps.stores.quote.writeQuotes(underlying, date, rows);
+      }
+    }
   }
 
   async ingestChain(opts: IngestChainOptions): Promise<IngestResult> {
