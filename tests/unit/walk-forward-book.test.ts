@@ -250,6 +250,7 @@ test("the exported equal-risk recipe uses declared domains and retains fixed cap
   };
   const fit = fitBookAtEqualRisk(tape, {
     referenceCapitalPerContract: 1000,
+    noTrainingEntries: "unavailable",
     standaloneTargetDrawdownPct: 1.5,
     referenceBookBudgetPct: 100,
     memberWeightDomain: [1],
@@ -323,4 +324,118 @@ test("attributes initial carry separately from exact base sizing and prior fitte
       },
     ]);
   }
+});
+
+test.each(["unavailable", "carry-member"] as const)(
+  "declares %s for an entry-empty member and names every failure/carry at the public seam",
+  (noTrainingEntries) => {
+    const tape = input();
+    tape.members.sample = {
+      ...member,
+      sizing: { mode: "capitalPerContract", capitalPerContract: 1000 },
+      maxContractsPerTrade: 1,
+    };
+    tape.members.empty = {
+      ...member,
+      sizing: { mode: "capitalPerContract", capitalPerContract: 250 },
+    };
+    tape.simultaneousOrder.push("empty");
+    tape.trades.forEach((t) => {
+      t.buyingPowerPerContract = 10;
+    });
+    tape.trades.push({
+      ...tape.trades[1],
+      id: "empty-forward",
+      memberId: "empty",
+      entryGroupId: "empty-forward",
+    });
+    tape.marks = {
+      mode: "child",
+      values: [
+        { tradeId: "held", date: "2024-01-02", netOpenPlPerContract: -5 },
+        { tradeId: "held", date: "2024-01-03", netOpenPlPerContract: -10 },
+        { tradeId: "held", date: "2024-01-04", netOpenPlPerContract: -15 },
+        { tradeId: "next", date: "2024-01-04", netOpenPlPerContract: 0 },
+        { tradeId: "empty-forward", date: "2024-01-04", netOpenPlPerContract: -40 },
+      ],
+    };
+    const initialRules = {
+      sample: {
+        sizing: { mode: "capitalPerContract" as const, capitalPerContract: 1000 },
+        maxContractsPerTrade: 1,
+        maxAllocationAmount: null,
+        maxOpenTrades: null,
+      },
+      empty: {
+        sizing: { mode: "capitalPerContract" as const, capitalPerContract: 500 },
+        maxContractsPerTrade: null,
+        maxAllocationAmount: null,
+        maxOpenTrades: null,
+      },
+    };
+    const result = walkForwardBook({
+      input: tape,
+      initialRules,
+      policies: ["reserve", "exclude"],
+      folds: [
+        {
+          id: "first",
+          origin: "2024-01-04",
+          trainingStart: "2024-01-02",
+          trainingEnd: "2024-01-03",
+          end: "2024-01-05",
+        },
+      ],
+      fit: ({ training, previous }) =>
+        fitBookAtEqualRisk(
+          training,
+          {
+            noTrainingEntries,
+            referenceCapitalPerContract: 1000,
+            standaloneTargetDrawdownPct: 1,
+            referenceBookBudgetPct: 100,
+            memberWeightDomain: [1],
+            commonFactorDomain: [1],
+            refinementSpans: [],
+            refinementPoints: 2,
+            factorBounds: { min: 1, max: 1 },
+            targetDrawdownPct: 5,
+            significantFigures: 2,
+            maximumRepairs: 0,
+          },
+          previous,
+        ),
+    });
+    const fold = result.folds[0];
+    if (noTrainingEntries === "unavailable") {
+      expect(fold.status).toBe("unavailable");
+      expect(fold.memberFailures).toEqual([{ memberId: "empty", reason: "no_training_entries" }]);
+      expect(fold.carriedFrom).toBe("initialRules");
+    } else {
+      expect(fold.status).toBe("available");
+      expect(fold.carriedMembers).toEqual([
+        {
+          memberId: "empty",
+          reason: "no_training_entries",
+          rule: initialRules.empty,
+          carriedFrom: "initialRules",
+        },
+      ]);
+      expect(fold.rules.empty).toEqual(initialRules.empty);
+      expect(fold.fitBudget!.excludedMembers).toEqual(["empty"]);
+    }
+    for (const panel of result.policies) {
+      expect(panel.participation.pass).toBe(true);
+      expect(panel.replay.members.find((m) => m.memberId === "empty")!.contractsPerEntry).toEqual([
+        { entryGroupId: "empty-forward", contracts: 2 },
+      ]);
+      expect(panel.folds[0].maxDrawdownPct).toBeGreaterThan(5);
+    }
+  },
+);
+
+test("the public equal-risk recipe refuses an omitted no-training-entries policy", () => {
+  expect(() => Reflect.apply(fitBookAtEqualRisk, undefined, [input(), {}])).toThrow(
+    "no_training_entries_policy_required",
+  );
 });

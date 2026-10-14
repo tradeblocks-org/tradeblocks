@@ -25,14 +25,25 @@ export interface BookFitLedger {
   referenceCandidateArms: number;
   statistics: number;
 }
-export type BookFoldFit =
-  | {
-      status: "available";
-      rules: Record<string, BookFoldRule>;
-      details?: unknown;
-      ledger?: Partial<BookFitLedger>;
-    }
-  | { status: "unavailable"; reason: string; details?: unknown; ledger?: Partial<BookFitLedger> };
+export interface BookMemberFitFailure {
+  memberId: string;
+  reason: string;
+}
+export interface BookCarriedMember extends BookMemberFitFailure {
+  rule: BookFoldRule;
+}
+export interface BookFitDiagnostics {
+  details?: unknown;
+  ledger?: Partial<BookFitLedger>;
+  memberFailures?: BookMemberFitFailure[];
+  carriedMembers?: BookCarriedMember[];
+  fitBudget?: { excludedMembers: string[]; disclosure: string };
+}
+export type BookFoldFit = BookFitDiagnostics &
+  (
+    | { status: "available"; rules: Record<string, BookFoldRule> }
+    | { status: "unavailable"; reason: string }
+  );
 export interface WalkForwardBookInput {
   input: BookReplayInput;
   folds: readonly BookFold[];
@@ -66,6 +77,9 @@ export interface WalkForwardBookResult {
       reason: string | null;
       rules: Record<string, BookFoldRule>;
       details?: unknown;
+      memberFailures: BookMemberFitFailure[];
+      carriedMembers: Array<BookCarriedMember & { carriedFrom: string }>;
+      fitBudget?: BookFitDiagnostics["fitBudget"];
     }
   >;
   sizingSchedule: NonNullable<BookReplayInput["sizingSchedule"]>;
@@ -270,6 +284,16 @@ export function walkForwardBook(request: WalkForwardBookInput): WalkForwardBookR
       schedule[id].push({ ...rules[id], effectiveDate: fold.origin });
     previous = rules;
     const carriedFrom = result.status === "unavailable" ? carrySource : null;
+    const memberFailures =
+      result.status === "unavailable"
+        ? result.memberFailures?.length
+          ? structuredClone(result.memberFailures)
+          : input.simultaneousOrder.map((memberId) => ({ memberId, reason: result.reason }))
+        : [];
+    const carriedMembers = (result.carriedMembers ?? []).map((member) => ({
+      ...structuredClone(member),
+      carriedFrom: carrySource,
+    }));
     if (result.status === "available") carrySource = fold.id;
     return {
       ...fold,
@@ -278,6 +302,9 @@ export function walkForwardBook(request: WalkForwardBookInput): WalkForwardBookR
       carriedFrom,
       reason: result.status === "unavailable" ? result.reason : null,
       rules,
+      memberFailures,
+      carriedMembers,
+      ...(result.fitBudget ? { fitBudget: structuredClone(result.fitBudget) } : {}),
       ...(result.details === undefined ? {} : { details: result.details }),
     };
   });

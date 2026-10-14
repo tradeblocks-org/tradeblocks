@@ -10,6 +10,8 @@ import type { BookFoldFit, BookFitLedger, BookFoldRule } from "./walk-forward-bo
 
 export interface BookEqualRiskRecipe {
   referenceCapitalPerContract: number;
+  /** Required caller policy for an intended member with no training-window entries. */
+  noTrainingEntries: "unavailable" | "carry-member";
   standaloneTargetDrawdownPct: number;
   referenceBookBudgetPct: number;
   memberWeightDomain: readonly number[];
@@ -22,8 +24,110 @@ export interface BookEqualRiskRecipe {
   maximumRepairs: number;
 }
 
-/** Caller-declared standalone marked-DD references, common return search and bounded rounding repair. */
+/** Caller-declared equal-risk fitting with explicit treatment of entry-empty members. */
 export function fitBookAtEqualRisk(
+  training: BookReplayInput,
+  recipe: BookEqualRiskRecipe,
+  previous?: Record<string, BookFoldRule>,
+): BookFoldFit {
+  if (recipe.noTrainingEntries !== "unavailable" && recipe.noTrainingEntries !== "carry-member")
+    throw new RangeError("no_training_entries_policy_required");
+  const missing = training.simultaneousOrder.filter(
+    (id) =>
+      !training.trades.some(
+        (t) =>
+          t.memberId === id &&
+          t.dateOpened >= training.dates[0] &&
+          t.dateOpened <= training.dates[training.dates.length - 1],
+      ),
+  );
+  const carry = recipe.noTrainingEntries === "carry-member" && missing.length > 0;
+  if (carry && missing.some((id) => !previous?.[id]))
+    throw new RangeError("carry_member_previous_rules_required");
+  const carriedMembers = carry
+    ? missing.map((memberId) => ({
+        memberId,
+        reason: "no_training_entries",
+        rule: structuredClone(previous![memberId]),
+      }))
+    : [];
+  const fitBudget = carry
+    ? {
+        excludedMembers: [...missing],
+        disclosure:
+          "The fit budget excludes carried members. Replayed drawdown under both policies measures the combined schedule, which may exceed that budget.",
+      }
+    : undefined;
+  const selected = new Set(
+    training.simultaneousOrder.filter((id) => !carry || !missing.includes(id)),
+  );
+  if (!selected.size)
+    return {
+      status: "unavailable",
+      reason: "no_training_members_available",
+      memberFailures: missing.map((memberId) => ({ memberId, reason: "no_training_entries" })),
+      carriedMembers,
+      fitBudget,
+    };
+  const trades = training.trades.filter((t) => selected.has(t.memberId));
+  const tradeIds = new Set(trades.map((t) => t.id));
+  const fittedTraining: BookReplayInput = carry
+    ? {
+        ...training,
+        trades,
+        simultaneousOrder: training.simultaneousOrder.filter((id) => selected.has(id)),
+        members: Object.fromEntries(
+          Object.entries(training.members).filter(([id]) => selected.has(id)),
+        ),
+        marks:
+          training.marks &&
+          (training.marks.mode === "child"
+            ? {
+                mode: "child",
+                values: training.marks.values.filter((m) => tradeIds.has(m.tradeId)),
+              }
+            : {
+                mode: "entryGroup",
+                values: training.marks.values.filter((m) => selected.has(m.memberId)),
+              }),
+      }
+    : training;
+  const fitted = fitAvailableMembersAtEqualRisk(fittedTraining, recipe);
+  if (fitted.status === "unavailable") {
+    const reference = (
+      fitted.details as
+        | { reference?: { members: Array<{ memberId: string; referenceWeight: number | null }> } }
+        | undefined
+    )?.reference;
+    const failed =
+      fitted.reason === "standalone_reference_unavailable"
+        ? (reference?.members.filter((m) => m.referenceWeight === null).map((m) => m.memberId) ??
+          fittedTraining.simultaneousOrder)
+        : fittedTraining.simultaneousOrder;
+    return {
+      ...fitted,
+      memberFailures: failed.map((memberId) => ({
+        memberId,
+        reason: missing.includes(memberId) ? "no_training_entries" : fitted.reason,
+      })),
+      carriedMembers,
+      ...(fitBudget ? { fitBudget } : {}),
+    };
+  }
+  return {
+    ...fitted,
+    rules: Object.fromEntries(
+      training.simultaneousOrder.map((id) => [
+        id,
+        selected.has(id) ? fitted.rules[id] : structuredClone(previous![id]),
+      ]),
+    ),
+    carriedMembers,
+    ...(fitBudget ? { fitBudget } : {}),
+  };
+}
+
+function fitAvailableMembersAtEqualRisk(
   training: BookReplayInput,
   recipe: BookEqualRiskRecipe,
 ): BookFoldFit {

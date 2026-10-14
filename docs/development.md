@@ -330,7 +330,7 @@ and funds across folds. Participation separates `scheduled-disabled`,
 `active-zero` and `active-participating` entries, both overall and per fold.
 The result says **offline screening, not OO evidence**.
 
-`fitBookAtEqualRisk(training, recipe)` is the optional public, book-generic
+`fitBookAtEqualRisk(training, recipe, previous?)` is the optional public, book-generic
 marked-DD recipe: standalone risk references, a caller-declared common-factor
 return search, significant-figure rounding and bounded repair. All domains,
 targets, reference capital, refinement spans and repair limits are declared by
@@ -339,6 +339,16 @@ participation and the training budget. The trial ledger separates direct replays
 search evaluations, reference candidate arms, fits and repairs; reference arms
 are not claimed as hidden helper replay counts. The runner defines no universal
 qualification, hindsight target or study scoring windows.
+
+The recipe requires `noTrainingEntries: "unavailable" | "carry-member"`; there
+is no default. `"unavailable"` retains whole-book failure when a member has no
+training-window entries. `"carry-member"` fits the remaining members and
+preserves each entry-empty member's exact prior rule, supplied as `previous`.
+Every unavailable fold names its affected members and reasons. Partial fits
+record each carried member, its prior rule and carry source separately from a
+whole-fold carry. The fit budget excludes carried members. Replayed drawdown
+under both policies measures the combined schedule, which may exceed that budget;
+the recipe does not re-solve or silently scale the combined schedule.
 
 Optional `includeFundsAtEntry: true` adds `fundsAtEntry` to each member's
 `contractsPerEntry` entry, including zero-quantity and disabled attempts. Disabled
