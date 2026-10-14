@@ -162,6 +162,11 @@ market tables or Parquet. Re-import atomically replaces a named dataset.
 `enrich_trades` retains CSV `customFields` and returns `datasetFields` plus
 `datasetProvenance` (source timestamp and available-at instant) so carry-forward age is visible.
 
+`find_predictive_fields` ranks registered numeric dataset fields and built-in market fields
+alongside trade fields. `filter_curve` accepts these names directly (for example `signal.score`
+or `RSI_14`); both use the same entry-time values as `enrich_trades`. Dataset fields with no
+available value in the selected trades are refused explicitly.
+
 ## Strategy Profiles
 
 | Tool                   | Description                                                  |

@@ -6,10 +6,18 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerDatasetTools } from "../../src/tools/datasets.ts";
 import { closeConnection } from "../../src/db/connection.ts";
 import type { ToolOutput } from "../../src/utils/output-formatter.ts";
-import { getConnection, upgradeToReadWrite } from "../../src/db/connection.ts";
+import {
+  getConnection,
+  getCurrentConnection,
+  upgradeToReadWrite,
+} from "../../src/db/connection.ts";
 import { upsertProfile } from "../../src/db/profile-schemas.ts";
 import { handleValidateEntryFilters } from "../../src/tools/profile-analysis.ts";
 import { mkdir, writeFile } from "node:fs/promises";
+import { registerPredictiveTools } from "../../src/tools/reports/predictive.ts";
+import { registerMarketDataTools } from "../../src/tools/market-data.ts";
+import { createMarketStores } from "../../src/market/stores/index.ts";
+import { TickerRegistry } from "../../src/market/tickers/registry.ts";
 
 let baseDir: string;
 const handlers: Record<string, (input: Record<string, unknown>) => Promise<ToolOutput>> = {};
@@ -120,4 +128,60 @@ test("profile filters use close carry-forward and open known-by rather than same
       }),
     }),
   );
+  const server = {
+    registerTool(
+      name: string,
+      _config: unknown,
+      handler: (input: Record<string, unknown>) => Promise<ToolOutput>,
+    ) {
+      handlers[name] = handler;
+    },
+  } as unknown as McpServer;
+  registerPredictiveTools(server, baseDir);
+  registerMarketDataTools(
+    server,
+    baseDir,
+    createMarketStores({
+      get conn() {
+        return getCurrentConnection();
+      },
+      dataDir: baseDir,
+      parquetMode: false,
+      tickers: new TickerRegistry([{ underlying: "SPX", roots: ["SPX", "SPXW"] }]),
+    }),
+  );
+  const enrichment = await handlers.enrich_trades({
+    blockId: "sample",
+    limit: 50,
+    offset: 0,
+    includeOutcomeFields: false,
+    includeIntradayContext: false,
+  });
+  expect(enrichment.isError ? enrichment.content : null).toBeNull();
+  expect(enrichment.structuredContent?.trades).toEqual([
+    expect.objectContaining({
+      datasetFields: { "signal.score": 1, "signal.open": 20 },
+      datasetProvenance: expect.objectContaining({
+        "signal.score": {
+          sourceTimestamp: "2025-01-02T05:00:00.000Z",
+          availableAt: "2025-01-03T05:00:00.000Z",
+        },
+      }),
+    }),
+    expect.objectContaining({ datasetFields: { "signal.score": 9, "signal.open": 20 } }),
+  ]);
+  const curve = await handlers.filter_curve({
+    blockId: "sample",
+    field: "signal.score",
+    mode: "both",
+    thresholds: [5],
+    percentileSteps: [50],
+  });
+  expect(curve.structuredContent?.thresholds).toEqual([
+    expect.objectContaining({
+      threshold: 5,
+      lt: expect.objectContaining({ count: 1, totalPl: 100 }),
+      gt: expect.objectContaining({ count: 1, totalPl: -50 }),
+    }),
+  ]);
 });

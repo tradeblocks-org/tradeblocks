@@ -12,6 +12,7 @@ import {
   type Trade,
   type FilterOperator,
 } from "@tradeblocks/lib";
+import { resolveAnalysisFields } from "../../utils/trade-analysis-fields.ts";
 
 /**
  * Simplified enriched trade interface for MCP server
@@ -49,6 +50,24 @@ export interface EnrichedTrade extends Trade {
   // Extended field access (for advanced queries)
   dailyCustomFields?: Record<string, number | string>;
   staticDatasetFields?: Record<string, Record<string, number | string>>;
+}
+
+export async function enrichAnalysisTrades(baseDir: string, trades: Trade[]) {
+  const resolved = await resolveAnalysisFields(baseDir, trades);
+  const enriched = enrichTrades(trades);
+  for (let i = 0; i < enriched.length; i++) {
+    const datasets: Record<string, Record<string, number | string>> = {};
+    for (const [field, value] of Object.entries(resolved.values[i])) {
+      const dot = field.indexOf(".");
+      if (dot < 0) Object.assign(enriched[i], { [field]: value });
+      else {
+        const name = field.slice(0, dot);
+        (datasets[name] ??= {})[field.slice(dot + 1)] = value;
+      }
+    }
+    enriched[i].staticDatasetFields = datasets;
+  }
+  return { trades: enriched, ...resolved };
 }
 
 /**

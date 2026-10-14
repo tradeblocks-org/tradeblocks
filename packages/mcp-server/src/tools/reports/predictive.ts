@@ -10,10 +10,16 @@ import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
 import { rankPredictiveTradeFields } from "@tradeblocks/lib";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
-import { enrichTrades, getTradeFieldValue, percentile, type EnrichedTrade } from "./helpers.ts";
+import {
+  enrichAnalysisTrades,
+  getTradeFieldValue,
+  percentile,
+  type EnrichedTrade,
+} from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
+import { requireCoveredField } from "../../utils/trade-analysis-fields.ts";
 
 /**
  * Register predictive-related report tools
@@ -93,7 +99,8 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           }
 
           // Enrich trades
-          const enrichedTrades = enrichTrades(trades);
+          const resolved = await enrichAnalysisTrades(baseDir, trades);
+          const enrichedTrades = resolved.trades;
 
           const {
             totalFieldsAnalyzed: totalAnalyzed,
@@ -105,6 +112,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             targetField,
             minSamples,
             includeCustomFields,
+            resolved.catalog.map(({ field }) => ({ field, label: field })),
           );
           const summary = `Found ${fieldsWithData} predictive fields out of ${totalAnalyzed} analyzed`;
 
@@ -235,7 +243,13 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           }
 
           // Enrich trades
-          const enrichedTrades = enrichTrades(trades);
+          const resolved = await enrichAnalysisTrades(baseDir, trades);
+          const enrichedTrades = resolved.trades;
+          if (
+            resolved.catalog.some((entry) => entry.field === field) ||
+            (field.includes(".") && !field.startsWith("custom.") && !field.startsWith("daily."))
+          )
+            requireCoveredField(field, resolved.catalog, resolved.values);
 
           // Extract field values
           const fieldValues: number[] = [];

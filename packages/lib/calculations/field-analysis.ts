@@ -96,6 +96,7 @@ export function rankPredictiveTradeFields(
   targetField = "pl",
   minSamples = 30,
   includeCustomFields = true,
+  additionalFields: ReadonlyArray<{ field: string; label: string }> = [],
 ): {
   totalFieldsAnalyzed: number;
   fieldsWithSufficientData: number;
@@ -117,6 +118,10 @@ export function rankPredictiveTradeFields(
   const fields: Array<{ field: string; label: string }> = REPORT_FIELDS.filter(
     (info) => info?.field && info.field !== targetField,
   ).map(({ field, label }) => ({ field, label }));
+  for (const entry of additionalFields) {
+    if (entry.field !== targetField && !fields.some(({ field }) => field === entry.field))
+      fields.push(entry);
+  }
   if (includeCustomFields) {
     const names = new Set<string>();
     for (const trade of trades)
