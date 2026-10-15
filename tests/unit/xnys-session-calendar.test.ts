@@ -1,5 +1,7 @@
 import {
   XNYS_SESSION_CALENDAR_REVISION,
+  XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
+  XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
   XNYS_SESSION_CALENDAR_REVISION_V2,
   XNYS_SESSION_CALENDAR_SUPPORTED_FROM_V2,
   XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH_V2,
@@ -14,6 +16,8 @@ import incumbent from "../fixtures/xnys-console-incumbent.json";
 
 it("exports the historical calendar without changing provenance identity", () => {
   expect(XNYS_SESSION_CALENDAR_REVISION).toBe("xnys-full-day-2022-2030-v1");
+  expect(XNYS_SESSION_CALENDAR_SUPPORTED_FROM).toBe("2022-01-01");
+  expect(XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH).toBe("2030-12-31");
   expect(XNYS_SESSION_CALENDAR_REVISION_V2).toBe("xnys-full-day-2013-2030-v2");
   expect(XNYS_SESSION_CALENDAR_SUPPORTED_FROM_V2).toBe("2013-01-01");
   expect(XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH_V2).toBe("2030-12-31");
@@ -92,4 +96,20 @@ it.each(["2012-12-31", "2031-01-01"])("names unsupported date %s, revision and b
       `${JSON.stringify(date)} is outside XNYS calendar revision xnys-full-day-2013-2030-v2 [2013-01-01, 2030-12-31]`,
     );
   }
+});
+
+it("preserves the exact public v1 out-of-range refusal text", () => {
+  const suffix =
+    '"2021-12-31" is outside XNYS calendar revision xnys-full-day-2022-2030-v1 [2022-01-01, 2030-12-31]';
+  for (const read of [isXnysSessionDate, isEarlyCloseSession]) {
+    expect(() => read("2021-12-31")).toThrow(new RangeError(`XNYS session date ${suffix}`));
+  }
+  expect(() => enumerateXnysSessions("2021-12-31", "2022-01-03")).toThrow(
+    new RangeError(`XNYS session range from ${suffix}`),
+  );
+  expect(() => enumerateXnysSessions("2022-01-03", "2031-01-01")).toThrow(
+    new RangeError(
+      'XNYS session range through "2031-01-01" is outside XNYS calendar revision xnys-full-day-2022-2030-v1 [2022-01-01, 2030-12-31]',
+    ),
+  );
 });
