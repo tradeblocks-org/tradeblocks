@@ -39,6 +39,12 @@ import { getProfile } from "../db/profile-schemas.ts";
 import type { MarketStores } from "../market/stores/index.ts";
 import { listDatasets, resolveTradeDatasets } from "../db/dataset-schemas.ts";
 import { suggestFieldFilters, analyzeFieldRegimes } from "./shared/field-analysis.ts";
+import {
+  suggestionEvidence,
+  rankSuggestions,
+  objectiveOutput,
+  type SuggestionEvidence,
+} from "./shared/filter-objective.ts";
 
 // =============================================================================
 // Types
@@ -534,6 +540,7 @@ export function registerMarketDataTools(
       description:
         "Analyze a block's losing trades and suggest market-based filters that would have improved performance. " +
         "Returns actionable standalone filter suggestions plus composite filters where cross-field correlations are strong. " +
+        "objective defaults to totalPl: only positive P&L improvements, ranked by P&L. winRate restores win-rate ranking with P&L tie-breaks. minImprovementPct is ignored under totalPl. " +
         "Close-derived fields (VIX_Close, Vol_Regime, RSI_14, Realized_Vol_5D/20D, VIX_IVR, VIX_IVP) use prior trading day values. " +
         "Open-known fields (Gap_Pct, VIX_Open, VIX_Gap_Pct, Prior_Range_vs_ATR, Day_of_Week, Is_Opex) use same-day values. " +
         "Uses market.enriched + market.spot_daily LEFT JOIN VIX tickers + market.enriched_context. Returns warnings when market data is partially missing.",
@@ -547,6 +554,12 @@ export function registerMarketDataTools(
             "Sweep numeric thresholds or categorical exclusions for these built-in or dataset fields. Omit to keep default suggestions.",
           ),
         strategy: z.string().optional().describe("Filter to specific strategy"),
+        objective: z
+          .enum(["totalPl", "winRate"])
+          .default("totalPl")
+          .describe(
+            "Admission/ranking objective (default totalPl). minImprovementPct applies only to winRate.",
+          ),
         strategyName: z
           .string()
           .optional()
@@ -556,13 +569,23 @@ export function registerMarketDataTools(
         minImprovementPct: z
           .number()
           .optional()
-          .describe("Only suggest filters with >= X% win rate improvement (default: 3)"),
+          .describe(
+            "Minimum win-rate gain in percentage points under winRate (default: 3); ignored under totalPl",
+          ),
         ticker: z.string().optional().describe("Underlying ticker symbol (default: SPX)"),
       }),
     },
     withFullSync(
       baseDir,
-      async ({ blockId, strategy, strategyName, minImprovementPct = 3, ticker, fields }) => {
+      async ({
+        blockId,
+        strategy,
+        strategyName,
+        minImprovementPct,
+        ticker,
+        fields,
+        objective = "totalPl",
+      }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
           let trades = block.trades;
@@ -605,7 +628,14 @@ export function registerMarketDataTools(
           }
 
           if (fields)
-            return await suggestFieldFilters(baseDir, blockId, trades, fields, minImprovementPct);
+            return await suggestFieldFilters(
+              baseDir,
+              blockId,
+              trades,
+              fields,
+              minImprovementPct,
+              objective,
+            );
 
           // Collect unique trade keys (ticker+date) and query DuckDB for market data
           const tradeKeys = uniqueTradeLookupKeys(trades);
@@ -655,7 +685,7 @@ export function registerMarketDataTools(
           const currentTotalPl = matchedTrades.reduce((sum, t) => sum + t.trade.pl, 0);
 
           // Test various filters
-          interface FilterSuggestion {
+          interface FilterSuggestion extends SuggestionEvidence {
             filter: string;
             condition: {
               field: string;
@@ -663,14 +693,12 @@ export function registerMarketDataTools(
               value: number | number[] | string;
               lagged: boolean;
             };
-            tradesRemoved: number;
             winnersRemoved: number;
             losersRemoved: number;
             newWinRate: number;
             newTotalPl: number;
             winRateDelta: number;
             plDelta: number;
-            confidence: "high" | "medium" | "low";
           }
 
           const suggestions: FilterSuggestion[] = [];
@@ -966,16 +994,15 @@ export function registerMarketDataTools(
             const winRateDelta = newWinRate - poolWinRate;
             const plDelta = newTotalPl - poolTotalPl;
 
-            // Only include if improvement meets threshold
-            if (winRateDelta >= minImprovementPct) {
-              // Determine confidence based on sample size
-              let confidence: "high" | "medium" | "low" = "low";
-              if (removed.length >= 10 && remaining.length >= 20) {
-                confidence = "high";
-              } else if (removed.length >= 5 && remaining.length >= 10) {
-                confidence = "medium";
-              }
-
+            const evidence = suggestionEvidence(
+              objective,
+              winRateDelta,
+              plDelta,
+              remaining.length,
+              removed.length,
+              minImprovementPct ?? 3,
+            );
+            if (evidence) {
               suggestions.push({
                 filter: filterDef.name,
                 condition: {
@@ -984,35 +1011,34 @@ export function registerMarketDataTools(
                   value: filterDef.value,
                   lagged: filterDef.lagged,
                 },
-                tradesRemoved: removed.length,
+                ...evidence,
                 winnersRemoved,
                 losersRemoved,
                 newWinRate: Math.round(newWinRate * 100) / 100,
                 newTotalPl: Math.round(newTotalPl * 100) / 100,
                 winRateDelta: Math.round(winRateDelta * 100) / 100,
                 plDelta: Math.round(plDelta * 100) / 100,
-                confidence,
               });
             }
           }
 
-          // Sort by win rate improvement
-          suggestions.sort((a, b) => b.winRateDelta - a.winRateDelta);
+          suggestions.sort((a, b) => rankSuggestions(objective, a, b));
 
           // Take top 10
           const topSuggestions = suggestions.slice(0, 10);
 
           // Generate composite filter suggestions from pairs of top-performing standalone filters
-          const baseWinRate = currentWinRate;
-          const significantFilters = suggestions.filter((s) => s.winRateDelta > 3);
+          const significantFilters = topSuggestions;
 
-          interface CompositeSuggestion {
+          interface CompositeSuggestion extends SuggestionEvidence {
             name: string;
             type: "composite";
             projectedWinRate: number;
             projectedAvgPl: number;
             tradesAffected: number;
             improvement: number;
+            winRateDelta: number;
+            plDelta: number;
           }
 
           const compositeSuggestions: CompositeSuggestion[] = [];
@@ -1056,39 +1082,47 @@ export function registerMarketDataTools(
                 return testA.test(m) && testB.test(m);
               });
 
-              if (bothMatchTrades.length < 5) continue;
-
+              const excluded = new Set(bothMatchTrades);
+              const kept = pool.filter((trade) => !excluded.has(trade));
+              if (!kept.length || !bothMatchTrades.length) continue;
               const compositeWinRate =
-                (bothMatchTrades.filter((t) => t.trade.pl > 0).length / bothMatchTrades.length) *
-                100;
-              const compositeAvgPl =
-                bothMatchTrades.reduce((sum, t) => sum + t.trade.pl, 0) / bothMatchTrades.length;
-
-              // Only surface if composite win rate is materially better than either standalone filter alone
-              const improvement =
-                compositeWinRate -
-                Math.max(filterA.winRateDelta + baseWinRate, filterB.winRateDelta + baseWinRate);
-              if (improvement > 2) {
+                (kept.filter((t) => t.trade.pl > 0).length / kept.length) * 100;
+              const totalPl = kept.reduce((sum, t) => sum + t.trade.pl, 0);
+              const winRateDelta =
+                compositeWinRate - (pool.filter((t) => t.trade.pl > 0).length / pool.length) * 100;
+              const plDelta = totalPl - pool.reduce((sum, t) => sum + t.trade.pl, 0);
+              const evidence = suggestionEvidence(
+                objective,
+                winRateDelta,
+                plDelta,
+                kept.length,
+                bothMatchTrades.length,
+                minImprovementPct ?? 3,
+              );
+              if (evidence) {
                 compositeSuggestions.push({
                   name: `${filterA.filter} AND ${filterB.filter}`,
                   type: "composite",
                   projectedWinRate: Math.round(compositeWinRate * 100) / 100,
-                  projectedAvgPl: Math.round(compositeAvgPl * 100) / 100,
+                  projectedAvgPl: Math.round((totalPl / kept.length) * 100) / 100,
                   tradesAffected: bothMatchTrades.length,
-                  improvement: Math.round(improvement * 100) / 100,
+                  improvement: Math.round(winRateDelta * 100) / 100,
+                  winRateDelta,
+                  plDelta,
+                  ...evidence,
                 });
               }
             }
           }
 
-          // Sort composites by improvement, take top 5
-          compositeSuggestions.sort((a, b) => b.improvement - a.improvement);
+          compositeSuggestions.sort((a, b) => rankSuggestions(objective, a, b));
           const topCompositeSuggestions = compositeSuggestions.slice(0, 5);
 
-          const summary = `Filter analysis: ${blockId} | ${topSuggestions.length} standalone, ${topCompositeSuggestions.length} composite suggestions (min ${minImprovementPct}% improvement)`;
+          const summary = `Filter analysis: ${blockId} | objective ${objective} | ${topSuggestions.length} standalone, ${topCompositeSuggestions.length} composite suggestions`;
 
           const sfResponseData: Record<string, unknown> = {
             blockId,
+            ...objectiveOutput(objective, minImprovementPct),
             lagNote:
               "Close-derived fields (VIX_Close, Vol_Regime, RSI_14, Consecutive_Days, VIX_Spike_Pct, Term_Structure_State, Realized_Vol_5D, Realized_Vol_20D, VIX_IVR, VIX_IVP) use prior trading day values to prevent lookahead bias. Open-known fields (Gap_Pct, VIX_Open, VIX_Gap_Pct, Prior_Range_vs_ATR, Day_of_Week, Is_Opex) use same-day values.",
             strategy: effectiveStrategy || null,
@@ -1100,7 +1134,7 @@ export function registerMarketDataTools(
             },
             suggestedFilters: topSuggestions,
             compositeSuggestions: topCompositeSuggestions,
-            minImprovementThreshold: minImprovementPct,
+            minImprovementThreshold: objective === "winRate" ? (minImprovementPct ?? 3) : null,
           };
 
           if (availabilitySF.warnings.length > 0) {

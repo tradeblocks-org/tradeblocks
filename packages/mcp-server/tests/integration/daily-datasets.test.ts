@@ -736,3 +736,97 @@ test("field suggestions and curves name the same covered baseline and uncovered 
   expect(suggestions.structuredContent?.comparisonPopulation).toBe("fieldBaselines");
   expect(curve.structuredContent?.baseline).toEqual(expect.objectContaining(baseline));
 });
+
+test("both suggestion paths honor the objective and cap support for 95 percent removal", async () => {
+  await handlers.import_daily_dataset({
+    name: "objective",
+    content: "date,state\n2025-01-02,keep\n2025-01-03,skip",
+    columnTiming: { state: "open" },
+    knownBy: "09:30",
+  });
+  await mkdir(path.join(baseDir, "objective"));
+  await writeFile(
+    path.join(baseDir, "objective", "tradelog.csv"),
+    [
+      "Date Opened,Time Opened,Opening Price,Legs,Premium,Closing Price,Date Closed,Time Closed,Avg. Closing Cost,Reason For Close,P/L,No. of Contracts,Funds at Close,Margin Req.,Strategy,Opening Commissions + Fees,Closing Commissions + Fees",
+      ...Array.from({ length: 200 }, (_, i) => {
+        const date = i < 10 ? "2025-01-02" : "2025-01-03";
+        const pl = i < 10 ? 1 : i < 110 ? 100 : -1;
+        return `${date},10:00:00,1,SPX Put Spread,1,0,${date},15:00:00,0,Profit Target,${pl},1,10000,500,Test,0,0`;
+      }),
+    ].join("\n"),
+  );
+  const conn = await upgradeToReadWrite(baseDir);
+  await conn.run(
+    "INSERT INTO market.enriched (ticker, date, Gap_Pct) VALUES ('SPX', '2025-01-02', 0), ('SPX', '2025-01-03', 2)",
+  );
+  const server = {
+    registerTool(name: string, _config: unknown, handler: (typeof handlers)[string]) {
+      handlers[name] = handler;
+    },
+  } as unknown as McpServer;
+  registerMarketDataTools(
+    server,
+    baseDir,
+    createMarketStores({
+      get conn() {
+        return getCurrentConnection();
+      },
+      dataDir: baseDir,
+      parquetMode: false,
+      tickers: new TickerRegistry([{ underlying: "SPX", roots: ["SPX", "SPXW"] }]),
+    }),
+  );
+  for (const fields of [undefined, ["objective.state"]]) {
+    for (const objective of [undefined, "totalPl", "winRate"]) {
+      const output = await handlers.suggest_filters({
+        blockId: "objective",
+        fields,
+        objective,
+        minImprovementPct: 3,
+      });
+      expect(output.isError ? output.content : null).toBeNull();
+      expect(output.structuredContent?.objective).toBe(objective ?? "totalPl");
+      const suggestions = output.structuredContent?.suggestedFilters as {
+        condition: { field: string; value: unknown };
+        plDelta: number;
+      }[];
+      const candidate = suggestions.find((item) =>
+        fields ? item.condition.value === "skip" : item.condition.field === "Gap_Pct",
+      );
+      if (objective === "winRate") {
+        expect(candidate).toEqual(
+          expect.objectContaining({
+            objective: "winRate",
+            tradesKept: 10,
+            keptFraction: 0.05,
+            tradesRemoved: 190,
+            plDelta: -9910,
+            confidence: "low",
+            warnings: expect.arrayContaining([expect.stringContaining("Low retention")]),
+          }),
+        );
+        if (!fields) {
+          expect(output.structuredContent?.compositeSuggestions).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                projectedWinRate: 100,
+                projectedAvgPl: 1,
+                plDelta: -9910,
+                tradesKept: 10,
+                tradesRemoved: 190,
+                keptFraction: 0.05,
+                confidence: "low",
+                objective: "winRate",
+              }),
+            ]),
+          );
+        }
+      } else {
+        expect(candidate).toBeUndefined();
+        expect(suggestions.every((item) => item.plDelta > 0)).toBe(true);
+        expect(output.structuredContent?.objectiveNote).toContain("minImprovementPct is ignored");
+      }
+    }
+  }
+});

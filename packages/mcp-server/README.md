@@ -549,6 +549,15 @@ Field-based `suggest_filters` retains all-trade `currentStats` and reports per-f
 Suggestions compare against those covered populations; `filter_curve.baseline`
 reports the same covered and uncovered counts and P&L.
 
+`suggest_filters` defaults to `objective: "totalPl"`: only positive P&L improvements,
+ranked by P&L improvement with win-rate gain as tie-breaker. `objective: "winRate"`
+admits/ranks by win-rate gain with P&L tie-breaks. `minImprovementPct` (default 3
+percentage points) applies only to `winRate`; it is ignored under `totalPl` and the
+response notes this when supplied. Standalone and composite suggestions include
+`tradesKept`, `keptFraction`, `tradesRemoved`, and `objective`. `confidence` means
+sample-size support, not statistical confidence; keeping less than 20% caps it at
+low and adds a low-retention warning. Composite metrics describe kept trades.
+
 ### Strategy Profile Tools
 
 | Tool                      | Description                                                  |

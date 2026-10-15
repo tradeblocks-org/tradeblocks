@@ -190,6 +190,18 @@ covered `count`/`totalPl` and `uncoveredCount`/`uncoveredTotalPl`.
 `comparisonPopulation: "fieldBaselines"` identifies what suggestions compare against.
 `filter_curve.baseline` reports the same covered and uncovered counts and P&L.
 
+`suggest_filters.objective` defaults to `totalPl`: admit only positive P&L improvements
+and rank by P&L improvement (win-rate gain breaks ties). Use `winRate` to admit and rank
+by win-rate gain, with P&L as the tie-breaker. `minImprovementPct` is a percentage-point
+win-rate threshold only under `winRate` (default 3); it is ignored under `totalPl`.
+The response names `objective`, `rankingRule`, and notes the ignored argument when supplied.
+Each standalone/composite suggestion reports `tradesKept`, `keptFraction`, `tradesRemoved`,
+and `objective`. The retained `confidence` key means sample-size support, not statistical
+confidence: high requires at least 20 kept/10 removed, medium 10 kept/5 removed, otherwise low.
+Keeping less than 20% of the covered pool always caps support at low and adds a
+`Low retention` warning. Composite projections describe the retained complement of the
+AND exclusion and use the same objective, not a separate standalone-relative gain gate.
+
 `analyze_regime_performance` accepts `field` instead of a preset `segmentBy`. Categorical
 fields group by value. Numeric fields use `bins` as strictly increasing cut points, with
 lower-inclusive/upper-exclusive intervals and unbounded tails; omitted bins use quartiles.
