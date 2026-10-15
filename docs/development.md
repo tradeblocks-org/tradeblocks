@@ -199,6 +199,59 @@ not exceed entry quantities. Empty executed-entry and open-position sets are
 valid. Evidence provenance, verdict retention and tolerance policy belong to
 the caller; the library neither stores verdicts nor authorizes relaxed ceilings.
 
+#### Option Omega attribution open-mark cost basis
+
+`cumulativeReplayTradeMark` and `calculateOoReplayAttribution` are pure exports
+from `@tradeblocks/lib` and its calculations entrypoint, not MCP tools. Existing
+calls retain `oo-replay-method/v2` and its stored parameters. Select the additive
+method with `parameters.method_id: "oo-replay-method/v3"` in either calculation.
+For example:
+
+```typescript
+const attribution = calculateOoReplayAttribution({
+  trades,
+  curve,
+  quoteLookup,
+  parameters: {
+    method_id: "oo-replay-method/v3",
+    cost_schedule: {
+      [strategyId]: {
+        ...savedCost,
+        entry_slippage: 0.07,
+        entry_slippage_source: "entrySlippage",
+      },
+    },
+  },
+});
+```
+
+Supply entry slippage in per-share dollars per package contract, together with
+its saved-settings provenance. Do not put entry cost in `exit_slippage`.
+v3 subtracts the signed entry-leg dollars, one opening fee per leg-contract,
+and `entry_slippage × 100 × package contracts` from nickel-rounded mid value.
+It does not prepay exit slippage. Missing entry value or provenance produces
+`missing_strategy_cost`, never an assumed zero. An explicit null entry value
+means zero, as does numeric zero; both still require provenance. Mixed-ratio
+positions need an explicit aggregate `numberOfContracts`; equal leg counts can
+provide the package count when it is omitted.
+
+The measured convention is limited to SPX Friday 5/3 CD and TSLA RDC, one-lot,
+over 2024; it is not a universal vendor rule. The trade-log leg
+`pricePerContract` basis omits entry slippage, while the package premium includes
+that debit. v2 is numerically correct only when entry slippage equals exit
+slippage (including a caller's legacy entry-slippage fallback in the exit field).
+With entry 0.07 and exit 0.20, v3's open mark is $13 higher per package contract.
+
+Both methods still transition to native net profit at close, or zero for an
+ignored row, with no second slippage charge. Daily changes are finite differences:
+the opening-day increase reverses on the closing day; a held-to-held day is
+unchanged, and the telescoped closed total is identical. v3 records
+`method_id: "oo-replay-method/v3"` and
+`method_parameters.open_mark_slippage_basis: "entry_slippage"`, retaining the
+entry value and provenance in its cost schedule. v2 ignores these new cost fields,
+including in stored output. Mark times, calendar, tolerance, rounding and quote
+provenance do not change.
+
 #### Streak ordering and strict losses
 
 `calculateStreakDistributions(trades, options?: StreakOptions)` and
