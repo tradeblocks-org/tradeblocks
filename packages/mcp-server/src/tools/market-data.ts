@@ -1097,17 +1097,34 @@ export function registerMarketDataTools(
                 );
               }
 
-              // Find trades that match BOTH filters (would be skipped by both)
-              const bothMatchTrades = pool.filter((t) => {
-                const m = t.market as Record<string, unknown>;
-                return testA.test(m) && testB.test(m);
-              });
+              // Compare both standalone kept sets on the same covered pool as the composite.
+              const bothMatchTrades: EnrichedTrade[] = [];
+              let keptA = 0;
+              let winsA = 0;
+              let keptB = 0;
+              let winsB = 0;
+              for (const item of pool) {
+                const market = item.market as Record<string, unknown>;
+                const skipA = testA.test(market);
+                const skipB = testB.test(market);
+                if (skipA && skipB) bothMatchTrades.push(item);
+                if (!skipA) {
+                  keptA++;
+                  if (item.trade.pl > 0) winsA++;
+                }
+                if (!skipB) {
+                  keptB++;
+                  if (item.trade.pl > 0) winsB++;
+                }
+              }
+              if (!keptA || !keptB) continue;
 
               const excluded = new Set(bothMatchTrades);
               const kept = pool.filter((trade) => !excluded.has(trade));
               if (!kept.length || !bothMatchTrades.length) continue;
               const compositeWinRate =
                 (kept.filter((t) => t.trade.pl > 0).length / kept.length) * 100;
+              const improvement = compositeWinRate - Math.max(winsA / keptA, winsB / keptB) * 100;
               const totalPl = kept.reduce((sum, t) => sum + t.trade.pl, 0);
               const winRateDelta =
                 compositeWinRate - (pool.filter((t) => t.trade.pl > 0).length / pool.length) * 100;
@@ -1127,7 +1144,7 @@ export function registerMarketDataTools(
                   projectedWinRate: Math.round(compositeWinRate * 100) / 100,
                   projectedAvgPl: Math.round((totalPl / kept.length) * 100) / 100,
                   tradesAffected: bothMatchTrades.length,
-                  improvement: Math.round(winRateDelta * 100) / 100,
+                  improvement: Math.round(improvement * 100) / 100,
                   winRateDelta: Math.round(winRateDelta * 100) / 100,
                   plDelta: Math.round(plDelta * 100) / 100,
                   ...evidence,
