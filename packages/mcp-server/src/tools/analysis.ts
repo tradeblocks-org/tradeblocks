@@ -51,7 +51,8 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
   server.registerTool(
     "run_walk_forward",
     {
-      description: "Execute walk-forward analysis to test parameter robustness across time windows",
+      description:
+        "Execute walk-forward analysis to test parameter robustness across time windows. Position-sizing sweeps linearly rescale P&L on one realized trade tape; they do not simulate shared funds or a marked equity curve. Confirm a surviving fixed allocation with a native Option Omega Portfolio backtest.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
@@ -216,7 +217,7 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
           .optional()
           .describe(
             "Parameter ranges for optimization sweep. Format: {paramName: [min, max, step]}. " +
-              "POSITION SIZING: " +
+              "POSITION SIZING (linear P&L rescaling of one realized trade tape, not a shared-funds simulation; confirm a surviving fixed allocation with a native Option Omega Portfolio backtest): " +
               "'kellyMultiplier' scales P&L by multiplier (e.g., {\"kellyMultiplier\": [0.25, 1.0, 0.25]} tests quarter/half/3-quarter/full Kelly); " +
               "'fixedFractionPct' scales relative to 2% baseline (e.g., [1, 4, 1] tests 1-4%); " +
               "'fixedContracts' scales relative to avg contracts (e.g., [1, 5, 1] tests 1-5 contracts). " +
@@ -1213,7 +1214,8 @@ export function registerAnalysisTools(server: McpServer, baseDir: string): void 
   server.registerTool(
     "get_position_sizing",
     {
-      description: "Calculate Kelly criterion position sizing for optimal capital allocation",
+      description:
+        "Calculate Kelly criterion position sizing from realized trade outcomes as an allocation lead, not a confirmed allocation. Confirm the resulting fixed allocation with a native Option Omega Portfolio backtest.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         capitalBase: z.number().positive().describe("Starting capital in dollars"),

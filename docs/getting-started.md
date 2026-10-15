@@ -103,7 +103,7 @@ docker run -v ~/Trading/backtests:/data ghcr.io/tradeblocks-org/tradeblocks-mcp 
 
 ### Massive.com API (Optional)
 
-Massive.com adds automated market data import and on-demand option bar fetching for trade replay. It is not required — CSV import and locally cached bar data work without it.
+Massive.com adds explicit market-data fetching through the data-pipeline tools. Replay reads local quotes and bars only; it does not fetch on cache miss. Massive.com is not required — CSV import and locally cached data work without provider credentials.
 
 1. Get an API key from [massive.com](https://massive.com)
 2. Set the environment variable:
@@ -125,7 +125,7 @@ Massive.com adds automated market data import and on-demand option bar fetching 
    }
    ```
 3. Use `fetch_bars` for daily OHLCV or intraday bars, `compute_vix_context` for VIX regime fields, or `refresh_market_data` for a combined daily refresh
-4. Replay tools fetch option bars on cache miss automatically
+4. Before replaying, backfill missing option quotes with `fetch_quotes` and underlying bars with `fetch_bars`, or import compatible local data. Replay tools never fetch missing data automatically.
 
 See [Market Data Guide](market-data.md) for full details on import paths, ticker formats, and enrichment.
 

@@ -111,10 +111,11 @@ trade's calendar date and have no availability declarations. Close-derived value
 in those fields can therefore leak; import them as timed Static Datasets for causal
 analysis instead.
 
-### Cache-First Bar Loading
+### Cache-Only Replay Data
 
-Trade replay and exit trigger tools read cached bars from `market.spot` before calling the configured
-provider. After the first fetch, bars are persisted locally, so subsequent analysis uses the cache.
+Trade replay and exit trigger tools read option-leg quotes via QuoteStore and underlying bars via
+SpotStore from local storage only; they do not call a provider on cache miss. Backfill missing data
+explicitly with the data-pipeline tools before analysis.
 
 ### MCP Tool Pattern
 

@@ -245,7 +245,7 @@ export function registerSimilarityBlockTools(server: McpServer, baseDir: string)
     "what_if_scaling",
     {
       description:
-        "Explore strategy weight combinations within a portfolio. Answer 'what if I scaled strategy X to 0.5x?' questions. Shows before/after comparison with per-strategy breakdown. Profile-aware: uses backtest block data, enforces maxContractsPerTrade ceilings, flags ignoreMarginReq. Multi-strategy mode combines trades from multiple blocks.",
+        "Explore strategy weight combinations as trade-derived counterfactuals, not the shared-funds result of a native Option Omega Portfolio backtest. Answer 'what if I scaled strategy X to 0.5x?' screening questions. Shows before/after comparison with per-strategy breakdown. Profile-aware: uses backtest block data, enforces maxContractsPerTrade ceilings, flags ignoreMarginReq. Multi-strategy mode combines trades from multiple blocks. Confirm a surviving fixed allocation with a native Option Omega Portfolio backtest.",
       inputSchema: z.object({
         blockId: z
           .string()

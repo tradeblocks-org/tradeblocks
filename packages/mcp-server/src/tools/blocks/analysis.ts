@@ -36,7 +36,7 @@ export function registerAnalysisBlockTools(server: McpServer, baseDir: string): 
     "stress_test",
     {
       description:
-        "Analyze portfolio performance during historical market stress scenarios (COVID crash, 2022 bear, VIX spikes, etc.). Shows how the portfolio performed during named periods without manually specifying date ranges.",
+        "Analyze closed-trade P&L during historical market stress scenarios (COVID crash, 2022 bear, VIX spikes, etc.), not the marked equity curve or intratrade exposure. Uses trades closed within named periods, falling back to opening dates when close dates are absent. For marked-account stress, confirm against a native Option Omega Portfolio backtest and its daily log.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name to analyze"),
         scenarios: z

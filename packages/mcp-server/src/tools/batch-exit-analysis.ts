@@ -408,14 +408,14 @@ export function registerBatchExitAnalysisTools(
     "batch_exit_analysis",
     {
       description:
-        "Analyze how a candidate exit policy would perform across multiple trades in a block. " +
-        "Replays each matching trade, evaluates exit triggers against the minute-level P&L path, " +
+        "Screen a candidate exit policy on a sample of up to 200 trades in a block using cached quotes. " +
+        "Replays each sampled trade, evaluates exit triggers against the minute-level P&L path, " +
         "and returns aggregate statistics (win rate, profit factor, drawdown, and a legacy " +
         "nonannualized trade-P&L signal-to-noise value in sharpeRatio). That legacy field is not " +
         "comparable to the daily-return Sharpe from get_statistics. Includes per-trigger attribution. " +
         "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
         "trades with missing data are skipped. Use the data-pipeline tools to backfill cache, " +
-        "and strategy profiles to iterate on exit rules.",
+        "and strategy profiles to iterate on exit rules. Confirm a surviving exit policy in a native Option Omega backtest.",
       inputSchema: batchExitAnalysisSchema,
     },
     async (params) => {

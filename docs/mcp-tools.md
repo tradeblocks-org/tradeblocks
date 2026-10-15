@@ -38,9 +38,9 @@ such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO times
 
 ## Trade Replay
 
-| Tool           | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `replay_trade` | Replay trades with minute-level P&L path, MFE/MAE, and per-leg greeks. Uses cached bars from `market.intraday`; fetches from Massive.com on cache miss. Quote sanity: opening-rotation quotes (before 09:32 ET) and quotes with a zero or missing bid or ask are dropped and the previous mark is carried forward; the path starts at the trade's entry time (`time_opened`, or `open_time` in hypothetical mode). Three output formats: `full`, `sampled` (default), `summary`. |
+| Tool           | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `replay_trade` | Replay trades with minute-level P&L path, MFE/MAE, and per-leg greeks. Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); backfill missing data explicitly with the data-pipeline tools. Quote sanity: opening-rotation quotes (before 09:32 ET) and quotes with a zero or missing bid or ask are dropped and the previous mark is carried forward; the path starts at the trade's entry time (`time_opened`, or `open_time` in hypothetical mode). Three output formats: `full`, `sampled` (default), `summary`. |
 
 For `replay_trade`'s computed model and units, see the
 [computed option-Greeks method](market-data.md#computed-option-greeks-method).
@@ -65,9 +65,9 @@ argument to `replay_trade` or any MCP tool; their interfaces are unchanged.
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `analyze_exit_triggers` | Evaluate 14 trigger types against a trade's replay path. Shows first-to-fire trigger with P&L comparison against actual exit.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `decompose_greeks`      | Decompose P&L into delta, gamma, theta, vega, charm, vanna, and residual by full revaluation along an ordered path (time, then vol, then spot): the vol move is priced at the step's new time to expiry, so on short-dated legs crossing a night or weekend the vega decay stays in vega instead of cancelling against the residual, and the residual is model error only. Automatic numerical fallback when the model-based residual exceeds 80% of the gross attribution flow (the sum of absolute factor totals, residual included) — measured against gross flow rather than net P&L so a legitimate multi-day step on a hedged position does not trip the fallback. Per-leg-group vega attribution for calendar strategies. |
-| `batch_exit_analysis`   | Test exit policies across entire blocks. Returns aggregate stats (win rate, Sharpe, Sortino, profit factor, drawdown, streaks) with per-trigger attribution.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `batch_exit_analysis`   | Screen exit policies on a sample of up to 200 trades using cached quotes. Returns aggregate statistics with per-trigger attribution; trades with missing data are skipped. Confirm a surviving exit policy in a native Option Omega backtest.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
-All exit tools use cached bars from `market.intraday` — no Massive.com subscription required if bars are pre-loaded.
+All exit tools read cached option-leg quotes via QuoteStore and underlying bars via SpotStore only — no provider subscription is required if data is pre-loaded. Missing data must be backfilled explicitly with the data-pipeline tools.
 
 `decompose_greeks` uses the pricing models and volatility units described in the
 [computed option-Greeks method](market-data.md#computed-option-greeks-method);
@@ -150,6 +150,10 @@ See [per-request details](market-data.md#fetch_quotes).
 | `list_daily_datasets`        | List datasets, fields, timing and coverage                             |
 | `delete_daily_dataset`       | Delete a dataset and unregister its fields                             |
 | `list_analysis_fields`       | Runtime catalog of built-in and dataset analysis fields                |
+
+Market-filter analyses are screens on the supplied trade tape, not new backtest results.
+Confirm a surviving filter by adding it to the Option Omega backtest and running it natively.
+These local tools do not require an Option Omega connection.
 
 Static Dataset CSVs use the same parser as the web app: timestamp first, then numeric or
 categorical columns. `import_daily_dataset` takes `name`, exactly one of inline `content` or
@@ -370,18 +374,18 @@ dataset fields. Time-of-day uses valid trade times independently of market cover
 
 ## Advanced Analysis
 
-| Tool                          | Description                                                  |
-| ----------------------------- | ------------------------------------------------------------ |
-| `run_monte_carlo`             | Monte Carlo simulation with confidence intervals             |
-| `run_walk_forward`            | Walk-forward analysis to detect overfitting                  |
-| `get_correlation_matrix`      | Strategy correlation matrix (Kendall, Spearman, Pearson)     |
-| `get_tail_risk`               | Tail dependence and copula-based risk analysis               |
-| `get_position_sizing`         | Kelly criterion position sizing guidance                     |
-| `regime_allocation_advisor`   | Regime-based allocation recommendations                      |
-| `stress_test`                 | Stress test portfolio against historical scenarios           |
-| `marginal_contribution`       | Marginal contribution of a strategy to portfolio risk/return |
-| `what_if_scaling`             | What-if analysis for position sizing changes                 |
-| `paired_bootstrap_comparison` | Paired bootstrap intervals for two strategy runs             |
+| Tool                          | Description                                                                                                                                                                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run_monte_carlo`             | Monte Carlo simulation with confidence intervals                                                                                                                                                                                    |
+| `run_walk_forward`            | Walk-forward analysis on one realized trade tape; sizing sweeps linearly rescale P&L, not shared funds or marked equity. Confirm a surviving fixed allocation with a native Option Omega Portfolio backtest.                        |
+| `get_correlation_matrix`      | Strategy correlation matrix (Kendall, Spearman, Pearson)                                                                                                                                                                            |
+| `get_tail_risk`               | Tail dependence and copula-based risk analysis                                                                                                                                                                                      |
+| `get_position_sizing`         | Kelly criterion from realized trade outcomes as an allocation lead. Confirm the resulting fixed allocation with a native Option Omega Portfolio backtest.                                                                           |
+| `regime_allocation_advisor`   | Regime-based allocation recommendations                                                                                                                                                                                             |
+| `stress_test`                 | Historical stress statistics from closed-trade P&L (opening-date fallback when absent), not marked equity or intratrade exposure. Confirm marked-account stress against a native Option Omega Portfolio backtest and its daily log. |
+| `marginal_contribution`       | Marginal contribution of a strategy to portfolio risk/return                                                                                                                                                                        |
+| `what_if_scaling`             | Trade-derived sizing counterfactuals, not the shared-funds result of a native Option Omega Portfolio backtest. Confirm a surviving fixed allocation with that native backtest.                                                      |
+| `paired_bootstrap_comparison` | Paired bootstrap intervals for two strategy runs                                                                                                                                                                                    |
 
 ### Monte Carlo input series and marked-account risk
 

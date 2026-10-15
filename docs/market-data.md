@@ -717,7 +717,7 @@ for these normal nonzero values), with one extra rounding margin.
 
 Replay historical trades using minute-level option bars for P&L analysis with greeks.
 
-**Data source:** Reads from `market.intraday` cache first. On cache miss, fetches from the configured data provider (default: Massive.com). Bars are persisted after fetch — subsequent replays are instant. You can also pre-load bars via `import_market_csv` with intraday data.
+**Data source:** Reads option-leg quotes via QuoteStore and underlying bars via SpotStore from local storage only. Replay does not fetch from a provider on cache miss; missing data can yield a degenerate replay. Backfill quotes with `fetch_quotes` and underlying bars with `fetch_bars`, or import compatible local data, before replaying.
 
 **Two modes:**
 
