@@ -231,6 +231,9 @@ covered `count`/`totalPl` and `uncoveredCount`/`uncoveredTotalPl`.
 
 #### Filter-curve significance and stability
 
+Available since 4.4.0; see the [release notes](../releases/v4.4.0.md) for the workflow
+and interpretation limits.
+
 Use either `field: "signal.score"` or `fields: ["signal.score", "other.score"]`
 (up to 10 distinct fields). Single-field calls without new options retain the existing
 response. `fields`, `objective`, or `permutation` opts into `bestThreshold` and `perYear`;

@@ -549,6 +549,9 @@ Field-based `suggest_filters` retains all-trade `currentStats` and reports per-f
 Suggestions compare against those covered populations; `filter_curve.baseline`
 reports the same covered and uncovered counts and P&L.
 
+New in 4.4.0: [filter statistics](../../releases/v4.4.0.md) for asking whether a
+chosen filter survives a full threshold search, with explicit assumptions and work caps.
+
 `find_predictive_fields.method` selects `pearson` (default), `spearman`, or `kendall`
 (tau-b with ties). Explicit requests name their method; omission preserves the Pearson
 response. Ranking uses the chosen coefficient on the same causal entry-time values,
