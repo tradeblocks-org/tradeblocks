@@ -393,3 +393,89 @@ test("permutation refuses too few covered trades even with enough calendar block
   });
   expect(output.structuredContent?.permutation).not.toHaveProperty("pValue");
 });
+
+test("request work admission refuses the combined field family before producing any sweeps", async () => {
+  await fixture(
+    Array.from({ length: 1100 }, (_, i) => ({
+      date: `2025-${String(Math.floor(i / 100) + 1).padStart(2, "0")}-02`,
+      pl: i % 2 ? 100 : -100,
+      signal: i % 2,
+      noise: i % 10,
+      trend: i,
+    })),
+  );
+  const output = await handlers.filter_curve({
+    blockId: "sample",
+    fields: ["custom.signal", "custom.noise", "custom.trend", "openingPrice"],
+    mode: "both",
+    percentileSteps: [5, 10, 25, 50, 75, 90, 95],
+    permutation: { iterations: 499, block: "month", seed: 42 },
+  });
+  expect(output.structuredContent).toMatchObject({
+    status: "refused",
+    reason: "permutation_request_work_limit",
+    workLimit: 60_000_000,
+  });
+  const content = output.structuredContent as unknown as {
+    estimatedWork: number;
+    fields: Array<{ field: string; estimatedWork: number; thresholds?: unknown }>;
+  };
+  expect(content.estimatedWork).toBeGreaterThan(60_000_000);
+  expect(content.fields).toHaveLength(4);
+  for (const field of content.fields) {
+    expect(field.estimatedWork).toBeLessThanOrEqual(30_000_000);
+    expect(field.thresholds).toBeUndefined();
+  }
+  const fieldRefusal = await handlers.filter_curve({
+    blockId: "sample",
+    field: "custom.signal",
+    mode: "both",
+    thresholds: Array.from({ length: 100 }, (_, i) => i / 100),
+    permutation: { iterations: 499, block: "month", seed: 42 },
+  });
+  expect(fieldRefusal.structuredContent).toMatchObject({
+    status: "refused",
+    reason: "permutation_work_limit",
+    workLimit: 30_000_000,
+    permutation: { iterations: 499, block: "month", seed: 42, status: "refused" },
+  });
+  expect(fieldRefusal.structuredContent).not.toHaveProperty("thresholds");
+});
+
+test("Kendall refuses more than 500 prefiltered trades without restricting other methods", async () => {
+  await fixture(
+    Array.from({ length: 501 }, (_, i) => ({
+      date: i < 500 ? "2025-01-02" : "2025-01-03",
+      pl: i ** 2,
+      signal: i,
+    })),
+  );
+  const input = { blockId: "sample", targetField: "pl", minSamples: 10, includeCustomFields: true };
+  const refused = await handlers.find_predictive_fields({ ...input, method: "kendall" });
+  expect(refused.structuredContent).toMatchObject({
+    status: "refused",
+    reason: "kendall_trade_limit",
+    tradeLimit: 500,
+    tradeCount: 501,
+  });
+  expect(refused.structuredContent).not.toHaveProperty("rankedFields");
+  const allowed = await handlers.find_predictive_fields({
+    ...input,
+    method: "kendall",
+    endDate: "2025-01-02",
+  });
+  expect(allowed.structuredContent?.rankedFields).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ field: "custom.signal", correlation: 1, sampleSize: 500 }),
+    ]),
+  );
+  for (const method of ["pearson", "spearman"]) {
+    const output = await handlers.find_predictive_fields({ ...input, method });
+    expect(output.isError).not.toBe(true);
+    expect(output.structuredContent?.rankedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "custom.signal", sampleSize: 501 }),
+      ]),
+    );
+  }
+});

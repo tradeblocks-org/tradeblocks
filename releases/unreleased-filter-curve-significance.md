@@ -14,5 +14,8 @@ Holm-adjusted p-values across the requested family are reported. Refused fields 
 in that family conservatively as p=1 without receiving fabricated p-values.
 
 At least 30 covered trades and 8 observed months are needed. Iterations are capped
-at 499 and work above 50 million estimated evaluations per field is refused by name.
+at 499, with threshold and percentile arrays capped at 100 entries. Sort-aware work
+admission refuses the whole request before any sweeps above 30 million work units
+per field or 60 million per request. Field, objective and mode choices across
+separate requests are not part of the Holm family.
 Low-sample years remain visible. See [the complete contract](../docs/mcp-tools.md#filter-curve-significance-and-stability).

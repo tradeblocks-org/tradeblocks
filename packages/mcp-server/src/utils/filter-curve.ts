@@ -212,11 +212,9 @@ export function analyzeFilterCurve<T extends CurveTrade>(
       blocks.get(key)!.push(trade.pl);
     }
     permutation = { ...options.permutation, blockCount: blocks.size, status: "refused" };
-    const work = options.permutation.iterations * covered.length * Math.max(1, sweeps.length) * 2;
     if (covered.length < 30) permutation.reason = "too_few_covered_trades";
     else if (blocks.size < 8) permutation.reason = "too_few_blocks";
     else if (!chosen) permutation.reason = "no_eligible_threshold";
-    else if (work > 50_000_000) permutation.reason = "permutation_work_limit";
     else {
       let state = options.permutation.seed >>> 0;
       const rng = () => {

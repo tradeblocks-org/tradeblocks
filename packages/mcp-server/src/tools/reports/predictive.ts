@@ -103,6 +103,15 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
               ],
             };
           }
+          if (method === "kendall" && trades.length > 500)
+            return createToolOutput("Kendall analysis refused: kendall_trade_limit", {
+              blockId,
+              method,
+              status: "refused",
+              reason: "kendall_trade_limit",
+              tradeCount: trades.length,
+              tradeLimit: 500,
+            });
 
           // Enrich trades
           const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
@@ -231,12 +240,14 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           ),
         thresholds: z
           .array(z.number())
+          .max(100)
           .optional()
           .describe(
             "Custom threshold values to test. If omitted, auto-generates from field percentiles.",
           ),
         percentileSteps: z
           .array(z.number())
+          .max(100)
           .default([5, 10, 25, 50, 75, 90, 95])
           .describe(
             "Percentiles to use for auto-generated thresholds (default: [5, 10, 25, 50, 75, 90, 95])",
@@ -289,6 +300,37 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             throw new Error("Provide exactly one of field or fields.");
           if (new Set(names).size !== names.length)
             throw new Error("fields must not contain duplicates.");
+          if (permutation) {
+            const candidates = thresholds?.length || percentileSteps?.length || 7;
+            const estimates = names.map((name) => {
+              const coveredCount = enrichedTrades.reduce(
+                (count, trade) => count + (getTradeFieldValue(trade, name) !== null ? 1 : 0),
+                0,
+              );
+              // Include sorting values/candidates and filtering/scoring both directions on every sweep.
+              const sweepWork =
+                coveredCount * Math.ceil(Math.log2(Math.max(2, coveredCount))) +
+                6 * coveredCount * candidates +
+                3 * candidates * Math.ceil(Math.log2(Math.max(2, 2 * candidates)));
+              return {
+                field: name,
+                coveredCount,
+                estimatedWork: (permutation.iterations + 2) * sweepWork,
+              };
+            });
+            const estimatedWork = estimates.reduce((sum, field) => sum + field.estimatedWork, 0);
+            const overField = estimates.find((field) => field.estimatedWork > 30_000_000);
+            if (overField || estimatedWork > 60_000_000)
+              return createToolOutput("Filter curve permutation refused by work admission", {
+                blockId,
+                status: "refused",
+                reason: overField ? "permutation_work_limit" : "permutation_request_work_limit",
+                estimatedWork: overField ? overField.estimatedWork : estimatedWork,
+                workLimit: overField ? 30_000_000 : 60_000_000,
+                permutation: { ...permutation, status: "refused" },
+                fields: estimates,
+              });
+          }
           const results = names.map((name) => {
             try {
               if (

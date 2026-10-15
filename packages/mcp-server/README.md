@@ -553,6 +553,9 @@ reports the same covered and uncovered counts and P&L.
 (tau-b with ties). Explicit requests name their method; omission preserves the Pearson
 response. Ranking uses the chosen coefficient on the same causal entry-time values,
 including `maxMissedSessions` refusals.
+Kendall refuses more than 500 trades after strategy/date filtering with the named
+`kendall_trade_limit` reason, before enrichment/correlation. Pearson and Spearman
+retain their existing limits and behavior.
 
 `filter_curve` accepts either the existing `field` or up to 10 distinct `fields`.
 Multi-field calls, an explicit `objective` (`totalPl` or `winRate`), or opt-in
@@ -562,7 +565,10 @@ blocks and reruns the complete threshold sweep, not just the selected threshold.
 It reports add-one raw p-values and Holm-adjusted p-values across requested fields.
 Single-field calls without these options retain their old outputs.
 At least 30 covered trades and 8 observed months are required; refusals are named.
-Iterations are capped at 499, with a 50-million evaluation work limit per field.
+Iterations are capped at 499; threshold and percentile arrays at 100 entries.
+Sort-aware work admission caps permutation at 30 million units per field and
+60 million per request, refusing the whole request before any sweeps.
+Field, objective and mode choices across separate requests are outside the Holm family.
 Monthly blocks retain within-month dependence, not cross-month dependence; block
 exchangeability is an assumption. See [the full contract](../../docs/mcp-tools.md#filter-curve-significance-and-stability).
 

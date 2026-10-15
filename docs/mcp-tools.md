@@ -208,6 +208,10 @@ available value in the selected trades are refused explicitly.
 (tie-adjusted Kendall tau-b). Ranking uses the selected coefficient. Explicit requests
 report `method`; omission preserves the existing Pearson response shape. All methods
 use the same covered entry-time pairs and honor `maxMissedSessions`.
+Kendall is quadratic: requests with more than **500 trades after strategy/date
+prefiltering** are refused with `status: "refused"`, `reason: "kendall_trade_limit"`,
+`tradeCount` and `tradeLimit`, before enrichment or correlation starts. At the limit,
+each field requires at most 124,750 pair comparisons. Pearson and Spearman are unchanged.
 `get_field_statistics` also accepts registered dataset columns and built-in market fields,
 using these same causal values and dataset age summaries.
 
@@ -261,11 +265,25 @@ exceedances. `pValueHolm` uses the shared Holm implementation across **all reque
 fields** (refused fields conservatively occupy p=1); one field reports no adjustment.
 No p-value is fabricated for refusal. Named reasons include `too_few_covered_trades`
 (under 30), `too_few_blocks` (under 8 observed months), `no_eligible_threshold`,
-and `permutation_work_limit`. Iterations are capped at **499**; permutation is refused
-above 50 million estimated trade/threshold/direction evaluations per field. Requested
-iterations, block, seed, block count and status are returned even when refused.
-These exploratory p-values adjust threshold/field selection within this request,
-not repeated requests, objectives tried elsewhere, or out-of-sample performance.
+and `permutation_work_limit`. Iterations are capped at **499**; `thresholds` and
+`percentileSteps` each accept at most **100** entries. Before any sweep or permutation
+starts, admission estimates work for every requested field using its covered count
+`n`, requested threshold/percentile count `t` (conservative before deduplication), and
+iterations `r`:
+`(r + 2) × (n × ceil(log2(max(2,n))) + 6nt + 3t × ceil(log2(max(2,2t))))`.
+The estimate includes sorting the values and candidates on every sweep, filtering and
+scoring both directions, plus the observed sweeps. Its limits are **30 million work
+units per field** and **60 million per request**, summed across fields, so a wide
+request cannot multiply the field allowance tenfold. These conservative computational
+limits target a few seconds on ordinary trade logs, not a wall-clock guarantee.
+If either is exceeded the entire request is refused before any field sweep, with
+`permutation_work_limit` (per field) or `permutation_request_work_limit` (request),
+`estimatedWork`, `workLimit`, the requested permutation settings and per-field estimates.
+No block count is calculated for admission refusals. Other refusals return requested
+iterations, block, seed, block count and status.
+These exploratory p-values adjust threshold/field selection within this request.
+Choices of **field, objective and mode across separate requests are not part of the
+Holm family**. Neither repeated exploration nor out-of-sample performance is adjusted.
 
 `suggest_filters.objective` defaults to `totalPl`: admit only positive P&L improvements
 and rank by P&L improvement (win-rate gain breaks ties). Use `winRate` to admit and rank

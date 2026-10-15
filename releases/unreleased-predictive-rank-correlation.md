@@ -5,3 +5,7 @@ Spearman detects monotone nonlinear relationships; Kendall uses the shared tie-a
 tau-b implementation. Rankings use the chosen coefficient. Explicit requests report
 `method`; omission preserves Pearson and the existing response shape. Dataset values
 still use the shared causal resolver and optional `maxMissedSessions` limit.
+
+Kendall requests with more than 500 trades after strategy/date filtering are refused
+by name (`kendall_trade_limit`) before enrichment or correlation, bounding each field
+to at most 124,750 pair comparisons. Pearson and Spearman behavior is unchanged.
