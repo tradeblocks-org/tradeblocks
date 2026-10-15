@@ -1,4 +1,10 @@
-import { replayBook, type BookReplayInput, type BookSizingScheduleEntry } from "@tradeblocks/lib";
+import {
+  replayBook,
+  prepareReplayTape,
+  type BookReplayInput,
+  type BookSizingScheduleEntry,
+  type EntrySizingFact,
+} from "@tradeblocks/lib";
 
 // Compile-time contract: the exported active-entry type keeps sizing and caps required.
 const readActiveEntry = (entry: BookSizingScheduleEntry) => [
@@ -104,6 +110,72 @@ function fixture(): BookReplayInput {
     },
   };
 }
+
+it.each([false, true])("applies minimum-one only in its schedule window (base=%s)", (base) => {
+  const value = fixture();
+  delete value.marks;
+  delete value.memberMarkedPl;
+  value.members.a.minimumOne = base;
+  value.members.a.sizing = { mode: "capitalPerContract", capitalPerContract: 2000 };
+  const rule = {
+    sizing: { mode: "capitalPerContract" as const, capitalPerContract: 2000 },
+    maxContractsPerTrade: null,
+    maxAllocationAmount: null,
+    maxOpenTrades: null,
+  };
+  value.sizingSchedule!.a = [
+    { ...rule, effectiveDate: "2025-02-01", minimumOne: true },
+    { ...rule, effectiveDate: "2025-02-02", minimumOne: false },
+    { ...rule, effectiveDate: "2025-02-03" },
+  ];
+  value.trades.push({
+    ...value.trades[3],
+    id: "resumed",
+    entryGroupId: "resumed",
+    dateOpened: "2025-02-03",
+  });
+  const tape = prepareReplayTape(value);
+  const facts: EntrySizingFact[] = [];
+  const result = replayBook(value, {
+    audit: { originDates: [], onEntry: (fact) => facts.push(fact), onOrigin: () => {} },
+  });
+  expect(result.members[0].contractsPerEntry.map((entry) => entry.contracts)).toEqual([
+    Number(base),
+    1,
+    0,
+    Number(base),
+  ]);
+  expect(facts.map((fact) => fact.minimumOne)).toEqual([base, true, false, base]);
+  expect(replayBook(value, { preparedTape: tape })).toEqual(result);
+
+  // Absent overrides retain the member flag, including after an explicit window.
+  value.sizingSchedule!.a.forEach((entry) => delete entry.minimumOne);
+  expect(replayBook(value).members[0].contractsPerEntry.map((entry) => entry.contracts)).toEqual([
+    Number(base),
+    Number(base),
+    Number(base),
+    Number(base),
+  ]);
+  value.sizingSchedule!.a[0] = { effectiveDate: "2025-02-01", disabled: true, minimumOne: true };
+  expect(replayBook(value).members[0].contractsPerEntry[1].contracts).toBe(0);
+
+  // Positive quantities are unchanged by the floor.
+  value.sizingSchedule!.a[0] = {
+    ...rule,
+    effectiveDate: "2025-02-01",
+    minimumOne: true,
+    sizing: { mode: "fixed", contracts: 2 },
+  };
+  expect(replayBook(value).members[0].contractsPerEntry[1].contracts).toBe(2);
+});
+
+it("rejects a non-boolean active minimum-one override but ignores it on disabled entries", () => {
+  const value = fixture();
+  Object.assign(value.sizingSchedule!.a[0], { minimumOne: "yes" });
+  expect(() => replayBook(value)).toThrow(/sizingSchedule minimumOne/);
+  value.sizingSchedule!.a[0].disabled = true;
+  expect(replayBook(value).census.disabledGroups).toBe(2);
+});
 
 it("keeps multi-child quantity and shared reservation across schedule changes and endpoint closes", () => {
   const value = fixture();

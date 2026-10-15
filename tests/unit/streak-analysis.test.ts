@@ -34,6 +34,79 @@ describe("Streak Analysis", () => {
     openingShortLongRatio: 1.0,
   });
 
+  it("orders closed streaks by calendar day, clock and stable input order, counting unclosed rows", () => {
+    const trades = [
+      { ...createMockTrade(-10, 0), dateClosed: new Date(2024, 0, 5), timeClosed: "16:00:00" },
+      { ...createMockTrade(20, 1), dateClosed: new Date(2024, 0, 4), timeClosed: "16:00:00" },
+      { ...createMockTrade(-30, 2), dateClosed: new Date(2024, 0, 5), timeClosed: "15:00:00" },
+      { ...createMockTrade(40, 3), dateClosed: new Date(2024, 0, 5), timeClosed: "16:00:00" },
+      { ...createMockTrade(-50, 4), dateClosed: undefined },
+    ];
+    const before = [...trades];
+    const opened = calculateStreakDistributions(trades);
+    expect(opened.streaks.map((streak) => streak.length)).toEqual([1, 1, 1, 1, 1]);
+    expect(opened).not.toHaveProperty("excludedMissingClose");
+    expect(
+      calculateStreakDistributions(trades, { dateBasis: "opened", breakeven: "nonwin" }),
+    ).toEqual(opened);
+    const closed = calculateStreakDistributions(trades, { dateBasis: "closed" });
+    expect(closed.excludedMissingClose).toBe(1);
+    expect(closed.streaks.map((streak) => [streak.type, streak.length, streak.totalPl])).toEqual([
+      ["win", 1, 20],
+      ["loss", 2, -40],
+      ["win", 1, 40],
+    ]);
+    expect(closed.streaks.flatMap((streak) => streak.trades)).toEqual([
+      trades[1],
+      trades[2],
+      trades[0],
+      trades[3],
+    ]);
+    expect(closed.runsTest).toMatchObject({ numRuns: 3, sampleSize: 4 });
+    expect(calculateRunsTest(trades, { dateBasis: "closed" })).toEqual(closed.runsTest);
+    expect(trades).toEqual(before);
+    expect(calculateStreakDistributions([trades[4]], { dateBasis: "closed" })).toMatchObject({
+      excludedMissingClose: 1,
+      streaks: [],
+      statistics: { maxLossStreak: 0 },
+    });
+    expect(calculateStreakDistributions([], { dateBasis: "closed" }).excludedMissingClose).toBe(0);
+  });
+
+  it("breaks strict-loss streaks at breakeven and excludes zero outcomes from the runs sample", () => {
+    const trades = [-10, 0, -20, 30, 0, 40].map((pl, day) => createMockTrade(pl, day));
+    const strict = calculateStreakDistributions(trades, {
+      dateBasis: "closed",
+      breakeven: "neither",
+    });
+    expect(strict.streaks.map((streak) => [streak.type, streak.length, streak.totalPl])).toEqual([
+      ["loss", 1, -10],
+      ["loss", 1, -20],
+      ["win", 1, 30],
+      ["win", 1, 40],
+    ]);
+    expect(strict.lossDistribution).toEqual({ 1: 2 });
+    expect(strict.winDistribution).toEqual({ 1: 2 });
+    expect(strict.runsTest).toMatchObject({ numRuns: 2, sampleSize: 4, excludedMissingClose: 0 });
+    expect(calculateRunsTest(trades, { dateBasis: "closed", breakeven: "neither" })).toEqual(
+      strict.runsTest,
+    );
+    expect(calculateStreakDistributions(trades).streaks.map((streak) => streak.length)).toEqual([
+      3, 1, 1, 1,
+    ]);
+    expect(
+      calculateStreakDistributions([createMockTrade(0)], { breakeven: "neither" }),
+    ).toMatchObject({
+      streaks: [],
+      winDistribution: {},
+      lossDistribution: {},
+      statistics: { maxLossStreak: 0 },
+    });
+    expect(
+      calculateRunsTest([createMockTrade(0), createMockTrade(-10)], { breakeven: "neither" }),
+    ).toBeUndefined();
+  });
+
   describe("Empty and Edge Cases", () => {
     it("should handle empty trade array", () => {
       const result = calculateStreakDistributions([]);

@@ -343,7 +343,7 @@ function runReplay(
           );
           fact.flooredQuantity = available(quantity);
         }
-        if (member.minimumOne && funds > 0) quantity = Math.max(1, quantity);
+        if ((rule.minimumOne ?? member.minimumOne) && funds > 0) quantity = Math.max(1, quantity);
         if (fact) fact.afterMinimumOne = available(quantity);
         if (rule.maxContractsPerTrade !== null)
           quantity = Math.min(quantity, rule.maxContractsPerTrade);
@@ -748,6 +748,7 @@ function validateReplay(input: BookReplayInput, prepared = false): void {
                 "maxContractsPerTrade",
                 "maxAllocationAmount",
                 "maxOpenTrades",
+                "minimumOne",
               ].includes(key),
           )
         )
@@ -755,6 +756,8 @@ function validateReplay(input: BookReplayInput, prepared = false): void {
         if (entry.disabled !== undefined && typeof entry.disabled !== "boolean")
           fail("sizingSchedule disabled");
         if (entry.disabled === true) continue;
+        if (entry.minimumOne !== undefined && typeof entry.minimumOne !== "boolean")
+          fail("sizingSchedule minimumOne");
         if (!entry.sizing) fail("sizingSchedule sizing");
         validateSizing(entry, input.members[memberId].ignoreMarginRequirements);
       }
@@ -950,7 +953,7 @@ function entryFact(
     maxContractsPerTrade: active ? available(active.maxContractsPerTrade) : unavailable("disabled"),
     maxAllocationAmount: active ? available(active.maxAllocationAmount) : unavailable("disabled"),
     maxOpenTrades: active ? available(active.maxOpenTrades) : unavailable("disabled"),
-    minimumOne: member.minimumOne,
+    minimumOne: active?.minimumOne ?? member.minimumOne,
     removed: member.removed,
     ignoreMarginRequirements: member.ignoreMarginRequirements,
     reservedBuyingPowerBefore: reserved,

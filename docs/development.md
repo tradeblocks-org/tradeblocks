@@ -199,6 +199,23 @@ not exceed entry quantities. Empty executed-entry and open-position sets are
 valid. Evidence provenance, verdict retention and tolerance policy belong to
 the caller; the library neither stores verdicts nor authorizes relaxed ceilings.
 
+#### Streak ordering and strict losses
+
+`calculateStreakDistributions(trades, options?: StreakOptions)` and
+`calculateRunsTest(trades, options?: StreakOptions)` accept `dateBasis?: "opened" | "closed"`
+and `breakeven?: "nonwin" | "neither"`. Defaults preserve existing behavior:
+distributions sort by opening day/time, standalone runs tests consume caller order,
+and zero P/L counts as a loss. Default result shapes are unchanged.
+
+Closed basis excludes trades without `dateClosed`, sorts by the local calendar
+close day and then `timeClosed` (missing clocks sort first), and retains input
+order on exact ties. `excludedMissingClose` is present on closed-basis distributions
+and on available closed-basis runs-test results, including zero when none are
+excluded. A runs test with insufficient binary outcomes remains `undefined`;
+use the distribution's count when a census is required even without a runs test.
+`neither` makes zero P/L break either streak, without counting it as a win or loss;
+the binary runs test excludes those zeros from its sample. No inputs are mutated.
+
 #### Offline book replay and drawdown-budget search
 
 `@tradeblocks/lib` exports `replayBook(input: BookReplayInput, options?: BookReplayOptions)` and
@@ -235,6 +252,14 @@ tape produces equivalent results. This conservative refusal preserves the
 once-validated declaration context rather than promising semantic equivalence.
 Callers can always prepare a new handle or omit the optional handle and use
 ordinary replay/search; an equivalent input is never otherwise refused.
+
+Active `BookSizingScheduleEntry` values accept `minimumOne?: boolean`. An explicit
+value overrides `BookMember.minimumOne` from the effective date through the next
+schedule entry. Omission falls back to the member flag (not the prior override).
+`BookDisabledScheduleEntry` accepts but ignores the field. Floors still precede
+caps and admission, never resize held quantities, and are reported as the effective
+`EntrySizingFact.minimumOne` on active entries. Prepared and ordinary replay use
+the same schedule resolution.
 
 The optional `audit` observer supplies `originDates`, `onEntry(fact)` and
 `onOrigin(fact)`. Origin dates must be unique members of the replay session

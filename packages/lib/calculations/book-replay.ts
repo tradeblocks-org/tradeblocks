@@ -99,10 +99,13 @@ export interface BookMember {
 export type BookSizingScheduleEntry = Pick<
   BookMember,
   "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades"
-> & { effectiveDate: string; disabled?: false };
+> & { effectiveDate: string; disabled?: false; minimumOne?: boolean };
 /** A disabled schedule entry: no new entries from its effective date; supplied sizing/caps are ignored. */
 export type BookDisabledScheduleEntry = { effectiveDate: string; disabled: true } & Partial<
-  Pick<BookMember, "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades">
+  Pick<
+    BookMember,
+    "sizing" | "maxContractsPerTrade" | "maxAllocationAmount" | "maxOpenTrades" | "minimumOne"
+  >
 >;
 export interface BookTrade {
   id: string;
@@ -233,6 +236,8 @@ export interface BookReplayResult {
  * includeFundsAtEntry records closed funds on each contractsPerEntry entry after
  * same-timestamp closes settle and before sizing/admission, including zero and disabled entries.
  * Marks and buying-power reservations do not reduce this value.
+ * Active schedule minimumOne overrides the member flag only until the next schedule entry.
+ * Omission uses the member flag, not the previous entry's override; disabled entries ignore it.
  * Without the option, the result shape and replay behavior are unchanged.
  */
 export function replayBook(input: BookReplayInput, options?: BookReplayOptions): BookReplayResult {

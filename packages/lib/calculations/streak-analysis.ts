@@ -1,6 +1,28 @@
 import type { Trade } from "../models/trade.ts";
 import { normalCDF } from "./statistical-utils.ts";
 
+export interface StreakOptions {
+  /** Defaults to opened. Closed excludes unclosed trades and stably sorts by close day/time. */
+  dateBasis?: "opened" | "closed";
+  /** Defaults to nonwin. Neither breaks streaks at zero P/L and omits zeros from the runs test. */
+  breakeven?: "nonwin" | "neither";
+}
+
+/** Stable sorting retains input order for tied closes; missing clocks sort before populated ones. */
+function closedTrades(trades: Trade[]): Trade[] {
+  return trades
+    .filter((trade) => trade.dateClosed != null)
+    .sort((a, b) => {
+      const left = a.dateClosed!;
+      const right = b.dateClosed!;
+      const day =
+        left.getFullYear() - right.getFullYear() ||
+        left.getMonth() - right.getMonth() ||
+        left.getDate() - right.getDate();
+      return day || (a.timeClosed || "").localeCompare(b.timeClosed || "");
+    });
+}
+
 export interface StreakData {
   type: "win" | "loss";
   length: number;
@@ -18,6 +40,8 @@ export interface RunsTestResult {
   interpretation: string; // Human-readable explanation
   sampleSize: number; // Total number of trades
   isSufficientSample: boolean; // n >= 20 for reliable results
+  /** Present only for closed basis. Undefined test results still mean insufficient binary outcomes. */
+  excludedMissingClose?: number;
 }
 
 export interface StreakDistribution {
@@ -33,6 +57,8 @@ export interface StreakDistribution {
     totalLossStreaks: number;
   };
   runsTest?: RunsTestResult;
+  /** Present only for closed basis, including when every trade is excluded. */
+  excludedMissingClose?: number;
 }
 
 /**
@@ -43,10 +69,18 @@ export interface StreakDistribution {
  * - Fewer runs than expected → Clustering/streakiness (wins cluster, losses cluster)
  * - More runs than expected → Anti-clustering (alternating pattern)
  *
- * @param trades - Array of trades sorted chronologically
+ * @param trades - Opened basis preserves caller sequence; closed basis sorts by close day/time.
  * @returns RunsTestResult with p-value and interpretation, or undefined if insufficient data
  */
-export function calculateRunsTest(trades: Trade[]): RunsTestResult | undefined {
+export function calculateRunsTest(
+  trades: Trade[],
+  options?: StreakOptions,
+): RunsTestResult | undefined {
+  const inputCount = trades?.length ?? 0;
+  if (options?.dateBasis === "closed") trades = closedTrades(trades ?? []);
+  const excludedMissingClose =
+    options?.dateBasis === "closed" ? inputCount - trades.length : undefined;
+  if (options?.breakeven === "neither") trades = trades?.filter((trade) => trade.pl !== 0);
   if (!trades || trades.length < 2) {
     return undefined;
   }
@@ -128,6 +162,7 @@ export function calculateRunsTest(trades: Trade[]): RunsTestResult | undefined {
     interpretation,
     sampleSize: n,
     isSufficientSample,
+    ...(excludedMissingClose !== undefined ? { excludedMissingClose } : {}),
   };
 }
 
@@ -135,9 +170,18 @@ export function calculateRunsTest(trades: Trade[]): RunsTestResult | undefined {
  * Calculate comprehensive win/loss streak analysis.
  * Based on legacy/app/calculations/performance.py::calculate_streak_distributions
  */
-export function calculateStreakDistributions(trades: Trade[]): StreakDistribution {
+export function calculateStreakDistributions(
+  trades: Trade[],
+  options?: StreakOptions,
+): StreakDistribution {
+  const closed = options?.dateBasis === "closed";
+  const eligibleTrades = closed ? closedTrades(trades ?? []) : trades;
+  const census = closed
+    ? { excludedMissingClose: (trades?.length ?? 0) - eligibleTrades.length }
+    : {};
   if (!trades || trades.length === 0) {
     return {
+      ...census,
       streaks: [],
       winDistribution: {},
       lossDistribution: {},
@@ -153,17 +197,24 @@ export function calculateStreakDistributions(trades: Trade[]): StreakDistributio
   }
 
   // Sort trades chronologically
-  const sortedTrades = [...trades].sort((a, b) => {
-    const dateCompare = a.dateOpened.getTime() - b.dateOpened.getTime();
-    if (dateCompare !== 0) return dateCompare;
-    return (a.timeOpened || "").localeCompare(b.timeOpened || "");
-  });
+  const sortedTrades = closed
+    ? eligibleTrades
+    : [...trades].sort((a, b) => {
+        const dateCompare = a.dateOpened.getTime() - b.dateOpened.getTime();
+        if (dateCompare !== 0) return dateCompare;
+        return (a.timeOpened || "").localeCompare(b.timeOpened || "");
+      });
 
   // Identify all streaks
   const streaks: StreakData[] = [];
   let currentStreak: StreakData | null = null;
 
   for (const trade of sortedTrades) {
+    if (options?.breakeven === "neither" && trade.pl === 0) {
+      if (currentStreak) streaks.push(currentStreak);
+      currentStreak = null;
+      continue;
+    }
     const isWin = trade.pl > 0;
     const streakType: "win" | "loss" = isWin ? "win" : "loss";
 
@@ -221,9 +272,11 @@ export function calculateStreakDistributions(trades: Trade[]): StreakDistributio
   };
 
   // Calculate runs test for streakiness
-  const runsTest = calculateRunsTest(sortedTrades);
+  const runsTest = calculateRunsTest(sortedTrades, { breakeven: options?.breakeven });
+  if (runsTest && closed) runsTest.excludedMissingClose = census.excludedMissingClose;
 
   return {
+    ...census,
     streaks,
     winDistribution,
     lossDistribution,
