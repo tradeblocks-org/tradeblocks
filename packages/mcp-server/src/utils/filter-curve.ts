@@ -31,6 +31,16 @@ interface RiskStats {
   annualizedReturnPct: number | null;
 }
 
+function calendarSpanDays(trades: readonly CurveTrade[]) {
+  const first = trades[0]?.dateOpened;
+  const last = trades[trades.length - 1]?.dateOpened;
+  return first && last
+    ? (Date.UTC(last.getFullYear(), last.getMonth(), last.getDate()) -
+        Date.UTC(first.getFullYear(), first.getMonth(), first.getDate())) /
+        86400000
+    : 0;
+}
+
 function population(trades: Array<{ pl: number }>) {
   const totalPl = trades.reduce((sum, trade) => sum + trade.pl, 0);
   return {
@@ -96,12 +106,7 @@ export function analyzeFilterCurve<T extends CurveTrade>(
     );
     const capital = options.startingCapital;
     const percent = capital ? (dollars / capital) * 100 : null;
-    const years =
-      all.length > 1
-        ? (all[all.length - 1].dateOpened.getTime() - all[0].dateOpened.getTime()) /
-          86400000 /
-          365.25
-        : 0;
+    const years = calendarSpanDays(all) / 365.25;
     const annualizedReturnPct =
       capital && years > 0 && capital + cumulative > 0
         ? (Math.pow((capital + cumulative) / capital, 1 / years) - 1) * 100
@@ -305,14 +310,7 @@ export function analyzeFilterCurve<T extends CurveTrade>(
       : [];
     const keptSet = new Set(kept);
     const removed = annual.filter((trade) => !keptSet.has(trade));
-    const firstDate = annual[0]?.dateOpened;
-    const lastDate = annual[annual.length - 1]?.dateOpened;
-    const calendarDays =
-      firstDate && lastDate
-        ? (Date.UTC(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate()) -
-            Date.UTC(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate())) /
-          86400000
-        : 0;
+    const calendarDays = calendarSpanDays(annual);
     const marUnstable = riskObjective && calendarDays < 90;
     const unstableMar = marUnstable
       ? { mar: null, annualizedReturnPct: null, marUnstable: true }

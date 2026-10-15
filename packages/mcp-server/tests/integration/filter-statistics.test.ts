@@ -1149,3 +1149,76 @@ test("strategy-filtered risk objectives never use portfolio daily-log capital", 
     expect(result.bestThreshold).toMatchObject({ objectiveDelta: expect.any(Number) });
   }
 });
+
+test("whole-population MAR uses two calendar days across the spring DST transition", async () => {
+  await fixture([
+    { date: "2025-03-08", pl: -10, signal: 0 },
+    { date: "2025-03-09", pl: 30, signal: 1 },
+    { date: "2025-03-10", pl: -5, signal: 0 },
+  ]);
+  const result = (
+    await handlers.filter_curve({
+      blockId: "sample",
+      field: "custom.signal",
+      unit: "day",
+      objective: "mar",
+      mode: "both",
+      thresholds: [0.5],
+    })
+  ).structuredContent as unknown as {
+    baseline: { annualizedReturnPct: number; mar: number };
+  };
+  // March 8 through March 10 is two calendar days, even when local midnights are 47 hours apart.
+  const annualizedReturnPct = (Math.pow(10025 / 10010, 365.25 / 2) - 1) * 100;
+  expect(result.baseline.annualizedReturnPct).toBeCloseTo(annualizedReturnPct, 10);
+  expect(result.baseline.mar).toBeCloseTo(annualizedReturnPct / ((10 / 10010) * 100), 10);
+});
+
+test("date-windowed risk capital uses the window's first daily log rather than the block's", async () => {
+  await fixture([
+    { date: "2025-01-02", pl: -10, signal: 0 },
+    { date: "2025-04-01", pl: -20, signal: 0 },
+    { date: "2025-04-02", pl: 40, signal: 1 },
+    { date: "2025-06-01", pl: 10, signal: 1 },
+  ]);
+  await writeFile(
+    path.join(baseDir, "sample", "dailylog.csv"),
+    "Date,Net Liquidity,P/L,Drawdown %\n2025-01-02,100100,100,0\n2025-04-01,20050,50,0\n2025-04-02,20090,40,0\n2025-06-01,300100,100,0\n",
+  );
+  const input = {
+    blockId: "sample",
+    field: "custom.signal",
+    unit: "day",
+    mode: "both",
+    thresholds: [0.5],
+  };
+  for (const objective of ["mar", "maxDrawdown", "sharpe"]) {
+    const result = (
+      await handlers.filter_curve({
+        ...input,
+        objective,
+        startDate: "2025-04-01",
+        endDate: "2025-04-02",
+      })
+    ).structuredContent!;
+    expect(result.objectiveMetadata).toMatchObject({ startingCapital: 20000 });
+    expect(result.baseline).toMatchObject({
+      count: 2,
+      totalPl: 20,
+      maxDrawdown: { dollars: 20, percent: 0.1 },
+    });
+  }
+  const unwindowed = (await handlers.filter_curve({ ...input, objective: "mar" }))
+    .structuredContent!;
+  expect(unwindowed.objectiveMetadata).toMatchObject({ startingCapital: 100000 });
+  const strategy = (
+    await handlers.filter_curve({
+      ...input,
+      objective: "mar",
+      strategy: "Test",
+      startDate: "2025-04-01",
+      endDate: "2025-04-02",
+    })
+  ).structuredContent!;
+  expect(strategy.objectiveMetadata).toMatchObject({ startingCapital: 10020 });
+});

@@ -276,6 +276,8 @@ They refuse trade units as `objective_requires_day`.
   capital, while this measure does not.
 - **MAR** is CAGR / maximum drawdown as a fraction of starting capital. CAGR uses
   the first through last covered entry dates and 365.25 calendar days per year,
+  measured from calendar parts rather than elapsed local-midnight milliseconds
+  so daylight-saving transitions do not add or subtract an hour from the span,
   matching the portfolio annualization convention. Capital comes from the existing
   daily-log/trade-funds resolver, never its assumed default; otherwise
   `mar_requires_capital` refuses. Zero drawdown, nonpositive ending capital, or no
@@ -298,7 +300,10 @@ MAR refuses as `mar_requires_capital` with
 `capitalReason: "portfolio_capital_not_applicable_to_strategy"`.
 Sharpe and dollar drawdown still work; drawdown percent is null with the same
 `percentReason`, also reported as `objectiveMetadata.capitalReason`.
-Without a strategy filter, the existing daily-log/trade-funds capital policy is unchanged.
+Without a strategy filter, daily-log evidence is restricted to the same `startDate`
+and `endDate` window as the trades before resolving capital. The first daily log
+inside that window supplies its starting capital when valid; absent evidence
+falls back to the existing observed trade-funds policy, never a pre-window balance.
 
 Response `objectiveMetadata` states these definitions. Every risk candidate shows
 its objective delta against the covered baseline. Ranking shares the existing

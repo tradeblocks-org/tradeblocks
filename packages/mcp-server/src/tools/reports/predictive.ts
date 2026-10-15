@@ -9,7 +9,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
 import { holmAdjust, KendallPairWorkLimitError, rankPredictiveTradeFields } from "@tradeblocks/lib";
-import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
+import {
+  filterByStrategy,
+  filterByDateRange,
+  filterDailyLogsByDateRange,
+} from "../shared/filters.ts";
 import { enrichAnalysisTrades, getTradeFieldValue } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
@@ -340,7 +344,12 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
               objective,
             });
           const capital = riskObjective
-            ? resolveStartingCapital(trades, strategy ? undefined : block.dailyLogs)
+            ? resolveStartingCapital(
+                trades,
+                strategy
+                  ? undefined
+                  : filterDailyLogsByDateRange(block.dailyLogs ?? [], startDate, endDate),
+              )
             : undefined;
           const capitalReason =
             capital?.source === "assumed_default"
