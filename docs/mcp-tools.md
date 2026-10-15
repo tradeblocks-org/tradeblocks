@@ -219,6 +219,54 @@ covered `count`/`totalPl` and `uncoveredCount`/`uncoveredTotalPl`.
 `comparisonPopulation: "fieldBaselines"` identifies what suggestions compare against.
 `filter_curve.baseline` reports the same covered and uncovered counts and P&L.
 
+#### Filter-curve significance and stability
+
+Use either `field: "signal.score"` or `fields: ["signal.score", "other.score"]`
+(up to 10 distinct fields). Single-field calls without new options retain the existing
+response. `fields`, `objective`, or `permutation` opts into `bestThreshold` and `perYear`;
+multi-field results live in `fields`, including named unavailable/uncovered entries.
+Each field has its own covered baseline; dataset timing and `maxMissedSessions` are unchanged.
+
+`objective` is `totalPl` by default, or `winRate` (percentage-point gain). Best thresholds
+rank P&L delta then win-rate gain, or win-rate gain then P&L delta, using the same ranking
+module as `suggest_filters`. Only candidates keeping and removing at least one covered
+trade are eligible. Unlike suggestions, the curve reports the best even if its delta
+is negative: a fitted optimum is not a recommendation. Legacy `sweetSpots` remain
+unchanged. Per-year rows partition entries by calendar year, including uncovered-only
+years, and show covered baseline, kept/removed count, P&L and win rate, objective delta,
+and uncovered counts/P&L. Fewer than 30 baseline, kept or removed entries is flagged,
+not dropped. Values equal to the threshold are removed because comparisons are strict.
+
+```json
+{
+  "blockId": "sample",
+  "fields": ["custom.signal", "custom.noise"],
+  "objective": "totalPl",
+  "permutation": { "iterations": 499, "block": "month", "seed": 42 }
+}
+```
+
+Permutation is opt-in and selection-adjusted: every draw reruns **all** requested
+thresholds/directions and compares the best objective delta with the observed best.
+Covered trades are stably ordered by entry date, then outcomes are grouped into
+calendar-month blocks. Fisher–Yates shuffles whole blocks, preserving their internal
+outcome order (and ties); the flattened outcomes are paired with the fixed field
+series. This is simpler than week/holiday alignment and retains within-month serial
+dependence even with unequal trade counts per month. Cross-month dependence is not
+preserved; the exchangeability of monthly blocks is an assumption, not a causal claim.
+The seeded 32-bit LCG makes identical requests deterministic.
+
+The reported `pValue` uses `(exceedances + 1) / (iterations + 1)`, counting ties as
+exceedances. `pValueHolm` uses the shared Holm implementation across **all requested
+fields** (refused fields conservatively occupy p=1); one field reports no adjustment.
+No p-value is fabricated for refusal. Named reasons include `too_few_covered_trades`
+(under 30), `too_few_blocks` (under 8 observed months), `no_eligible_threshold`,
+and `permutation_work_limit`. Iterations are capped at **499**; permutation is refused
+above 50 million estimated trade/threshold/direction evaluations per field. Requested
+iterations, block, seed, block count and status are returned even when refused.
+These exploratory p-values adjust threshold/field selection within this request,
+not repeated requests, objectives tried elsewhere, or out-of-sample performance.
+
 `suggest_filters.objective` defaults to `totalPl`: admit only positive P&L improvements
 and rank by P&L improvement (win-rate gain breaks ties). Use `winRate` to admit and rank
 by win-rate gain, with P&L as the tie-breaker. `minImprovementPct` is a percentage-point

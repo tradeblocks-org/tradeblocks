@@ -102,6 +102,10 @@ before comparing suggestions with earlier reports.
 
 Predictive field ranking also supports opt-in Spearman and Kendall correlation via
 `find_predictive_fields.method`; omitted methods retain Pearson and its response shape.
+`filter_curve` adds opt-in multi-field comparison, P&L/win-rate objectives, per-year
+stability, and seeded whole-month block permutation with full-sweep selection adjustment
+and Holm p-values. Existing single-field calls remain unchanged. See
+[the tool contract and limits](docs/mcp-tools.md#filter-curve-significance-and-stability).
 
 ## Features Overview
 

@@ -8,14 +8,14 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
-import { rankPredictiveTradeFields } from "@tradeblocks/lib";
+import { holmAdjust, rankPredictiveTradeFields } from "@tradeblocks/lib";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
-import { enrichAnalysisTrades, getTradeFieldValue, type EnrichedTrade } from "./helpers.ts";
+import { enrichAnalysisTrades, getTradeFieldValue } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
 import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
 import { requireCoveredField } from "../../utils/trade-analysis-fields.ts";
-import { sweepThresholds } from "../../utils/threshold-sweep.ts";
+import { analyzeFilterCurve } from "../../utils/filter-curve.ts";
 import { datasetAgeOutput, maxMissedSessionsSchema } from "../../db/dataset-schemas.ts";
 
 /**
@@ -201,7 +201,28 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
         maxMissedSessions: maxMissedSessionsSchema,
         field: z
           .string()
-          .describe("Field to sweep thresholds on (e.g., 'openingVix', 'durationHours')"),
+          .optional()
+          .describe("Single field to sweep; use field or fields, not both."),
+        fields: z
+          .array(z.string())
+          .min(1)
+          .max(10)
+          .optional()
+          .describe("Fields to compare with Holm-adjusted permutation p-values."),
+        objective: z
+          .enum(["totalPl", "winRate"])
+          .optional()
+          .describe(
+            "Opt into best-threshold and per-year analysis; defaults to totalPl with fields or permutation.",
+          ),
+        permutation: z
+          .object({
+            iterations: z.number().int().min(1).max(499),
+            block: z.literal("month").default("month"),
+            seed: z.number().int().min(0).max(4294967295).default(42),
+          })
+          .optional()
+          .describe("Selection-adjusted calendar-month block permutation; at most 499 iterations."),
         mode: z
           .enum(["lt", "gt", "both"])
           .default("both")
@@ -230,6 +251,9 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
       async ({
         blockId,
         field,
+        fields,
+        objective,
+        permutation,
         mode,
         thresholds,
         percentileSteps,
@@ -260,206 +284,92 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           // Enrich trades
           const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
           const enrichedTrades = resolved.trades;
-          if (
-            resolved.catalog.some((entry) => entry.field === field) ||
-            (field.includes(".") && !field.startsWith("custom.") && !field.startsWith("daily."))
-          )
-            requireCoveredField(field, resolved.catalog, resolved.values, resolved.datasetAge);
-
-          // Extract field values
-          const fieldValues: number[] = [];
-          const tradesWithField: EnrichedTrade[] = [];
-
-          for (const trade of enrichedTrades) {
-            const value = getTradeFieldValue(trade, field);
-            if (value !== null) {
-              fieldValues.push(value);
-              tradesWithField.push(trade);
-            }
-          }
-
-          if (fieldValues.length === 0) {
-            return {
-              content: [
+          const names = fields ?? (field ? [field] : []);
+          if (!names.length || (fields && field))
+            throw new Error("Provide exactly one of field or fields.");
+          if (new Set(names).size !== names.length)
+            throw new Error("fields must not contain duplicates.");
+          const results = names.map((name) => {
+            try {
+              if (
+                resolved.catalog.some((entry) => entry.field === name) ||
+                (name.includes(".") && !name.startsWith("custom.") && !name.startsWith("daily."))
+              )
+                requireCoveredField(name, resolved.catalog, resolved.values, resolved.datasetAge);
+              if (!enrichedTrades.some((trade) => getTradeFieldValue(trade, name) !== null))
+                return {
+                  field: name,
+                  reason: "no_covered_trades",
+                  error: `Field "${name}" has no valid numeric values in the filtered trades.`,
+                };
+              const { analysis, ...curve } = analyzeFilterCurve(
+                enrichedTrades,
+                (trade) => getTradeFieldValue(trade, name),
                 {
-                  type: "text",
-                  text: `Field "${field}" has no valid numeric values in the filtered trades.`,
+                  mode,
+                  thresholds,
+                  percentileSteps,
+                  objective: objective ?? (fields || permutation ? "totalPl" : undefined),
+                  permutation,
                 },
-              ],
-            };
-          }
-
-          // Calculate baseline metrics (all trades with valid field values)
-          const baselinePls = tradesWithField.map((t) => t.pl);
-          const baselineTotalPl = baselinePls.reduce((a, b) => a + b, 0);
-          const baselineAvgPl = baselineTotalPl / tradesWithField.length;
-          const baselineWinners = tradesWithField.filter((t) => t.pl > 0).length;
-          const baselineWinRate = baselineWinners / tradesWithField.length;
-
-          const baseline = {
-            count: tradesWithField.length,
-            winRate: Math.round(baselineWinRate * 10000) / 10000,
-            avgPl: Math.round(baselineAvgPl * 100) / 100,
-            totalPl: Math.round(baselineTotalPl * 100) / 100,
-            uncoveredCount: trades.length - tradesWithField.length,
-            uncoveredTotalPl:
-              Math.round(
-                enrichedTrades
-                  .filter((trade) => getTradeFieldValue(trade, field) === null)
-                  .reduce((sum, trade) => sum + trade.pl, 0) * 100,
-              ) / 100,
-          };
-
-          const sweeps = sweepThresholds(
-            tradesWithField,
-            (trade) => getTradeFieldValue(trade, field),
-            thresholds,
-            percentileSteps,
-          );
-          const thresholdsToTest = sweeps.map(({ threshold }) => threshold);
-
-          // Minimum sample size for reliable statistics
-          const MIN_SAMPLE_SIZE = 30;
-
-          // Helper to calculate metrics for a filtered set of trades
-          function calculateMetrics(filteredTrades: EnrichedTrade[]): {
-            count: number;
-            percentOfTrades: number;
-            winRate: number;
-            avgPl: number;
-            totalPl: number;
-            winRateDelta: number;
-            avgPlDelta: number;
-            lowSampleWarning?: string;
-          } {
-            if (filteredTrades.length === 0) {
+              );
               return {
-                count: 0,
-                percentOfTrades: 0,
-                winRate: 0,
-                avgPl: 0,
-                totalPl: 0,
-                winRateDelta: -baseline.winRate,
-                avgPlDelta: -baseline.avgPl,
+                field: name,
+                ...datasetAgeOutput(resolved.datasetAge, [name]),
+                ...curve,
+                ...analysis,
               };
+            } catch (error) {
+              if (!fields) throw error;
+              return { field: name, reason: "field_unavailable", error: (error as Error).message };
             }
-
-            const pls = filteredTrades.map((t) => t.pl);
-            const totalPl = pls.reduce((a, b) => a + b, 0);
-            const avgPl = totalPl / filteredTrades.length;
-            const winners = filteredTrades.filter((t) => t.pl > 0).length;
-            const winRate = winners / filteredTrades.length;
-            const percentOfTrades = (filteredTrades.length / tradesWithField.length) * 100;
-
-            const result: ReturnType<typeof calculateMetrics> = {
-              count: filteredTrades.length,
-              percentOfTrades: Math.round(percentOfTrades * 100) / 100,
-              winRate: Math.round(winRate * 10000) / 10000,
-              avgPl: Math.round(avgPl * 100) / 100,
-              totalPl: Math.round(totalPl * 100) / 100,
-              winRateDelta: Math.round((winRate - baseline.winRate) * 10000) / 10000,
-              avgPlDelta: Math.round((avgPl - baseline.avgPl) * 100) / 100,
-            };
-
-            // Add warning for small sample sizes
-            if (filteredTrades.length < MIN_SAMPLE_SIZE && filteredTrades.length > 0) {
-              result.lowSampleWarning = `${filteredTrades.length} trades may be insufficient for reliable statistics (recommend >= ${MIN_SAMPLE_SIZE})`;
-            }
-
-            return result;
-          }
-
-          // Analyze each threshold
-          interface ThresholdResult {
-            threshold: number;
-            lt?: ReturnType<typeof calculateMetrics>;
-            gt?: ReturnType<typeof calculateMetrics>;
-          }
-
-          const thresholdResults: ThresholdResult[] = [];
-
-          for (const sweep of sweeps) {
-            const result: ThresholdResult = { threshold: sweep.threshold };
-            if (mode === "lt" || mode === "both") result.lt = calculateMetrics(sweep.lt);
-            if (mode === "gt" || mode === "both") result.gt = calculateMetrics(sweep.gt);
-            thresholdResults.push(result);
-          }
-
-          // Identify sweet spots
-          interface SweetSpot {
-            threshold: number;
-            direction: "lt" | "gt";
-            winRateDelta: number;
-            avgPlDelta: number;
-            percentOfTrades: number;
-            score: number;
-          }
-
-          const sweetSpots: SweetSpot[] = [];
-
-          for (const result of thresholdResults) {
-            // Check lt direction
-            if (result.lt) {
-              const { winRateDelta, avgPlDelta, percentOfTrades } = result.lt;
-              if (winRateDelta > 0 && avgPlDelta > 0 && percentOfTrades >= 20) {
-                const score = winRateDelta * avgPlDelta;
-                sweetSpots.push({
-                  threshold: result.threshold,
-                  direction: "lt",
-                  winRateDelta,
-                  avgPlDelta,
-                  percentOfTrades,
-                  score: Math.round(score * 10000) / 10000,
+          });
+          if (permutation) {
+            const tested = results.filter(
+              (result) => "permutation" in result && result.permutation?.pValue !== undefined,
+            );
+            // Refused fields stay in the requested family as conservative p=1, never disappear.
+            const adjusted = holmAdjust(
+              results.map((result) =>
+                "permutation" in result ? (result.permutation?.pValue ?? 1) : 1,
+              ),
+            );
+            for (const result of tested) {
+              if ("permutation" in result && result.permutation)
+                Object.assign(result.permutation, {
+                  pValueHolm: adjusted[results.indexOf(result)],
+                  adjustment:
+                    names.length === 1 ? "none (one field)" : "Holm across requested fields",
                 });
-              }
-            }
-
-            // Check gt direction
-            if (result.gt) {
-              const { winRateDelta, avgPlDelta, percentOfTrades } = result.gt;
-              if (winRateDelta > 0 && avgPlDelta > 0 && percentOfTrades >= 20) {
-                const score = winRateDelta * avgPlDelta;
-                sweetSpots.push({
-                  threshold: result.threshold,
-                  direction: "gt",
-                  winRateDelta,
-                  avgPlDelta,
-                  percentOfTrades,
-                  score: Math.round(score * 10000) / 10000,
-                });
-              }
             }
           }
-
-          // Sort sweet spots by score (highest first)
-          sweetSpots.sort((a, b) => b.score - a.score);
-
-          // Build summary
-          const summary = `Filter curve for ${field}: ${thresholdsToTest.length} thresholds analyzed | ${sweetSpots.length} sweet spots found`;
-
-          const structuredData = {
-            blockId,
-            field,
-            ...datasetAgeOutput(resolved.datasetAge, [field]),
-            mode,
-            filters: {
-              strategy: strategy ?? null,
-              startDate: startDate ?? null,
-              endDate: endDate ?? null,
-            },
-            tradesAnalyzed: tradesWithField.length,
-            baseline,
-            thresholds: thresholdResults,
-            sweetSpots,
-            sweetSpotCriteria: {
-              winRateDelta: "> 0 (win rate improves)",
-              avgPlDelta: "> 0 (average P/L improves)",
-              percentOfTrades: ">= 20% (retains meaningful sample)",
-              scoreFormula: "winRateDelta * avgPlDelta (higher = better)",
-            },
+          const filters = {
+            strategy: strategy ?? null,
+            startDate: startDate ?? null,
+            endDate: endDate ?? null,
           };
-
-          return createToolOutput(summary, structuredData);
+          if (fields)
+            return createToolOutput(`Filter curves for ${names.length} fields`, {
+              blockId,
+              mode,
+              filters,
+              fields: results,
+            });
+          const result = results[0];
+          if (result.error !== undefined)
+            return { content: [{ type: "text", text: result.error }] };
+          const { field: resultField, ...curve } = result;
+          return createToolOutput(
+            `Filter curve for ${field}: ${result.thresholds.length} thresholds analyzed | ${result.sweetSpots.length} sweet spots found`,
+            {
+              blockId,
+              field: resultField,
+              ...datasetAgeOutput(resolved.datasetAge, [resultField]),
+              mode,
+              filters,
+              ...curve,
+            },
+          );
         } catch (error) {
           return {
             content: [

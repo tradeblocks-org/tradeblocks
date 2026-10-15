@@ -554,6 +554,18 @@ reports the same covered and uncovered counts and P&L.
 response. Ranking uses the chosen coefficient on the same causal entry-time values,
 including `maxMissedSessions` refusals.
 
+`filter_curve` accepts either the existing `field` or up to 10 distinct `fields`.
+Multi-field calls, an explicit `objective` (`totalPl` or `winRate`), or opt-in
+`permutation: { iterations: 499, block: "month", seed: 42 }` add the best threshold
+and per-year kept/removed stability. Permutation shuffles whole calendar-month outcome
+blocks and reruns the complete threshold sweep, not just the selected threshold.
+It reports add-one raw p-values and Holm-adjusted p-values across requested fields.
+Single-field calls without these options retain their old outputs.
+At least 30 covered trades and 8 observed months are required; refusals are named.
+Iterations are capped at 499, with a 50-million evaluation work limit per field.
+Monthly blocks retain within-month dependence, not cross-month dependence; block
+exchangeability is an assumption. See [the full contract](../../docs/mcp-tools.md#filter-curve-significance-and-stability).
+
 `suggest_filters` defaults to `objective: "totalPl"`: only positive P&L improvements,
 ranked by P&L improvement with win-rate gain as tie-breaker. `objective: "winRate"`
 admits/ranks by win-rate gain with P&L tie-breaks. `minImprovementPct` (default 3
