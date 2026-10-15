@@ -75,10 +75,7 @@ export interface ReplayMethodV2Parameters extends ReplayMethodParameters {
 }
 export type ReplayMethodOverrides = Partial<
   Pick<ReplayMethodParameters, "tolerance_fraction" | "root_precedence">
-> & {
-  method_id?: "oo-replay-method/v2" | "oo-replay-method/v3";
-  cost_schedule?: Record<string, ReplayStrategyCost>;
-};
+> & { cost_schedule?: Record<string, ReplayStrategyCost> };
 
 export const DEFAULT_REPLAY_METHOD_PARAMETERS: ReplayMethodParameters = {
   mark_time: "15:59",
@@ -295,9 +292,18 @@ export function cumulativeReplayTradeMark(
   date: string,
   quoteLookup: ReplayQuoteLookup,
   cost: ReplayStrategyCost,
-  parameters: ReplayMethodOverrides = {},
+  parameters: ReplayMethodOverrides & {
+    method_id?: "oo-replay-method/v2" | "oo-replay-method/v3";
+  } = {},
   markTime?: string,
 ): ReplayMark {
+  if (
+    parameters.method_id !== undefined &&
+    parameters.method_id !== "oo-replay-method/v2" &&
+    parameters.method_id !== "oo-replay-method/v3"
+  ) {
+    throw new RangeError("Invalid replay method parameters");
+  }
   const contracts = packageContractCount(trade);
   const v3 = parameters.method_id === "oo-replay-method/v3";
   if (
@@ -341,16 +347,39 @@ type ReplayAttributionInput = {
   parameters?: ReplayMethodOverrides;
 };
 
-export function calculateOoReplayAttribution({
-  trades,
-  curve,
-  quoteLookup,
-  parameters = {},
-}: ReplayAttributionInput): OoReplayAttribution | OoReplayAttributionV3 {
-  const { method_id = "oo-replay-method/v2", ...overrides } = parameters;
+export function calculateOoReplayAttribution(input: ReplayAttributionInput): OoReplayAttribution {
+  if (
+    input.parameters &&
+    "method_id" in input.parameters &&
+    input.parameters.method_id !== undefined &&
+    input.parameters.method_id !== "oo-replay-method/v2"
+  ) {
+    throw new RangeError("Invalid replay method parameters");
+  }
+  return calculateReplayAttribution(input, "oo-replay-method/v2");
+}
+
+export function calculateOoReplayAttributionV3(
+  input: ReplayAttributionInput,
+): OoReplayAttributionV3 {
+  const result = calculateReplayAttribution(input, "oo-replay-method/v3");
+  return {
+    ...result,
+    method_id: "oo-replay-method/v3",
+    method_parameters: {
+      ...result.method_parameters,
+      open_mark_slippage_basis: "entry_slippage",
+    },
+  };
+}
+
+function calculateReplayAttribution(
+  { trades, curve, quoteLookup, parameters = {} }: ReplayAttributionInput,
+  method_id: "oo-replay-method/v2" | "oo-replay-method/v3",
+): OoReplayAttribution {
   const method = {
     ...DEFAULT_REPLAY_METHOD_PARAMETERS,
-    ...overrides,
+    ...parameters,
     root_precedence: {
       ...DEFAULT_REPLAY_METHOD_PARAMETERS.root_precedence,
       ...parameters.root_precedence,
@@ -599,13 +628,10 @@ export function calculateOoReplayAttribution({
   for (const row of daily)
     if (row.reason)
       unavailable_reasons[row.reason.code] = (unavailable_reasons[row.reason.code] ?? 0) + 1;
-  return {
-    method_id,
+  const result: OoReplayAttribution = {
+    method_id: "oo-replay-method/v2",
     method_parameters: {
       ...method,
-      ...(method_id === "oo-replay-method/v3" && {
-        open_mark_slippage_basis: "entry_slippage" as const,
-      }),
       mark_time: "session_close_minus_1m",
       mark_rule: "equity_close_minus_1m",
       mid_rounding: "half_up_0.05",
@@ -639,5 +665,6 @@ export function calculateOoReplayAttribution({
         (a, b) => a.date.localeCompare(b.date) || a.ticker.localeCompare(b.ticker),
       ),
     },
-  } as OoReplayAttribution | OoReplayAttributionV3;
+  };
+  return result;
 }

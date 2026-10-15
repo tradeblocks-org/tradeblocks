@@ -2,14 +2,18 @@
 
 ## Opt-in Option Omega replay method v3
 
-- `cumulativeReplayTradeMark` and `calculateOoReplayAttribution` accept
-  `parameters.method_id: "oo-replay-method/v3"`. Open marks deduct the caller's
+- `calculateOoReplayAttributionV3` is a separate export with the same input shape
+  as `calculateOoReplayAttribution`, returning `OoReplayAttributionV3`. The existing
+  attribution export retains its v2 input and return type. `cumulativeReplayTradeMark`
+  selects v3 with `parameters.method_id: "oo-replay-method/v3"`. Open marks deduct the caller's
   explicit `entry_slippage` and `entry_slippage_source: "entrySlippage"` rather
   than prepaying exit slippage. Missing entry cost or provenance is
   `missing_strategy_cost`; explicit null or zero means zero. Mixed-ratio
   positions still require an aggregate package count.
-- Existing calls and explicit v2 calls retain byte-identical v2 output, including
-  stored parameters, even when the new entry-cost fields are supplied.
+- Existing attribution calls retain byte-identical v2 output, including stored
+  parameters, even when the new entry-cost fields are supplied. Unknown mark
+  method IDs throw `RangeError`; the v2 attribution export also refuses an
+  untyped caller's method ID other than v2.
   v3 stores `open_mark_slippage_basis: "entry_slippage"` and the entry provenance.
   Native net profit at close (zero for ignored rows), fees, rounding, mark times,
   calendar and quote provenance remain unchanged.

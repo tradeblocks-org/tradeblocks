@@ -201,19 +201,23 @@ the caller; the library neither stores verdicts nor authorizes relaxed ceilings.
 
 #### Option Omega attribution open-mark cost basis
 
-`cumulativeReplayTradeMark` and `calculateOoReplayAttribution` are pure exports
-from `@tradeblocks/lib` and its calculations entrypoint, not MCP tools. Existing
-calls retain `oo-replay-method/v2` and its stored parameters. Select the additive
-method with `parameters.method_id: "oo-replay-method/v3"` in either calculation.
+`cumulativeReplayTradeMark`, `calculateOoReplayAttribution`, and
+`calculateOoReplayAttributionV3` are pure exports from `@tradeblocks/lib` and its
+calculations entrypoint, not MCP tools. `calculateOoReplayAttribution` retains
+its v2 input and `OoReplayAttribution` return type. Use the separate
+`calculateOoReplayAttributionV3` export for an `OoReplayAttributionV3` result;
+it accepts the same input shape and always uses v3. The mark calculation selects
+v3 with `parameters.method_id: "oo-replay-method/v3"` and still returns `ReplayMark`.
+Unknown mark method IDs throw `RangeError`. The v2 attribution export also throws
+`RangeError` if an untyped caller supplies a method ID other than v2.
 For example:
 
 ```typescript
-const attribution = calculateOoReplayAttribution({
+const attribution = calculateOoReplayAttributionV3({
   trades,
   curve,
   quoteLookup,
   parameters: {
-    method_id: "oo-replay-method/v3",
     cost_schedule: {
       [strategyId]: {
         ...savedCost,
