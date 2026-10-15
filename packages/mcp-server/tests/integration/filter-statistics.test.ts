@@ -8,6 +8,7 @@ import { registerDatasetTools } from "../../src/tools/datasets.ts";
 import { getConnection, closeConnection } from "../../src/db/connection.ts";
 import type { ToolOutput } from "../../src/utils/output-formatter.ts";
 import { holmAdjust } from "@tradeblocks/lib";
+import type { ZodType } from "zod";
 
 interface Stats {
   count: number;
@@ -44,12 +45,18 @@ interface FieldResult {
 
 let baseDir: string;
 const handlers: Record<string, (input: Record<string, unknown>) => Promise<ToolOutput>> = {};
+const schemas: Record<string, ZodType<Record<string, unknown>>> = {};
 beforeEach(async () => {
   baseDir = await mkdtemp(path.join(tmpdir(), "tb-filter-stats-"));
   await getConnection(baseDir);
   registerPredictiveTools(
     {
-      registerTool(name: string, _config: unknown, handler: (typeof handlers)[string]) {
+      registerTool(
+        name: string,
+        config: { inputSchema: ZodType<Record<string, unknown>> },
+        handler: (typeof handlers)[string],
+      ) {
+        schemas[name] = config.inputSchema;
         handlers[name] = handler;
       },
     } as unknown as McpServer,
@@ -489,5 +496,36 @@ test("Kendall admits realistic blocks and refuses excessive total pair work with
         expect.objectContaining({ field: "custom.signal", sampleSize: 20_000 }),
       ]),
     );
+  }
+});
+
+test("large threshold and percentile arrays retain legacy schema acceptance without permutation", async () => {
+  await fixture(
+    Array.from({ length: 40 }, (_, i) => ({
+      date: "2025-01-02",
+      signal: i,
+      pl: i % 2 ? 100 : -100,
+    })),
+  );
+  for (const selection of [
+    { thresholds: Array.from({ length: 150 }, (_, i) => i) },
+    { percentileSteps: Array.from({ length: 150 }, (_, i) => (i * 100) / 149) },
+  ]) {
+    const input = { blockId: "sample", field: "custom.signal", ...selection };
+    const legacy = await handlers.filter_curve(schemas.filter_curve.parse(input));
+    expect(legacy.isError).not.toBe(true);
+    expect(legacy.structuredContent?.thresholds).toHaveLength(150);
+    const refused = await handlers.filter_curve(
+      schemas.filter_curve.parse({
+        ...input,
+        permutation: { iterations: 1, block: "month", seed: 42 },
+      }),
+    );
+    expect(refused.structuredContent).toMatchObject({
+      status: "refused",
+      reason: "permutation_candidate_limit",
+      candidateLimit: 100,
+    });
+    expect(refused.structuredContent).not.toHaveProperty("thresholds");
   }
 });

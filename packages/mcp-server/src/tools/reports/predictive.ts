@@ -242,14 +242,12 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           ),
         thresholds: z
           .array(z.number())
-          .max(100)
           .optional()
           .describe(
             "Custom threshold values to test. If omitted, auto-generates from field percentiles.",
           ),
         percentileSteps: z
           .array(z.number())
-          .max(100)
           .default([5, 10, 25, 50, 75, 90, 95])
           .describe(
             "Percentiles to use for auto-generated thresholds (default: [5, 10, 25, 50, 75, 90, 95])",
@@ -303,6 +301,20 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           if (new Set(names).size !== names.length)
             throw new Error("fields must not contain duplicates.");
           if (permutation) {
+            if ((thresholds?.length ?? 0) > 100 || (percentileSteps?.length ?? 0) > 100)
+              return createToolOutput(
+                "Filter curve permutation refused: permutation_candidate_limit",
+                {
+                  blockId,
+                  status: "refused",
+                  reason: "permutation_candidate_limit",
+                  candidateLimit: 100,
+                  thresholdCount: thresholds?.length ?? 0,
+                  percentileCount: percentileSteps?.length ?? 7,
+                  requestedFields: names,
+                  permutation: { ...permutation, status: "refused" },
+                },
+              );
             const candidates = thresholds?.length || percentileSteps?.length || 7;
             const estimates = names.map((name) => {
               const coveredCount = enrichedTrades.reduce(

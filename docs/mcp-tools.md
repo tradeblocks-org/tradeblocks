@@ -271,9 +271,11 @@ exceedances. `pValueHolm` uses the shared Holm implementation across **all reque
 fields** (refused fields conservatively occupy p=1); one field reports no adjustment.
 No p-value is fabricated for refusal. Named reasons include `too_few_covered_trades`
 (under 30), `too_few_blocks` (under 8 observed months), `no_eligible_threshold`,
-and `permutation_work_limit`. Iterations are capped at **499**; `thresholds` and
-`percentileSteps` each accept at most **100** entries. Before any sweep or permutation
-starts, admission estimates work for every requested field using its covered count
+and `permutation_work_limit`. Iterations are capped at **499**. Only when permutation
+is requested, `thresholds` and `percentileSteps` are limited to **100** entries each:
+larger arrays produce the named `permutation_candidate_limit` refusal before any sweep.
+Without permutation, these arrays retain their existing unrestricted schema acceptance.
+Permutation admission then estimates work for every requested field using its covered count
 `n`, requested threshold/percentile count `t` (conservative before deduplication), and
 iterations `r`:
 `(r + 2) × (n × ceil(log2(max(2,n))) + 6nt + 3t × ceil(log2(max(2,2t))))`.

@@ -567,7 +567,9 @@ blocks and reruns the complete threshold sweep, not just the selected threshold.
 It reports add-one raw p-values and Holm-adjusted p-values across requested fields.
 Single-field calls without these options retain their old outputs.
 At least 30 covered trades and 8 observed months are required; refusals are named.
-Iterations are capped at 499; threshold and percentile arrays at 100 entries.
+Iterations are capped at 499. Only permutation requests limit threshold and percentile
+arrays to 100 entries, with a named `permutation_candidate_limit` refusal.
+Without permutation, larger arrays retain their previous schema acceptance.
 Sort-aware work admission caps permutation at 30 million units per field and
 90 million per request, refusing the whole request before any sweeps. At 1,100 trades,
 55 months, 499 iterations and default thresholds, the largest admitted family is
