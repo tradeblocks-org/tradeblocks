@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput } from "../../utils/output-formatter.ts";
-import { holmAdjust, rankPredictiveTradeFields } from "@tradeblocks/lib";
+import { holmAdjust, KendallPairWorkLimitError, rankPredictiveTradeFields } from "@tradeblocks/lib";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
 import { enrichAnalysisTrades, getTradeFieldValue } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
@@ -103,15 +103,6 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
               ],
             };
           }
-          if (method === "kendall" && trades.length > 500)
-            return createToolOutput("Kendall analysis refused: kendall_trade_limit", {
-              blockId,
-              method,
-              status: "refused",
-              reason: "kendall_trade_limit",
-              tradeCount: trades.length,
-              tradeLimit: 500,
-            });
 
           // Enrich trades
           const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
@@ -185,6 +176,17 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
 
           return createToolOutput(summary, structuredData);
         } catch (error) {
+          if (error instanceof KendallPairWorkLimitError)
+            return createToolOutput("Kendall analysis refused: kendall_pair_work_limit", {
+              blockId,
+              method,
+              status: "refused",
+              reason: "kendall_pair_work_limit",
+              estimatedPairs: error.estimatedPairs,
+              pairLimit: error.pairLimit,
+              fieldCount: error.fieldCount,
+              tradeCount: error.tradeCount,
+            });
           return {
             content: [
               {
@@ -320,13 +322,13 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             });
             const estimatedWork = estimates.reduce((sum, field) => sum + field.estimatedWork, 0);
             const overField = estimates.find((field) => field.estimatedWork > 30_000_000);
-            if (overField || estimatedWork > 60_000_000)
+            if (overField || estimatedWork > 90_000_000)
               return createToolOutput("Filter curve permutation refused by work admission", {
                 blockId,
                 status: "refused",
                 reason: overField ? "permutation_work_limit" : "permutation_request_work_limit",
                 estimatedWork: overField ? overField.estimatedWork : estimatedWork,
-                workLimit: overField ? 30_000_000 : 60_000_000,
+                workLimit: overField ? 30_000_000 : 90_000_000,
                 permutation: { ...permutation, status: "refused" },
                 fields: estimates,
               });

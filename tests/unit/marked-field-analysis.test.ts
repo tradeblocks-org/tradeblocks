@@ -5,6 +5,7 @@ import {
   fieldStatisticsFromValues,
   rankPredictiveTradeFields,
   spearmanCorrelation,
+  KendallPairWorkLimitError,
   getNumericTradeFieldValue,
   singleTapeWalkForwardByTrades,
 } from "@tradeblocks/lib";
@@ -139,6 +140,34 @@ describe("public field analysis", () => {
         1,
       );
     }
+  });
+  it("admits 1100 trades across 100 Kendall fields and refuses aggregate pair work above 75 million", () => {
+    const trades = Array.from({ length: 1100 }, (_, i) => ({
+      pl: i,
+      customFields: Object.fromEntries(
+        Array.from({ length: 100 }, (_, field) => [`field${field}`, i]),
+      ),
+    }));
+    const admitted = rankPredictiveTradeFields(trades, "pl", 30, true, [], "kendall");
+    expect(admitted.rankedFields).toHaveLength(100);
+    expect(
+      admitted.rankedFields.every((field) => field.correlation === 1 && field.sampleSize === 1100),
+    ).toBe(true);
+    for (const trade of trades)
+      for (let field = 100; field < 125; field++) trade.customFields[`field${field}`] = trade.pl;
+    let refusal: unknown;
+    try {
+      rankPredictiveTradeFields(trades, "pl", 30, true, [], "kendall");
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toBeInstanceOf(KendallPairWorkLimitError);
+    expect(refusal).toMatchObject({
+      estimatedPairs: 75_556_250,
+      pairLimit: 75_000_000,
+      fieldCount: 125,
+      tradeCount: 1100,
+    });
   });
   it("exposes an empty single-tape walk-forward result without database inputs", async () => {
     const result = await singleTapeWalkForwardByTrades([], {

@@ -208,10 +208,16 @@ available value in the selected trades are refused explicitly.
 (tie-adjusted Kendall tau-b). Ranking uses the selected coefficient. Explicit requests
 report `method`; omission preserves the existing Pearson response shape. All methods
 use the same covered entry-time pairs and honor `maxMissedSessions`.
-Kendall is quadratic: requests with more than **500 trades after strategy/date
-prefiltering** are refused with `status: "refused"`, `reason: "kendall_trade_limit"`,
-`tradeCount` and `tradeLimit`, before enrichment or correlation starts. At the limit,
-each field requires at most 124,750 pair comparisons. Pearson and Spearman are unchanged.
+Kendall is quadratic: the shared ranking module admits at most **75 million total
+estimated pair comparisons**, summed as `n_f × (n_f - 1) / 2` across fields with at
+least `minSamples` valid field/target pairs. Here `n_f` follows each field's causal
+coverage after strategy/date filtering; constant fields are conservatively included
+before variance screening. Admission precedes every quadratic correlation calculation.
+Refusals report `status: "refused"`, `reason: "kendall_pair_work_limit"`,
+`estimatedPairs`, `pairLimit`, covered `fieldCount`, and prefiltered `tradeCount`.
+A 1,100-trade block with 100 fully covered fields needs 60,445,000 pairs and passes;
+124 fully covered fields fit, while 125 exceed the cap. A 20,000-trade field alone
+needs 199,990,000 pairs and is refused. Pearson and Spearman are unchanged.
 `get_field_statistics` also accepts registered dataset columns and built-in market fields,
 using these same causal values and dataset age summaries.
 
@@ -273,9 +279,13 @@ iterations `r`:
 `(r + 2) × (n × ceil(log2(max(2,n))) + 6nt + 3t × ceil(log2(max(2,2t))))`.
 The estimate includes sorting the values and candidates on every sweep, filtering and
 scoring both directions, plus the observed sweeps. Its limits are **30 million work
-units per field** and **60 million per request**, summed across fields, so a wide
+units per field** and **90 million per request**, summed across fields, so a wide
 request cannot multiply the field allowance tenfold. These conservative computational
 limits target a few seconds on ordinary trade logs, not a wall-clock guarantee.
+At **1,100 trades, 55 months, 499 iterations and the seven default thresholds**,
+the conservative estimate is **29,250,384 units per fully covered field**. The largest
+admitted family at this size is **3 fields** (87,751,152 units); 4 fields require
+117,001,536 and are refused. Threshold deduplication does not increase that allowance.
 If either is exceeded the entire request is refused before any field sweep, with
 `permutation_work_limit` (per field) or `permutation_request_work_limit` (request),
 `estimatedWork`, `workLimit`, the requested permutation settings and per-field estimates.

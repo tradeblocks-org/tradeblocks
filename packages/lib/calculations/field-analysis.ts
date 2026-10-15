@@ -2,6 +2,25 @@ import { REPORT_FIELDS } from "../models/report-config.ts";
 import { kendallTau, pearsonCorrelation } from "./statistical-utils.ts";
 import { spearmanCorrelation } from "./correlation.ts";
 
+const KENDALL_PAIR_LIMIT = 75_000_000;
+
+/** Named admission failure, before any quadratic field calculations start. */
+export class KendallPairWorkLimitError extends RangeError {
+  readonly pairLimit = KENDALL_PAIR_LIMIT;
+  readonly estimatedPairs: number;
+  readonly fieldCount: number;
+  readonly tradeCount: number;
+  constructor(estimatedPairs: number, fieldCount: number, tradeCount: number) {
+    super(
+      `kendall_pair_work_limit: ${estimatedPairs} estimated pairs exceed ${KENDALL_PAIR_LIMIT}`,
+    );
+    this.name = "KendallPairWorkLimitError";
+    this.estimatedPairs = estimatedPairs;
+    this.fieldCount = fieldCount;
+    this.tradeCount = tradeCount;
+  }
+}
+
 export interface NumericFieldTrade {
   customFields?: Record<string, number | string>;
   dailyCustomFields?: Record<string, number | string>;
@@ -132,6 +151,26 @@ export function rankPredictiveTradeFields(
       const field = `custom.${name}`;
       if (field !== targetField) fields.push({ field, label: `Custom: ${name}` });
     }
+  }
+  if (method === "kendall") {
+    let estimatedPairs = 0;
+    let fieldCount = 0;
+    for (const { field } of fields) {
+      let count = 0;
+      for (const trade of trades) {
+        if (
+          getNumericTradeFieldValue(trade, field) !== null &&
+          getNumericTradeFieldValue(trade, targetField) !== null
+        )
+          count++;
+      }
+      if (count >= minSamples) {
+        fieldCount++;
+        estimatedPairs += (count * (count - 1)) / 2;
+      }
+    }
+    if (estimatedPairs > KENDALL_PAIR_LIMIT)
+      throw new KendallPairWorkLimitError(estimatedPairs, fieldCount, trades.length);
   }
   const rankedFields: Array<{
     field: string;

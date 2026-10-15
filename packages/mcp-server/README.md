@@ -553,9 +553,11 @@ reports the same covered and uncovered counts and P&L.
 (tau-b with ties). Explicit requests name their method; omission preserves the Pearson
 response. Ranking uses the chosen coefficient on the same causal entry-time values,
 including `maxMissedSessions` refusals.
-Kendall refuses more than 500 trades after strategy/date filtering with the named
-`kendall_trade_limit` reason, before enrichment/correlation. Pearson and Spearman
-retain their existing limits and behavior.
+Kendall admits up to 75 million estimated pairs across fields, using each field's
+valid field/target coverage after strategy/date filtering. It refuses by name
+(`kendall_pair_work_limit`) before quadratic calculations. A 1,100-trade block with
+100 fully covered fields passes (60,445,000 pairs); a 20,000-trade field is refused.
+Pearson and Spearman retain their existing behavior.
 
 `filter_curve` accepts either the existing `field` or up to 10 distinct `fields`.
 Multi-field calls, an explicit `objective` (`totalPl` or `winRate`), or opt-in
@@ -567,7 +569,9 @@ Single-field calls without these options retain their old outputs.
 At least 30 covered trades and 8 observed months are required; refusals are named.
 Iterations are capped at 499; threshold and percentile arrays at 100 entries.
 Sort-aware work admission caps permutation at 30 million units per field and
-60 million per request, refusing the whole request before any sweeps.
+90 million per request, refusing the whole request before any sweeps. At 1,100 trades,
+55 months, 499 iterations and default thresholds, the largest admitted family is
+3 fully covered fields (87,751,152 estimated units); 4 fields exceed the cap.
 Field, objective and mode choices across separate requests are outside the Holm family.
 Monthly blocks retain within-month dependence, not cross-month dependence; block
 exchangeability is an assumption. See [the full contract](../../docs/mcp-tools.md#filter-curve-significance-and-stability).

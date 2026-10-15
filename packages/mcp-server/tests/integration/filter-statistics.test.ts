@@ -397,13 +397,25 @@ test("permutation refuses too few covered trades even with enough calendar block
 test("request work admission refuses the combined field family before producing any sweeps", async () => {
   await fixture(
     Array.from({ length: 1100 }, (_, i) => ({
-      date: `2025-${String(Math.floor(i / 100) + 1).padStart(2, "0")}-02`,
-      pl: i % 2 ? 100 : -100,
-      signal: i % 2,
-      noise: i % 10,
+      date: `${2022 + Math.floor(i / 240)}-${String((Math.floor(i / 20) % 12) + 1).padStart(2, "0")}-${String((i % 20) + 1).padStart(2, "0")}`,
+      pl: Math.floor(i / 20) % 2 ? 100 : -100,
+      signal: Math.floor(i / 20) % 2,
+      noise: i % 20,
       trend: i,
     })),
   );
+  const realistic = await handlers.filter_curve({
+    blockId: "sample",
+    fields: ["custom.signal", "custom.noise", "custom.trend"],
+    mode: "both",
+    permutation: { iterations: 499, block: "month", seed: 42 },
+  });
+  const realisticContent = realistic.structuredContent as unknown as { fields: FieldResult[] };
+  expect(realisticContent.fields).toHaveLength(3);
+  for (const field of realisticContent.fields) {
+    expect(field.baseline.count).toBe(1100);
+    expect(field.permutation).toMatchObject({ status: "ok", iterations: 499, blockCount: 55 });
+  }
   const output = await handlers.filter_curve({
     blockId: "sample",
     fields: ["custom.signal", "custom.noise", "custom.trend", "openingPrice"],
@@ -414,13 +426,13 @@ test("request work admission refuses the combined field family before producing 
   expect(output.structuredContent).toMatchObject({
     status: "refused",
     reason: "permutation_request_work_limit",
-    workLimit: 60_000_000,
+    workLimit: 90_000_000,
   });
   const content = output.structuredContent as unknown as {
     estimatedWork: number;
     fields: Array<{ field: string; estimatedWork: number; thresholds?: unknown }>;
   };
-  expect(content.estimatedWork).toBeGreaterThan(60_000_000);
+  expect(content.estimatedWork).toBeGreaterThan(90_000_000);
   expect(content.fields).toHaveLength(4);
   for (const field of content.fields) {
     expect(field.estimatedWork).toBeLessThanOrEqual(30_000_000);
@@ -442,10 +454,10 @@ test("request work admission refuses the combined field family before producing 
   expect(fieldRefusal.structuredContent).not.toHaveProperty("thresholds");
 });
 
-test("Kendall refuses more than 500 prefiltered trades without restricting other methods", async () => {
+test("Kendall admits realistic blocks and refuses excessive total pair work without restricting other methods", async () => {
   await fixture(
-    Array.from({ length: 501 }, (_, i) => ({
-      date: i < 500 ? "2025-01-02" : "2025-01-03",
+    Array.from({ length: 20_000 }, (_, i) => ({
+      date: i < 1100 ? "2025-01-02" : "2025-01-03",
       pl: i ** 2,
       signal: i,
     })),
@@ -454,9 +466,9 @@ test("Kendall refuses more than 500 prefiltered trades without restricting other
   const refused = await handlers.find_predictive_fields({ ...input, method: "kendall" });
   expect(refused.structuredContent).toMatchObject({
     status: "refused",
-    reason: "kendall_trade_limit",
-    tradeLimit: 500,
-    tradeCount: 501,
+    reason: "kendall_pair_work_limit",
+    pairLimit: 75_000_000,
+    tradeCount: 20_000,
   });
   expect(refused.structuredContent).not.toHaveProperty("rankedFields");
   const allowed = await handlers.find_predictive_fields({
@@ -466,7 +478,7 @@ test("Kendall refuses more than 500 prefiltered trades without restricting other
   });
   expect(allowed.structuredContent?.rankedFields).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ field: "custom.signal", correlation: 1, sampleSize: 500 }),
+      expect.objectContaining({ field: "custom.signal", correlation: 1, sampleSize: 1100 }),
     ]),
   );
   for (const method of ["pearson", "spearman"]) {
@@ -474,7 +486,7 @@ test("Kendall refuses more than 500 prefiltered trades without restricting other
     expect(output.isError).not.toBe(true);
     expect(output.structuredContent?.rankedFields).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ field: "custom.signal", sampleSize: 501 }),
+        expect.objectContaining({ field: "custom.signal", sampleSize: 20_000 }),
       ]),
     );
   }
