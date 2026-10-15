@@ -127,7 +127,7 @@ export function datasetFields(entries: StoredDataset[]): AnalysisField[] {
         ? "numeric"
         : "categorical",
       timing: dataset.columnTiming![column],
-      knownBy: dataset.knownBy ?? null,
+      knownBy: dataset.columnTiming![column] === "open" ? (dataset.knownBy ?? null) : null,
       source,
     })),
   );

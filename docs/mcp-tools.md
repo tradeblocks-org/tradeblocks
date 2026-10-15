@@ -154,11 +154,16 @@ See [per-request details](market-data.md#fetch_quotes).
 Static Dataset CSVs use the same parser as the web app: timestamp first, then numeric or
 categorical columns. `import_daily_dataset` takes `name`, exactly one of inline `content` or
 `csvPath` under the data root, optional `ticker`, `columnTiming`, and `knownBy` (HH:mm ET).
+For Docker's default `-v ./data:/data` mount, put the CSV at `./data/datasets/vrp.csv`
+on the host and pass `csvPath: "datasets/vrp.csv"` or `"/data/datasets/vrp.csv"`.
+Use the container path beneath the configured data root, not the host path.
 Default timing is close. Date-only close values are available D+1 at 00:00 ET; date-only
 open values require knownBy; timestamped values are as-of. All consumers select the latest
 value available at or before trade entry, including sparse series. There is no freshness
 limit. Values live only in analytics.duckdb's `datasets.dataset` and `datasets.value`, not
 market tables or Parquet. Re-import atomically replaces a named dataset.
+Field metadata reports `knownBy: null` for close columns; the dataset's stored known-by
+continues to apply only to date-only open observations.
 `enrich_trades` retains CSV `customFields` and returns `datasetFields` plus
 `datasetProvenance` (source timestamp and available-at instant) so carry-forward age is visible.
 
@@ -180,6 +185,10 @@ using these same causal values and dataset age summaries.
 `suggest_filters.fields` optionally selects registered fields: numeric fields sweep percentile
 thresholds; categorical fields test exclusions by value. Omitting fields preserves the existing
 hand-authored defaults. Shared sweeps preserve numeric scale without two-decimal rounding.
+The fields path keeps all-trade `currentStats` and reports `fieldBaselines` by field:
+covered `count`/`totalPl` and `uncoveredCount`/`uncoveredTotalPl`.
+`comparisonPopulation: "fieldBaselines"` identifies what suggestions compare against.
+`filter_curve.baseline` reports the same covered and uncovered counts and P&L.
 
 `analyze_regime_performance` accepts `field` instead of a preset `segmentBy`. Categorical
 fields group by value. Numeric fields use `bins` as strictly increasing cut points, with

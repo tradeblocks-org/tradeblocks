@@ -288,6 +288,13 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             winRate: Math.round(baselineWinRate * 10000) / 10000,
             avgPl: Math.round(baselineAvgPl * 100) / 100,
             totalPl: Math.round(baselineTotalPl * 100) / 100,
+            uncoveredCount: trades.length - tradesWithField.length,
+            uncoveredTotalPl:
+              Math.round(
+                enrichedTrades
+                  .filter((trade) => getTradeFieldValue(trade, field) === null)
+                  .reduce((sum, trade) => sum + trade.pl, 0) * 100,
+              ) / 100,
           };
 
           const sweeps = sweepThresholds(

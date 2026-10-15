@@ -26,6 +26,15 @@ export async function suggestFieldFilters(
     confidence: string;
   }[] = [];
   const coverage: Record<string, { covered: number; uncovered: number }> = {};
+  const fieldBaselines: Record<
+    string,
+    {
+      count: number;
+      totalPl: number;
+      uncoveredCount: number;
+      uncoveredTotalPl: number;
+    }
+  > = {};
   for (const field of fields) {
     requireCoveredField(field, catalog, values);
     const pool = trades
@@ -33,6 +42,14 @@ export async function suggestFieldFilters(
       .filter((item) => item.value !== undefined);
     coverage[field] = { covered: pool.length, uncovered: trades.length - pool.length };
     const baseline = computeSliceStats(pool.map(({ trade }) => trade.pl));
+    fieldBaselines[field] = {
+      count: pool.length,
+      totalPl: baseline.totalPl,
+      uncoveredCount: trades.length - pool.length,
+      uncoveredTotalPl: computeSliceStats(
+        trades.filter((_, i) => values[i][field] === undefined).map((trade) => trade.pl),
+      ).totalPl,
+    };
     const entry = catalog.find((entry) => entry.field === field)!;
     const candidates =
       entry.type === "numeric"
@@ -82,6 +99,8 @@ export async function suggestFieldFilters(
     suggestedFilters: suggestions,
     compositeSuggestions: [],
     coverage,
+    fieldBaselines,
+    comparisonPopulation: "fieldBaselines",
     ...datasetAgeOutput(datasetAge, fields),
     minImprovementThreshold: minImprovementPct,
   });

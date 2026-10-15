@@ -540,6 +540,15 @@ values are available the following calendar day at 00:00 ET; date-only open valu
 observation without a freshness cutoff. See the [dataset tools reference](../../docs/mcp-tools.md#market-analysis)
 and [4.1.0 behavior changes](../../releases/v4.1.0.md#behavior-changes).
 
+With Docker's default `-v ./data:/data` mount, put the CSV at
+`./data/datasets/vrp.csv` on the host and pass `csvPath: "datasets/vrp.csv"` or
+`"/data/datasets/vrp.csv"`; use the container path beneath the configured data root.
+Close-column metadata shows `knownBy: null`; open columns retain the configured value.
+Field-based `suggest_filters` retains all-trade `currentStats` and reports per-field
+`fieldBaselines` (`count`, `totalPl`, `uncoveredCount`, `uncoveredTotalPl`).
+Suggestions compare against those covered populations; `filter_curve.baseline`
+reports the same covered and uncovered counts and P&L.
+
 ### Strategy Profile Tools
 
 | Tool                      | Description                                                  |
