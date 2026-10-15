@@ -239,6 +239,11 @@ covered `count`/`totalPl` and `uncoveredCount`/`uncoveredTotalPl`.
 
 Available since 4.4.0; see the [release notes](../releases/v4.4.0.md) for the workflow
 and interpretation limits.
+The [4.5.0 release notes](../releases/v4.5.0.md) cover day units, daily risk,
+group breakdowns and field-scoped resolution. Varchar market fields such as
+`Trend_Direction` now produce categorical equality exclusions in explicit-field
+`suggest_filters` and category segments in `analyze_regime_performance`, rather
+than numeric bins; prior-session timing is unchanged.
 
 Use either `field: "signal.score"` or `fields: ["signal.score", "other.score"]`
 (up to 10 distinct fields). Single-field calls without new options retain the existing

@@ -599,6 +599,13 @@ Missing values form an explicit uncovered group, small groups stay flagged,
 and within-day varying groups refuse as `day_group_varies`. Group values honor
 the same causal availability and optional freshness limit.
 
+Missing groups use `group: null`, `groupValue: null`, `uncoveredGroup: true`, distinct
+from a real `"uncovered"` category. Varchar market fields such as `Trend_Direction`
+are now categorical for filter suggestions and regime analysis. Explicit-field
+tools resolve only consumed fields without changing their timing or values. See the
+[4.5.0 release notes](../../releases/v4.5.0.md) for the timings, MAR capital/window
+policy and the under-90-day per-year/per-group `marUnstable` guard.
+
 `suggest_filters` defaults to `objective: "totalPl"`: only positive P&L improvements,
 ranked by P&L improvement with win-rate gain as tie-breaker. `objective: "winRate"`
 admits/ranks by win-rate gain with P&L tie-breaks. `minImprovementPct` (default 3
