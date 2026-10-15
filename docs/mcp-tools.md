@@ -255,6 +255,34 @@ Default `unit: "trade"` retains the existing output. Work admission runs before
 field resolution, conservatively counting all selected trades or entry days before
 field coverage; it never silently drops a field to fit the budget.
 
+With `unit: "day"`, `objective` also accepts `sharpe`, `mar`, and `maxDrawdown`.
+They use the covered entry-date P&L curve, keeping filtered dates flat at zero.
+They refuse trade units as `objective_requires_day`.
+
+- **Sharpe** is mean daily dollar P&L / sample standard deviation × √252, rf=0;
+  zero variance or fewer than two observations gives 0, matching the shared
+  simulation helper. This intentionally differs from portfolio return Sharpe,
+  which uses historical Treasury rates: a risk-free dollar P&L deduction needs
+  capital, while this measure does not.
+- **MAR** is CAGR / maximum drawdown as a fraction of starting capital. CAGR uses
+  the first through last covered entry dates and 365.25 calendar days per year,
+  matching the portfolio annualization convention. Capital comes from the existing
+  daily-log/trade-funds resolver, never its assumed default; otherwise
+  `mar_requires_capital` refuses. Zero drawdown, nonpositive ending capital, or no
+  elapsed time yields a null MAR and `mar_undefined`; such candidates are shown
+  but cannot rank, and no eligible MAR candidate gives a named refusal.
+- **maxDrawdown** reports the positive maximum decline of cumulative daily P&L,
+  starting at zero, in dollars and percent of starting capital when observed.
+  Its objective delta is **baseline drawdown minus kept drawdown**: smaller is
+  better. The percent denominator is starting capital, not the rolling peak.
+
+Response `objectiveMetadata` states these definitions. Every risk candidate shows
+its objective delta against the covered baseline. Ranking shares the existing
+P&L/win-rate tie-breaks and eligibility (keep and remove at least one observation).
+Every permutation recomputes the baseline path and reruns the complete objective
+sweep. Risk-path work adds `36nt` per sweep to admission, covering path construction
+and risk statistics; Holm and the requested-field family are unchanged.
+
 `objective` is `totalPl` by default, or `winRate` (percentage-point gain). Best thresholds
 rank P&L delta then win-rate gain, or win-rate gain then P&L delta, using the same ranking
 module as `suggest_filters`. Only candidates keeping and removing at least one covered

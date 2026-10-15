@@ -109,6 +109,8 @@ and Holm p-values. Existing single-field calls remain unchanged. See
 Day-level filter analysis (`unit: "day"`, 4.5.0) aggregates multi-entry days before
 scoring and permutation, refuses within-day varying fields by name, and admits
 large requests before expensive field resolution.
+Day mode also supports risk objectives `sharpe`, `mar`, and `maxDrawdown` on the
+covered daily P&L curve, with explicit definitions and named unit/capital refusals.
 See the [4.4.0 release notes](releases/v4.4.0.md) for the “Is this filter real?”
 workflow, assumptions, within-request testing family and computational limits.
 

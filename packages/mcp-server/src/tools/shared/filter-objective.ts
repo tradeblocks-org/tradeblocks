@@ -1,4 +1,5 @@
 export type FilterObjective = "totalPl" | "winRate";
+export type CurveObjective = FilterObjective | "sharpe" | "mar" | "maxDrawdown";
 
 export interface SuggestionEvidence {
   objective: FilterObjective;
@@ -45,10 +46,16 @@ export function suggestionEvidence(
 }
 
 export function rankSuggestions(
-  objective: FilterObjective,
-  a: { winRateDelta: number; plDelta: number },
-  b: { winRateDelta: number; plDelta: number },
+  objective: CurveObjective,
+  a: { winRateDelta: number; plDelta: number; objectiveDelta?: number | null },
+  b: { winRateDelta: number; plDelta: number; objectiveDelta?: number | null },
 ): number {
+  if (objective !== "totalPl" && objective !== "winRate")
+    return (
+      (b.objectiveDelta ?? -Infinity) - (a.objectiveDelta ?? -Infinity) ||
+      b.plDelta - a.plDelta ||
+      b.winRateDelta - a.winRateDelta
+    );
   return objective === "totalPl"
     ? b.plDelta - a.plDelta || b.winRateDelta - a.winRateDelta
     : b.winRateDelta - a.winRateDelta || b.plDelta - a.plDelta;

@@ -586,6 +586,12 @@ permutation; win rate counts profitable days. A field varying within a day is
 refused as `day_field_varies`, with the varying dates. Cheap request/work admission
 precedes causal field resolution and counts the chosen unit conservatively before
 coverage. Omitted `unit` retains trade-mode outputs.
+Day mode also offers `sharpe` (daily dollar P&L, rf=0, sample std, √252),
+`mar` (calendar-day CAGR / drawdown fraction of observed starting capital), and
+`maxDrawdown` (dollar drawdown reduction; smaller is better). Filtered dates are
+flat. Trade units refuse these objectives; MAR additionally refuses missing capital.
+`objectiveMetadata` documents definitions and undefined cases. This dollar-P&L
+Sharpe intentionally differs from the capital-based portfolio return Sharpe.
 
 `suggest_filters` defaults to `objective: "totalPl"`: only positive P&L improvements,
 ranked by P&L improvement with win-rate gain as tie-breaker. `objective: "winRate"`

@@ -1,5 +1,6 @@
 import { sweepThresholds } from "./threshold-sweep.ts";
-import { rankSuggestions, type FilterObjective } from "../tools/shared/filter-objective.ts";
+import { calculateMaxDrawdown, calculateSharpeRatio } from "@tradeblocks/lib";
+import { rankSuggestions, type CurveObjective } from "../tools/shared/filter-objective.ts";
 
 interface CurveTrade {
   pl: number;
@@ -10,8 +11,16 @@ interface Options {
   unit?: "trade" | "day";
   thresholds?: number[];
   percentileSteps?: number[];
-  objective?: FilterObjective;
+  objective?: CurveObjective;
+  startingCapital?: number;
   permutation?: { iterations: number; block: "month"; seed: number };
+}
+
+interface RiskStats {
+  sharpe: number;
+  mar: number | null;
+  maxDrawdown: { dollars: number; percent: number | null };
+  annualizedReturnPct: number | null;
 }
 
 function population(trades: Array<{ pl: number }>) {
@@ -50,8 +59,69 @@ export function analyzeFilterCurve<T extends CurveTrade>(
     trades = [...days.values()].sort((a, b) => a.dateOpened.getTime() - b.dateOpened.getTime());
   }
   const covered = trades.filter((trade) => valueOf(trade) !== null);
+  const objective = options.objective ?? "totalPl";
+  const riskObjective = objective !== "totalPl" && objective !== "winRate";
+  function riskStats<U extends CurveTrade>(items: U[], all: U[]) {
+    const kept = new Set(items);
+    const pls = all.map((item) => (kept.has(item) ? item.pl : 0));
+    let cumulative = 0;
+    const dollars = calculateMaxDrawdown(
+      pls.map((pl) => (cumulative += pl)),
+      "absolute",
+    );
+    const capital = options.startingCapital;
+    const percent = capital ? (dollars / capital) * 100 : null;
+    const years =
+      all.length > 1
+        ? (all[all.length - 1].dateOpened.getTime() - all[0].dateOpened.getTime()) /
+          86400000 /
+          365.25
+        : 0;
+    const annualizedReturnPct =
+      capital && years > 0 && capital + cumulative > 0
+        ? (Math.pow((capital + cumulative) / capital, 1 / years) - 1) * 100
+        : null;
+    const mar =
+      annualizedReturnPct !== null && percent !== null && percent > 0
+        ? annualizedReturnPct / percent
+        : null;
+    return {
+      sharpe: calculateSharpeRatio(pls, 252),
+      mar: mar !== null && Number.isFinite(mar) ? mar : null,
+      maxDrawdown: { dollars, percent },
+      annualizedReturnPct:
+        annualizedReturnPct !== null && Number.isFinite(annualizedReturnPct)
+          ? annualizedReturnPct
+          : null,
+    };
+  }
+  function stats<U extends CurveTrade>(items: U[], all: U[] = items) {
+    return { ...population(items), ...(riskObjective ? riskStats(items, all) : {}) };
+  }
+  function delta<U extends CurveTrade>(
+    items: U[],
+    all: U[],
+    original?: RiskStats,
+    current?: RiskStats,
+  ) {
+    if (!riskObjective) {
+      const kept = population(items);
+      const baseline = population(all);
+      return objective === "totalPl"
+        ? kept.totalPl - baseline.totalPl
+        : (kept.winRate - baseline.winRate) * 100;
+    }
+    current ??= riskStats(items, all);
+    original ??= riskStats(all, all);
+    if (objective === "maxDrawdown")
+      return original.maxDrawdown.dollars - current.maxDrawdown.dollars;
+    const a = current[objective];
+    const b = original[objective];
+    return a === null || b === null ? null : a - b;
+  }
   const base = population(covered);
   const uncovered = population(trades.filter((trade) => valueOf(trade) === null));
+  const baselineRisk = riskObjective ? riskStats(covered, covered) : undefined;
   const baseline = {
     count: base.count,
     winRate: Math.round(base.winRate * 10000) / 10000,
@@ -59,16 +129,26 @@ export function analyzeFilterCurve<T extends CurveTrade>(
     totalPl: Math.round(base.totalPl * 100) / 100,
     uncoveredCount: uncovered.count,
     uncoveredTotalPl: Math.round(uncovered.totalPl * 100) / 100,
+    ...baselineRisk,
   };
   function metrics(items: T[]) {
     const stats = population(items);
     const avgPl = stats.count ? stats.totalPl / stats.count : 0;
+    const risk = riskObjective ? riskStats(items, covered) : undefined;
+    const objectiveDelta = riskObjective ? delta(items, covered, baselineRisk, risk) : undefined;
     return {
       count: stats.count,
       percentOfTrades: Math.round((stats.count / base.count) * 10000) / 100,
       winRate: Math.round(stats.winRate * 10000) / 10000,
       avgPl: Math.round(avgPl * 100) / 100,
       totalPl: Math.round(stats.totalPl * 100) / 100,
+      ...(risk
+        ? {
+            ...risk,
+            objectiveDelta,
+            ...(objectiveDelta === null ? { objectiveReason: "mar_undefined" } : {}),
+          }
+        : {}),
       winRateDelta: stats.count
         ? Math.round((stats.winRate - baseline.winRate) * 10000) / 10000
         : -baseline.winRate,
@@ -126,9 +206,13 @@ export function analyzeFilterCurve<T extends CurveTrade>(
     },
   };
   if (!options.objective && !options.permutation) return { ...legacy, analysis: undefined };
-  const objective = options.objective ?? "totalPl";
-  const pairs = covered.map((trade) => ({ value: valueOf(trade)!, pl: trade.pl }));
-  function best(items: Array<{ value: number; pl: number }>) {
+  const pairs = covered.map((trade) => ({
+    value: valueOf(trade)!,
+    pl: trade.pl,
+    dateOpened: trade.dateOpened,
+  }));
+  function best(items: Array<{ value: number; pl: number; dateOpened: Date }>) {
+    const original = riskObjective ? riskStats(items, items) : undefined;
     const candidates = sweepThresholds(
       items,
       (item) => item.value,
@@ -144,6 +228,8 @@ export function analyzeFilterCurve<T extends CurveTrade>(
         )
           return [];
         const stats = population(kept);
+        const objectiveDelta = delta(kept, items, original);
+        if (objectiveDelta === null) return [];
         return [
           {
             threshold: sweep.threshold,
@@ -151,6 +237,7 @@ export function analyzeFilterCurve<T extends CurveTrade>(
             kept,
             plDelta: stats.totalPl - base.totalPl,
             winRateDelta: (stats.winRate - base.winRate) * 100,
+            objectiveDelta,
           },
         ];
       }),
@@ -163,15 +250,16 @@ export function analyzeFilterCurve<T extends CurveTrade>(
     ? {
         threshold: chosen.threshold,
         direction: chosen.direction,
-        kept: population(chosen.kept),
-        removed: population(
+        kept: stats(chosen.kept, pairs),
+        removed: stats(
           pairs.filter((pair) =>
             chosen.direction === "lt"
               ? pair.value >= chosen.threshold
               : pair.value <= chosen.threshold,
           ),
+          pairs,
         ),
-        objectiveDelta: objective === "totalPl" ? chosen.plDelta : chosen.winRateDelta,
+        objectiveDelta: chosen.objectiveDelta,
       }
     : null;
   const years = [...new Set(trades.map((trade) => trade.dateOpened.getFullYear()))].sort();
@@ -193,8 +281,8 @@ export function analyzeFilterCurve<T extends CurveTrade>(
             ? valueOf(trade)! >= chosen.threshold
             : valueOf(trade)! <= chosen.threshold,
         );
-        const baseline = population(annual);
-        const stats = population(kept);
+        const baseline = stats(annual);
+        const keptStats = stats(kept, annual);
         return {
           year,
           baseline: {
@@ -202,12 +290,9 @@ export function analyzeFilterCurve<T extends CurveTrade>(
             uncoveredCount: uncovered.count,
             uncoveredTotalPl: uncovered.totalPl,
           },
-          kept: stats,
-          removed: population(removed),
-          objectiveDelta:
-            objective === "totalPl"
-              ? stats.totalPl - baseline.totalPl
-              : (stats.winRate - baseline.winRate) * 100,
+          kept: keptStats,
+          removed: stats(removed, annual),
+          objectiveDelta: delta(kept, annual),
           ...(annual.length < 30 || kept.length < 30 || removed.length < 30
             ? { lowSampleWarning: "Fewer than 30 covered, kept or removed entries" }
             : {}),
@@ -247,7 +332,7 @@ export function analyzeFilterCurve<T extends CurveTrade>(
       };
       const original = [...blocks.values()];
       let exceedances = 0;
-      const observed = objective === "totalPl" ? chosen.plDelta : chosen.winRateDelta;
+      const observed = chosen.objectiveDelta;
       const orderedValues = ordered.map((trade) => valueOf(trade)!);
       for (let iteration = 0; iteration < options.permutation.iterations; iteration++) {
         const shuffled = [...original];
@@ -256,13 +341,13 @@ export function analyzeFilterCurve<T extends CurveTrade>(
           [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
         const outcomes = shuffled.flat();
-        const permuted = outcomes.map((pl, index) => ({ value: orderedValues[index], pl }));
+        const permuted = outcomes.map((pl, index) => ({
+          value: orderedValues[index],
+          pl,
+          dateOpened: ordered[index].dateOpened,
+        }));
         const winner = best(permuted);
-        const score = winner
-          ? objective === "totalPl"
-            ? winner.plDelta
-            : winner.winRateDelta
-          : -Infinity;
+        const score = winner?.objectiveDelta ?? -Infinity;
         if (score >= observed) exceedances++;
       }
       permutation = {
@@ -276,6 +361,32 @@ export function analyzeFilterCurve<T extends CurveTrade>(
   }
   return {
     ...legacy,
-    analysis: { objective, bestThreshold, perYear, ...(permutation ? { permutation } : {}) },
+    analysis: {
+      objective,
+      bestThreshold,
+      perYear,
+      ...(riskObjective
+        ? {
+            ...(objective === "mar" && !chosen
+              ? { status: "refused", reason: "mar_undefined" }
+              : {}),
+            objectiveMetadata: {
+              definition:
+                objective === "sharpe"
+                  ? "daily P&L, rf=0, sqrt(252), sample std"
+                  : objective === "mar"
+                    ? "CAGR (365.25 calendar days/year) / max drawdown as percent of starting capital"
+                    : "covered baseline max drawdown dollars minus kept max drawdown dollars; smaller drawdown is better",
+              startingCapital: options.startingCapital ?? null,
+              dailyCurve: "covered entry dates; filtered dates flat (0 P&L)",
+              maxDrawdownPercentBasis: "starting capital",
+              zeroVarianceSharpe: 0,
+              undefinedMar:
+                "null (zero drawdown, nonpositive ending capital, or zero elapsed time)",
+            },
+          }
+        : {}),
+      ...(permutation ? { permutation } : {}),
+    },
   };
 }

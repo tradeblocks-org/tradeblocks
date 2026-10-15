@@ -1054,10 +1054,14 @@ function runSingleSimulation(
 /**
  * Calculate maximum drawdown from an equity curve
  *
- * @param equityCurve - Array of cumulative returns (as decimals, e.g., 0.5 = 50% gain)
- * @returns Maximum drawdown as a decimal (positive number for losses, e.g., 0.2 = 20% drawdown)
+ * @param equityCurve - Cumulative returns (relative basis) or cumulative P&L (absolute basis), ordered in time
+ * @param basis - Relative peak-to-trough fraction (default), or absolute peak-to-trough amount; both start at zero
+ * @returns Positive maximum drawdown in the chosen basis
  */
-function calculateMaxDrawdown(equityCurve: number[]): number {
+export function calculateMaxDrawdown(
+  equityCurve: readonly number[],
+  basis: "relative" | "absolute" = "relative",
+): number {
   let maxDrawdown = 0;
   let peak = 0; // Treat initial capital (0% return) as the starting peak
 
@@ -1076,7 +1080,8 @@ function calculateMaxDrawdown(equityCurve: number[]): number {
 
     if (peak > -1) {
       // Avoid division by zero if portfolio goes to zero
-      const drawdown = (peak - cumulativeReturn) / (1 + peak);
+      const drawdown =
+        basis === "absolute" ? peak - cumulativeReturn : (peak - cumulativeReturn) / (1 + peak);
       if (drawdown > maxDrawdown) {
         maxDrawdown = drawdown;
       }
@@ -1093,7 +1098,7 @@ function calculateMaxDrawdown(equityCurve: number[]): number {
  * @param periodsPerYear - Number of trading periods per year
  * @returns Sharpe ratio (annualized)
  */
-function calculateSharpeRatio(returns: number[], periodsPerYear: number): number {
+export function calculateSharpeRatio(returns: readonly number[], periodsPerYear: number): number {
   if (returns.length < 2) {
     return 0;
   }

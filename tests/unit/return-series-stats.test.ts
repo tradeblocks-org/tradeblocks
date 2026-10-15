@@ -1,5 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  calculateMaxDrawdown,
+  calculateSharpeRatio,
   cvarFromReturns,
   cvarFromReturnsAtConfidence,
   maxDrawdownFromReturns,
@@ -177,4 +179,15 @@ describe("return-series statistics public API", () => {
     expect(drawdownPastOneHundredPercent).toBeUndefined();
     expect(drawdownPastOneHundredPercent).not.toBe(250);
   });
+});
+
+it("exports cumulative-path drawdown in relative and dollar bases and zero-rf dollar Sharpe", () => {
+  expect(calculateMaxDrawdown([0.1, -0.12, 0.02])).toBeCloseTo(0.2, 12);
+  expect(calculateMaxDrawdown([-10, 20, 0, 40], "absolute")).toBe(20);
+  expect(calculateMaxDrawdown([-10, -30], "absolute")).toBe(30);
+  expect(calculateSharpeRatio([-10, 30, -20, 40], 252)).toBeCloseTo(
+    (10 / Math.sqrt(2600 / 3)) * Math.sqrt(252),
+    12,
+  );
+  expect(calculateSharpeRatio([1, 1], 252)).toBe(0);
 });

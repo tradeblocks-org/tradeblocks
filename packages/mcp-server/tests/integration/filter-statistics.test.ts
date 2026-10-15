@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, test } from "@jest/globals";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -619,4 +619,122 @@ test("day mode names every date with a varying or partially uncovered field", as
     reason: "day_field_varies",
     days: ["2025-01-02", "2025-01-03"],
   });
+});
+
+test("insurance ranks ahead for drawdown and MAR, not total P&L; daily risk metrics have a fixed-capital oracle", async () => {
+  const pls = [-150, -150, 310, -10, -10, 100, 100, 100, 100, 100];
+  await fixture(
+    Array.from({ length: 120 }, (_, i) => ({
+      date: `2025-${String(1 + Math.floor(i / 10)).padStart(2, "0")}-${String(1 + (i % 10)).padStart(2, "0")}`,
+      pl: pls[i % 10],
+      signal: i % 10 < 3 ? 2 : i % 10 === 3 ? 0 : 1,
+    })),
+  );
+  const input = {
+    blockId: "sample",
+    field: "custom.signal",
+    unit: "day",
+    mode: "both",
+    thresholds: [0.5, 1.5],
+  };
+  for (const objective of ["maxDrawdown", "mar", "totalPl", "sharpe"]) {
+    const output = await handlers.filter_curve(schemas.filter_curve.parse({ ...input, objective }));
+    expect(output.isError).not.toBe(true);
+    const result = output.structuredContent!;
+    expect(result.bestThreshold).toMatchObject(
+      objective === "totalPl"
+        ? { threshold: 0.5, direction: "gt" }
+        : { threshold: 1.5, direction: "lt" },
+    );
+    if (objective === "maxDrawdown") {
+      expect(result.baseline).toMatchObject({ maxDrawdown: { dollars: 300 } });
+      expect(result.bestThreshold).toMatchObject({
+        kept: { maxDrawdown: { dollars: 20 } },
+        objectiveDelta: 280,
+      });
+    }
+  }
+});
+
+test("risk objectives refuse trade units and MAR refuses an assumed capital basis", async () => {
+  await fixture([
+    { date: "2025-01-02", pl: -10, signal: 0 },
+    { date: "2025-01-03", pl: 20, signal: 1 },
+  ]);
+  const input = { blockId: "sample", field: "custom.signal", mode: "both", thresholds: [0.5] };
+  for (const objective of ["sharpe", "mar", "maxDrawdown"])
+    expect((await handlers.filter_curve({ ...input, objective })).structuredContent).toMatchObject({
+      status: "refused",
+      reason: "objective_requires_day",
+      objective,
+    });
+  const csvPath = path.join(baseDir, "sample", "tradelog.csv");
+  await writeFile(
+    csvPath,
+    (await readFile(csvPath, "utf8")).replace("Funds at Close", "No Capital"),
+  );
+  expect(
+    (await handlers.filter_curve({ ...input, unit: "day", objective: "mar" })).structuredContent,
+  ).toMatchObject({ status: "refused", reason: "mar_requires_capital" });
+  for (const objective of ["sharpe", "maxDrawdown"]) {
+    const result = (await handlers.filter_curve({ ...input, unit: "day", objective }))
+      .structuredContent!;
+    expect(result.baseline).toMatchObject({ maxDrawdown: { dollars: 10, percent: null } });
+    expect(result.objectiveMetadata).toMatchObject({ startingCapital: null });
+  }
+});
+
+test("maxDrawdown month permutation on balanced noise is non-significant", async () => {
+  await fixture(
+    Array.from({ length: 240 }, (_, i) => ({
+      date: `${2024 + Math.floor(i / 120)}-${String(1 + (Math.floor(i / 10) % 12)).padStart(2, "0")}-${String(1 + (i % 10)).padStart(2, "0")}`,
+      pl: i % 2 ? 10 : -10,
+      signal: i % 5,
+    })),
+  );
+  const result = (
+    await handlers.filter_curve({
+      blockId: "sample",
+      field: "custom.signal",
+      mode: "both",
+      unit: "day",
+      objective: "maxDrawdown",
+      thresholds: [1.5, 2.5],
+      permutation: { iterations: 99, block: "month", seed: 42 },
+    })
+  ).structuredContent!;
+  expect(result.permutation).toMatchObject({ status: "ok", pValue: 1 });
+});
+
+test("daily risk definitions match an independent four-date oracle with filtered days flat", async () => {
+  await fixture(
+    [-10, 30, -20, 40].map((pl, i) => ({
+      date: `2025-01-0${i + 2}`,
+      pl,
+      signal: i === 2 ? 0 : 1,
+    })),
+  );
+  const result = (
+    await handlers.filter_curve({
+      blockId: "sample",
+      field: "custom.signal",
+      unit: "day",
+      mode: "gt",
+      objective: "sharpe",
+      thresholds: [0.5],
+    })
+  ).structuredContent as unknown as {
+    baseline: { sharpe: number; maxDrawdown: { dollars: number; percent: number }; mar: number };
+    bestThreshold: { kept: { sharpe: number; mar: number } };
+  };
+  // Sample variance: (400 + 400 + 900 + 900) / 3; kept [-10,30,0,40] mean 15, variance 1700/3.
+  expect(result.baseline.sharpe).toBeCloseTo((10 / Math.sqrt(2600 / 3)) * Math.sqrt(252), 12);
+  expect(result.bestThreshold.kept.sharpe).toBeCloseTo(
+    (15 / Math.sqrt(1700 / 3)) * Math.sqrt(252),
+    12,
+  );
+  // Funds at first close 10000 minus first P&L -10 = initial capital 10010.
+  expect(result.baseline.maxDrawdown).toEqual({ dollars: 20, percent: (20 / 10010) * 100 });
+  const cagrPct = (Math.pow(10050 / 10010, 365.25 / 3) - 1) * 100;
+  expect(result.baseline.mar).toBeCloseTo(cagrPct / ((20 / 10010) * 100), 10);
 });

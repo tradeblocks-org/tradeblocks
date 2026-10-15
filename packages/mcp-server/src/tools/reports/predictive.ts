@@ -17,6 +17,7 @@ import { getProfile } from "../../db/profile-schemas.ts";
 import { requireCoveredField } from "../../utils/trade-analysis-fields.ts";
 import { analyzeFilterCurve } from "../../utils/filter-curve.ts";
 import { datasetAgeOutput, maxMissedSessionsSchema } from "../../db/dataset-schemas.ts";
+import { resolveStartingCapital } from "../../utils/starting-capital.ts";
 
 /**
  * Register predictive-related report tools
@@ -227,7 +228,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             "Sweep trades (default) or summed entry-date P&L; day fields must be constant within each day.",
           ),
         objective: z
-          .enum(["totalPl", "winRate"])
+          .enum(["totalPl", "winRate", "sharpe", "mar", "maxDrawdown"])
           .optional()
           .describe(
             "Opt into best-threshold and per-year analysis; defaults to totalPl with fields or permutation.",
@@ -304,6 +305,25 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             throw new Error("Provide exactly one of field or fields.");
           if (new Set(names).size !== names.length)
             throw new Error("fields must not contain duplicates.");
+          const riskObjective =
+            objective !== undefined && objective !== "totalPl" && objective !== "winRate";
+          if (riskObjective && unit !== "day")
+            return createToolOutput("Risk objective requires day units", {
+              blockId,
+              status: "refused",
+              reason: "objective_requires_day",
+              objective,
+            });
+          const capital = riskObjective
+            ? resolveStartingCapital(trades, block.dailyLogs)
+            : undefined;
+          if (objective === "mar" && capital?.source === "assumed_default")
+            return createToolOutput("MAR requires observed starting capital", {
+              blockId,
+              status: "refused",
+              reason: "mar_requires_capital",
+              objective,
+            });
           if (permutation) {
             if ((thresholds?.length ?? 0) > 100 || (percentileSteps?.length ?? 0) > 100)
               return createToolOutput(
@@ -330,10 +350,11 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                 coveredCount * Math.ceil(Math.log2(Math.max(2, coveredCount))) +
                 6 * coveredCount * candidates +
                 3 * candidates * Math.ceil(Math.log2(Math.max(2, 2 * candidates)));
+              const pathWork = riskObjective ? 36 * coveredCount * candidates : 0;
               return {
                 field: name,
                 coveredCount,
-                estimatedWork: (permutation.iterations + 2) * sweepWork,
+                estimatedWork: (permutation.iterations + 2) * (sweepWork + pathWork),
               };
             });
             const estimatedWork = estimates.reduce((sum, field) => sum + field.estimatedWork, 0);
@@ -375,6 +396,8 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                   objective:
                     objective ?? (fields || permutation || unit === "day" ? "totalPl" : undefined),
                   permutation,
+                  startingCapital:
+                    capital?.source !== "assumed_default" ? capital?.amount : undefined,
                 },
               );
               return {
