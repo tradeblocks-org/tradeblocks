@@ -6,7 +6,13 @@
 
 `minImprovementPct` remains a win-rate percentage-point threshold (default 3) under `winRate`. It is ignored under `totalPl`; no percentage P&L meaning is inferred. The response notes this when the argument was supplied.
 
+`minImprovementThreshold` is now `null` under `totalPl`, the new default; previously it was always a number.
+
 Composite projected metrics now describe **kept** trades, fixing the prior calculation on excluded trades. Composites use the same admission and ranking objective as standalone suggestions; the separate >2-point standalone-relative gate is removed.
+
+Composite `improvement` now means win-rate gain on the kept set against its covered pool, rather than gain against the best standalone filter.
+
+On the fields path, sample-size support previously used at least 100 kept trades for high and 30 for medium. It now uses the shared rule: high requires at least 20 kept and 10 removed, medium requires 10 kept and 5 removed, and retention below 20% caps support at low.
 
 ## Output
 

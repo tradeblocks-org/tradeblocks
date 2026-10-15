@@ -847,6 +847,7 @@ test("both suggestion paths honor the objective and cap support for 95 percent r
                 projectedWinRate: 100,
                 projectedAvgPl: 1,
                 plDelta: -9910,
+                winRateDelta: 45,
                 tradesKept: 10,
                 tradesRemoved: 190,
                 keptFraction: 0.05,

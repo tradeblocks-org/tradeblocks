@@ -1128,8 +1128,8 @@ export function registerMarketDataTools(
                   projectedAvgPl: Math.round((totalPl / kept.length) * 100) / 100,
                   tradesAffected: bothMatchTrades.length,
                   improvement: Math.round(winRateDelta * 100) / 100,
-                  winRateDelta,
-                  plDelta,
+                  winRateDelta: Math.round(winRateDelta * 100) / 100,
+                  plDelta: Math.round(plDelta * 100) / 100,
                   ...evidence,
                 });
               }

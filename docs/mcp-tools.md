@@ -195,6 +195,9 @@ It refuses a dataset attachment when missed sessions exceed the limit, or when s
 age is unsupported. Rejected trades count as uncovered for that field, including its
 baseline count/P&L; `enrich_trades.datasetRejections` names refused fields and provenance.
 Omitting the limit preserves matching exactly. Built-in market fields are unaffected.
+Datasets with undeclared (legacy) timing report session age `unsupported`, so any
+`maxMissedSessions` limit refuses them. In practice these are legacy web datasets;
+MCP imports always declare timing.
 
 `find_predictive_fields` ranks registered numeric dataset fields and built-in market fields
 alongside trade fields. `filter_curve` accepts these names directly (for example `signal.score`
