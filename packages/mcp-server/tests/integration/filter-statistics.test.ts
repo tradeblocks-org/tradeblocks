@@ -529,3 +529,94 @@ test("large threshold and percentile arrays retain legacy schema acceptance with
     expect(refused.structuredContent).not.toHaveProperty("thresholds");
   }
 });
+
+test("large daily dataset filter completes or names its work refusal", async () => {
+  const days = Array.from({ length: 2200 }, (_, i) => {
+    const date = new Date(2022, 0, 1 + i);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  });
+  await fixture(
+    days.flatMap((date, i) =>
+      Array.from({ length: 11 }, () => ({ date, pl: i % 2 ? 10 : -9, signal: i % 2 })),
+    ),
+  );
+  const imported = await handlers.import_daily_dataset({
+    name: "signal",
+    content: ["date,score", ...days.map((date, i) => `${date},${i % 2}`)].join("\n"),
+    columnTiming: { score: "open" },
+    knownBy: "09:30",
+  });
+  expect(imported).not.toMatchObject({ isError: true });
+  for (const unit of ["trade", "day"]) {
+    const started = performance.now();
+    const output = await handlers.filter_curve({
+      blockId: "sample",
+      field: "signal.score",
+      unit,
+      mode: "both",
+      permutation: { iterations: 99, block: "month", seed: 42 },
+    });
+    console.log(
+      "large-filter-timing",
+      unit,
+      performance.now() - started,
+      output.structuredContent?.reason ?? output.structuredContent?.permutation,
+    );
+    expect(output.isError).not.toBe(true);
+    if (unit === "day") {
+      expect(output.structuredContent?.baseline).toMatchObject({ count: 2200 });
+      expect(output.structuredContent?.permutation).toMatchObject({ status: "ok" });
+    } else expect(output.structuredContent).toMatchObject({ status: "refused" });
+  }
+}, 180_000);
+
+test("day sweeps and month permutations equal an entry-day oracle, not an eleven-fold trade shuffle", async () => {
+  const days = Array.from({ length: 120 }, (_, i) => ({
+    date: `${2024 + Math.floor(i / 120)}-${String(1 + Math.floor(i / 10)).padStart(2, "0")}-${String(1 + (i % 10)).padStart(2, "0")}`,
+    pl: i % 10 < (Math.floor(i / 10) % 2 ? 8 : 2) ? 11 : -11,
+    signal: Math.floor(i / 10) % 2,
+  }));
+  await fixture(
+    days.flatMap((day) =>
+      Array.from({ length: 11 }, (_, i) => ({ ...day, pl: i < 10 ? 1 : day.pl - 10 })),
+    ),
+  );
+  const input = {
+    blockId: "sample",
+    field: "custom.signal",
+    thresholds: [0.5],
+    mode: "both",
+    objective: "winRate",
+    permutation: { iterations: 99, block: "month", seed: 42 },
+  };
+  const actual = (await handlers.filter_curve({ ...input, unit: "day" })).structuredContent!;
+  expect(actual.baseline).toMatchObject({ count: 120, totalPl: 0, winRate: 0.5 });
+  await rm(path.join(baseDir, "sample"), { recursive: true });
+  await fixture(days);
+  const oracle = (await handlers.filter_curve(input)).structuredContent!;
+  for (const key of ["baseline", "thresholds", "bestThreshold", "perYear", "permutation"])
+    expect(actual[key]).toEqual(oracle[key]);
+});
+
+test("day mode names every date with a varying or partially uncovered field", async () => {
+  await fixture([
+    { date: "2025-01-02", pl: 1, signal: 0 },
+    { date: "2025-01-02", pl: 2, signal: 1 },
+    { date: "2025-01-03", pl: 3, signal: 2 },
+    { date: "2025-01-03", pl: 4, signal: 3 },
+  ]);
+  expect(
+    (
+      await handlers.filter_curve({
+        blockId: "sample",
+        field: "custom.signal",
+        unit: "day",
+        mode: "both",
+      })
+    ).structuredContent,
+  ).toMatchObject({
+    status: "refused",
+    reason: "day_field_varies",
+    days: ["2025-01-02", "2025-01-03"],
+  });
+});

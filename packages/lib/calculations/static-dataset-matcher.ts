@@ -245,14 +245,15 @@ export function combineDateAndTime(dateOpened: Date, timeOpened: string): Date {
  * Get the Eastern Time offset in minutes for a given date
  * Returns the offset from UTC in minutes (e.g., -300 for EST, -240 for EDT)
  */
+const easternOffsetFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  timeZoneName: "shortOffset",
+});
+
 function getEasternTimeOffset(date: Date): number {
   // Use Intl to get the actual offset for America/New_York
   // This correctly handles DST transitions
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    timeZoneName: "shortOffset",
-  });
-  const parts = formatter.formatToParts(date);
+  const parts = easternOffsetFormatter.formatToParts(date);
   const tzPart = parts.find((p) => p.type === "timeZoneName");
 
   if (tzPart) {
@@ -307,15 +308,15 @@ export function matchTradeToDataset(
  * Get the date-only portion of a timestamp as YYYY-MM-DD string in Eastern Time
  * This ensures we're comparing calendar dates in the trading timezone
  */
+const easternDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 function getDateOnly(date: Date): string {
-  // Format the date in Eastern Time to get the correct calendar date
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return formatter.format(date); // Returns YYYY-MM-DD format
+  return easternDateFormatter.format(date);
 }
 
 /**

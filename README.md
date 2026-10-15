@@ -106,6 +106,9 @@ Predictive field ranking also supports opt-in Spearman and Kendall correlation v
 stability, and seeded whole-month block permutation with full-sweep selection adjustment
 and Holm p-values. Existing single-field calls remain unchanged. See
 [the tool contract and limits](docs/mcp-tools.md#filter-curve-significance-and-stability).
+Day-level filter analysis (`unit: "day"`, 4.5.0) aggregates multi-entry days before
+scoring and permutation, refuses within-day varying fields by name, and admits
+large requests before expensive field resolution.
 See the [4.4.0 release notes](releases/v4.4.0.md) for the “Is this filter real?”
 workflow, assumptions, within-request testing family and computational limits.
 

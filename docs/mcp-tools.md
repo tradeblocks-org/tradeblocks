@@ -246,6 +246,15 @@ response. `fields`, `objective`, or `permutation` opts into `bestThreshold` and 
 multi-field results live in `fields`, including named unavailable/uncovered entries.
 Each field has its own covered baseline; dataset timing and `maxMissedSessions` are unchanged.
 
+`unit: "day"` (4.5.0) sums reported P&L by entry calendar date before the
+sweep, yearly rows, and whole-month permutation. Win rate then counts days with
+positive summed P&L (`winRateBasis` in the response), not winning trades.
+Every resolved field value, including missing values, must agree within each day;
+otherwise `day_field_varies` refuses that field and lists the varying `days`.
+Default `unit: "trade"` retains the existing output. Work admission runs before
+field resolution, conservatively counting all selected trades or entry days before
+field coverage; it never silently drops a field to fit the budget.
+
 `objective` is `totalPl` by default, or `winRate` (percentage-point gain). Best thresholds
 rank P&L delta then win-rate gain, or win-rate gain then P&L delta, using the same ranking
 module as `suggest_filters`. Only candidates keeping and removing at least one covered
@@ -284,9 +293,9 @@ and `permutation_work_limit`. Iterations are capped at **499**. Only when permut
 is requested, `thresholds` and `percentileSteps` are limited to **100** entries each:
 larger arrays produce the named `permutation_candidate_limit` refusal before any sweep.
 Without permutation, these arrays retain their existing unrestricted schema acceptance.
-Permutation admission then estimates work for every requested field using its covered count
-`n`, requested threshold/percentile count `t` (conservative before deduplication), and
-iterations `r`:
+Permutation admission estimates work before resolving fields, using the selected
+trade/day count `n` (an upper bound on covered count), threshold/percentile count `t`
+(conservative before deduplication), and iterations `r`:
 `(r + 2) × (n × ceil(log2(max(2,n))) + 6nt + 3t × ceil(log2(max(2,2t))))`.
 The estimate includes sorting the values and candidates on every sweep, filtering and
 scoring both directions, plus the observed sweeps. Its limits are **30 million work

@@ -220,6 +220,12 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           .max(10)
           .optional()
           .describe("Fields to compare with Holm-adjusted permutation p-values."),
+        unit: z
+          .enum(["trade", "day"])
+          .optional()
+          .describe(
+            "Sweep trades (default) or summed entry-date P&L; day fields must be constant within each day.",
+          ),
         objective: z
           .enum(["totalPl", "winRate"])
           .optional()
@@ -265,6 +271,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
         fields,
         objective,
         permutation,
+        unit,
         mode,
         thresholds,
         percentileSteps,
@@ -292,9 +299,6 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             };
           }
 
-          // Enrich trades
-          const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
-          const enrichedTrades = resolved.trades;
           const names = fields ?? (field ? [field] : []);
           if (!names.length || (fields && field))
             throw new Error("Provide exactly one of field or fields.");
@@ -317,10 +321,10 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
               );
             const candidates = thresholds?.length || percentileSteps?.length || 7;
             const estimates = names.map((name) => {
-              const coveredCount = enrichedTrades.reduce(
-                (count, trade) => count + (getTradeFieldValue(trade, name) !== null ? 1 : 0),
-                0,
-              );
+              const coveredCount =
+                unit === "day"
+                  ? new Set(trades.map((trade) => trade.dateOpened.getTime())).size
+                  : trades.length;
               // Include sorting values/candidates and filtering/scoring both directions on every sweep.
               const sweepWork =
                 coveredCount * Math.ceil(Math.log2(Math.max(2, coveredCount))) +
@@ -345,6 +349,8 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                 fields: estimates,
               });
           }
+          const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
+          const enrichedTrades = resolved.trades;
           const results = names.map((name) => {
             try {
               if (
@@ -363,9 +369,11 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                 (trade) => getTradeFieldValue(trade, name),
                 {
                   mode,
+                  unit,
                   thresholds,
                   percentileSteps,
-                  objective: objective ?? (fields || permutation ? "totalPl" : undefined),
+                  objective:
+                    objective ?? (fields || permutation || unit === "day" ? "totalPl" : undefined),
                   permutation,
                 },
               );
@@ -376,6 +384,14 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                 ...analysis,
               };
             } catch (error) {
+              if (error instanceof Error && "reason" in error && "days" in error)
+                return {
+                  field: name,
+                  status: "refused",
+                  reason: error.reason,
+                  days: error.days,
+                  error: `${name}: ${error.message}`,
+                };
               if (!fields) throw error;
               return { field: name, reason: "field_unavailable", error: (error as Error).message };
             }
@@ -412,6 +428,11 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
               fields: results,
             });
           const result = results[0];
+          if ("status" in result && result.status === "refused")
+            return createToolOutput(`Filter curve refused: ${result.reason}`, {
+              blockId,
+              ...result,
+            });
           if (result.error !== undefined)
             return { content: [{ type: "text", text: result.error }] };
           const { field: resultField, ...curve } = result;

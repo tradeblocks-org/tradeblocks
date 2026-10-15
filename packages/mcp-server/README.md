@@ -581,6 +581,12 @@ Field, objective and mode choices across separate requests are outside the Holm 
 Monthly blocks retain within-month dependence, not cross-month dependence; block
 exchangeability is an assumption. See [the full contract](../../docs/mcp-tools.md#filter-curve-significance-and-stability).
 
+In 4.5.0, `unit: "day"` aggregates entry-date P&L before scoring and month
+permutation; win rate counts profitable days. A field varying within a day is
+refused as `day_field_varies`, with the varying dates. Cheap request/work admission
+precedes causal field resolution and counts the chosen unit conservatively before
+coverage. Omitted `unit` retains trade-mode outputs.
+
 `suggest_filters` defaults to `objective: "totalPl"`: only positive P&L improvements,
 ranked by P&L improvement with win-rate gain as tie-breaker. `objective: "winRate"`
 admits/ranks by win-rate gain with P&L tie-breaks. `minImprovementPct` (default 3

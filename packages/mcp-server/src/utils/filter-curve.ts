@@ -7,6 +7,7 @@ interface CurveTrade {
 }
 interface Options {
   mode: "lt" | "gt" | "both";
+  unit?: "trade" | "day";
   thresholds?: number[];
   percentileSteps?: number[];
   objective?: FilterObjective;
@@ -28,6 +29,26 @@ export function analyzeFilterCurve<T extends CurveTrade>(
   valueOf: (trade: T) => number | null,
   options: Options,
 ) {
+  if (options.unit === "day") {
+    const days = new Map<string, T>();
+    const varied = new Set<string>();
+    for (const trade of trades) {
+      const date = trade.dateOpened;
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const day = days.get(key);
+      if (!day) days.set(key, { ...trade });
+      else {
+        if (valueOf(day) !== valueOf(trade)) varied.add(key);
+        day.pl += trade.pl;
+      }
+    }
+    if (varied.size)
+      throw Object.assign(new Error("day_field_varies"), {
+        reason: "day_field_varies",
+        days: [...varied].sort(),
+      });
+    trades = [...days.values()].sort((a, b) => a.dateOpened.getTime() - b.dateOpened.getTime());
+  }
   const covered = trades.filter((trade) => valueOf(trade) !== null);
   const base = population(covered);
   const uncovered = population(trades.filter((trade) => valueOf(trade) === null));
@@ -91,6 +112,9 @@ export function analyzeFilterCurve<T extends CurveTrade>(
     .sort((a, b) => b.score - a.score);
   const legacy = {
     tradesAnalyzed: covered.length,
+    ...(options.unit === "day"
+      ? { unit: "day", winRateBasis: "days with positive summed entry-date P&L" }
+      : {}),
     baseline,
     thresholds,
     sweetSpots,
