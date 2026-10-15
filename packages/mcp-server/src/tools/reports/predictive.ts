@@ -340,14 +340,27 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
               objective,
             });
           const capital = riskObjective
-            ? resolveStartingCapital(trades, block.dailyLogs)
+            ? resolveStartingCapital(trades, strategy ? undefined : block.dailyLogs)
             : undefined;
+          const capitalReason =
+            capital?.source === "assumed_default"
+              ? strategy
+                ? "portfolio_capital_not_applicable_to_strategy"
+                : "capital_unavailable"
+              : undefined;
           if (objective === "mar" && capital?.source === "assumed_default")
             return createToolOutput("MAR requires observed starting capital", {
               blockId,
               status: "refused",
               reason: "mar_requires_capital",
               objective,
+              capitalReason,
+              ...(strategy
+                ? {
+                    capitalNote:
+                      "Portfolio daily-log capital does not apply to a single strategy; no observed strategy trade-funds evidence is available.",
+                  }
+                : {}),
             });
           if (permutation) {
             if ((thresholds?.length ?? 0) > 100 || (percentileSteps?.length ?? 0) > 100)
@@ -453,6 +466,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                   permutation,
                   startingCapital:
                     capital?.source !== "assumed_default" ? capital?.amount : undefined,
+                  capitalReason,
                   groupBy:
                     groupEntry && groupValues
                       ? {

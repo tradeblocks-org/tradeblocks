@@ -14,6 +14,7 @@ interface Options<T extends CurveTrade> {
   percentileSteps?: number[];
   objective?: CurveObjective;
   startingCapital?: number;
+  capitalReason?: string;
   permutation?: { iterations: number; block: "month"; seed: number };
   groupBy?: {
     field: string;
@@ -26,7 +27,7 @@ interface Options<T extends CurveTrade> {
 interface RiskStats {
   sharpe: number;
   mar: number | null;
-  maxDrawdown: { dollars: number; percent: number | null };
+  maxDrawdown: { dollars: number; percent: number | null; percentReason?: string };
   annualizedReturnPct: number | null;
 }
 
@@ -112,7 +113,13 @@ export function analyzeFilterCurve<T extends CurveTrade>(
     return {
       sharpe: calculateSharpeRatio(pls, 252),
       mar: mar !== null && Number.isFinite(mar) ? mar : null,
-      maxDrawdown: { dollars, percent },
+      maxDrawdown: {
+        dollars,
+        percent,
+        ...(percent === null
+          ? { percentReason: options.capitalReason ?? "capital_unavailable" }
+          : {}),
+      },
       annualizedReturnPct:
         annualizedReturnPct !== null && Number.isFinite(annualizedReturnPct)
           ? annualizedReturnPct
@@ -446,6 +453,7 @@ export function analyzeFilterCurve<T extends CurveTrade>(
                     ? "CAGR (365.25 calendar days/year) / max drawdown as percent of starting capital"
                     : "covered baseline max drawdown dollars minus kept max drawdown dollars; smaller drawdown is better",
               startingCapital: options.startingCapital ?? null,
+              ...(options.capitalReason ? { capitalReason: options.capitalReason } : {}),
               dailyCurve: "covered entry dates; filtered dates flat (0 P&L)",
               maxDrawdownPercentBasis: "starting capital",
               zeroVarianceSharpe: 0,

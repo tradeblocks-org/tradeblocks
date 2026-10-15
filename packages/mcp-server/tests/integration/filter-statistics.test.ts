@@ -1072,3 +1072,80 @@ test("per-year and per-group MAR suppress spans below 90 calendar days but retai
     ]);
   }
 });
+
+test("strategy-filtered risk objectives never use portfolio daily-log capital", async () => {
+  await fixture(
+    [-10, 30, -20, 40].map((pl, i) => ({
+      date: ["2025-01-02", "2025-01-03", "2025-05-02", "2025-05-03"][i],
+      pl,
+      signal: i === 2 ? 0 : 1,
+    })),
+  );
+  const csvPath = path.join(baseDir, "sample", "tradelog.csv");
+  const csv = await readFile(csvPath, "utf8");
+  await writeFile(
+    csvPath,
+    [
+      csv,
+      ...csv
+        .split("\n")
+        .slice(1)
+        .map((row) => row.replace(",Test,", ",Other,").replace(",10000,", ",50000,")),
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(baseDir, "sample", "dailylog.csv"),
+    "Date,Net Liquidity,P/L,Drawdown %\n2025-01-02,100100,100,0\n2025-05-03,100000,0,0\n",
+  );
+  const input = {
+    blockId: "sample",
+    field: "custom.signal",
+    unit: "day",
+    mode: "gt",
+    thresholds: [0.5],
+    strategy: "Test",
+  };
+  for (const objective of ["mar", "maxDrawdown", "sharpe"]) {
+    const result = (await handlers.filter_curve({ ...input, objective })).structuredContent!;
+    expect(result.objectiveMetadata).toMatchObject({ startingCapital: 10010 });
+    expect(result.baseline).toMatchObject({
+      count: 4,
+      maxDrawdown: { dollars: 20, percent: (20 / 10010) * 100 },
+    });
+    expect(result.bestThreshold).toMatchObject({ objectiveDelta: expect.any(Number) });
+  }
+  const unscoped = (
+    await handlers.filter_curve({
+      ...input,
+      strategy: undefined,
+      objective: "mar",
+    })
+  ).structuredContent!;
+  expect(unscoped.objectiveMetadata).toMatchObject({ startingCapital: 100000 });
+  await writeFile(
+    csvPath,
+    (await readFile(csvPath, "utf8")).replace("Funds at Close", "No Capital"),
+  );
+  expect(
+    (await handlers.filter_curve({ ...input, objective: "mar" })).structuredContent,
+  ).toMatchObject({
+    status: "refused",
+    reason: "mar_requires_capital",
+    capitalReason: "portfolio_capital_not_applicable_to_strategy",
+  });
+  for (const objective of ["sharpe", "maxDrawdown"]) {
+    const result = (await handlers.filter_curve({ ...input, objective })).structuredContent!;
+    expect(result.objectiveMetadata).toMatchObject({
+      startingCapital: null,
+      capitalReason: "portfolio_capital_not_applicable_to_strategy",
+    });
+    expect(result.baseline).toMatchObject({
+      maxDrawdown: {
+        dollars: 20,
+        percent: null,
+        percentReason: "portfolio_capital_not_applicable_to_strategy",
+      },
+    });
+    expect(result.bestThreshold).toMatchObject({ objectiveDelta: expect.any(Number) });
+  }
+});

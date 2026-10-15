@@ -291,6 +291,15 @@ They refuse trade units as `objective_requires_day`.
   Its objective delta is **baseline drawdown minus kept drawdown**: smaller is
   better. The percent denominator is starting capital, not the rolling peak.
 
+When `strategy` is supplied, portfolio daily logs are never a capital basis.
+Following the performance-chart convention, capital is reconstructed only from
+the strategy-filtered trades' observed funds evidence. Without that evidence,
+MAR refuses as `mar_requires_capital` with
+`capitalReason: "portfolio_capital_not_applicable_to_strategy"`.
+Sharpe and dollar drawdown still work; drawdown percent is null with the same
+`percentReason`, also reported as `objectiveMetadata.capitalReason`.
+Without a strategy filter, the existing daily-log/trade-funds capital policy is unchanged.
+
 Response `objectiveMetadata` states these definitions. Every risk candidate shows
 its objective delta against the covered baseline. Ranking shares the existing
 P&L/win-rate tie-breaks and eligibility (keep and remove at least one observation).
