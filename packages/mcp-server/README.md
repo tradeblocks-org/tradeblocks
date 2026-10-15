@@ -592,6 +592,12 @@ Day mode also offers `sharpe` (daily dollar P&L, rf=0, sample std, √252),
 flat. Trade units refuse these objectives; MAR additionally refuses missing capital.
 `objectiveMetadata` documents definitions and undefined cases. This dollar-P&L
 Sharpe intentionally differs from the capital-based portfolio return Sharpe.
+`groupBy: "regime.label"` adds chosen-threshold `perGroup` rows in either unit,
+with the same covered baseline/kept/removed shape as `perYear`. Numeric groups use
+`bins` or shared regime-analysis quartiles; categorical groups use values.
+Missing values form an explicit uncovered group, small groups stay flagged,
+and within-day varying groups refuse as `day_group_varies`. Group values honor
+the same causal availability and optional freshness limit.
 
 `suggest_filters` defaults to `objective: "totalPl"`: only positive P&L improvements,
 ranked by P&L improvement with win-rate gain as tie-breaker. `objective: "winRate"`

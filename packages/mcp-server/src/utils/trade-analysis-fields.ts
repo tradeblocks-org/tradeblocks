@@ -14,12 +14,14 @@ export async function resolveAnalysisFields(
   baseDir: string,
   trades: Trade[],
   maxMissedSessions?: number,
+  fields?: readonly string[],
 ) {
   const conn = await getConnection(baseDir);
   const datasets = await listDatasets(conn);
   const catalog = await runtimeFieldCatalog(conn);
+  const requestedFields = fields ? new Set(fields) : undefined;
   const datasetMatches = trades.map((trade) =>
-    resolveTradeDatasets(datasets, trade, maxMissedSessions),
+    resolveTradeDatasets(datasets, trade, maxMissedSessions, requestedFields),
   );
   const keys = trades.map((trade) => {
     const date = new Date(trade.dateOpened);
@@ -36,7 +38,11 @@ export async function resolveAnalysisFields(
     ...new Map(keys.map((key) => [marketTickerDateKey(key.ticker, key.date), key])).values(),
   ];
   const market = new Map<string, Record<string, unknown>>();
-  if (unique.length) {
+  if (
+    unique.length &&
+    (!requestedFields ||
+      catalog.some((entry) => entry.source === "market" && requestedFields.has(entry.field)))
+  ) {
     const { sql, params } = buildLookaheadFreeQuery(unique);
     const result = await conn.runAndReadAll(sql, params);
     const names = Array.from({ length: result.columnCount }, (_, i) => result.columnName(i));

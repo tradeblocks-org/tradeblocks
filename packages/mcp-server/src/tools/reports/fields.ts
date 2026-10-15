@@ -76,7 +76,7 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
           }
 
           // Enrich trades
-          const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
+          const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions, [field]);
           const enrichedTrades = resolved.trades;
 
           // Extract field values

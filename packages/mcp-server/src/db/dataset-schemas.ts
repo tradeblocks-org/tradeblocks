@@ -8,6 +8,7 @@ import {
 } from "@tradeblocks/lib";
 import { OPEN_KNOWN_FIELDS, CLOSE_KNOWN_FIELDS, STATIC_FIELDS } from "../utils/field-timing.ts";
 import { resolveTradeTicker } from "../utils/ticker.ts";
+import { CONTEXT_FIELD_TYPES } from "../utils/enrichment-verification.ts";
 import { z } from "zod";
 
 export const maxMissedSessionsSchema = z
@@ -149,7 +150,7 @@ export async function runtimeFieldCatalog(conn: DuckDBConnection): Promise<Analy
     ...[...OPEN_KNOWN_FIELDS, ...CLOSE_KNOWN_FIELDS, ...STATIC_FIELDS].map<AnalysisField>(
       (field) => ({
         field,
-        type: "numeric",
+        type: CONTEXT_FIELD_TYPES[field] === "varchar" ? "categorical" : "numeric",
         timing: CLOSE_KNOWN_FIELDS.has(field) ? "close" : "open",
         knownBy: null,
         source: "market",
@@ -169,6 +170,7 @@ export function resolveTradeDatasets(
   entries: StoredDataset[],
   trade: Trade,
   maxMissedSessions?: number,
+  fields?: ReadonlySet<string>,
 ) {
   const values: Record<string, number | string> = {};
   const provenance: Record<string, DatasetProvenance> = {};
@@ -177,9 +179,10 @@ export function resolveTradeDatasets(
   for (const { dataset, rows, ticker } of entries) {
     if (ticker && ticker !== resolveTradeTicker(trade)) continue;
     for (const column of dataset.columns) {
+      const field = `${dataset.name}.${column}`;
+      if (fields && !fields.has(field)) continue;
       const match = resolveDatasetColumnAtTime(dataset, rows, column, entryTime, maxMissedSessions);
       if (!match) continue;
-      const field = `${dataset.name}.${column}`;
       if (match.accepted) values[field] = match.value;
       (match.accepted ? provenance : rejected)[field] = {
         sourceTimestamp: match.row.timestamp.toISOString(),

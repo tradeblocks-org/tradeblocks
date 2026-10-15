@@ -216,6 +216,7 @@ async function loadTradesAndMarket(
   blockId: string,
   strategyName: string,
   maxMissedSessions?: number,
+  fields?: ReadonlySet<string>,
 ): Promise<{
   rows: TradeWithFields[];
   unmatchedCount: number;
@@ -249,7 +250,7 @@ async function loadTradesAndMarket(
   const marketMap = recordsByTickerDate(marketRecords);
   const datasets = await listDatasets(conn);
   const datasetMatches = trades.map((trade) =>
-    resolveTradeDatasets(datasets, trade, maxMissedSessions),
+    resolveTradeDatasets(datasets, trade, maxMissedSessions, fields),
   );
 
   // Preserve built-in coverage separately from the per-field joined values.
@@ -362,16 +363,19 @@ export async function handleAnalyzeStructureFit(
     );
   }
 
+  const catalog = await runtimeFieldCatalog(conn);
+  const marketFilters = partitionMarketFilters(profile.entryFilters, catalog);
   // Load trades + market data
   const { rows, unmatchedCount, allTrades } = await loadTradesAndMarket(
     baseDir,
     blockId,
     strategyName,
     input.maxMissedSessions,
+    new Set(
+      marketFilters.filters.flatMap((filter) => buildFilterPredicate(filter, catalog).fields),
+    ),
   );
 
-  const catalog = await runtimeFieldCatalog(conn);
-  const marketFilters = partitionMarketFilters(profile.entryFilters, catalog);
   const datasetFields = marketFilters.filters
     .filter((filter) => filter.field.includes("."))
     .map((filter) => filter.field);
@@ -681,15 +685,16 @@ export async function handleValidateEntryFilters(
     );
   }
 
+  const predicates: FilterPredicate[] = filters.map((filter) =>
+    buildFilterPredicate(filter, catalog),
+  );
   // Load trades + market data
   const { rows, unmatchedCount, allTrades } = await loadTradesAndMarket(
     baseDir,
     blockId,
     strategyName,
     input.maxMissedSessions,
-  );
-  const predicates: FilterPredicate[] = filters.map((filter) =>
-    buildFilterPredicate(filter, catalog),
+    new Set(predicates.flatMap((predicate) => predicate.fields)),
   );
   const matched = rows.filter(({ market }) =>
     predicates.every((predicate) => predicate.hasData(market)),

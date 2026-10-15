@@ -1,12 +1,13 @@
 import { sweepThresholds } from "./threshold-sweep.ts";
 import { calculateMaxDrawdown, calculateSharpeRatio } from "@tradeblocks/lib";
 import { rankSuggestions, type CurveObjective } from "../tools/shared/filter-objective.ts";
+import { groupFieldValues } from "../tools/shared/field-analysis.ts";
 
 interface CurveTrade {
   pl: number;
   dateOpened: Date;
 }
-interface Options {
+interface Options<T extends CurveTrade> {
   mode: "lt" | "gt" | "both";
   unit?: "trade" | "day";
   thresholds?: number[];
@@ -14,6 +15,12 @@ interface Options {
   objective?: CurveObjective;
   startingCapital?: number;
   permutation?: { iterations: number; block: "month"; seed: number };
+  groupBy?: {
+    field: string;
+    type: "numeric" | "categorical";
+    bins?: number[];
+    valueOf: (trade: T) => number | string | null;
+  };
 }
 
 interface RiskStats {
@@ -36,18 +43,28 @@ function population(trades: Array<{ pl: number }>) {
 export function analyzeFilterCurve<T extends CurveTrade>(
   trades: T[],
   valueOf: (trade: T) => number | null,
-  options: Options,
+  options: Options<T>,
 ) {
+  const groupValues = options.groupBy
+    ? new Map(trades.map((trade) => [trade, options.groupBy!.valueOf(trade)]))
+    : undefined;
   if (options.unit === "day") {
     const days = new Map<string, T>();
+    const fieldValues = new Map<T, number | null>();
     const varied = new Set<string>();
+    const variedGroups = new Set<string>();
     for (const trade of trades) {
       const date = trade.dateOpened;
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
       const day = days.get(key);
-      if (!day) days.set(key, { ...trade });
-      else {
-        if (valueOf(day) !== valueOf(trade)) varied.add(key);
+      if (!day) {
+        const aggregate = { ...trade };
+        days.set(key, aggregate);
+        fieldValues.set(aggregate, valueOf(trade));
+        if (groupValues) groupValues.set(aggregate, groupValues.get(trade) ?? null);
+      } else {
+        if (fieldValues.get(day) !== valueOf(trade)) varied.add(key);
+        if (groupValues && groupValues.get(day) !== groupValues.get(trade)) variedGroups.add(key);
         day.pl += trade.pl;
       }
     }
@@ -56,7 +73,14 @@ export function analyzeFilterCurve<T extends CurveTrade>(
         reason: "day_field_varies",
         days: [...varied].sort(),
       });
+    if (variedGroups.size)
+      throw Object.assign(new Error("day_group_varies"), {
+        reason: "day_group_varies",
+        days: [...variedGroups].sort(),
+        groupBy: options.groupBy!.field,
+      });
     trades = [...days.values()].sort((a, b) => a.dateOpened.getTime() - b.dateOpened.getTime());
+    valueOf = (trade) => fieldValues.get(trade) ?? null;
   }
   const covered = trades.filter((trade) => valueOf(trade) !== null);
   const objective = options.objective ?? "totalPl";
@@ -155,7 +179,7 @@ export function analyzeFilterCurve<T extends CurveTrade>(
       avgPlDelta: stats.count ? Math.round((avgPl - baseline.avgPl) * 100) / 100 : -baseline.avgPl,
       ...(stats.count > 0 && stats.count < 30
         ? {
-            lowSampleWarning: `${stats.count} trades may be insufficient for reliable statistics (recommend >= 30)`,
+            lowSampleWarning: `${stats.count} ${options.unit === "day" ? "days" : "trades"} may be insufficient for reliable statistics (recommend >= 30)`,
           }
         : {}),
     };
@@ -262,43 +286,72 @@ export function analyzeFilterCurve<T extends CurveTrade>(
         objectiveDelta: chosen.objectiveDelta,
       }
     : null;
-  const years = [...new Set(trades.map((trade) => trade.dateOpened.getFullYear()))].sort();
-  const perYear = chosen
-    ? years.map((year) => {
-        const annual = covered.filter((trade) => trade.dateOpened.getFullYear() === year);
-        const uncovered = population(
-          trades.filter(
-            (trade) => trade.dateOpened.getFullYear() === year && valueOf(trade) === null,
-          ),
-        );
-        const kept = annual.filter((trade) =>
+  function breakdown(subset: T[]) {
+    const annual = subset.filter((trade) => valueOf(trade) !== null);
+    const uncovered = population(subset.filter((trade) => valueOf(trade) === null));
+    const kept = chosen
+      ? annual.filter((trade) =>
           chosen.direction === "lt"
             ? valueOf(trade)! < chosen.threshold
             : valueOf(trade)! > chosen.threshold,
-        );
-        const removed = annual.filter((trade) =>
-          chosen.direction === "lt"
-            ? valueOf(trade)! >= chosen.threshold
-            : valueOf(trade)! <= chosen.threshold,
-        );
-        const baseline = stats(annual);
-        const keptStats = stats(kept, annual);
-        return {
-          year,
-          baseline: {
-            ...baseline,
-            uncoveredCount: uncovered.count,
-            uncoveredTotalPl: uncovered.totalPl,
-          },
-          kept: keptStats,
-          removed: stats(removed, annual),
-          objectiveDelta: delta(kept, annual),
-          ...(annual.length < 30 || kept.length < 30 || removed.length < 30
-            ? { lowSampleWarning: "Fewer than 30 covered, kept or removed entries" }
-            : {}),
-        };
-      })
+        )
+      : [];
+    const keptSet = new Set(kept);
+    const removed = annual.filter((trade) => !keptSet.has(trade));
+    return {
+      baseline: {
+        ...stats(annual),
+        uncoveredCount: uncovered.count,
+        uncoveredTotalPl: uncovered.totalPl,
+      },
+      kept: stats(kept, annual),
+      removed: stats(removed, annual),
+      objectiveDelta: delta(kept, annual),
+      ...(annual.length < 30 || kept.length < 30 || removed.length < 30
+        ? { lowSampleWarning: "Fewer than 30 covered, kept or removed entries" }
+        : {}),
+    };
+  }
+  const years = [...new Set(trades.map((trade) => trade.dateOpened.getFullYear()))].sort();
+  const perYear = chosen
+    ? years.map((year) => ({
+        year,
+        ...breakdown(trades.filter((trade) => trade.dateOpened.getFullYear() === year)),
+      }))
     : [];
+  let perGroup;
+  if (options.groupBy && groupValues) {
+    const pool = trades.flatMap((trade) => {
+      const value = groupValues.get(trade);
+      return value === null || value === undefined ? [] : [{ trade, value }];
+    });
+    const { groups } = groupFieldValues(pool, options.groupBy.type, options.groupBy.bins);
+    const grouped = [...groups].sort(([, a], [, b]) =>
+      typeof a.value === "number" && typeof b.value === "number"
+        ? a.value - b.value
+        : String(a.value).localeCompare(String(b.value)),
+    );
+    const missing = trades.filter((trade) => groupValues.get(trade) == null);
+    perGroup = chosen
+      ? [
+          ...grouped.map(([group, entries]) => ({
+            group,
+            groupValue: entries.value,
+            ...breakdown(entries.trades),
+          })),
+          ...(missing.length
+            ? [
+                {
+                  group: "uncovered",
+                  groupValue: null,
+                  uncoveredGroup: true,
+                  ...breakdown(missing),
+                },
+              ]
+            : []),
+        ]
+      : [];
+  }
   let permutation:
     | {
         iterations: number;
@@ -365,6 +418,7 @@ export function analyzeFilterCurve<T extends CurveTrade>(
       objective,
       bestThreshold,
       perYear,
+      ...(perGroup ? { groupBy: options.groupBy!.field, perGroup } : {}),
       ...(riskObjective
         ? {
             ...(objective === "mar" && !chosen

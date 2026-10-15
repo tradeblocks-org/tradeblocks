@@ -5,7 +5,12 @@ import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerPredictiveTools } from "../../src/tools/reports/predictive.ts";
 import { registerDatasetTools } from "../../src/tools/datasets.ts";
-import { getConnection, closeConnection } from "../../src/db/connection.ts";
+import {
+  getConnection,
+  closeConnection,
+  upgradeToReadWrite,
+  downgradeToReadOnly,
+} from "../../src/db/connection.ts";
 import type { ToolOutput } from "../../src/utils/output-formatter.ts";
 import { holmAdjust } from "@tradeblocks/lib";
 import type { ZodType } from "zod";
@@ -547,6 +552,12 @@ test("large daily dataset filter completes or names its work refusal", async () 
     knownBy: "09:30",
   });
   expect(imported).not.toMatchObject({ isError: true });
+  const unrelated = await handlers.import_daily_dataset({
+    name: "unrelated",
+    content: "timestamp,old\n2025-01-02T09:00:00-05:00,1",
+    columnTiming: { old: "open" },
+  });
+  expect(unrelated.isError).not.toBe(true);
   for (const unit of ["trade", "day"]) {
     const started = performance.now();
     const output = await handlers.filter_curve({
@@ -566,6 +577,7 @@ test("large daily dataset filter completes or names its work refusal", async () 
     if (unit === "day") {
       expect(output.structuredContent?.baseline).toMatchObject({ count: 2200 });
       expect(output.structuredContent?.permutation).toMatchObject({ status: "ok" });
+      expect(performance.now() - started).toBeLessThan(10_000);
     } else expect(output.structuredContent).toMatchObject({ status: "refused" });
   }
 }, 180_000);
@@ -598,7 +610,7 @@ test("day sweeps and month permutations equal an entry-day oracle, not an eleven
     expect(actual[key]).toEqual(oracle[key]);
 });
 
-test("day mode names every date with a varying or partially uncovered field", async () => {
+test("day mode names every date with a varying field", async () => {
   await fixture([
     { date: "2025-01-02", pl: 1, signal: 0 },
     { date: "2025-01-02", pl: 2, signal: 1 },
@@ -737,4 +749,236 @@ test("daily risk definitions match an independent four-date oracle with filtered
   expect(result.baseline.maxDrawdown).toEqual({ dollars: 20, percent: (20 / 10010) * 100 });
   const cagrPct = (Math.pow(10050 / 10010, 365.25 / 3) - 1) * 100;
   expect(result.baseline.mar).toBeCloseTo(cagrPct / ((20 / 10010) * 100), 10);
+});
+
+test("chosen threshold groups partition covered and uncovered totals with numeric quantiles or categories", async () => {
+  await fixture(
+    Array.from({ length: 80 }, (_, i) => ({
+      date: `2025-01-${String(2 + Math.floor(i / 20)).padStart(2, "0")}`,
+      pl: i % 2 ? 20 : -10,
+      signal: i % 2,
+    })),
+  );
+  expect(
+    (
+      await handlers.import_daily_dataset({
+        name: "regime",
+        content: "date,score,label\n2025-01-03,1,calm\n2025-01-04,2,busy\n2025-01-05,3,busy",
+        columnTiming: { score: "open", label: "open" },
+        knownBy: "09:30",
+      })
+    ).isError,
+  ).not.toBe(true);
+  const input = {
+    blockId: "sample",
+    field: "custom.signal",
+    mode: "gt",
+    objective: "totalPl",
+    thresholds: [0.5],
+  };
+  for (const groupBy of ["regime.score", "regime.label"]) {
+    const result = (await handlers.filter_curve(schemas.filter_curve.parse({ ...input, groupBy })))
+      .structuredContent!;
+    const rows = result.perGroup as Array<{
+      group: string;
+      uncoveredGroup?: boolean;
+      baseline: Stats & { uncoveredCount: number };
+      kept: Stats;
+      removed: Stats;
+      lowSampleWarning?: string;
+    }>;
+    expect(rows.reduce((sum, row) => sum + row.baseline.count, 0)).toBe(80);
+    expect(rows.reduce((sum, row) => sum + row.kept.count, 0)).toBe(40);
+    expect(rows.reduce((sum, row) => sum + row.removed.totalPl, 0)).toBe(-400);
+    expect(rows.find((row) => row.uncoveredGroup)).toMatchObject({
+      baseline: { count: 20 },
+      kept: { count: 10 },
+      removed: { count: 10 },
+      lowSampleWarning: expect.any(String),
+    });
+    expect(rows.filter((row) => !row.uncoveredGroup).map((row) => row.group)).toEqual(
+      groupBy === "regime.label" ? ["busy", "calm"] : ["[1, 2)", "[2, 3)", "[3, ∞)"],
+    );
+  }
+});
+
+test("day groups honor causal freshness, retain uncovered totals, and refuse intraday group variation", async () => {
+  await fixture(
+    Array.from({ length: 88 }, (_, i) => ({
+      date: ["2025-01-02", "2025-01-03", "2025-01-06", "2025-01-07"][Math.floor(i / 22)],
+      pl: i % 22 < 11 ? 2 : -1,
+      signal: i % 22 < 11 ? 1 : 0,
+    })),
+  );
+  await handlers.import_daily_dataset({
+    name: "grouping",
+    content: "date,value\n2025-01-02,1\n2025-01-03,2",
+    columnTiming: { value: "open" },
+    knownBy: "09:30",
+  });
+  const input = {
+    blockId: "sample",
+    field: "grouping.value",
+    unit: "day",
+    mode: "gt",
+    thresholds: [1.5],
+    groupBy: "grouping.value",
+    bins: [1.5],
+    maxMissedSessions: 0,
+  };
+  const result = (await handlers.filter_curve(schemas.filter_curve.parse(input)))
+    .structuredContent!;
+  const rows = result.perGroup as Array<{
+    baseline: Stats & { uncoveredCount: number };
+    kept: Stats;
+    removed: Stats;
+  }>;
+  // Friday's open value is stale on Monday/Tuesday; both fields use the same freshness rule.
+  expect(rows.reduce((sum, row) => sum + row.baseline.count + row.baseline.uncoveredCount, 0)).toBe(
+    4,
+  );
+  expect(rows.reduce((sum, row) => sum + row.kept.count, 0)).toBe(1);
+  expect(rows.reduce((sum, row) => sum + row.removed.count, 0)).toBe(1);
+  expect(result.perGroup).toContainEqual(
+    expect.objectContaining({
+      uncoveredGroup: true,
+      baseline: expect.objectContaining({ count: 0, uncoveredCount: 2, uncoveredTotalPl: 22 }),
+    }),
+  );
+  // Two entry times on each day see different timestamped group values.
+  const csvPath = path.join(baseDir, "sample", "tradelog.csv");
+  const csv = await readFile(csvPath, "utf8");
+  await writeFile(
+    csvPath,
+    csv
+      .split("\n")
+      .map((line, i) => (i > 0 && i % 2 ? line.replace("10:00:00", "11:00:00") : line))
+      .join("\n"),
+  );
+  await handlers.import_daily_dataset({
+    name: "intraday",
+    content: "timestamp,value\n2025-01-02T09:00:00-05:00,1\n2025-01-02T10:30:00-05:00,2",
+    columnTiming: { value: "open" },
+  });
+  const refused = (
+    await handlers.filter_curve({
+      ...input,
+      groupBy: "intraday.value",
+      maxMissedSessions: undefined,
+    })
+  ).structuredContent!;
+  expect(refused).toMatchObject({
+    status: "refused",
+    reason: "day_group_varies",
+    groupBy: "intraday.value",
+    days: ["2025-01-02"],
+  });
+});
+
+test("group declarations refuse unknown fields and incompatible bins by name", async () => {
+  await fixture([
+    { date: "2025-01-02", pl: 10, signal: 1 },
+    { date: "2025-01-03", pl: -5, signal: 0 },
+  ]);
+  await handlers.import_daily_dataset({
+    name: "category",
+    content: "date,value\n2025-01-02,calm",
+    columnTiming: { value: "open" },
+    knownBy: "09:30",
+  });
+  const input = { blockId: "sample", field: "custom.signal", mode: "both", thresholds: [0.5] };
+  for (const options of [
+    { bins: [1] },
+    { groupBy: "category.value", bins: [1] },
+    { groupBy: "category.value", bins: [2, 1] },
+  ])
+    expect((await handlers.filter_curve({ ...input, ...options })).structuredContent).toMatchObject(
+      { status: "refused", reason: "group_bins_invalid" },
+    );
+  expect(
+    (await handlers.filter_curve({ ...input, groupBy: "missing.value" })).structuredContent,
+  ).toMatchObject({ status: "refused", reason: "group_field_unavailable" });
+});
+
+test("MAR with zero baseline drawdown reports undefined candidates and a named refusal", async () => {
+  await fixture([
+    { date: "2025-01-02", pl: 10, signal: 1 },
+    { date: "2025-01-03", pl: 20, signal: 0 },
+  ]);
+  const result = (
+    await handlers.filter_curve({
+      blockId: "sample",
+      field: "custom.signal",
+      unit: "day",
+      objective: "mar",
+      mode: "both",
+      thresholds: [0.5],
+    })
+  ).structuredContent!;
+  expect(result).toMatchObject({ status: "refused", reason: "mar_undefined", bestThreshold: null });
+  expect(result.thresholds).toEqual([
+    expect.objectContaining({
+      lt: expect.objectContaining({ objectiveDelta: null, objectiveReason: "mar_undefined" }),
+      gt: expect.objectContaining({ objectiveDelta: null, objectiveReason: "mar_undefined" }),
+    }),
+  ]);
+});
+
+test("day P&L aggregation does not rewrite the constant field value being swept", async () => {
+  await fixture(
+    [1, 1, 1, 2, 2, 2].map((pl, i) => ({
+      date: i < 3 ? "2025-01-02" : "2025-01-03",
+      pl,
+      signal: 0,
+    })),
+  );
+  const result = (
+    await handlers.filter_curve({
+      blockId: "sample",
+      field: "pl",
+      unit: "day",
+      mode: "both",
+      thresholds: [1.5],
+    })
+  ).structuredContent!;
+  expect(result.baseline).toMatchObject({ count: 2, totalPl: 9 });
+  expect(result.thresholds).toEqual([
+    expect.objectContaining({
+      lt: expect.objectContaining({ count: 1, totalPl: 3 }),
+      gt: expect.objectContaining({ count: 1, totalPl: 6 }),
+    }),
+  ]);
+});
+
+test("built-in categorical group values use prior-session categories rather than numeric buckets", async () => {
+  await fixture([
+    { date: "2025-01-03", pl: -10, signal: 0 },
+    { date: "2025-01-06", pl: 20, signal: 1 },
+  ]);
+  const conn = await upgradeToReadWrite(baseDir);
+  await conn.run(
+    "INSERT INTO market.enriched (ticker, date) VALUES ('SPX', '2025-01-02'), ('SPX', '2025-01-03'), ('SPX', '2025-01-06')",
+  );
+  await conn.run(`INSERT INTO market.enriched_context (date, "Trend_Direction") VALUES
+    ('2025-01-02', 'up'), ('2025-01-03', 'down'), ('2025-01-06', 'flat')`);
+  await downgradeToReadOnly(baseDir);
+  const result = (
+    await handlers.filter_curve({
+      blockId: "sample",
+      field: "custom.signal",
+      groupBy: "Trend_Direction",
+      thresholds: [0.5],
+      mode: "both",
+    })
+  ).structuredContent!;
+  expect(result.perGroup).toEqual([
+    expect.objectContaining({
+      group: "down",
+      baseline: expect.objectContaining({ count: 1, totalPl: 20 }),
+    }),
+    expect.objectContaining({
+      group: "up",
+      baseline: expect.objectContaining({ count: 1, totalPl: -10 }),
+    }),
+  ]);
 });

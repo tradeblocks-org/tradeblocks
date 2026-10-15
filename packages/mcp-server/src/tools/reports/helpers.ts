@@ -56,8 +56,9 @@ export async function enrichAnalysisTrades(
   baseDir: string,
   trades: Trade[],
   maxMissedSessions?: number,
+  fields?: readonly string[],
 ) {
-  const resolved = await resolveAnalysisFields(baseDir, trades, maxMissedSessions);
+  const resolved = await resolveAnalysisFields(baseDir, trades, maxMissedSessions, fields);
   const enriched = enrichTrades(trades);
   for (let i = 0; i < enriched.length; i++) {
     const datasets: Record<string, Record<string, number | string>> = {};

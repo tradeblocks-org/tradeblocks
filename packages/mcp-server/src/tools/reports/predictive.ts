@@ -16,7 +16,11 @@ import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
 import { requireCoveredField } from "../../utils/trade-analysis-fields.ts";
 import { analyzeFilterCurve } from "../../utils/filter-curve.ts";
-import { datasetAgeOutput, maxMissedSessionsSchema } from "../../db/dataset-schemas.ts";
+import {
+  datasetAgeOutput,
+  maxMissedSessionsSchema,
+  runtimeFieldCatalog,
+} from "../../db/dataset-schemas.ts";
 import { resolveStartingCapital } from "../../utils/starting-capital.ts";
 
 /**
@@ -221,6 +225,15 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           .max(10)
           .optional()
           .describe("Fields to compare with Holm-adjusted permutation p-values."),
+        groupBy: z
+          .string()
+          .optional()
+          .describe("Built-in market or dataset field for the chosen-threshold regime breakdown."),
+        bins: z
+          .array(z.number().finite())
+          .min(1)
+          .optional()
+          .describe("Increasing numeric group cut points; omitted uses quartiles."),
         unit: z
           .enum(["trade", "day"])
           .optional()
@@ -273,6 +286,8 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
         objective,
         permutation,
         unit,
+        groupBy,
+        bins,
         mode,
         thresholds,
         percentileSteps,
@@ -305,6 +320,16 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             throw new Error("Provide exactly one of field or fields.");
           if (new Set(names).size !== names.length)
             throw new Error("fields must not contain duplicates.");
+          if (
+            bins &&
+            (!groupBy ||
+              bins.some((value, i) => !Number.isFinite(value) || (i > 0 && value <= bins[i - 1])))
+          )
+            return createToolOutput("Invalid group bins", {
+              blockId,
+              status: "refused",
+              reason: "group_bins_invalid",
+            });
           const riskObjective =
             objective !== undefined && objective !== "totalPl" && objective !== "winRate";
           if (riskObjective && unit !== "day")
@@ -370,8 +395,37 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                 fields: estimates,
               });
           }
-          const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
+          const groupEntry = groupBy
+            ? (await runtimeFieldCatalog(await getConnection(baseDir))).find(
+                (entry) => entry.field === groupBy,
+              )
+            : undefined;
+          if (groupBy && !groupEntry)
+            return createToolOutput("Unknown group field", {
+              blockId,
+              groupBy,
+              status: "refused",
+              reason: "group_field_unavailable",
+            });
+          if (bins && groupEntry?.type !== "numeric")
+            return createToolOutput("Bins require a numeric group field", {
+              blockId,
+              groupBy,
+              status: "refused",
+              reason: "group_bins_invalid",
+            });
+          const resolved = await enrichAnalysisTrades(
+            baseDir,
+            trades,
+            maxMissedSessions,
+            groupBy ? [...names, groupBy] : names,
+          );
           const enrichedTrades = resolved.trades;
+          const groupValues = groupBy
+            ? new Map(
+                enrichedTrades.map((trade, i) => [trade, resolved.values[i][groupBy] ?? null]),
+              )
+            : undefined;
           const results = names.map((name) => {
             try {
               if (
@@ -394,15 +448,25 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                   thresholds,
                   percentileSteps,
                   objective:
-                    objective ?? (fields || permutation || unit === "day" ? "totalPl" : undefined),
+                    objective ??
+                    (fields || permutation || groupBy || unit === "day" ? "totalPl" : undefined),
                   permutation,
                   startingCapital:
                     capital?.source !== "assumed_default" ? capital?.amount : undefined,
+                  groupBy:
+                    groupEntry && groupValues
+                      ? {
+                          field: groupEntry.field,
+                          type: groupEntry.type,
+                          bins,
+                          valueOf: (trade) => groupValues.get(trade) ?? null,
+                        }
+                      : undefined,
                 },
               );
               return {
                 field: name,
-                ...datasetAgeOutput(resolved.datasetAge, [name]),
+                ...datasetAgeOutput(resolved.datasetAge, groupBy ? [name, groupBy] : [name]),
                 ...curve,
                 ...analysis,
               };
@@ -413,6 +477,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                   status: "refused",
                   reason: error.reason,
                   days: error.days,
+                  ...(groupBy ? { groupBy } : {}),
                   error: `${name}: ${error.message}`,
                 };
               if (!fields) throw error;

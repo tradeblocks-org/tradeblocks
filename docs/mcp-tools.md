@@ -254,6 +254,13 @@ otherwise `day_field_varies` refuses that field and lists the varying `days`.
 Default `unit: "trade"` retains the existing output. Work admission runs before
 field resolution, conservatively counting all selected trades or entry days before
 field coverage; it never silently drops a field to fit the budget.
+Field-named analysis resolves only requested filter/group fields through the same
+availability rule. Unrelated registered datasets cannot inflate the work.
+`get_field_statistics`, field-based `suggest_filters` and `analyze_regime_performance`,
+and profile-based `validate_entry_filters` / `analyze_structure_fit` likewise resolve
+only their named fields (including cross-field comparison operands). Exhaustive
+`find_predictive_fields` still resolves the whole catalog; `enrich_trades` returns
+all fields for its paginated trades (default 50, maximum 500).
 
 With `unit: "day"`, `objective` also accepts `sharpe`, `mar`, and `maxDrawdown`.
 They use the covered entry-date P&L curve, keeping filtered dates flat at zero.
@@ -282,6 +289,27 @@ P&L/win-rate tie-breaks and eligibility (keep and remove at least one observatio
 Every permutation recomputes the baseline path and reruns the complete objective
 sweep. Risk-path work adds `36nt` per sweep to admission, covering path construction
 and risk statistics; Holm and the requested-field family are unchanged.
+
+`groupBy: "regime.label"` (a built-in market or registered dataset field) adds
+`perGroup` rows for the **same chosen threshold**, never independently optimized
+thresholds per group. This opts into `totalPl` selection if no objective was given.
+Rows have the `perYear` shape: covered baseline and its uncovered count/P&L,
+kept/removed counts, P&L, win rate, objective delta and small-sample warning.
+Groups partition every selected trade/day, including filter-uncovered observations.
+Missing group values form a separate `uncoveredGroup: true` row labelled `uncovered`;
+this flag distinguishes it from a real categorical value with that spelling.
+
+Numeric groups use increasing finite `bins` cut points or quartiles over the
+selected unit's group-covered observations, sharing the exact
+`analyze_regime_performance` binning. Intervals are lower-inclusive, upper-exclusive.
+Categorical groups use their values, ordered lexically; numeric groups are ordered
+by bucket, with the uncovered group last. Group values use the same causal resolver
+and `maxMissedSessions` as filter values. Day groups must be constant, including
+missingness, within each entry date: otherwise `day_group_varies` lists the dates
+and group field. Unknown groups refuse as `group_field_unavailable`; bins without
+`groupBy`, unordered cuts, or categorical-incompatible declarations refuse as
+`group_bins_invalid`. Small groups are flagged, never omitted. `groupBy` does not
+add another permutation search or change the Holm family.
 
 `objective` is `totalPl` by default, or `winRate` (percentage-point gain). Best thresholds
 rank P&L delta then win-rate gain, or win-rate gain then P&L delta, using the same ranking

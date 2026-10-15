@@ -25,6 +25,7 @@ export async function suggestFieldFilters(
     baseDir,
     trades,
     maxMissedSessions,
+    fields,
   );
   const suggestions: (SuggestionEvidence & {
     filter: string;
@@ -125,6 +126,47 @@ export async function suggestFieldFilters(
   });
 }
 
+/** Shared numeric quantile/explicit bins and categorical grouping for regime breakdowns. */
+export function groupFieldValues<T>(
+  pool: Array<{ trade: T; value: number | string }>,
+  type: "numeric" | "categorical",
+  bins?: number[],
+) {
+  if (bins && type !== "numeric") throw new Error("Bins require a numeric field");
+  if (bins?.some((value, i) => !Number.isFinite(value) || (i > 0 && value <= bins[i - 1])))
+    throw new Error("Bins must be finite, strictly increasing cut points");
+  const cuts =
+    type === "numeric"
+      ? (bins ??
+        sweepThresholds(
+          pool,
+          (item) => (typeof item.value === "number" ? item.value : null),
+          undefined,
+          [25, 50, 75],
+        ).map(({ threshold }) => threshold))
+      : [];
+  const groups = new Map<string, { value: number | string; trades: T[] }>();
+  for (const item of pool) {
+    let key: string;
+    let value: number | string = item.value;
+    if (type === "numeric") {
+      const index = cuts.findIndex((cut) => (item.value as number) < cut);
+      const bucket = index < 0 ? cuts.length : index;
+      const lower = bucket === 0 ? "-∞" : String(cuts[bucket - 1]);
+      const upper = bucket === cuts.length ? "∞" : String(cuts[bucket]);
+      key = `[${lower}, ${upper})`;
+      value = bucket;
+    } else key = String(item.value);
+    let group = groups.get(key);
+    if (!group) {
+      group = { value, trades: [] };
+      groups.set(key, group);
+    }
+    group.trades.push(item.trade);
+  }
+  return { groups, cuts };
+}
+
 export async function analyzeFieldRegimes(
   baseDir: string,
   blockId: string,
@@ -137,6 +179,7 @@ export async function analyzeFieldRegimes(
     baseDir,
     trades,
     maxMissedSessions,
+    [field],
   );
   requireCoveredField(field, catalog, values, datasetAge);
   const entry = catalog.find((entry) => entry.field === field)!;
@@ -146,40 +189,11 @@ export async function analyzeFieldRegimes(
   const pool = trades
     .map((trade, i) => ({ trade, value: values[i][field] }))
     .filter((item) => item.value !== undefined);
-  const cuts =
-    entry.type === "numeric"
-      ? (bins ??
-        sweepThresholds(
-          pool,
-          (item) => (typeof item.value === "number" ? item.value : null),
-          undefined,
-          [25, 50, 75],
-        ).map(({ threshold }) => threshold))
-      : [];
-  const groups = new Map<string, { value: number | string; pls: number[] }>();
-  for (const item of pool) {
-    let key: string;
-    let value: number | string = item.value;
-    if (entry.type === "numeric") {
-      const number = item.value as number;
-      const index = cuts.findIndex((cut) => number < cut);
-      const bucket = index < 0 ? cuts.length : index;
-      const lower = bucket === 0 ? "-∞" : String(cuts[bucket - 1]);
-      const upper = bucket === cuts.length ? "∞" : String(cuts[bucket]);
-      key = `[${lower}, ${upper})`;
-      value = bucket;
-    } else key = String(item.value);
-    let group = groups.get(key);
-    if (!group) {
-      group = { value, pls: [] };
-      groups.set(key, group);
-    }
-    group.pls.push(item.trade.pl);
-  }
+  const { groups, cuts } = groupFieldValues(pool, entry.type, bins);
   const overall = computeSliceStats(pool.map(({ trade }) => trade.pl));
   const segments = [...groups]
     .map(([segment, group]) => {
-      const stats = computeSliceStats(group.pls);
+      const stats = computeSliceStats(group.trades.map((trade) => trade.pl));
       return {
         segment,
         segmentValue: group.value,

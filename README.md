@@ -111,6 +111,8 @@ scoring and permutation, refuses within-day varying fields by name, and admits
 large requests before expensive field resolution.
 Day mode also supports risk objectives `sharpe`, `mar`, and `maxDrawdown` on the
 covered daily P&L curve, with explicit definitions and named unit/capital refusals.
+Optional `groupBy` adds chosen-threshold regime breakdowns, numeric bins or
+categorical groups, explicit uncovered rows, and day-constancy refusals.
 See the [4.4.0 release notes](releases/v4.4.0.md) for the “Is this filter real?”
 workflow, assumptions, within-request testing family and computational limits.
 
