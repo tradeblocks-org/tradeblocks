@@ -203,6 +203,11 @@ MCP imports always declare timing.
 alongside trade fields. `filter_curve` accepts these names directly (for example `signal.score`
 or `RSI_14`); both use the same entry-time values as `enrich_trades`. Dataset fields with no
 available value in the selected trades are refused explicitly.
+
+`find_predictive_fields.method` accepts `pearson` (default), `spearman`, or `kendall`
+(tie-adjusted Kendall tau-b). Ranking uses the selected coefficient. Explicit requests
+report `method`; omission preserves the existing Pearson response shape. All methods
+use the same covered entry-time pairs and honor `maxMissedSessions`.
 `get_field_statistics` also accepts registered dataset columns and built-in market fields,
 using these same causal values and dataset age summaries.
 

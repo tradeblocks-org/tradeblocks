@@ -226,7 +226,7 @@ function pearsonCorrelation(x: number[], y: number[]): number {
 /**
  * Calculate Spearman rank correlation coefficient
  */
-function spearmanCorrelation(x: number[], y: number[]): number {
+export function spearmanCorrelation(x: number[], y: number[]): number {
   if (x.length !== y.length || x.length === 0) return 0;
 
   // Convert values to ranks

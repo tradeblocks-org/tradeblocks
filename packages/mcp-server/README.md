@@ -549,6 +549,11 @@ Field-based `suggest_filters` retains all-trade `currentStats` and reports per-f
 Suggestions compare against those covered populations; `filter_curve.baseline`
 reports the same covered and uncovered counts and P&L.
 
+`find_predictive_fields.method` selects `pearson` (default), `spearman`, or `kendall`
+(tau-b with ties). Explicit requests name their method; omission preserves the Pearson
+response. Ranking uses the chosen coefficient on the same causal entry-time values,
+including `maxMissedSessions` refusals.
+
 `suggest_filters` defaults to `objective: "totalPl"`: only positive P&L improvements,
 ranked by P&L improvement with win-rate gain as tie-breaker. `objective: "winRate"`
 admits/ranks by win-rate gain with P&L tie-breaks. `minImprovementPct` (default 3

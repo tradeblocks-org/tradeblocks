@@ -27,10 +27,16 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
     "find_predictive_fields",
     {
       description:
-        "Identify which trade entry conditions predict profitability by calculating Pearson correlations between all numeric fields and a target field (usually P/L). Returns fields ranked by predictive strength.",
+        "Identify which trade entry conditions predict profitability using Pearson (default), Spearman or Kendall correlation against a target field. Returns fields ranked by the chosen coefficient's strength.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         maxMissedSessions: maxMissedSessionsSchema,
+        method: z
+          .enum(["pearson", "spearman", "kendall"])
+          .optional()
+          .describe(
+            "Correlation method; defaults to Pearson. Rank methods measure monotone relationships.",
+          ),
         strategy: z.string().optional().describe("Pre-filter by strategy name (case-insensitive)"),
         strategyName: z
           .string()
@@ -69,6 +75,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
         minSamples,
         includeCustomFields,
         maxMissedSessions,
+        method,
       }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
@@ -112,12 +119,14 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             minSamples,
             includeCustomFields,
             resolved.catalog.map(({ field }) => ({ field, label: field })),
+            method,
           );
           const summary = `Found ${fieldsWithData} predictive fields out of ${totalAnalyzed} analyzed`;
 
           const structuredData: Record<string, unknown> = {
             blockId,
             targetField,
+            ...(method ? { method } : {}),
             filters: {
               strategy: effectiveStrategy ?? null,
               strategyName: strategyName ?? null,

@@ -1,5 +1,6 @@
 import { REPORT_FIELDS } from "../models/report-config.ts";
-import { pearsonCorrelation } from "./statistical-utils.ts";
+import { kendallTau, pearsonCorrelation } from "./statistical-utils.ts";
+import { spearmanCorrelation } from "./correlation.ts";
 
 export interface NumericFieldTrade {
   customFields?: Record<string, number | string>;
@@ -97,6 +98,7 @@ export function rankPredictiveTradeFields(
   minSamples = 30,
   includeCustomFields = true,
   additionalFields: ReadonlyArray<{ field: string; label: string }> = [],
+  method: "pearson" | "spearman" | "kendall" = "pearson",
 ): {
   totalFieldsAnalyzed: number;
   fieldsWithSufficientData: number;
@@ -166,7 +168,13 @@ export function rankPredictiveTradeFields(
       fieldsSkipped.push({ field, label, reason: "no_variance", sampleSize: pairs.length });
       continue;
     }
-    const correlation = pearsonCorrelation(
+    const correlate =
+      method === "spearman"
+        ? spearmanCorrelation
+        : method === "kendall"
+          ? kendallTau
+          : pearsonCorrelation;
+    const correlation = correlate(
       xValues,
       pairs.map((pair) => pair.y),
     );

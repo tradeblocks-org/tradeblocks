@@ -4,6 +4,7 @@ import {
   calendarReturnsFromEquity,
   fieldStatisticsFromValues,
   rankPredictiveTradeFields,
+  spearmanCorrelation,
   getNumericTradeFieldValue,
   singleTapeWalkForwardByTrades,
 } from "@tradeblocks/lib";
@@ -120,6 +121,24 @@ describe("public field analysis", () => {
     expect(getNumericTradeFieldValue(trades[0], "custom.signal")).toBe(1);
     expect(getNumericTradeFieldValue(trades[0], "custom.unknown")).toBeNull();
     expect(rankPredictiveTradeFields([], "pl", 3).rankedFields).toEqual([]);
+  });
+  it("selects rank correlation for a nonlinear monotone field without changing Pearson defaults", () => {
+    expect(spearmanCorrelation([1, 2, 3], [1, 16, 81])).toBe(1);
+    const trades = Array.from({ length: 12 }, (_, i) => ({
+      pl: (i + 1) ** 4,
+      customFields: { signal: i + 1 },
+    }));
+    const rank = (method?: "pearson" | "spearman" | "kendall") =>
+      rankPredictiveTradeFields(trades, "pl", 10, true, [], method);
+    expect(rank()).toEqual(rank("pearson"));
+    expect(rank().rankedFields.find((f) => f.field === "custom.signal")!.correlation).toBeLessThan(
+      0.9,
+    );
+    for (const method of ["spearman", "kendall"] as const) {
+      expect(rank(method).rankedFields.find((f) => f.field === "custom.signal")!.correlation).toBe(
+        1,
+      );
+    }
   });
   it("exposes an empty single-tape walk-forward result without database inputs", async () => {
     const result = await singleTapeWalkForwardByTrades([], {
