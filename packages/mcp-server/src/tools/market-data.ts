@@ -37,7 +37,13 @@ import {
 import { checkDataAvailability } from "../utils/data-availability.ts";
 import { getProfile } from "../db/profile-schemas.ts";
 import type { MarketStores } from "../market/stores/index.ts";
-import { listDatasets, resolveTradeDatasets } from "../db/dataset-schemas.ts";
+import {
+  listDatasets,
+  resolveTradeDatasets,
+  maxMissedSessionsSchema,
+  summarizeDatasetAge,
+  datasetAgeOutput,
+} from "../db/dataset-schemas.ts";
 import { suggestFieldFilters, analyzeFieldRegimes } from "./shared/field-analysis.ts";
 import {
   suggestionEvidence,
@@ -285,6 +291,7 @@ export function registerMarketDataTools(
         "Returns warnings when market data is partially missing.",
       inputSchema: z.object({
         blockId: z.string().describe("Block ID to analyze"),
+        maxMissedSessions: maxMissedSessionsSchema,
         field: z
           .string()
           .optional()
@@ -306,229 +313,240 @@ export function registerMarketDataTools(
         ticker: z.string().optional().describe("Underlying ticker symbol (default: SPX)"),
       }),
     },
-    withFullSync(baseDir, async ({ blockId, segmentBy, strategy, ticker, field, bins }) => {
-      try {
-        const block = await loadBlock(baseDir, blockId);
-        let trades = block.trades;
+    withFullSync(
+      baseDir,
+      async ({ blockId, segmentBy, strategy, ticker, field, bins, maxMissedSessions }) => {
+        try {
+          const block = await loadBlock(baseDir, blockId);
+          let trades = block.trades;
 
-        if (strategy) {
-          trades = trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
-        }
-
-        if (trades.length === 0) {
-          return {
-            content: [{ type: "text", text: "No trades found" }],
-            isError: true,
-          };
-        }
-
-        if (field) return await analyzeFieldRegimes(baseDir, blockId, trades, field, bins);
-        if (!segmentBy) throw new Error("Provide field or segmentBy");
-
-        // Collect unique trade keys (ticker+date) and query DuckDB for market data
-        const tradeKeys = uniqueTradeLookupKeys(trades);
-
-        const conn = await getConnection(baseDir);
-
-        // Check data availability and collect warnings
-        const resolvedTicker = normalizeTicker(ticker || "") || DEFAULT_MARKET_TICKER;
-        const availability = await checkDataAvailability(stores, resolvedTicker);
-
-        const { sql: lagSql, params: lagParams } = buildLookaheadFreeQuery(tradeKeys);
-        const dailyResult = await conn.runAndReadAll(lagSql, lagParams);
-        const dailyRecords = resultToRecords(dailyResult);
-        const daily = recordsByTickerDate(dailyRecords);
-
-        // Match trades to market data and segment
-        interface SegmentStats {
-          segment: string;
-          segmentValue: number | string;
-          trades: { pl: number; isWin: boolean }[];
-        }
-
-        const segments = new Map<string, SegmentStats>();
-        let totalMatched = 0;
-        let totalWins = 0;
-        let totalPl = 0;
-        let lagExcluded = 0;
-        const unmatchedDates: string[] = [];
-
-        for (const trade of trades) {
-          const lookup = getTradeLookupKey(trade);
-          const marketData = daily.get(marketTickerDateKey(lookup.ticker, lookup.date));
-
-          if (!marketData) {
-            unmatchedDates.push(`${lookup.date}|${lookup.ticker}`);
-            continue;
+          if (strategy) {
+            trades = trades.filter((t) => t.strategy.toLowerCase() === strategy.toLowerCase());
           }
 
-          // Get segment value (must resolve before counting in totals,
-          // since lagged fields may be NaN and cause continue)
-          const isWin = trade.pl > 0;
-          let segmentKey: string;
-          let segmentLabel: string;
-          let segmentValue: number | string;
-
-          switch (segmentBy) {
-            case "volRegime": {
-              const val = getNum(marketData, "prev_Vol_Regime");
-              if (isNaN(val)) {
-                lagExcluded++;
-                continue;
-              }
-              segmentValue = val;
-              segmentKey = String(val);
-              segmentLabel = getVolRegimeLabel(val);
-              break;
-            }
-            case "termStructure": {
-              const val = getNum(marketData, "prev_Term_Structure_State");
-              if (isNaN(val)) {
-                lagExcluded++;
-                continue;
-              }
-              segmentValue = val;
-              segmentKey = String(val);
-              segmentLabel = getTermStructureLabel(val);
-              break;
-            }
-            case "dayOfWeek":
-              segmentValue = getNum(marketData, "Day_of_Week");
-              segmentKey = String(segmentValue);
-              segmentLabel = getDayLabel(getNum(marketData, "Day_of_Week"));
-              break;
-            case "gapDirection": {
-              const gapPct = getNum(marketData, "Gap_Pct");
-              if (isNaN(gapPct)) {
-                lagExcluded++;
-                continue;
-              }
-              segmentValue = gapPct > 0.1 ? "up" : gapPct < -0.1 ? "down" : "flat";
-              segmentKey = segmentValue;
-              segmentLabel = `Gap ${segmentValue}`;
-              break;
-            }
-            default:
-              continue;
-          }
-
-          // Count in totals only after segment resolved (NaN-lag trades excluded)
-          totalMatched++;
-          if (isWin) totalWins++;
-          totalPl += trade.pl;
-
-          if (!segments.has(segmentKey)) {
-            segments.set(segmentKey, {
-              segment: segmentLabel,
-              segmentValue,
-              trades: [],
-            });
-          }
-
-          segments.get(segmentKey)!.trades.push({ pl: trade.pl, isWin });
-        }
-
-        if (totalMatched === 0) {
-          return {
-            content: [{ type: "text", text: "No trades matched to market data" }],
-            isError: true,
-          };
-        }
-
-        // Calculate overall stats
-        const overallWinRate = (totalWins / totalMatched) * 100;
-        const overallAvgPl = totalPl / totalMatched;
-
-        // Calculate segment stats
-        const segmentStats = Array.from(segments.values())
-          .map((seg) => {
-            const wins = seg.trades.filter((t) => t.isWin).length;
-            const losses = seg.trades.length - wins;
-            const winRate = (wins / seg.trades.length) * 100;
-            const totalSegPl = seg.trades.reduce((sum, t) => sum + t.pl, 0);
-            const avgPl = totalSegPl / seg.trades.length;
-
-            const winningTrades = seg.trades.filter((t) => t.isWin);
-            const losingTrades = seg.trades.filter((t) => !t.isWin);
-            const avgWin =
-              winningTrades.length > 0
-                ? winningTrades.reduce((sum, t) => sum + t.pl, 0) / winningTrades.length
-                : 0;
-            const avgLoss =
-              losingTrades.length > 0
-                ? losingTrades.reduce((sum, t) => sum + t.pl, 0) / losingTrades.length
-                : 0;
-
-            const grossWins = winningTrades.reduce((sum, t) => sum + t.pl, 0);
-            const grossLosses = Math.abs(losingTrades.reduce((sum, t) => sum + t.pl, 0));
-            const profitFactor =
-              grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? null : 0;
-
+          if (trades.length === 0) {
             return {
-              segment: seg.segment,
-              segmentValue: seg.segmentValue,
-              tradeCount: seg.trades.length,
-              wins,
-              losses,
-              winRate: Math.round(winRate * 100) / 100,
-              totalPl: Math.round(totalSegPl * 100) / 100,
-              avgPl: Math.round(avgPl * 100) / 100,
-              avgWin: Math.round(avgWin * 100) / 100,
-              avgLoss: Math.round(avgLoss * 100) / 100,
-              profitFactor: profitFactor !== null ? Math.round(profitFactor * 100) / 100 : null,
-              vsOverallWinRate: Math.round((winRate - overallWinRate) * 100) / 100,
-              vsOverallAvgPl: Math.round((avgPl - overallAvgPl) * 100) / 100,
+              content: [{ type: "text", text: "No trades found" }],
+              isError: true,
             };
-          })
-          .sort((a, b) => {
-            // Sort by segment value for consistent ordering
-            if (typeof a.segmentValue === "number" && typeof b.segmentValue === "number") {
-              return a.segmentValue - b.segmentValue;
+          }
+
+          if (field)
+            return await analyzeFieldRegimes(
+              baseDir,
+              blockId,
+              trades,
+              field,
+              bins,
+              maxMissedSessions,
+            );
+          if (!segmentBy) throw new Error("Provide field or segmentBy");
+
+          // Collect unique trade keys (ticker+date) and query DuckDB for market data
+          const tradeKeys = uniqueTradeLookupKeys(trades);
+
+          const conn = await getConnection(baseDir);
+
+          // Check data availability and collect warnings
+          const resolvedTicker = normalizeTicker(ticker || "") || DEFAULT_MARKET_TICKER;
+          const availability = await checkDataAvailability(stores, resolvedTicker);
+
+          const { sql: lagSql, params: lagParams } = buildLookaheadFreeQuery(tradeKeys);
+          const dailyResult = await conn.runAndReadAll(lagSql, lagParams);
+          const dailyRecords = resultToRecords(dailyResult);
+          const daily = recordsByTickerDate(dailyRecords);
+
+          // Match trades to market data and segment
+          interface SegmentStats {
+            segment: string;
+            segmentValue: number | string;
+            trades: { pl: number; isWin: boolean }[];
+          }
+
+          const segments = new Map<string, SegmentStats>();
+          let totalMatched = 0;
+          let totalWins = 0;
+          let totalPl = 0;
+          let lagExcluded = 0;
+          const unmatchedDates: string[] = [];
+
+          for (const trade of trades) {
+            const lookup = getTradeLookupKey(trade);
+            const marketData = daily.get(marketTickerDateKey(lookup.ticker, lookup.date));
+
+            if (!marketData) {
+              unmatchedDates.push(`${lookup.date}|${lookup.ticker}`);
+              continue;
             }
-            return String(a.segmentValue).localeCompare(String(b.segmentValue));
-          });
 
-        const sortedUnmatchedDates = [...new Set(unmatchedDates)].sort();
+            // Get segment value (must resolve before counting in totals,
+            // since lagged fields may be NaN and cause continue)
+            const isWin = trade.pl > 0;
+            let segmentKey: string;
+            let segmentLabel: string;
+            let segmentValue: number | string;
 
-        const summary = `Regime analysis: ${blockId} by ${segmentBy} | ${totalMatched} trades across ${segmentStats.length} segments`;
+            switch (segmentBy) {
+              case "volRegime": {
+                const val = getNum(marketData, "prev_Vol_Regime");
+                if (isNaN(val)) {
+                  lagExcluded++;
+                  continue;
+                }
+                segmentValue = val;
+                segmentKey = String(val);
+                segmentLabel = getVolRegimeLabel(val);
+                break;
+              }
+              case "termStructure": {
+                const val = getNum(marketData, "prev_Term_Structure_State");
+                if (isNaN(val)) {
+                  lagExcluded++;
+                  continue;
+                }
+                segmentValue = val;
+                segmentKey = String(val);
+                segmentLabel = getTermStructureLabel(val);
+                break;
+              }
+              case "dayOfWeek":
+                segmentValue = getNum(marketData, "Day_of_Week");
+                segmentKey = String(segmentValue);
+                segmentLabel = getDayLabel(getNum(marketData, "Day_of_Week"));
+                break;
+              case "gapDirection": {
+                const gapPct = getNum(marketData, "Gap_Pct");
+                if (isNaN(gapPct)) {
+                  lagExcluded++;
+                  continue;
+                }
+                segmentValue = gapPct > 0.1 ? "up" : gapPct < -0.1 ? "down" : "flat";
+                segmentKey = segmentValue;
+                segmentLabel = `Gap ${segmentValue}`;
+                break;
+              }
+              default:
+                continue;
+            }
 
-        const laggedSegments = ["volRegime", "termStructure"];
-        const lagNote = laggedSegments.includes(segmentBy)
-          ? `Segmentation by ${segmentBy} uses prior trading day values (close-derived field from market.enriched_context) to prevent lookahead bias.`
-          : `Segmentation by ${segmentBy} uses same-day values (${segmentBy === "dayOfWeek" ? "static" : "open-known"} field).`;
+            // Count in totals only after segment resolved (NaN-lag trades excluded)
+            totalMatched++;
+            if (isWin) totalWins++;
+            totalPl += trade.pl;
 
-        // Future: Realized_Vol quartile and IVR/IVP regime segmentation dimensions can be added here
+            if (!segments.has(segmentKey)) {
+              segments.set(segmentKey, {
+                segment: segmentLabel,
+                segmentValue,
+                trades: [],
+              });
+            }
 
-        const responseData: Record<string, unknown> = {
-          blockId,
-          segmentBy,
-          lagNote,
-          strategy: strategy || null,
-          tradesTotal: trades.length,
-          tradesMatched: totalMatched,
-          tradesUnmatched: unmatchedDates.length,
-          tradesLagExcluded: lagExcluded,
-          unmatchedDates: sortedUnmatchedDates,
-          overall: {
-            winRate: Math.round(overallWinRate * 100) / 100,
-            avgPl: Math.round(overallAvgPl * 100) / 100,
-            totalPl: Math.round(totalPl * 100) / 100,
-          },
-          segments: segmentStats,
-        };
+            segments.get(segmentKey)!.trades.push({ pl: trade.pl, isWin });
+          }
 
-        if (availability.warnings.length > 0) {
-          responseData.warnings = availability.warnings;
+          if (totalMatched === 0) {
+            return {
+              content: [{ type: "text", text: "No trades matched to market data" }],
+              isError: true,
+            };
+          }
+
+          // Calculate overall stats
+          const overallWinRate = (totalWins / totalMatched) * 100;
+          const overallAvgPl = totalPl / totalMatched;
+
+          // Calculate segment stats
+          const segmentStats = Array.from(segments.values())
+            .map((seg) => {
+              const wins = seg.trades.filter((t) => t.isWin).length;
+              const losses = seg.trades.length - wins;
+              const winRate = (wins / seg.trades.length) * 100;
+              const totalSegPl = seg.trades.reduce((sum, t) => sum + t.pl, 0);
+              const avgPl = totalSegPl / seg.trades.length;
+
+              const winningTrades = seg.trades.filter((t) => t.isWin);
+              const losingTrades = seg.trades.filter((t) => !t.isWin);
+              const avgWin =
+                winningTrades.length > 0
+                  ? winningTrades.reduce((sum, t) => sum + t.pl, 0) / winningTrades.length
+                  : 0;
+              const avgLoss =
+                losingTrades.length > 0
+                  ? losingTrades.reduce((sum, t) => sum + t.pl, 0) / losingTrades.length
+                  : 0;
+
+              const grossWins = winningTrades.reduce((sum, t) => sum + t.pl, 0);
+              const grossLosses = Math.abs(losingTrades.reduce((sum, t) => sum + t.pl, 0));
+              const profitFactor =
+                grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? null : 0;
+
+              return {
+                segment: seg.segment,
+                segmentValue: seg.segmentValue,
+                tradeCount: seg.trades.length,
+                wins,
+                losses,
+                winRate: Math.round(winRate * 100) / 100,
+                totalPl: Math.round(totalSegPl * 100) / 100,
+                avgPl: Math.round(avgPl * 100) / 100,
+                avgWin: Math.round(avgWin * 100) / 100,
+                avgLoss: Math.round(avgLoss * 100) / 100,
+                profitFactor: profitFactor !== null ? Math.round(profitFactor * 100) / 100 : null,
+                vsOverallWinRate: Math.round((winRate - overallWinRate) * 100) / 100,
+                vsOverallAvgPl: Math.round((avgPl - overallAvgPl) * 100) / 100,
+              };
+            })
+            .sort((a, b) => {
+              // Sort by segment value for consistent ordering
+              if (typeof a.segmentValue === "number" && typeof b.segmentValue === "number") {
+                return a.segmentValue - b.segmentValue;
+              }
+              return String(a.segmentValue).localeCompare(String(b.segmentValue));
+            });
+
+          const sortedUnmatchedDates = [...new Set(unmatchedDates)].sort();
+
+          const summary = `Regime analysis: ${blockId} by ${segmentBy} | ${totalMatched} trades across ${segmentStats.length} segments`;
+
+          const laggedSegments = ["volRegime", "termStructure"];
+          const lagNote = laggedSegments.includes(segmentBy)
+            ? `Segmentation by ${segmentBy} uses prior trading day values (close-derived field from market.enriched_context) to prevent lookahead bias.`
+            : `Segmentation by ${segmentBy} uses same-day values (${segmentBy === "dayOfWeek" ? "static" : "open-known"} field).`;
+
+          // Future: Realized_Vol quartile and IVR/IVP regime segmentation dimensions can be added here
+
+          const responseData: Record<string, unknown> = {
+            blockId,
+            segmentBy,
+            lagNote,
+            strategy: strategy || null,
+            tradesTotal: trades.length,
+            tradesMatched: totalMatched,
+            tradesUnmatched: unmatchedDates.length,
+            tradesLagExcluded: lagExcluded,
+            unmatchedDates: sortedUnmatchedDates,
+            overall: {
+              winRate: Math.round(overallWinRate * 100) / 100,
+              avgPl: Math.round(overallAvgPl * 100) / 100,
+              totalPl: Math.round(totalPl * 100) / 100,
+            },
+            segments: segmentStats,
+          };
+
+          if (availability.warnings.length > 0) {
+            responseData.warnings = availability.warnings;
+          }
+
+          return createToolOutput(summary, responseData);
+        } catch (error) {
+          return {
+            content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+            isError: true,
+          };
         }
-
-        return createToolOutput(summary, responseData);
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
-          isError: true,
-        };
-      }
-    }),
+      },
+    ),
   );
 
   // ---------------------------------------------------------------------------
@@ -546,6 +564,7 @@ export function registerMarketDataTools(
         "Uses market.enriched + market.spot_daily LEFT JOIN VIX tickers + market.enriched_context. Returns warnings when market data is partially missing.",
       inputSchema: z.object({
         blockId: z.string().describe("Block ID to analyze"),
+        maxMissedSessions: maxMissedSessionsSchema,
         fields: z
           .array(z.string())
           .min(1)
@@ -585,6 +604,7 @@ export function registerMarketDataTools(
         ticker,
         fields,
         objective = "totalPl",
+        maxMissedSessions,
       }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
@@ -635,6 +655,7 @@ export function registerMarketDataTools(
               fields,
               minImprovementPct,
               objective,
+              maxMissedSessions,
             );
 
           // Collect unique trade keys (ticker+date) and query DuckDB for market data
@@ -1202,6 +1223,7 @@ export function registerMarketDataTools(
         "Returns warnings when market data is partially missing.",
       inputSchema: z.object({
         blockId: z.string().describe("Block ID to enrich"),
+        maxMissedSessions: maxMissedSessionsSchema,
         strategy: z.string().optional().describe("Filter to specific strategy (exact match)"),
         startDate: z.string().optional().describe("Start date filter (YYYY-MM-DD)"),
         endDate: z.string().optional().describe("End date filter (YYYY-MM-DD)"),
@@ -1237,6 +1259,7 @@ export function registerMarketDataTools(
         includeIntradayContext,
         limit,
         offset,
+        maxMissedSessions,
       }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
@@ -1362,14 +1385,18 @@ export function registerMarketDataTools(
           const unmatchedDates: string[] = [];
           let matched = 0;
 
-          const enrichedTrades = paginated.map((trade) => {
+          const datasetMatches = paginated.map((trade) =>
+            resolveTradeDatasets(datasets, trade, maxMissedSessions),
+          );
+          const datasetAge = summarizeDatasetAge(paginated, datasetMatches);
+          const enrichedTrades = paginated.map((trade, index) => {
             const lookup = getTradeLookupKey(trade);
             const marketKey = marketTickerDateKey(lookup.ticker, lookup.date);
             const marketData = daily.get(marketKey);
 
             const commissions = trade.openingCommissionsFees + trade.closingCommissionsFees;
 
-            const datasetMatch = resolveTradeDatasets(datasets, trade);
+            const datasetMatch = datasetMatches[index];
             const baseTrade: Record<string, unknown> = {
               dateOpened: lookup.date,
               ticker: lookup.ticker,
@@ -1384,6 +1411,9 @@ export function registerMarketDataTools(
               customFields: trade.customFields ?? {},
               datasetFields: datasetMatch.values,
               datasetProvenance: datasetMatch.provenance,
+              ...(Object.keys(datasetMatch.rejected).length
+                ? { datasetRejections: datasetMatch.rejected }
+                : {}),
             };
 
             if (!marketData) {
@@ -1452,6 +1482,7 @@ export function registerMarketDataTools(
           // Build response data
           const responseData: Record<string, unknown> = {
             blockId,
+            ...datasetAgeOutput(datasetAge, Object.keys(datasetAge)),
             strategy: strategy || null,
             lagNote,
             tradesTotal: totalTrades,

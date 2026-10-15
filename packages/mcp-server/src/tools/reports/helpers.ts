@@ -52,8 +52,12 @@ export interface EnrichedTrade extends Trade {
   staticDatasetFields?: Record<string, Record<string, number | string>>;
 }
 
-export async function enrichAnalysisTrades(baseDir: string, trades: Trade[]) {
-  const resolved = await resolveAnalysisFields(baseDir, trades);
+export async function enrichAnalysisTrades(
+  baseDir: string,
+  trades: Trade[],
+  maxMissedSessions?: number,
+) {
+  const resolved = await resolveAnalysisFields(baseDir, trades, maxMissedSessions);
   const enriched = enrichTrades(trades);
   for (let i = 0; i < enriched.length; i++) {
     const datasets: Record<string, Record<string, number | string>> = {};

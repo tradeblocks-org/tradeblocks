@@ -14,7 +14,7 @@ import { createToolOutput } from "../../utils/output-formatter.ts";
 import { filterByStrategy, filterByDateRange } from "../shared/filters.ts";
 import { enrichAnalysisTrades } from "./helpers.ts";
 import { withSyncedBlock } from "../middleware/sync-middleware.ts";
-import { datasetAgeOutput } from "../../db/dataset-schemas.ts";
+import { datasetAgeOutput, maxMissedSessionsSchema } from "../../db/dataset-schemas.ts";
 
 /**
  * Register field-related report tools
@@ -28,6 +28,7 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
         "Get detailed statistics for a specific field including min/max/avg/median/stdDev, percentiles, and histogram",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
+        maxMissedSessions: maxMissedSessionsSchema,
         field: z
           .string()
           .describe(
@@ -46,7 +47,15 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
     },
     withSyncedBlock(
       baseDir,
-      async ({ blockId, field, strategy, startDate, endDate, histogramBuckets }) => {
+      async ({
+        blockId,
+        field,
+        strategy,
+        startDate,
+        endDate,
+        histogramBuckets,
+        maxMissedSessions,
+      }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
           let trades = block.trades;
@@ -67,7 +76,7 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
           }
 
           // Enrich trades
-          const resolved = await enrichAnalysisTrades(baseDir, trades);
+          const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
           const enrichedTrades = resolved.trades;
 
           // Extract field values
@@ -80,14 +89,10 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
           }
 
           if (values.length === 0) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `Field "${field}" has no valid numeric values in the filtered trades.`,
-                },
-              ],
-            };
+            return createToolOutput(
+              `Field "${field}" has no valid numeric values in the filtered trades.`,
+              { blockId, field, ...datasetAgeOutput(resolved.datasetAge, [field]) },
+            );
           }
 
           const analysis = fieldStatisticsFromValues(values, histogramBuckets)!;

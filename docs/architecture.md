@@ -80,13 +80,23 @@ calendar day; a trade on the next session therefore sees the prior available val
 Open columns require a dataset-level `HH:mm` known-by time in Eastern Time.
 Timestamped rows are as-of their timestamp, including explicitly timestamped midnight.
 The causal nearest-before matcher carries the last available value forward across
-weekends, holidays, and missing rows; it does not enforce freshness.
+weekends, holidays, and missing rows. It reports missed expected XNYS sessions from
+the selected row's provenance; no second matcher determines freshness. Close columns
+expect the prior session, open columns expect today at/after known-by ET. The bounded
+2022–2030 calendar reports unsupported ages explicitly. Optional `maxMissedSessions`
+refuses stale/unsupported attachments; omitting it preserves unlimited carry-forward.
 
 The shared lib exports `getDatasetValueAvailableAt`, `resolveDatasetColumnAtTime`,
 and `validateDatasetTiming`. The resolver takes immutable dataset metadata and row-array
 snapshots (replace them after edits), refuses unknown columns, and returns the latest
 value available at or before entry. Column-specific availability indexes are cached
 by snapshot identity, so mixed open/close columns may resolve to different source rows.
+The result also includes `sessionAge` (missed sessions or `"unsupported"`) and
+`accepted`. Callers attach values only when `accepted` is true; refused provenance
+remains available for uncovered counts and warnings. For timestamped open columns
+without known-by, freshness expects today's daily session from midnight ET, while
+availability remains strictly as-of the timestamp. Legacy timing has unsupported
+session age and its existing matching behavior is unchanged.
 
 Existing IndexedDB datasets load as `legacy-same-day` without changing their numbers.
 Static Datasets displays a warning and a **Set column timing** action. Older rows did

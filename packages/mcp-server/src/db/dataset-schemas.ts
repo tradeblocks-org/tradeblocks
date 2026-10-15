@@ -8,6 +8,16 @@ import {
 } from "@tradeblocks/lib";
 import { OPEN_KNOWN_FIELDS, CLOSE_KNOWN_FIELDS, STATIC_FIELDS } from "../utils/field-timing.ts";
 import { resolveTradeTicker } from "../utils/ticker.ts";
+import { z } from "zod";
+
+export const maxMissedSessionsSchema = z
+  .number()
+  .int()
+  .nonnegative()
+  .optional()
+  .describe(
+    "Opt-in maximum missed XNYS sessions for dataset values. No limit when omitted. Unsupported calendar ages (outside 2022–2030) are refused when a limit is set.",
+  );
 
 export async function ensureDatasetsSchema(conn: DuckDBConnection): Promise<void> {
   await conn.run("CREATE SCHEMA IF NOT EXISTS datasets");
@@ -149,31 +159,49 @@ export async function runtimeFieldCatalog(conn: DuckDBConnection): Promise<Analy
   ];
 }
 
-export function resolveTradeDatasets(entries: StoredDataset[], trade: Trade) {
+export interface DatasetProvenance {
+  sourceTimestamp: string;
+  availableAt: string;
+  sessionAge: number | "unsupported";
+}
+
+export function resolveTradeDatasets(
+  entries: StoredDataset[],
+  trade: Trade,
+  maxMissedSessions?: number,
+) {
   const values: Record<string, number | string> = {};
-  const provenance: Record<string, { sourceTimestamp: string; availableAt: string }> = {};
+  const provenance: Record<string, DatasetProvenance> = {};
+  const rejected: Record<string, DatasetProvenance> = {};
   const entryTime = combineDateAndTime(trade.dateOpened, trade.timeOpened);
   for (const { dataset, rows, ticker } of entries) {
     if (ticker && ticker !== resolveTradeTicker(trade)) continue;
     for (const column of dataset.columns) {
-      const match = resolveDatasetColumnAtTime(dataset, rows, column, entryTime);
+      const match = resolveDatasetColumnAtTime(dataset, rows, column, entryTime, maxMissedSessions);
       if (!match) continue;
       const field = `${dataset.name}.${column}`;
-      values[field] = match.value;
-      provenance[field] = {
+      if (match.accepted) values[field] = match.value;
+      (match.accepted ? provenance : rejected)[field] = {
         sourceTimestamp: match.row.timestamp.toISOString(),
         availableAt: match.availableAt.toISOString(),
+        sessionAge: match.sessionAge,
       };
     }
   }
-  return { values, provenance };
+  return { values, provenance, rejected };
 }
 
 export interface DatasetFieldAge {
   attachments: number;
-  medianAgeDays: number;
-  maxAgeDays: number;
+  medianAgeDays: number | null;
+  maxAgeDays: number | null;
   olderThan3Days: number;
+  sessionAgeStatus: "supported" | "unsupported";
+  medianAgeSessions: number | null;
+  maxAgeSessions: number | null;
+  staleAttachments: number;
+  unsupportedSessionAge: number;
+  rejectedAttachments: number;
 }
 
 const easternCalendar = new Intl.DateTimeFormat("en-US", {
@@ -194,34 +222,61 @@ function easternDayNumber(date: Date): number {
   );
 }
 
-/** Age is source-to-entry Eastern calendar days, not a freshness limit. */
+/** Session ages come only from the shared resolver's selected source provenance. */
 export function summarizeDatasetAge(
   trades: Trade[],
-  matches: { provenance: Record<string, { sourceTimestamp: string }> }[],
+  matches: {
+    provenance: Record<string, { sourceTimestamp: string; sessionAge?: number | "unsupported" }>;
+    rejected?: Record<string, DatasetProvenance>;
+  }[],
 ): Record<string, DatasetFieldAge> {
-  const ages = new Map<string, number[]>();
+  const ages = new Map<
+    string,
+    { days: number[]; sessions: number[]; unsupported: number; rejected: number }
+  >();
   for (let i = 0; i < trades.length; i++) {
     const entryDay = easternDayNumber(
       combineDateAndTime(trades[i].dateOpened, trades[i].timeOpened),
     );
-    for (const [field, provenance] of Object.entries(matches[i].provenance)) {
-      const samples = ages.get(field) ?? [];
-      samples.push(entryDay - easternDayNumber(new Date(provenance.sourceTimestamp)));
+    for (const [field, provenance] of Object.entries({
+      ...matches[i].provenance,
+      ...matches[i].rejected,
+    })) {
+      const samples = ages.get(field) ?? { days: [], sessions: [], unsupported: 0, rejected: 0 };
+      if (matches[i].rejected?.[field]) samples.rejected++;
+      else samples.days.push(entryDay - easternDayNumber(new Date(provenance.sourceTimestamp)));
+      if (typeof provenance.sessionAge === "number") samples.sessions.push(provenance.sessionAge);
+      else samples.unsupported++;
       ages.set(field, samples);
     }
   }
   return Object.fromEntries(
     [...ages].map(([field, samples]) => {
-      samples.sort((a, b) => a - b);
-      const middle = Math.floor(samples.length / 2);
+      const days = samples.days.sort((a, b) => a - b);
+      const sessions = samples.sessions.sort((a, b) => a - b);
+      const middle = Math.floor(days.length / 2);
+      const sessionMiddle = Math.floor(sessions.length / 2);
       return [
         field,
         {
-          attachments: samples.length,
-          medianAgeDays:
-            samples.length % 2 ? samples[middle] : (samples[middle - 1] + samples[middle]) / 2,
-          maxAgeDays: samples[samples.length - 1],
-          olderThan3Days: samples.filter((age) => age > 3).length,
+          attachments: days.length,
+          medianAgeDays: !days.length
+            ? null
+            : days.length % 2
+              ? days[middle]
+              : (days[middle - 1] + days[middle]) / 2,
+          maxAgeDays: days.length ? days[days.length - 1] : null,
+          olderThan3Days: days.filter((age) => age > 3).length,
+          sessionAgeStatus: samples.unsupported ? ("unsupported" as const) : ("supported" as const),
+          medianAgeSessions: !sessions.length
+            ? null
+            : sessions.length % 2
+              ? sessions[sessionMiddle]
+              : (sessions[sessionMiddle - 1] + sessions[sessionMiddle]) / 2,
+          maxAgeSessions: sessions.length ? sessions[sessions.length - 1] : null,
+          staleAttachments: sessions.filter((age) => age >= 1).length,
+          unsupportedSessionAge: samples.unsupported,
+          rejectedAttachments: samples.rejected,
         },
       ];
     }),
@@ -232,5 +287,24 @@ export function datasetAgeOutput(summary: Record<string, DatasetFieldAge>, field
   const selected = Object.fromEntries(
     fields.filter((field) => summary[field]).map((field) => [field, summary[field]]),
   );
-  return Object.keys(selected).length ? { datasetAge: selected } : {};
+  const datasetWarnings = Object.entries(selected).flatMap(([field, age]) => [
+    ...(age.staleAttachments
+      ? [
+          `${field}: ${age.staleAttachments} candidate attachments missed at least one expected XNYS session.`,
+        ]
+      : []),
+    ...(age.unsupportedSessionAge
+      ? [
+          `${field}: session age unsupported for ${age.unsupportedSessionAge} candidate attachments outside XNYS calendar 2022–2030.`,
+        ]
+      : []),
+    ...(age.rejectedAttachments
+      ? [
+          `${field}: ${age.rejectedAttachments} attachments refused by maxMissedSessions; counted as uncovered.`,
+        ]
+      : []),
+  ]);
+  return Object.keys(selected).length
+    ? { datasetAge: selected, ...(datasetWarnings.length ? { datasetWarnings } : {}) }
+    : {};
 }

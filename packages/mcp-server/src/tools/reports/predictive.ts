@@ -16,7 +16,7 @@ import { getConnection } from "../../db/connection.ts";
 import { getProfile } from "../../db/profile-schemas.ts";
 import { requireCoveredField } from "../../utils/trade-analysis-fields.ts";
 import { sweepThresholds } from "../../utils/threshold-sweep.ts";
-import { datasetAgeOutput } from "../../db/dataset-schemas.ts";
+import { datasetAgeOutput, maxMissedSessionsSchema } from "../../db/dataset-schemas.ts";
 
 /**
  * Register predictive-related report tools
@@ -30,6 +30,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
         "Identify which trade entry conditions predict profitability by calculating Pearson correlations between all numeric fields and a target field (usually P/L). Returns fields ranked by predictive strength.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
+        maxMissedSessions: maxMissedSessionsSchema,
         strategy: z.string().optional().describe("Pre-filter by strategy name (case-insensitive)"),
         strategyName: z
           .string()
@@ -67,6 +68,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
         targetField,
         minSamples,
         includeCustomFields,
+        maxMissedSessions,
       }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
@@ -96,7 +98,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           }
 
           // Enrich trades
-          const resolved = await enrichAnalysisTrades(baseDir, trades);
+          const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
           const enrichedTrades = resolved.trades;
 
           const {
@@ -187,6 +189,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
         "Sweep filter thresholds for a field and show performance at each threshold. Use after find_predictive_fields to determine optimal filter values. Returns outcome curves and identifies sweet spots where filtering improves performance.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
+        maxMissedSessions: maxMissedSessionsSchema,
         field: z
           .string()
           .describe("Field to sweep thresholds on (e.g., 'openingVix', 'durationHours')"),
@@ -224,6 +227,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
         strategy,
         startDate,
         endDate,
+        maxMissedSessions,
       }) => {
         try {
           const block = await loadBlock(baseDir, blockId);
@@ -245,13 +249,13 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           }
 
           // Enrich trades
-          const resolved = await enrichAnalysisTrades(baseDir, trades);
+          const resolved = await enrichAnalysisTrades(baseDir, trades, maxMissedSessions);
           const enrichedTrades = resolved.trades;
           if (
             resolved.catalog.some((entry) => entry.field === field) ||
             (field.includes(".") && !field.startsWith("custom.") && !field.startsWith("daily."))
           )
-            requireCoveredField(field, resolved.catalog, resolved.values);
+            requireCoveredField(field, resolved.catalog, resolved.values, resolved.datasetAge);
 
           // Extract field values
           const fieldValues: number[] = [];

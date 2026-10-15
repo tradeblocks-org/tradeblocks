@@ -184,3 +184,26 @@ it.each(["same-day", "nearest-after", "nearest", "exact", "nearest-before"] as c
     ).toEqual({ declared: { x: 1.5 } });
   },
 );
+
+it.each([
+  ["2025-01-03", "2025-01-06T15:00:00Z", "close", 0],
+  ["2025-01-02", "2025-01-06T15:00:00Z", "close", 1],
+  ["2026-07-02", "2026-07-06T14:00:00Z", "close", 0],
+  ["2030-12-31", "2031-01-02T15:00:00Z", "close", "unsupported"],
+  ["2025-01-03", "2025-01-06T14:29:00Z", "open", 0],
+  ["2025-01-03", "2025-01-06T14:30:00Z", "open", 1],
+] as const)("counts missed sessions from %s at %s (%s)", async (source, entry, timing, age) => {
+  const parsed = await processStaticDatasetContent(`date,x\n${source},1`, {
+    name: "sessions",
+    fileName: "sessions.csv",
+    columnTiming: { x: timing },
+    knownBy: "09:30",
+  });
+  const rows = parsed.rows.map((row) => ({ ...row, datasetId: parsed.dataset.id }));
+  expect(resolveDatasetColumnAtTime(parsed.dataset, rows, "x", new Date(entry))).toEqual(
+    expect.objectContaining({ value: 1, sessionAge: age, accepted: true }),
+  );
+  expect(resolveDatasetColumnAtTime(parsed.dataset, rows, "x", new Date(entry), 0)).toEqual(
+    expect.objectContaining({ sessionAge: age, accepted: age === 0 }),
+  );
+});

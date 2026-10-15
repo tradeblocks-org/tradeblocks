@@ -13,6 +13,11 @@ import type {
   DatasetMatchResult,
   DatasetMatchStats,
 } from "../models/static-dataset.ts";
+import {
+  enumerateXnysSessions,
+  XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
+  XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
+} from "./xnys-session-calendar.ts";
 
 /** Refuse incomplete timing declarations rather than silently omitting a user field. */
 export function validateDatasetTiming(dataset: StaticDataset, hasDateOnly: boolean): void {
@@ -69,7 +74,19 @@ export function resolveDatasetColumnAtTime(
   rows: StaticDatasetRow[],
   column: string,
   entryTime: Date,
-): { value: number | string; row: StaticDatasetRow; availableAt: Date } | null {
+  maxMissedSessions?: number,
+): {
+  value: number | string;
+  row: StaticDatasetRow;
+  availableAt: Date;
+  sessionAge: number | "unsupported";
+  accepted: boolean;
+} | null {
+  if (
+    maxMissedSessions !== undefined &&
+    (!Number.isInteger(maxMissedSessions) || maxMissedSessions < 0)
+  )
+    throw new Error("maxMissedSessions must be a nonnegative integer");
   if (!dataset.columns.includes(column)) throw new Error(`Unknown dataset column: ${column}`);
   let rowIndexes = availabilityIndexes.get(dataset);
   if (!rowIndexes) {
@@ -109,7 +126,31 @@ export function resolveDatasetColumnAtTime(
   }
   if (!left) return null;
   const match = index[left - 1];
-  return { value: match.row.values[column], row: match.row, availableAt: new Date(match.time) };
+  const sourceDay = getDateOnly(new Date(match.row.timestamp));
+  const entryDay = getDateOnly(entryTime);
+  let sessionAge: number | "unsupported" = "unsupported";
+  if (
+    dataset.timingMode === "declared" &&
+    sourceDay >= XNYS_SESSION_CALENDAR_SUPPORTED_FROM &&
+    entryDay <= XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH
+  ) {
+    const includeToday =
+      dataset.columnTiming?.[column] === "open" &&
+      entryTime >=
+        combineDateAndTime(new Date(`${entryDay}T00:00:00Z`), dataset.knownBy ?? "00:00");
+    sessionAge = enumerateXnysSessions(sourceDay, entryDay).filter(
+      (day) => day > sourceDay && (day < entryDay || includeToday),
+    ).length;
+  }
+  return {
+    value: match.row.values[column],
+    row: match.row,
+    availableAt: new Date(match.time),
+    sessionAge,
+    accepted:
+      maxMissedSessions === undefined ||
+      (sessionAge !== "unsupported" && sessionAge <= maxMissedSessions),
+  };
 }
 
 function matchDatasetValues(
@@ -125,7 +166,7 @@ function matchDatasetValues(
   let source: StaticDatasetRow | null = null;
   for (const column of dataset.columns) {
     const match = resolveDatasetColumnAtTime(dataset, rows, column, entry);
-    if (!match) continue;
+    if (!match?.accepted) continue;
     values[column] = match.value;
     source = match.row;
   }

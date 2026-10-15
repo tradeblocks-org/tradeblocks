@@ -19,8 +19,13 @@ export async function suggestFieldFilters(
   fields: string[],
   minImprovementPct: number | undefined,
   objective: FilterObjective,
+  maxMissedSessions?: number,
 ) {
-  const { catalog, values, datasetAge } = await resolveAnalysisFields(baseDir, trades);
+  const { catalog, values, datasetAge } = await resolveAnalysisFields(
+    baseDir,
+    trades,
+    maxMissedSessions,
+  );
   const suggestions: (SuggestionEvidence & {
     filter: string;
     condition: { field: string; operator: string; value: number | string; lagged: boolean };
@@ -42,7 +47,7 @@ export async function suggestFieldFilters(
     }
   > = {};
   for (const field of fields) {
-    requireCoveredField(field, catalog, values);
+    requireCoveredField(field, catalog, values, datasetAge);
     const pool = trades
       .map((trade, i) => ({ trade, value: values[i][field] }))
       .filter((item) => item.value !== undefined);
@@ -126,9 +131,14 @@ export async function analyzeFieldRegimes(
   trades: Trade[],
   field: string,
   bins?: number[],
+  maxMissedSessions?: number,
 ) {
-  const { catalog, values, datasetAge } = await resolveAnalysisFields(baseDir, trades);
-  requireCoveredField(field, catalog, values);
+  const { catalog, values, datasetAge } = await resolveAnalysisFields(
+    baseDir,
+    trades,
+    maxMissedSessions,
+  );
+  requireCoveredField(field, catalog, values, datasetAge);
   const entry = catalog.find((entry) => entry.field === field)!;
   if (bins && entry.type !== "numeric") throw new Error(`Bins require a numeric field: ${field}`);
   if (bins?.some((value, i) => !Number.isFinite(value) || (i > 0 && value <= bins[i - 1])))

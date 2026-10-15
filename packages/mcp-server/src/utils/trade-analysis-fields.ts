@@ -5,15 +5,22 @@ import {
   resolveTradeDatasets,
   runtimeFieldCatalog,
   summarizeDatasetAge,
+  type DatasetFieldAge,
 } from "../db/dataset-schemas.ts";
 import { buildLookaheadFreeQuery, CLOSE_KNOWN_FIELDS } from "./field-timing.ts";
 import { marketTickerDateKey, resolveTradeTicker } from "./ticker.ts";
 
-export async function resolveAnalysisFields(baseDir: string, trades: Trade[]) {
+export async function resolveAnalysisFields(
+  baseDir: string,
+  trades: Trade[],
+  maxMissedSessions?: number,
+) {
   const conn = await getConnection(baseDir);
   const datasets = await listDatasets(conn);
   const catalog = await runtimeFieldCatalog(conn);
-  const datasetMatches = trades.map((trade) => resolveTradeDatasets(datasets, trade));
+  const datasetMatches = trades.map((trade) =>
+    resolveTradeDatasets(datasets, trade, maxMissedSessions),
+  );
   const keys = trades.map((trade) => {
     const date = new Date(trade.dateOpened);
     const midnightUtc = date.getUTCHours() === 0 && date.getUTCMinutes() === 0;
@@ -64,9 +71,17 @@ export function requireCoveredField(
   field: string,
   catalog: { field: string }[],
   values: Record<string, number | string>[],
+  ages?: Record<string, DatasetFieldAge>,
 ) {
   if (!catalog.some((entry) => entry.field === field))
     throw new Error(`Unknown analysis field: ${field}`);
-  if (!values.some((row) => row[field] !== undefined))
-    throw new Error(`Uncovered analysis field: ${field}; no value available at trade entry`);
+  if (!values.some((row) => row[field] !== undefined)) {
+    const age = ages?.[field];
+    const reason = age?.rejectedAttachments
+      ? `; ${age.rejectedAttachments} refused by maxMissedSessions; ${age.unsupportedSessionAge} session ages unsupported`
+      : "";
+    throw new Error(
+      `Uncovered analysis field: ${field}; no value available at trade entry${reason}`,
+    );
+  }
 }

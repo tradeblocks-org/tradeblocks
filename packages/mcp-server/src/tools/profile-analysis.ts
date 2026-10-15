@@ -35,6 +35,8 @@ import {
   runtimeFieldCatalog,
   summarizeDatasetAge,
   datasetAgeOutput,
+  maxMissedSessionsSchema,
+  type DatasetProvenance,
 } from "../db/dataset-schemas.ts";
 
 // =============================================================================
@@ -177,7 +179,8 @@ interface TradeWithFields {
   trade: Trade;
   market: Record<string, unknown>;
   builtIn: Record<string, unknown> | undefined;
-  provenance: Record<string, { sourceTimestamp: string; availableAt: string }>;
+  provenance: Record<string, DatasetProvenance>;
+  rejected: Record<string, DatasetProvenance>;
 }
 
 function partitionMarketFilters(entryFilters: EntryFilter[], catalog: { field: string }[]) {
@@ -212,6 +215,7 @@ async function loadTradesAndMarket(
   baseDir: string,
   blockId: string,
   strategyName: string,
+  maxMissedSessions?: number,
 ): Promise<{
   rows: TradeWithFields[];
   unmatchedCount: number;
@@ -244,7 +248,9 @@ async function loadTradesAndMarket(
   const marketRecords = resultToRecords(result);
   const marketMap = recordsByTickerDate(marketRecords);
   const datasets = await listDatasets(conn);
-  const datasetMatches = trades.map((trade) => resolveTradeDatasets(datasets, trade));
+  const datasetMatches = trades.map((trade) =>
+    resolveTradeDatasets(datasets, trade, maxMissedSessions),
+  );
 
   // Preserve built-in coverage separately from the per-field joined values.
   const rows: TradeWithFields[] = [];
@@ -260,6 +266,7 @@ async function loadTradesAndMarket(
       builtIn,
       market: { ...builtIn, ...datasetValues },
       provenance: datasetMatches[index].provenance,
+      rejected: datasetMatches[index].rejected,
     });
     if (!builtIn) unmatchedCount++;
   }
@@ -330,6 +337,7 @@ function findBucket(
 export const analyzeStructureFitSchema = z.object({
   blockId: z.string().describe("Block ID to analyze"),
   strategyName: z.string().describe("Strategy name matching a stored profile"),
+  maxMissedSessions: maxMissedSessionsSchema,
   minTrades: z
     .number()
     .optional()
@@ -359,6 +367,7 @@ export async function handleAnalyzeStructureFit(
     baseDir,
     blockId,
     strategyName,
+    input.maxMissedSessions,
   );
 
   const catalog = await runtimeFieldCatalog(conn);
@@ -382,6 +391,7 @@ export async function handleAnalyzeStructureFit(
     return createToolOutput(`Uncovered dataset fields: ${uncovered.join(", ")}`, {
       error: "uncovered_fields",
       fields: uncovered,
+      ...datasetAgeOutput(datasetAge, uncovered),
       warnings,
     });
 
@@ -611,6 +621,7 @@ export async function handleAnalyzeStructureFit(
 export const validateEntryFiltersSchema = z.object({
   blockId: z.string().describe("Block ID to analyze"),
   strategyName: z.string().describe("Strategy name matching a stored profile"),
+  maxMissedSessions: maxMissedSessionsSchema,
   minTrades: z
     .number()
     .optional()
@@ -675,6 +686,7 @@ export async function handleValidateEntryFilters(
     baseDir,
     blockId,
     strategyName,
+    input.maxMissedSessions,
   );
   const predicates: FilterPredicate[] = filters.map((filter) =>
     buildFilterPredicate(filter, catalog),
@@ -682,9 +694,10 @@ export async function handleValidateEntryFilters(
   const matched = rows.filter(({ market }) =>
     predicates.every((predicate) => predicate.hasData(market)),
   );
+  const ageRows = input.maxMissedSessions === undefined ? matched : rows;
   const datasetAge = summarizeDatasetAge(
-    matched.map(({ trade }) => trade),
-    matched,
+    ageRows.map(({ trade }) => trade),
+    ageRows,
   );
   const uncovered = filters
     .filter(
@@ -697,6 +710,7 @@ export async function handleValidateEntryFilters(
     return createToolOutput(`Uncovered dataset fields: ${uncovered.join(", ")}`, {
       error: "uncovered_fields",
       fields: uncovered,
+      ...datasetAgeOutput(datasetAge, uncovered),
       warnings,
     });
 
