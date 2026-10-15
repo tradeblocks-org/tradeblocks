@@ -136,13 +136,43 @@ it.each([
   });
 });
 
-it("refuses an unused declaration even when other declared actions match", () => {
-  expect(
-    normalizeSplitAdjustedRows([freshRow], [action, { ...action, ticker: "SPY" }]),
-  ).toMatchObject({ ok: false, refused: "split-unmatched-action" });
-  expect(normalizeSplitAdjustedRows([], [action])).toMatchObject({
+it("accepts book-level actions unused by an individual tape", () => {
+  const result = normalizeSplitAdjustedRows([freshRow], [action, { ...action, ticker: "SPY" }]);
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(result.detail);
+  expect(result.rows[0].entryQuantity).toBe(1);
+  expect(result.adjusted_rows).toHaveLength(1);
+  expect(normalizeSplitAdjustedRows([], [action])).toEqual({
+    ok: true,
+    rows: [],
+    adjusted_rows: [],
+  });
+});
+
+it("treats an omitted adjustment flag as false while retaining held-across protection", () => {
+  const row = {
+    underlying: "TSLA",
+    dateOpened: "2022-08-24",
+    timeOpened: "15:20:00",
+    dateClosed: "2022-08-25",
+    numberOfContracts: 3,
+    profit: 40.97,
+    buyingPowerRequired: 23084.8,
+  };
+  const result = normalizeSplitAdjustedRows([row], []);
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(result.detail);
+  expect(result.rows[0]).toMatchObject({
+    entryQuantity: 3,
+    factor: 1,
+    netPlPerContract: 40.97 / 3,
+    buyingPowerPerContract: 23084.8 / 3,
+    action: null,
+  });
+  expect(result.adjusted_rows).toEqual([]);
+  expect(normalizeSplitAdjustedRows([row], [action])).toMatchObject({
     ok: false,
-    refused: "split-unmatched-action",
+    refused: "split-unadjusted-held-row",
   });
 });
 
@@ -157,6 +187,7 @@ it.each([
   { ...freshRow, dateClosed: "2022-08-23" },
   { ...freshRow, dateClosed: "0000-01-01" },
   { ...freshRow, timeOpened: "24:00:00" },
+  { ...freshRow, wasAdjusted: "false" as unknown as boolean },
   { ...freshRow, underlying: "" },
   { ...freshRow, numberOfContracts: 0 },
   { ...freshRow, numberOfContracts: 1.5 },

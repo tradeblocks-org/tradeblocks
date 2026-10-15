@@ -12,5 +12,5 @@ These additive library options add no provider requirement, MCP schema change or
 ## Native split-adjusted trade normalization
 
 - Added the pure `normalizeSplitAdjustedRows(rows, actions)` calculation, exported from `@tradeblocks/lib` and its calculations entrypoint. A declared ticker, effective date and ratio determine each adjusted row's entry quantity, native net P/L and buying power per entry contract, plus an `adjusted_rows` projection from the same matches.
-- Native rounded profit is preserved without premium reconstruction or re-rounding. Unknown or multiply matched adjusted rows, unused actions, invalid declarations/quantities and unadjusted held-across contradictions produce named refusals; unadjusted siblings remain unscaled.
+- Native rounded profit is preserved without premium reconstruction or re-rounding. Unknown or multiply matched adjusted rows, invalid declarations/quantities and unadjusted held-across contradictions produce named refusals; unadjusted siblings remain unscaled. An omitted `wasAdjusted` flag means false, and book-level actions unused by an individual tape are allowed.
 - No provider, file access, replay-kernel change or extra fee deduction is introduced. See the [developer guide](../docs/development.md#offline-book-replay-and-drawdown-budget-search) for calendar-date matching and the complete result contract.

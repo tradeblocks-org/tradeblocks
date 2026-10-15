@@ -321,12 +321,14 @@ is required.
 `normalizeSplitAdjustedRows(rows, actions)` (from `@tradeblocks/lib` or its
 calculations entrypoint) is the pure native-row normalizer. Supply rows with
 `underlying`, `dateOpened`, `timeOpened`, `dateClosed`, `numberOfContracts`,
-`profit`, `buyingPowerRequired` and boolean `wasAdjusted`, plus declared
-`{ ticker, date, ratio }` actions. Tickers match exactly, including case.
+`profit`, `buyingPowerRequired` and optional boolean `wasAdjusted` (absent means
+false), plus declared `{ ticker, date, ratio }` actions. Tickers match exactly,
+including case.
 Dates are valid `YYYY-MM-DD` calendar keys, opening times are `HH:mm:ss`, and
 an action is held across when **`dateOpened < date <= dateClosed`**.
 The ratio is positive finite settlement contracts per entry contract, including
 reverse splits. Each adjusted row must match exactly one declared action.
+A book-level action list may include actions unused by an individual tape.
 
 On `{ ok: true }`, `rows` preserves input order and original row references,
 with `rowIndex`, `nativeQuantity`, `entryQuantity`, `factor`, matched `action`
@@ -349,8 +351,7 @@ Named refusals are `split-invalid-action` (ticker, date or ratio),
 `split-invalid-row` (identity, calendar dates/order, clock, flag, quantity or
 non-finite economics; buying power must be non-negative),
 `split-unknown-adjusted-row`, `split-multiple-actions` (including duplicates),
-`split-invalid-entry-quantity`, `split-unmatched-action` (a declaration matches
-no adjusted row), and `split-unadjusted-held-row`. The last refuses an
+`split-invalid-entry-quantity`, and `split-unadjusted-held-row`. The last refuses an
 unadjusted row of the same ticker held across a declared action because that
 contradicts the native flag; it never guesses a factor. This function normalizes
 native trade totals only; open-mark normalization remains caller-owned.

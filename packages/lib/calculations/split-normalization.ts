@@ -15,7 +15,8 @@ export interface NativeSplitRow {
   /** Native net P/L, including any producer rounding and fees. */
   profit: number;
   buyingPowerRequired: number;
-  wasAdjusted: boolean;
+  /** Omitted means unadjusted. */
+  wasAdjusted?: boolean;
 }
 
 export interface SplitNormalizedRow<T extends NativeSplitRow> {
@@ -46,7 +47,6 @@ export type SplitNormalizationRefusal =
   | "split-unknown-adjusted-row"
   | "split-multiple-actions"
   | "split-invalid-entry-quantity"
-  | "split-unmatched-action"
   | "split-unadjusted-held-row";
 
 export type SplitNormalizationResult<T extends NativeSplitRow> =
@@ -98,7 +98,6 @@ export function normalizeSplitAdjustedRows<T extends NativeSplitRow>(
     if (indexes) indexes.push(i);
     else byTicker.set(action.ticker, [i]);
   }
-  const matched = new Set<number>();
   const normalized: SplitNormalizedRow<T>[] = [];
   const adjusted_rows: SplitAdjustedRowFact[] = [];
   for (let i = 0; i < rows.length; i++) {
@@ -111,7 +110,7 @@ export function normalizeSplitAdjustedRows<T extends NativeSplitRow>(
       row.dateClosed < row.dateOpened ||
       typeof row.timeOpened !== "string" ||
       !/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(row.timeOpened) ||
-      typeof row.wasAdjusted !== "boolean" ||
+      (row.wasAdjusted !== undefined && typeof row.wasAdjusted !== "boolean") ||
       !Number.isSafeInteger(row.numberOfContracts) ||
       row.numberOfContracts < 1 ||
       !Number.isFinite(row.profit) ||
@@ -168,7 +167,6 @@ export function normalizeSplitAdjustedRows<T extends NativeSplitRow>(
       action,
     });
     if (action && actionIndex !== undefined) {
-      matched.add(actionIndex);
       adjusted_rows.push({
         row_index: i,
         entry_date: row.dateOpened,
@@ -178,11 +176,6 @@ export function normalizeSplitAdjustedRows<T extends NativeSplitRow>(
         entry_quantity: entryQuantity,
         action,
       });
-    }
-  }
-  for (let i = 0; i < actions.length; i++) {
-    if (!matched.has(i)) {
-      return refuse("split-unmatched-action", `actions[${i}] matches no adjusted row`);
     }
   }
   return { ok: true, rows: normalized, adjusted_rows };
