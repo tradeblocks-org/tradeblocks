@@ -558,6 +558,14 @@ response notes this when supplied. Standalone and composite suggestions include
 sample-size support, not statistical confidence; keeping less than 20% caps it at
 low and adds a low-retention warning. Composite metrics describe kept trades.
 
+In 4.3.0, `minImprovementThreshold` is null under `totalPl` and numeric under
+`winRate`. Shared support thresholds are high at 20 kept/10 removed, medium at
+10 kept/5 removed, otherwise low, subject to the retention cap. This replaces
+the fields path's former kept-only 100/30 thresholds. Composites use the selected
+objective without the old >2-point standalone-relative gate. Their `improvement`
+still means kept win-rate gain over the better standalone on the same covered
+pool, not P&L or baseline-relative gain. See the [4.3.0 behavior changes](../../releases/v4.3.0.md#behavior-changes).
+
 Dataset consumers accept optional `maxMissedSessions` (a nonnegative integer).
 `datasetAge` preserves calendar-day ages and adds missed expected XNYS session ages:
 close columns expect the prior session; open columns expect today's session only

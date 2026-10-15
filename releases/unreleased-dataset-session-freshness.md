@@ -1,7 +1,0 @@
-# Dataset session freshness
-
-- Dataset ages now include timing-aware missed expected XNYS sessions from the shared causal resolver's source provenance. Friday close to Monday entry is 0 missed, a missing Friday is 1, and holidays do not count. Open columns expect today's source only at/after known-by ET. Timestamped rows remain as-of; open freshness without known-by uses midnight ET for the daily-session diagnostic, not an inferred intraday publication cadence.
-- Existing calendar-day ages remain. Session aggregates report supported/unsupported status, median/max missed sessions, stale candidate count, unsupported count, and rejected count. Warnings name fields and counts. Session summaries include rejected candidates; calendar-day summaries describe accepted attachments (null ages when none).
-- `maxMissedSessions` is opt-in across dataset-consuming analysis tools. Values older than the limit are refused and count as uncovered in field baselines. Ages outside the bounded 2022–2030 XNYS calendar are explicitly unsupported and refused when a limit is set. No weekday guessing is used. Without a limit, matching is unchanged.
-- Datasets with undeclared (legacy) timing report session age `unsupported`, so any `maxMissedSessions` limit refuses them. In practice these are legacy web datasets; MCP imports always declare timing.
-- `enrich_trades` exposes session age alongside accepted provenance, and names refused fields in `datasetRejections`.

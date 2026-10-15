@@ -226,6 +226,16 @@ Keeping less than 20% of the covered pool always caps support at low and adds a
 `Low retention` warning. Composite projections describe the retained complement of the
 AND exclusion and use the same objective, not a separate standalone-relative gain gate.
 
+Since 4.3.0, `minImprovementThreshold` is null under `totalPl`; under `winRate` it
+reports the configured/default numeric threshold. The fields path previously
+used kept-only support thresholds of 100 (high) and 30 (medium); it now uses the
+shared kept/removed thresholds above. Composite `improvement` remains the
+kept-trade win rate minus the better standalone kept-trade win rate, in percentage
+points, with standalones evaluated on the same composite covered pool. It is not
+P&L improvement or baseline-relative `winRateDelta`, and can be negative on an
+admitted composite because the former >2-point gate is gone. See the
+[4.3.0 behavior changes](../releases/v4.3.0.md#behavior-changes).
+
 `analyze_regime_performance` accepts `field` instead of a preset `segmentBy`. Categorical
 fields group by value. Numeric fields use `bins` as strictly increasing cut points, with
 lower-inclusive/upper-exclusive intervals and unbounded tails; omitted bins use quartiles.

@@ -95,6 +95,11 @@ a known-by time; timestamped values are as-of. Existing web datasets retain thei
 a `legacy-same-day` warning until timing is declared. See the [dataset tools reference](docs/mcp-tools.md#market-analysis)
 and [4.1.0 release notes](releases/v4.1.0.md), including changes to existing analysis results.
 
+4.3 adds covered/uncovered dataset baselines, missed-XNYS-session age diagnostics and an
+optional `maxMissedSessions` limit. `suggest_filters` now defaults to P&L improvement
+(`objective: "totalPl"`), not win-rate gain. See the [4.3.0 behavior changes](releases/v4.3.0.md#behavior-changes)
+before comparing suggestions with earlier reports.
+
 ## Features Overview
 
 ### Web Dashboard
