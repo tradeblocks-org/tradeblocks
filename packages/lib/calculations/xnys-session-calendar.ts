@@ -1,19 +1,32 @@
 /**
- * Bounded full-day XNYS session calendar used by the market-data provenance
- * authority. Early closes remain sessions: this calendar answers only whether
- * a complete daily partition is expected for a date.
- *
- * The revision changes whenever supported bounds or closure semantics change.
+ * Shared XNYS exchange rules with two bounded interfaces. The original v1
+ * identity remains fixed for provenance consumers; v2 also covers historical reads.
  */
 export const XNYS_SESSION_CALENDAR_REVISION = "xnys-full-day-2022-2030-v1" as const;
 export const XNYS_SESSION_CALENDAR_SUPPORTED_FROM = "2022-01-01" as const;
 export const XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH = "2030-12-31" as const;
 
+export const XNYS_SESSION_CALENDAR_REVISION_V2 = "xnys-full-day-2013-2030-v2" as const;
+export const XNYS_SESSION_CALENDAR_SUPPORTED_FROM_V2 = "2013-01-01" as const;
+export const XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH_V2 = "2030-12-31" as const;
+
+type Calendar = { revision: string; from: string; through: string };
+const V1: Calendar = {
+  revision: XNYS_SESSION_CALENDAR_REVISION,
+  from: XNYS_SESSION_CALENDAR_SUPPORTED_FROM,
+  through: XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH,
+};
+const V2: Calendar = {
+  revision: XNYS_SESSION_CALENDAR_REVISION_V2,
+  from: XNYS_SESSION_CALENDAR_SUPPORTED_FROM_V2,
+  through: XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH_V2,
+};
+
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MS_PER_DAY = 24 * 60 * 60 * 1_000;
 
-/** Non-recurring full-day XNYS closures inside this calendar revision. */
-const SPECIAL_CLOSURES = new Set(["2025-01-09"]);
+/** Non-recurring full-day XNYS closures inside the supported ranges. */
+const SPECIAL_CLOSURES = new Set(["2018-12-05", "2025-01-09"]);
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -23,7 +36,7 @@ function utcDate(year: number, monthIndex: number, day: number): Date {
   return new Date(Date.UTC(year, monthIndex, day));
 }
 
-function parseSupportedDate(value: string, label: string): Date {
+function parseSupportedDate(value: string, label: string, calendar: Calendar): Date {
   if (!ISO_DATE_RE.test(value)) {
     throw new TypeError(
       `${label} must be an ISO calendar date (YYYY-MM-DD): ${JSON.stringify(value)}`,
@@ -33,13 +46,10 @@ function parseSupportedDate(value: string, label: string): Date {
   if (!Number.isFinite(parsed.getTime()) || isoDate(parsed) !== value) {
     throw new TypeError(`${label} is not a real calendar date: ${JSON.stringify(value)}`);
   }
-  if (
-    value < XNYS_SESSION_CALENDAR_SUPPORTED_FROM ||
-    value > XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH
-  ) {
+  if (value < calendar.from || value > calendar.through) {
     throw new RangeError(
-      `${label} ${JSON.stringify(value)} is outside XNYS calendar revision ${XNYS_SESSION_CALENDAR_REVISION} ` +
-        `[${XNYS_SESSION_CALENDAR_SUPPORTED_FROM}, ${XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH}]`,
+      `${label} ${JSON.stringify(value)} is outside XNYS calendar revision ${calendar.revision} ` +
+        `[${calendar.from}, ${calendar.through}]`,
     );
   }
   return parsed;
@@ -116,7 +126,7 @@ function holidayClosures(year: number): ReadonlySet<string> {
   add(nthWeekdayOfMonth(year, 1, 1, 3)); // Washington's Birthday
   add(addDays(easterSunday(year), -2)); // Good Friday
   add(lastWeekdayOfMonth(year, 4, 1)); // Memorial Day
-  add(observedFixedHoliday(year, 5, 19)); // Juneteenth
+  if (year >= 2022) add(observedFixedHoliday(year, 5, 19)); // Juneteenth
   add(observedFixedHoliday(year, 6, 4)); // Independence Day
   add(nthWeekdayOfMonth(year, 8, 1, 1)); // Labor Day
   add(nthWeekdayOfMonth(year, 10, 4, 4)); // Thanksgiving Day
@@ -145,14 +155,32 @@ function closuresForYear(year: number): ReadonlySet<string> {
  * unknown date into a presumed non-session.
  */
 export function isXnysSessionDate(value: string): boolean {
-  const date = parseSupportedDate(value, "XNYS session date");
+  return isSessionDate(value, V1);
+}
+
+/** Historical session predicate; unsupported dates refuse with the v2 bounds. */
+export function isXnysSessionDateV2(value: string): boolean {
+  return isSessionDate(value, V2);
+}
+
+function isSessionDate(value: string, calendar: Calendar): boolean {
+  const date = parseSupportedDate(value, "XNYS session date", calendar);
   const weekday = date.getUTCDay();
   if (weekday === 0 || weekday === 6) return false;
   return !closuresForYear(date.getUTCFullYear()).has(value);
 }
 /** Equity early closes are 13:00 ET; full-day closures are never early sessions. */
 export function isEarlyCloseSession(value: string): boolean {
-  if (!isXnysSessionDate(value)) return false;
+  return isEarlyClose(value, V1);
+}
+
+/** Historical early-close predicate; full-day closures return false. */
+export function isEarlyCloseSessionV2(value: string): boolean {
+  return isEarlyClose(value, V2);
+}
+
+function isEarlyClose(value: string, calendar: Calendar): boolean {
+  if (!isSessionDate(value, calendar)) return false;
   const date = new Date(`${value}T12:00:00Z`);
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth();
@@ -163,8 +191,17 @@ export function isEarlyCloseSession(value: string): boolean {
 
 /** Deterministically enumerate XNYS sessions in the inclusive supported range. */
 export function enumerateXnysSessions(from: string, through: string): readonly string[] {
-  const first = parseSupportedDate(from, "XNYS session range from");
-  const last = parseSupportedDate(through, "XNYS session range through");
+  return enumerateSessions(from, through, V1);
+}
+
+/** Inclusive historical sessions; the returned array is immutable. */
+export function enumerateXnysSessionsV2(from: string, through: string): readonly string[] {
+  return enumerateSessions(from, through, V2);
+}
+
+function enumerateSessions(from: string, through: string, calendar: Calendar): readonly string[] {
+  const first = parseSupportedDate(from, "XNYS session range from", calendar);
+  const last = parseSupportedDate(through, "XNYS session range through", calendar);
   if (first.getTime() > last.getTime()) {
     throw new RangeError(
       `XNYS session range from ${JSON.stringify(from)} exceeds through ${JSON.stringify(through)}`,
@@ -174,7 +211,7 @@ export function enumerateXnysSessions(from: string, through: string): readonly s
   const sessions: string[] = [];
   for (let cursor = first; cursor.getTime() <= last.getTime(); cursor = addDays(cursor, 1)) {
     const date = isoDate(cursor);
-    if (isXnysSessionDate(date)) sessions.push(date);
+    if (isSessionDate(date, calendar)) sessions.push(date);
   }
   return Object.freeze(sessions);
 }

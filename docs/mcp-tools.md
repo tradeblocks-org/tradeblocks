@@ -189,8 +189,10 @@ is 0; a missing Friday is 1. Holidays do not count. For open columns, today's se
 expected only at/after known-by ET; before then the prior session is expected.
 Timestamped observations remain as-of; open-column freshness uses the declared known-by
 or midnight ET if omitted. This daily-session diagnostic does not infer intraday cadence.
-The shared library's existing XNYS calendar covers 2022–2030 only; outside that range
-session age is explicitly `unsupported` (null aggregate ages), never guessed from weekdays.
+This diagnostic retains the shared library's v1 XNYS calendar (2022–2030);
+outside that range session age is explicitly `unsupported` (null aggregate ages),
+never guessed from weekdays. The additive historical v2 library exports do not
+change dataset session-age behavior.
 
 `maxMissedSessions` is an optional nonnegative integer on `enrich_trades`,
 `suggest_filters`, `analyze_regime_performance`, `filter_curve`, `find_predictive_fields`,

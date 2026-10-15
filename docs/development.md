@@ -155,6 +155,26 @@ those comparisons as unavailable rather than reporting the substitution as
 measured evidence. This additive library calculation changes neither bootstrap
 inference nor MCP tools, and adds no bootstrap option or provider requirement.
 
+#### Bounded XNYS calendars
+
+`@tradeblocks/lib` and its calculations entrypoint export the historical
+`isXnysSessionDateV2`, `enumerateXnysSessionsV2(from, through)` (inclusive,
+immutable result), and `isEarlyCloseSessionV2`. Their revision and bounds are
+`XNYS_SESSION_CALENDAR_REVISION_V2` (`xnys-full-day-2013-2030-v2`),
+`XNYS_SESSION_CALENDAR_SUPPORTED_FROM_V2` (`2013-01-01`) and
+`XNYS_SESSION_CALENDAR_SUPPORTED_THROUGH_V2` (`2030-12-31`). They consume calendar
+keys, not instants. Malformed/impossible dates throw `TypeError`; unsupported
+dates throw `RangeError` naming the date, revision and bounds. Enumeration also
+refuses reversed ranges.
+
+Early closes remain sessions (13:00 Eastern); full closures return false from
+the early-close predicate. Juneteenth starts in 2022, with one-off closures on
+2018-12-05 and 2025-01-09 and no Friday observance for a Saturday New Year's Day.
+Both revisions use one exchange rule implementation. The original unsuffixed
+exports retain their 2022–2030 bounds, v1 provenance identity and refusal text;
+canonical registries, replay attribution, generated snapshots and dataset
+session-age calculations do not opt into historical v2 automatically.
+
 #### Replay and native-ledger calibration
 
 `compareReplayToNative(expected, observed, tolerances?)` is exported from
