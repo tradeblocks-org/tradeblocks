@@ -10,6 +10,7 @@ export * from "./realized-performance.ts";
 export * from "./marked-equity.ts";
 export * from "./book-replay.ts";
 export * from "./replay-calibration.ts";
+export * from "./split-normalization.ts";
 export * from "./walk-forward-book.ts";
 export * from "./walk-forward-book-equal-risk.ts";
 export * from "./drawdown-budget-search.ts";

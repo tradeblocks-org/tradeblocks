@@ -318,6 +318,43 @@ remains the entry quantity; retain OO's adjusted quantity separately when
 displaying settlement quantities. No extra replay field or market-data provider
 is required.
 
+`normalizeSplitAdjustedRows(rows, actions)` (from `@tradeblocks/lib` or its
+calculations entrypoint) is the pure native-row normalizer. Supply rows with
+`underlying`, `dateOpened`, `timeOpened`, `dateClosed`, `numberOfContracts`,
+`profit`, `buyingPowerRequired` and boolean `wasAdjusted`, plus declared
+`{ ticker, date, ratio }` actions. Tickers match exactly, including case.
+Dates are valid `YYYY-MM-DD` calendar keys, opening times are `HH:mm:ss`, and
+an action is held across when **`dateOpened < date <= dateClosed`**.
+The ratio is positive finite settlement contracts per entry contract, including
+reverse splits. Each adjusted row must match exactly one declared action.
+
+On `{ ok: true }`, `rows` preserves input order and original row references,
+with `rowIndex`, `nativeQuantity`, `entryQuantity`, `factor`, matched `action`
+(null for unadjusted rows), `netPlPerContract` and `buyingPowerPerContract`.
+Entry quantity is native quantity divided by the matched ratio and must be a
+positive safe integer. Native `profit` and `buyingPowerRequired` are divided by
+that **entry quantity**, never the adjusted quantity. Native net profit already
+contains producer rounding and fees: no premium reconstruction, re-rounding or
+additional fee subtraction occurs. A native $40.97, three-contract row with a
+3-for-1 action therefore yields one entry contract and $40.97 per entry contract.
+Unadjusted rows use factor one; same-opening siblings are never scaled together.
+
+`adjusted_rows` is the projection of those same matches, with `row_index`,
+`entry_date`, `entry_time`, `factor`, `native_quantity`, `entry_quantity` and
+`action`; a caller can add its own member identity. There is no second factor
+declaration. Neither inputs nor rows are mutated.
+
+On `{ ok: false, refused, detail }`, no partial normalized tape is returned.
+Named refusals are `split-invalid-action` (ticker, date or ratio),
+`split-invalid-row` (identity, calendar dates/order, clock, flag, quantity or
+non-finite economics; buying power must be non-negative),
+`split-unknown-adjusted-row`, `split-multiple-actions` (including duplicates),
+`split-invalid-entry-quantity`, `split-unmatched-action` (a declaration matches
+no adjusted row), and `split-unadjusted-held-row`. The last refuses an
+unadjusted row of the same ticker held across a declared action because that
+contradicts the native flag; it never guesses a factor. This function normalizes
+native trade totals only; open-mark normalization remains caller-owned.
+
 All member declarations are required: `sizing`, `removed`,
 `ignoreMarginRequirements`, `maxContractsPerTrade`, `maxAllocationAmount`,
 `minimumOne`, and `maxOpenTrades`. Null caps are uncapped; null concurrency means
