@@ -5,9 +5,13 @@ import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerPredictiveTools } from "../../src/tools/reports/predictive.ts";
 import { registerDatasetTools } from "../../src/tools/datasets.ts";
+import { registerMarketDataTools } from "../../src/tools/market-data.ts";
+import { createMarketStores } from "../../src/market/stores/index.ts";
+import { TickerRegistry } from "../../src/market/tickers/registry.ts";
 import {
   getConnection,
   closeConnection,
+  getCurrentConnection,
   upgradeToReadWrite,
   downgradeToReadOnly,
 } from "../../src/db/connection.ts";
@@ -763,7 +767,7 @@ test("chosen threshold groups partition covered and uncovered totals with numeri
     (
       await handlers.import_daily_dataset({
         name: "regime",
-        content: "date,score,label\n2025-01-03,1,calm\n2025-01-04,2,busy\n2025-01-05,3,busy",
+        content: "date,score,label\n2025-01-03,1,uncovered\n2025-01-04,2,busy\n2025-01-05,3,busy",
         columnTiming: { score: "open", label: "open" },
         knownBy: "09:30",
       })
@@ -780,7 +784,7 @@ test("chosen threshold groups partition covered and uncovered totals with numeri
     const result = (await handlers.filter_curve(schemas.filter_curve.parse({ ...input, groupBy })))
       .structuredContent!;
     const rows = result.perGroup as Array<{
-      group: string;
+      group: string | null;
       uncoveredGroup?: boolean;
       baseline: Stats & { uncoveredCount: number };
       kept: Stats;
@@ -791,13 +795,14 @@ test("chosen threshold groups partition covered and uncovered totals with numeri
     expect(rows.reduce((sum, row) => sum + row.kept.count, 0)).toBe(40);
     expect(rows.reduce((sum, row) => sum + row.removed.totalPl, 0)).toBe(-400);
     expect(rows.find((row) => row.uncoveredGroup)).toMatchObject({
+      group: null,
       baseline: { count: 20 },
       kept: { count: 10 },
       removed: { count: 10 },
       lowSampleWarning: expect.any(String),
     });
     expect(rows.filter((row) => !row.uncoveredGroup).map((row) => row.group)).toEqual(
-      groupBy === "regime.label" ? ["busy", "calm"] : ["[1, 2)", "[2, 3)", "[3, ∞)"],
+      groupBy === "regime.label" ? ["busy", "uncovered"] : ["[1, 2)", "[2, 3)", "[3, ∞)"],
     );
   }
 });
@@ -981,4 +986,89 @@ test("built-in categorical group values use prior-session categories rather than
       baseline: expect.objectContaining({ count: 1, totalPl: -10 }),
     }),
   ]);
+  registerMarketDataTools(
+    {
+      registerTool(name: string, _config: unknown, handler: (typeof handlers)[string]) {
+        handlers[name] = handler;
+      },
+    } as unknown as McpServer,
+    baseDir,
+    createMarketStores({
+      get conn() {
+        return getCurrentConnection();
+      },
+      dataDir: baseDir,
+      parquetMode: false,
+      tickers: new TickerRegistry([{ underlying: "SPX", roots: ["SPX", "SPXW"] }]),
+    }),
+  );
+  const regimes = (
+    await handlers.analyze_regime_performance({
+      blockId: "sample",
+      field: "Trend_Direction",
+    })
+  ).structuredContent!;
+  expect(regimes.segments).toEqual([
+    expect.objectContaining({ segment: "down", tradeCount: 1, totalPl: 20 }),
+    expect.objectContaining({ segment: "up", tradeCount: 1, totalPl: -10 }),
+  ]);
+  const suggestions = (
+    await handlers.suggest_filters({
+      blockId: "sample",
+      fields: ["Trend_Direction"],
+      objective: "totalPl",
+    })
+  ).structuredContent!;
+  expect(suggestions.suggestedFilters).toEqual([
+    expect.objectContaining({
+      condition: expect.objectContaining({ field: "Trend_Direction", operator: "==", value: "up" }),
+      newTotalPl: 20,
+    }),
+  ]);
+});
+
+test("per-year and per-group MAR suppress spans below 90 calendar days but retain the 90-day boundary", async () => {
+  await fixture([
+    { date: "2024-01-01", pl: -10, signal: 1 },
+    { date: "2024-01-02", pl: 30, signal: 1 },
+    { date: "2024-03-31", pl: -5, signal: 0 },
+    { date: "2025-01-02", pl: -20, signal: 1 },
+    { date: "2025-01-03", pl: 40, signal: 0 },
+  ]);
+  await handlers.import_daily_dataset({
+    name: "duration",
+    content: "date,label\n2024-01-01,long\n2025-01-01,short",
+    columnTiming: { label: "open" },
+    knownBy: "09:30",
+  });
+  const result = (
+    await handlers.filter_curve({
+      blockId: "sample",
+      field: "custom.signal",
+      unit: "day",
+      objective: "mar",
+      groupBy: "duration.label",
+      thresholds: [0.5],
+      mode: "both",
+    })
+  ).structuredContent!;
+  expect(result.baseline).toMatchObject({ mar: expect.any(Number) });
+  expect(result.bestThreshold).toMatchObject({ objectiveDelta: expect.any(Number) });
+  for (const rows of [result.perYear, result.perGroup]) {
+    expect(rows).toEqual([
+      expect.objectContaining({
+        baseline: expect.objectContaining({ mar: expect.any(Number) }),
+        kept: expect.objectContaining({ mar: expect.any(Number) }),
+        removed: expect.objectContaining({ mar: expect.any(Number) }),
+        objectiveDelta: expect.any(Number),
+      }),
+      expect.objectContaining({
+        marUnstable: true,
+        objectiveDelta: null,
+        baseline: expect.objectContaining({ mar: null, marUnstable: true }),
+        kept: expect.objectContaining({ mar: null, marUnstable: true }),
+        removed: expect.objectContaining({ mar: null, marUnstable: true }),
+      }),
+    ]);
+  }
 });

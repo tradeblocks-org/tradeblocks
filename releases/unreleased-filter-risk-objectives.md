@@ -9,3 +9,7 @@
 Trade units refuse all three as `objective_requires_day`. `objectiveMetadata` states definitions, flat-day treatment, capital and undefined cases. Admission includes path work. Existing objectives and omitted-option outputs are unchanged.
 
 The shared lib now exports the existing `calculateSharpeRatio` and `calculateMaxDrawdown` helpers. Drawdown retains its relative default and additionally accepts an `absolute` basis for ordered cumulative dollar P&L, beginning at zero.
+
+Sharpe and MAR use covered entry dates only, with filtered entry dates flat at zero; dates without covered entries are not inserted. Sharpe annualizes by √252; MAR retains calendar-span CAGR at 365.25 days per year.
+
+Per-year and per-group subsets spanning fewer than 90 calendar days now suppress MAR and its annualized return: baseline, kept and removed report `mar: null`, `annualizedReturnPct: null`, and `marUnstable: true`. The row also carries `marUnstable: true`, and the MAR objective delta is null. Exactly 90 days remains eligible. This guard does not change whole-population objectives or permutation.

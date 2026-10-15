@@ -298,15 +298,29 @@ export function analyzeFilterCurve<T extends CurveTrade>(
       : [];
     const keptSet = new Set(kept);
     const removed = annual.filter((trade) => !keptSet.has(trade));
+    const firstDate = annual[0]?.dateOpened;
+    const lastDate = annual[annual.length - 1]?.dateOpened;
+    const calendarDays =
+      firstDate && lastDate
+        ? (Date.UTC(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate()) -
+            Date.UTC(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate())) /
+          86400000
+        : 0;
+    const marUnstable = riskObjective && calendarDays < 90;
+    const unstableMar = marUnstable
+      ? { mar: null, annualizedReturnPct: null, marUnstable: true }
+      : undefined;
     return {
       baseline: {
         ...stats(annual),
+        ...unstableMar,
         uncoveredCount: uncovered.count,
         uncoveredTotalPl: uncovered.totalPl,
       },
-      kept: stats(kept, annual),
-      removed: stats(removed, annual),
-      objectiveDelta: delta(kept, annual),
+      kept: { ...stats(kept, annual), ...unstableMar },
+      removed: { ...stats(removed, annual), ...unstableMar },
+      objectiveDelta: marUnstable && objective === "mar" ? null : delta(kept, annual),
+      ...(marUnstable ? { marUnstable: true } : {}),
       ...(annual.length < 30 || kept.length < 30 || removed.length < 30
         ? { lowSampleWarning: "Fewer than 30 covered, kept or removed entries" }
         : {}),
@@ -342,7 +356,7 @@ export function analyzeFilterCurve<T extends CurveTrade>(
           ...(missing.length
             ? [
                 {
-                  group: "uncovered",
+                  group: null,
                   groupValue: null,
                   uncoveredGroup: true,
                   ...breakdown(missing),

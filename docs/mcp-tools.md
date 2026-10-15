@@ -264,6 +264,9 @@ all fields for its paginated trades (default 50, maximum 500).
 
 With `unit: "day"`, `objective` also accepts `sharpe`, `mar`, and `maxDrawdown`.
 They use the covered entry-date P&L curve, keeping filtered dates flat at zero.
+Only covered entry dates are observations: intervening dates without covered entries
+are not inserted. Sharpe uses √252 annualization; MAR retains calendar-span CAGR
+at 365.25 days per year, not √252.
 They refuse trade units as `objective_requires_day`.
 
 - **Sharpe** is mean daily dollar P&L / sample standard deviation × √252, rf=0;
@@ -278,6 +281,11 @@ They refuse trade units as `objective_requires_day`.
   `mar_requires_capital` refuses. Zero drawdown, nonpositive ending capital, or no
   elapsed time yields a null MAR and `mar_undefined`; such candidates are shown
   but cannot rank, and no eligible MAR candidate gives a named refusal.
+  In `perYear` and `perGroup` rows only, a covered subset spanning fewer than
+  90 calendar days reports `mar: null`, `annualizedReturnPct: null`, and
+  `marUnstable: true` on baseline, kept and removed statistics. The row also
+  sets `marUnstable: true`, and its MAR objective delta is null. A span of exactly
+  90 days is eligible. Whole-population ranking and permutation are unchanged.
 - **maxDrawdown** reports the positive maximum decline of cumulative daily P&L,
   starting at zero, in dollars and percent of starting capital when observed.
   Its objective delta is **baseline drawdown minus kept drawdown**: smaller is
@@ -296,8 +304,8 @@ thresholds per group. This opts into `totalPl` selection if no objective was giv
 Rows have the `perYear` shape: covered baseline and its uncovered count/P&L,
 kept/removed counts, P&L, win rate, objective delta and small-sample warning.
 Groups partition every selected trade/day, including filter-uncovered observations.
-Missing group values form a separate `uncoveredGroup: true` row labelled `uncovered`;
-this flag distinguishes it from a real categorical value with that spelling.
+Missing group values form a separate row with `group: null`, `groupValue: null`,
+and `uncoveredGroup: true`; a real category named `"uncovered"` remains a string.
 
 Numeric groups use increasing finite `bins` cut points or quartiles over the
 selected unit's group-covered observations, sharing the exact
