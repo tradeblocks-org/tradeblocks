@@ -164,7 +164,6 @@ export function CalendarNavigation() {
                   selected={selectedDateObj ?? undefined}
                   onSelect={handleDaySelect}
                   defaultMonth={selectedDateObj ?? undefined}
-                  initialFocus
                 />
               </PopoverContent>
             </Popover>
@@ -196,7 +195,6 @@ export function CalendarNavigation() {
                   selected={viewDate}
                   onSelect={(date) => date && setViewDate(date)}
                   defaultMonth={viewDate}
-                  initialFocus
                 />
               </PopoverContent>
             </Popover>
