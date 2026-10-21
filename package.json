@@ -117,7 +117,7 @@
     "@types/react-dom": "19.3.0",
     "lodash": ">=4.18.1",
     "rollup": ">=4.59.0",
-    "hono": ">=4.13.7",
+    "hono": ">=4.13.13",
     "sharp": "0.35.5",
     "maplibre-gl": "6.4.1",
     "@babel/core": "^7.29.1",
