@@ -4,7 +4,7 @@
  * Tests isParquetMode(), resolveMarketDir(), writeParquetAtomic(), and writeParquetPartition().
  * Uses standalone DuckDB instances (no connection.ts dependency).
  */
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { createHash } from "node:crypto";
 import {
   mkdirSync,
@@ -20,6 +20,7 @@ import { dirname, join } from "path";
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
 import {
   isParquetMode,
+  defaultStagingName,
   resolveMarketDir,
   writeParquetAtomic,
   writeParquetPartition,
@@ -157,6 +158,35 @@ describe("parquet-writer", () => {
       });
 
       expect(existsSync(deepPath)).toBe(true);
+    });
+
+    it("default staging names are unique within the same millisecond", () => {
+      const spy = jest.spyOn(Date, "now").mockReturnValue(1_792_350_050_088);
+      try {
+        const names = new Set(Array.from({ length: 50 }, () => defaultStagingName()));
+        expect(names.size).toBe(50);
+        for (const n of names) expect(n).toMatch(/^_staging_\d+_1792350050088_[a-z0-9]+$/);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it("concurrent writes on one connection in the same millisecond do not collide", async () => {
+      await conn.run(`CREATE TEMP TABLE tc AS SELECT range AS x FROM range(1000)`);
+      const spy = jest.spyOn(Date, "now").mockReturnValue(1_792_350_050_088);
+      try {
+        const results = await Promise.all(
+          [1, 2, 3].map((i) =>
+            writeParquetAtomic(conn, {
+              targetPath: join(tmpDir, `concurrent-${i}`, "data.parquet"),
+              selectQuery: `SELECT * FROM tc WHERE x % 3 = ${i - 1}`,
+            }),
+          ),
+        );
+        expect(results.map((r) => r.rowCount)).toEqual([334, 333, 333]);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it("drops staging table in finally block even on success", async () => {

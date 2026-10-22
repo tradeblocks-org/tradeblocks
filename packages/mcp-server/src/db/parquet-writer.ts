@@ -61,7 +61,7 @@ export interface WriteParquetAtomicOpts {
   targetPath: string;
   /** SELECT query that produces the final dataset */
   selectQuery: string;
-  /** Temp table name (default: _staging_{Date.now()}) */
+  /** Temp table name (default: _staging_{pid}_{Date.now()}_{random}, unique per call) */
   stagingName?: string;
   /** Parquet compression codec (default: 'ZSTD') */
   compression?: string;
@@ -261,6 +261,11 @@ function resolveQuality(
   };
 }
 
+/** Unique temp-table name: pid + millisecond + random suffix (identifier-safe characters only). */
+export function defaultStagingName(): string {
+  return `_staging_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /**
  * Atomic single-file Parquet write via DuckDB staging table.
  *
@@ -272,7 +277,9 @@ function resolveQuality(
  *
  * Path-traversal mitigation: targetPath is always constructed by callers via
  * path.join(dataDir, 'market', ...) with no user-supplied path components.
- * Identifier-injection mitigation: staging table names use Date.now() — no user input.
+ * Identifier-injection mitigation: staging table names use pid, Date.now() and a random
+ * base-36 suffix — no user input. The suffix keeps two writes that start in the same
+ * millisecond (e.g. two concurrent import_flat_file calls) from colliding on the name.
  *
  * @param conn - Active DuckDB connection
  * @param opts - Write options
@@ -285,7 +292,7 @@ export async function writeParquetAtomic(
   const {
     targetPath,
     selectQuery,
-    stagingName = `_staging_${Date.now()}`,
+    stagingName = defaultStagingName(),
     compression = "ZSTD",
     provenance: callerProvenance,
   } = opts;

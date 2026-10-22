@@ -347,6 +347,7 @@ export type { GreekColumn } from "./utils/quote-parquet-projection.ts";
 // Export parquet-writer utility functions for unit testing
 export {
   isParquetMode,
+  defaultStagingName,
   writeParquetAtomic,
   writeParquetPartition,
   ParquetProvenanceOrphanError,
