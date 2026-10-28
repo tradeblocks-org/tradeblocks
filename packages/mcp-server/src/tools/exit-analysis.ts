@@ -290,16 +290,6 @@ export async function handleAnalyzeExitTriggers(
   }
   const entryCost = fromMoney(entryCostMoney);
 
-  if (pnlPath.length === 0) {
-    return {
-      overall: {
-        triggers: [],
-        firstToFire: null,
-        summary: "No P&L data available from replay.",
-      },
-    };
-  }
-
   // 2. Determine date range from replay path
   const firstDate = pnlPath[0].timestamp.slice(0, 10);
   const lastDate = pnlPath[pnlPath.length - 1].timestamp.slice(0, 10);
@@ -551,7 +541,8 @@ export function registerExitAnalysisTools(
         "and by how much. For calendar/double-calendar strategies, includes per-leg-group " +
         "vega attribution showing front vs back month IV divergence. " +
         "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
-        "missing data yields a degenerate replay. Use the data-pipeline tools to backfill cache.",
+        "a leg with no usable cached quotes returns an error naming the leg. " +
+        "Use the data-pipeline tools to backfill cache.",
       inputSchema: decomposeGreeksSchema,
     },
     async (params) => {

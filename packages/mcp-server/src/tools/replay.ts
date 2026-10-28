@@ -23,7 +23,8 @@ import {
   computeStrategyPnlPath,
   computeReplayMfeMae,
   markPrice,
-  isUsableQuote,
+  chooseLegQuotes,
+  spxPmSeries,
   type ReplayLeg,
   type ReplayResult,
   type GreeksConfig,
@@ -181,6 +182,11 @@ export async function handleReplayTrade(
       throw new Error("open_date and close_date are required for hypothetical replay mode");
     }
 
+    // Stores read through the shared handle, which is closed when idle (#445).
+    // The tool lease only keeps an open handle open, so open it here the same
+    // way tradelog mode does below.
+    if (!injectedConn) await getConnection(baseDir);
+
     replayLegs = inputLegs.map((leg) => ({
       occTicker: buildOccTicker(leg.ticker, leg.expiry, leg.type, leg.strike),
       quantity: leg.quantity,
@@ -280,67 +286,94 @@ export async function handleReplayTrade(
     );
   }
 
-  // ----- Fetch minute quotes for each option leg via QuoteStore -----
-  // Adapt QuoteRow → BarRow with mid = (bid+ask)/2 as open/high/low/close
-  // (mid-price is the canonical mark for option-leg pricing).
+  // ----- Read minute quotes for each option leg via QuoteStore -----
+  // Mark = (bid+ask)/2 as open/high/low/close (mid-price is the canonical
+  // mark for option-leg pricing).
+  //
+  // The store resolves the partition by underlying but matches OCC tickers
+  // exactly, so an SPX-root ticker never reads SPXW-ingested quotes on its
+  // own. Tradelogs carry the root "SPX" for SPXW trades, so for each SPX-root
+  // leg on a PM-series expiration the SPXW ticker is read alongside it and
+  // chooseLegQuotes decides which contract the leg replays.
   //
   // Group OCC tickers by underlying before each readQuotes call: the store
-  // enforces a single-underlying invariant per call so partitioned reads
-  // can be served from one parquet partition root. Typical replays have
-  // all legs under one underlying (single SPX trade); multi-underlying
-  // replays issue one readQuotes per underlying.
-  //
-  // Fallback root logic (SPX→SPXW etc.) is implicit: the QuoteStore's
-  // tickers.resolve(extractRoot(...)) maps both SPX and SPXW to underlying
-  // 'SPX'. The OCC ticker prefix in the chain is whatever the data layer
-  // ingested (typically SPXW); keying on underlying makes the same data
-  // reachable via either root.
+  // enforces a single-underlying invariant per call.
   //
   // skip_quotes is a no-op for option-leg reads — quotes ARE the source of
   // truth here. Parameter remains in the schema for backward compat with
   // callers.
   void skip_quotes;
 
-  const byUnderlying = new Map<string, string[]>();
+  const byUnderlying = new Map<string, Set<string>>();
+  const addRead = (occTicker: string) => {
+    const underlying = stores.quote.tickers.resolve(extractRoot(occTicker));
+    const set = byUnderlying.get(underlying) ?? new Set<string>();
+    set.add(occTicker);
+    byUnderlying.set(underlying, set);
+  };
   for (const leg of replayLegs) {
-    const underlying = stores.quote.tickers.resolve(extractRoot(leg.occTicker));
-    const arr = byUnderlying.get(underlying) ?? [];
-    arr.push(leg.occTicker);
-    byUnderlying.set(underlying, arr);
+    addRead(leg.occTicker);
+    const pm = spxPmSeries(leg.occTicker);
+    if (pm.kind === "pm-series") addRead(pm.occTicker);
   }
 
   const quotesByOcc = new Map<string, QuoteRow[]>();
-  for (const [, occs] of byUnderlying) {
+  for (const [underlying, occs] of byUnderlying) {
+    let result: Map<string, QuoteRow[]>;
     try {
-      const result = await stores.quote.readQuotes(occs, open_date!, close_date!);
-      for (const [occ, rows] of result) quotesByOcc.set(occ, rows);
-    } catch {
-      // Best-effort: a missing partition / read error returns empty for these legs.
+      result = await stores.quote.readQuotes([...occs], open_date!, close_date!);
+    } catch (error) {
+      throw new Error(
+        `Replay unavailable: reading ${underlying} option quotes for ${[...occs].join(", ")} ` +
+          `failed: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
     }
+    for (const [occ, rows] of result) quotesByOcc.set(occ, rows);
   }
 
-  // Quote sanity: drop opening-rotation rows (before 09:32 ET) and rows where
-  // either bid or ask is not positive. A zero side is a missing quote, not a
-  // price — computeStrategyPnlPath forward-fills the previous mark across the gap.
-  const barsByLeg: BarRow[][] = replayLegs.map((leg) => {
-    const quotes = (quotesByOcc.get(leg.occTicker) ?? []).filter(isUsableQuote);
-    return quotes.map((q) => {
-      const [date, time] = q.timestamp.split(" ");
-      const mid = (q.bid + q.ask) / 2;
-      return {
-        ticker: q.occ_ticker,
-        date,
-        time,
-        open: mid,
-        high: mid,
-        low: mid,
-        close: mid,
-        bid: q.bid,
-        ask: q.ask,
-        volume: 0,
-      };
-    });
+  // A leg without usable quotes empties the whole path (computeStrategyPnlPath
+  // needs a mark for every leg), which used to come back as a zero MFE/MAE/P&L
+  // that looked like a result. The replay refuses and names the legs instead.
+  // Quote sanity (isUsableQuote): opening-rotation rows (before 09:32 ET) and
+  // rows with a non-positive bid or ask are dropped; computeStrategyPnlPath
+  // forward-fills the previous mark across the gap.
+  const unavailable: string[] = [];
+  const barsByLeg: BarRow[][] = [];
+  replayLegs = replayLegs.map((leg, i) => {
+    const choice = chooseLegQuotes(leg.occTicker, quotesByOcc);
+    if ("unavailable" in choice) {
+      unavailable.push(`leg ${i + 1} ${choice.unavailable}`);
+      barsByLeg.push([]);
+      return leg;
+    }
+    barsByLeg.push(
+      choice.quotes.map((q) => {
+        const [date, time] = q.timestamp.split(" ");
+        const mid = (q.bid + q.ask) / 2;
+        return {
+          ticker: q.occ_ticker,
+          date,
+          time,
+          open: mid,
+          high: mid,
+          low: mid,
+          close: mid,
+          bid: q.bid,
+          ask: q.ask,
+          volume: 0,
+        };
+      }),
+    );
+    return choice.occTicker === leg.occTicker ? leg : { ...leg, occTicker: choice.occTicker };
   });
+  if (unavailable.length > 0) {
+    throw new Error(
+      `Replay unavailable: no usable option quotes for ${unavailable.length} of ` +
+        `${replayLegs.length} legs between ${open_date} and ${close_date} — ` +
+        `${unavailable.join("; ")}. Backfill the quotes with the data-pipeline tools.`,
+    );
+  }
 
   // ----- Fetch underlying bars + build greeks config -----
   // Reverse-map weekly roots back to standard root for underlying fetch
@@ -468,12 +501,19 @@ export async function handleReplayTrade(
   // attributed to the trade. Forward-fill inside computeStrategyPnlPath has
   // already run over the full range, so the first retained bar carries the
   // latest mark for every leg.
-  if (tradeOpenTimestamp && fullPath.length > 0) {
+  if (tradeOpenTimestamp) {
     fullPath = fullPath.filter((p) => p.timestamp >= tradeOpenTimestamp!);
+    if (fullPath.length === 0) {
+      throw new Error(
+        `Replay unavailable: no usable option quotes at or after entry ${tradeOpenTimestamp} ` +
+          `for ${replayLegs.map((leg) => leg.occTicker).join(", ")} through ${close_date}. ` +
+          `Backfill the quotes with the data-pipeline tools.`,
+      );
+    }
   }
 
   let { mfe, mae, mfeTimestamp, maeTimestamp } = computeReplayMfeMae(fullPath);
-  let totalPnl = fullPath.length > 0 ? fullPath[fullPath.length - 1].strategyPnl : 0;
+  let totalPnl = fullPath[fullPath.length - 1].strategyPnl;
 
   // Surface a warning when >50% of leg-timestamps have null greeks — the
   // most common cause is sparse IV data or 0DTE legs falling outside the
@@ -567,7 +607,10 @@ export function registerReplayTools(
       description:
         "Replay a trade using historical minute-level option bars. " +
         "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
-        "missing data yields a degenerate replay. Use the data-pipeline tools to backfill cache. " +
+        "a leg with no usable cached quotes returns an error naming the leg, never a zero-valued replay. " +
+        "SPX-root legs on weekly/daily (PM-settled) expirations replay the listed SPXW contract; " +
+        "the AM-settled monthly SPX contract is never substituted. " +
+        "Use the data-pipeline tools to backfill cache. " +
         "Returns minute-by-minute P&L path with MFE (Maximum Favorable Excursion) and MAE (Maximum Adverse Excursion). " +
         "Two modes: (A) Hypothetical — provide explicit legs with strikes, expiry, entry prices. " +
         "(B) Tradelog — provide block_id + trade_index to replay an existing trade from your data.",

@@ -11,7 +11,11 @@ import { jest } from "@jest/globals";
 
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
 import { handleReplayTrade } from "../../src/tools/replay.ts";
-import { handleDecomposeGreeks } from "../../src/tools/exit-analysis.ts";
+import { handleAnalyzeExitTriggers, handleDecomposeGreeks } from "../../src/tools/exit-analysis.ts";
+import {
+  batchExitAnalysisSchema,
+  handleBatchExitAnalysis,
+} from "../../src/tools/batch-exit-analysis.ts";
 import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
 import type { MarketStores } from "../../src/market/stores/index.ts";
 
@@ -193,6 +197,7 @@ describe("replay_trade integration", () => {
         },
         "/tmp/test-replay",
         stores,
+        conn,
       );
 
       expect(result.pnlPath.length).toBe(3);
@@ -245,6 +250,7 @@ describe("replay_trade integration", () => {
         },
         "/tmp/test-replay",
         stores,
+        conn,
       );
 
       expect(result.pnlPath.length).toBe(3);
@@ -287,6 +293,7 @@ describe("replay_trade integration", () => {
         },
         "/tmp/test-replay",
         stores,
+        conn,
       );
 
       expect(result.pnlPath.map((p) => p.timestamp)).toEqual([
@@ -367,6 +374,7 @@ describe("replay_trade integration", () => {
         },
         "/tmp/test-replay",
         stores,
+        conn,
       );
 
       expect(result.totalPnlChange).not.toBeNaN();
@@ -602,6 +610,258 @@ describe("replay_trade integration", () => {
           stores,
         ),
       ).rejects.toThrow("Provide either legs[]");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // SPX root resolution and missing quotes (enterprise#4502, tradeblocks#585)
+  // ---------------------------------------------------------------------------
+
+  describe("SPX root resolution and missing quotes", () => {
+    // A put spread on SPX: short 5900P / long 5800P, priced off the SPY fixture
+    // bar closes. Quotes are ingested under the SPXW root, as providers name
+    // SPX weeklies, and partitioned by underlying SPX.
+    const spreadLegs = (ticker: string, expiry: string) => [
+      { ticker, strike: 5900, type: "P" as const, expiry, quantity: -1, entry_price: 5.1 },
+      { ticker, strike: 5800, type: "P" as const, expiry, quantity: 1, entry_price: 3.05 },
+    ];
+    const seedSpread = async (root: string, yymmdd: string) => {
+      await seedOptionQuotes(`${root}${yymmdd}P05900000`, "SPX", SPY_470C_BARS);
+      await seedOptionQuotes(`${root}${yymmdd}P05800000`, "SPX", SPY_475C_BARS);
+    };
+    const replaySpread = (
+      ticker: string,
+      expiry: string,
+      format: "full" | "sampled" | "summary" = "full",
+    ) =>
+      handleReplayTrade(
+        {
+          legs: spreadLegs(ticker, expiry),
+          open_date: "2025-01-17",
+          close_date: "2025-01-17",
+          multiplier: 100,
+          format,
+          close_at: "trade",
+          skip_quotes: false,
+        },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+    test("an SPXW replay keeps its output in every format (compatibility)", async () => {
+      await seedSpread("SPXW", "250124");
+
+      // Snapshot recorded against the pre-change replay (tradeblocks f98d3f7d).
+      for (const format of ["full", "sampled", "summary"] as const) {
+        expect(await replaySpread("SPXW", "2025-01-24", format)).toMatchSnapshot(format);
+      }
+    });
+
+    test("explicit SPX-root legs on a PM-series expiry replay the SPXW contract", async () => {
+      await seedSpread("SPXW", "250124");
+
+      const spx = await replaySpread("SPX", "2025-01-24");
+      const spxw = await replaySpread("SPXW", "2025-01-24");
+
+      expect(spx.legs.map((leg) => leg.occTicker)).toEqual([
+        "SPXW250124P05900000",
+        "SPXW250124P05800000",
+      ]);
+      expect(spx.pnlPath.length).toBe(3);
+      expect(spx).toEqual(spxw);
+    });
+
+    test("a tradelog SPX trade on a PM-series expiry replays the SPXW contract", async () => {
+      // tradeblocks#585: the Option Omega Underlying column is "SPX" for SPXW trades.
+      await conn.run(`
+        INSERT INTO trades.trade_data
+          (block_id, date_opened, date_closed, legs, premium, num_contracts, pl, ticker)
+        VALUES
+          ('spx-block', '2025-01-17', '2025-01-17',
+           '1 Jan 24 5900 P STO 5.1 | 1 Jan 24 5800 P BTO 3.05', 205.0, 1, 50.0, 'SPX')
+      `);
+      await seedSpread("SPXW", "250124");
+
+      const fromTradelog = await handleReplayTrade(
+        { block_id: "spx-block", trade_index: 0, multiplier: 100, format: "full" },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+      const explicit = await handleReplayTrade(
+        {
+          legs: spreadLegs("SPXW", "2025-01-24"),
+          open_date: "2025-01-17",
+          close_date: "2025-01-24",
+          multiplier: 100,
+          format: "full",
+        },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+      expect(fromTradelog.legs.map((leg) => leg.occTicker)).toEqual([
+        "SPXW250124P05900000",
+        "SPXW250124P05800000",
+      ]);
+      expect(fromTradelog.pnlPath.length).toBe(3);
+      expect(fromTradelog).toEqual(explicit);
+    });
+
+    test("an SPX-root leg on the AM-settled monthly expiry is refused, not substituted", async () => {
+      // 2025-01-17 is the third Friday: SPX250117 is the AM-settled monthly,
+      // a different contract from the PM-settled SPXW250117.
+      await seedSpread("SPXW", "250117");
+
+      await expect(replaySpread("SPX", "2025-01-17")).rejects.toThrow(
+        /2 of 2 legs.*leg 1 SPX250117P05900000: no quote rows in the local cache; 2025-01-17 is the AM-settled SPX monthly expiration, so the PM-settled SPXW250117P05900000 is a different contract and is not substituted/,
+      );
+    });
+
+    test("an SPX-root leg replays its own SPX quotes when they exist", async () => {
+      await seedSpread("SPX", "250117");
+
+      const result = await replaySpread("SPX", "2025-01-17");
+
+      expect(result.legs.map((leg) => leg.occTicker)).toEqual([
+        "SPX250117P05900000",
+        "SPX250117P05800000",
+      ]);
+      expect(result.pnlPath.length).toBe(3);
+    });
+
+    const spyCallSpread = [
+      {
+        ticker: "SPY",
+        strike: 470,
+        type: "C" as const,
+        expiry: "2025-01-17",
+        quantity: 1,
+        entry_price: 5.0,
+      },
+      {
+        ticker: "SPY",
+        strike: 475,
+        type: "C" as const,
+        expiry: "2025-01-17",
+        quantity: -1,
+        entry_price: 3.0,
+      },
+    ];
+    const replaySpySpread = (open_time?: string) =>
+      handleReplayTrade(
+        {
+          legs: spyCallSpread,
+          open_date: "2025-01-17",
+          close_date: "2025-01-17",
+          open_time,
+          multiplier: 100,
+          format: "full",
+        },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+    test("one leg without quotes among quoted legs is refused by name, not zeroed", async () => {
+      await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+
+      await expect(replaySpySpread()).rejects.toThrow(
+        /^Replay unavailable: no usable option quotes for 1 of 2 legs between 2025-01-17 and 2025-01-17 — leg 2 SPY250117C00475000: no quote rows in the local cache\./,
+      );
+    });
+
+    test("a leg whose quotes are all unusable is refused by name", async () => {
+      await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+      for (const time of ["09:32", "09:33", "09:34"]) {
+        await conn.run(
+          `INSERT INTO market.option_quote_minutes
+             (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source)
+           VALUES ('SPY', '2025-01-17', 'SPY250117C00475000', $1, 0, 3.1, 1.55, NULL, 'fixture')`,
+          [time],
+        );
+      }
+
+      await expect(replaySpySpread()).rejects.toThrow(
+        /leg 2 SPY250117C00475000: 3 quote rows, none usable \(bid and ask must both be positive, at or after 09:32 ET\)/,
+      );
+    });
+
+    test("a quote-read failure is surfaced, not read as missing data", async () => {
+      await conn.run(`DROP TABLE market.option_quote_minutes`);
+
+      await expect(replaySpySpread()).rejects.toThrow(
+        /^Replay unavailable: reading SPY option quotes for SPY250117C00470000, SPY250117C00475000 failed: .*option_quote_minutes/,
+      );
+    });
+
+    test("no quote at or after entry is refused, not zeroed", async () => {
+      await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+      await seedOptionQuotes("SPY250117C00475000", "SPY", SPY_475C_BARS);
+
+      await expect(replaySpySpread("10:00")).rejects.toThrow(
+        /^Replay unavailable: no usable option quotes at or after entry 2025-01-17 10:00 for SPY250117C00470000, SPY250117C00475000/,
+      );
+    });
+
+    test("exit analysis, greeks decomposition and batch surface a missing leg", async () => {
+      await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+      const missingLeg = /leg 2 SPY250117C00475000: no quote rows in the local cache/;
+      const replayInputs = {
+        legs: spyCallSpread,
+        open_date: "2025-01-17",
+        close_date: "2025-01-17",
+        multiplier: 100,
+        format: "summary" as const,
+      };
+
+      await expect(
+        handleAnalyzeExitTriggers(
+          { ...replayInputs, triggers: [{ type: "profitTarget", threshold: 50 }] },
+          "/tmp/test-replay",
+          stores,
+          conn,
+        ),
+      ).rejects.toThrow(missingLeg);
+      await expect(
+        handleDecomposeGreeks(
+          { ...replayInputs, skip_quotes: false },
+          "/tmp/test-replay",
+          stores,
+          conn,
+        ),
+      ).rejects.toThrow(missingLeg);
+
+      // Batch: the quoted trade is analyzed, the unquoted one is skipped with
+      // the named reason instead of counting as an evaluated trade.
+      await conn.run(`
+        INSERT INTO trades.trade_data
+          (block_id, date_opened, date_closed, legs, premium, num_contracts, pl, ticker)
+        VALUES
+          ('batch-block', '2025-01-17', '2025-01-17', 'SPY 470C', 5.0, 1, 50.0, 'SPY'),
+          ('batch-block', '2025-01-17', '2025-01-17', 'SPY 475C', 3.0, 1, 20.0, 'SPY')
+      `);
+      const batch = await handleBatchExitAnalysis(
+        batchExitAnalysisSchema.parse({
+          block_id: "batch-block",
+          candidate_policy: [{ type: "profitTarget", threshold: 50 }],
+        }),
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+      expect(batch.aggregate.totalTrades).toBe(1);
+      expect(batch.skippedTrades).toEqual([
+        expect.objectContaining({
+          tradeIndex: 1,
+          error: expect.stringMatching(
+            /leg 1 SPY250117C00475000: no quote rows in the local cache/,
+          ),
+        }),
+      ]);
     });
   });
 });

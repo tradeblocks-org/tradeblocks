@@ -7,10 +7,131 @@ import {
   markPrice,
   isUsableQuote,
   SESSION_OPEN_CUTOFF,
+  isPossibleSpxAmMonthlyExpiry,
+  spxPmSeries,
+  chooseLegQuotes,
   type ReplayLeg,
   type PnlPoint,
   type BarRow,
 } from "../../src/test-exports.ts";
+import type { QuoteRow } from "../../src/market/stores/types.ts";
+
+describe("isPossibleSpxAmMonthlyExpiry", () => {
+  it("is true on the third Friday and false on other Fridays", () => {
+    expect(isPossibleSpxAmMonthlyExpiry("2025-01-17")).toBe(true);
+    expect(isPossibleSpxAmMonthlyExpiry("2025-01-10")).toBe(false);
+    expect(isPossibleSpxAmMonthlyExpiry("2025-01-24")).toBe(false);
+    // Month that starts on a Friday: the third Friday is the 15th.
+    expect(isPossibleSpxAmMonthlyExpiry("2025-08-15")).toBe(true);
+    expect(isPossibleSpxAmMonthlyExpiry("2025-08-08")).toBe(false);
+  });
+
+  it("moves to the Thursday only when the third Friday is an exchange holiday", () => {
+    expect(isPossibleSpxAmMonthlyExpiry("2025-01-16")).toBe(false);
+    // Good Friday 2025-04-18 and Juneteenth 2026-06-19 close the third Friday.
+    expect(isPossibleSpxAmMonthlyExpiry("2025-04-17")).toBe(true);
+    expect(isPossibleSpxAmMonthlyExpiry("2026-06-18")).toBe(true);
+  });
+
+  it("counts the Thursday as possible outside the bundled XNYS calendar", () => {
+    expect(isPossibleSpxAmMonthlyExpiry("2021-01-14")).toBe(true);
+    expect(isPossibleSpxAmMonthlyExpiry("2021-01-13")).toBe(false);
+  });
+});
+
+describe("spxPmSeries", () => {
+  it("names the SPXW contract for an SPX-root PM-series expiry", () => {
+    expect(spxPmSeries("SPX250124P05900000")).toEqual({
+      kind: "pm-series",
+      occTicker: "SPXW250124P05900000",
+    });
+  });
+
+  it("marks a possible AM-settled monthly expiry", () => {
+    expect(spxPmSeries("SPX250117P05900000")).toEqual({
+      kind: "am-monthly",
+      occTicker: "SPXW250117P05900000",
+      expiry: "2025-01-17",
+    });
+  });
+
+  it("leaves every other root alone", () => {
+    for (const occ of ["SPXW250124P05900000", "SPY250117C00470000", "NDX250124P20000000"]) {
+      expect(spxPmSeries(occ)).toEqual({ kind: "not-spx" });
+    }
+  });
+});
+
+describe("chooseLegQuotes", () => {
+  const quote = (occ_ticker: string, time: string, bid: number, ask: number): QuoteRow => ({
+    occ_ticker,
+    timestamp: `2025-01-17 ${time}`,
+    bid,
+    ask,
+  });
+
+  it("replays the leg's own ticker whenever it has a usable quote", () => {
+    const own = [quote("SPX250124P05900000", "09:40", 5, 5.2)];
+    const result = chooseLegQuotes(
+      "SPX250124P05900000",
+      new Map([
+        ["SPX250124P05900000", own],
+        ["SPXW250124P05900000", [quote("SPXW250124P05900000", "09:40", 6, 6.2)]],
+      ]),
+    );
+    expect(result).toEqual({ occTicker: "SPX250124P05900000", quotes: own });
+  });
+
+  it("falls back to the SPXW contract on a PM-series expiry, usable rows only", () => {
+    const usable = quote("SPXW250124P05900000", "09:40", 5, 5.2);
+    const result = chooseLegQuotes(
+      "SPX250124P05900000",
+      new Map([
+        [
+          "SPXW250124P05900000",
+          [
+            quote("SPXW250124P05900000", "09:31", 4, 4.2),
+            quote("SPXW250124P05900000", "09:35", 0, 5.2),
+            usable,
+          ],
+        ],
+      ]),
+    );
+    expect(result).toEqual({ occTicker: "SPXW250124P05900000", quotes: [usable] });
+  });
+
+  it("names both tickers when neither has a usable quote", () => {
+    const result = chooseLegQuotes(
+      "SPX250124P05900000",
+      new Map([["SPX250124P05900000", [quote("SPX250124P05900000", "09:40", 0, 0)]]]),
+    );
+    expect(result).toEqual({
+      unavailable:
+        "SPX250124P05900000: 1 quote rows, none usable (bid and ask must both be positive, " +
+        "at or after 09:32 ET); SPXW250124P05900000, the PM-settled contract listed for that " +
+        "expiration: no quote rows in the local cache",
+    });
+  });
+
+  it("never substitutes SPXW on a possible AM-settled monthly expiry", () => {
+    const result = chooseLegQuotes(
+      "SPX250117P05900000",
+      new Map([["SPXW250117P05900000", [quote("SPXW250117P05900000", "09:40", 5, 5.2)]]]),
+    );
+    expect(result).toEqual({
+      unavailable:
+        "SPX250117P05900000: no quote rows in the local cache; 2025-01-17 is the AM-settled " +
+        "SPX monthly expiration, so the PM-settled SPXW250117P05900000 is a different contract " +
+        'and is not substituted (replay explicit legs with ticker "SPXW" if that is the contract traded)',
+    });
+  });
+
+  it("names a missing leg on any other root", () => {
+    expect(chooseLegQuotes("SPY250117C00475000", new Map())).toEqual({
+      unavailable: "SPY250117C00475000: no quote rows in the local cache",
+    });
+  });
+});
 
 describe("markPrice", () => {
   it("returns bid/ask midpoint when both are positive and well-formed", () => {

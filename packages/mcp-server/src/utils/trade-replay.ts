@@ -8,6 +8,8 @@
  */
 
 import type { BarRow } from "./market-provider.ts";
+import type { QuoteRow } from "../market/stores/types.ts";
+import { isXnysSessionDate } from "../market/provenance/xnys-session-calendar.ts";
 import { computeLegGreeks, type GreeksResult } from "./black-scholes.ts";
 import { addMoney, fromMoney, legPnlMoney, type Money } from "./money.ts";
 
@@ -147,6 +149,105 @@ export function isUsableQuote(q: {
   const bidOk = typeof q.bid === "number" && Number.isFinite(q.bid) && q.bid > 0;
   const askOk = typeof q.ask === "number" && Number.isFinite(q.ask) && q.ask > 0;
   return bidOk && askOk;
+}
+
+// ---------------------------------------------------------------------------
+// Leg quote resolution (SPX root → SPXW PM series)
+// ---------------------------------------------------------------------------
+
+const SPX_OCC_RE = /^SPX(\d{2})(\d{2})(\d{2})([CP]\d{8})$/;
+
+/**
+ * Whether `expiry` (YYYY-MM-DD) can be the AM-settled SPX monthly expiration:
+ * the third Friday of its month, or the Thursday before it when that Friday is
+ * an exchange holiday. Outside the bundled XNYS calendar the holiday cannot be
+ * checked, so that Thursday counts as a possible monthly expiration.
+ */
+export function isPossibleSpxAmMonthlyExpiry(expiry: string): boolean {
+  const [year, month, day] = expiry.split("-").map(Number);
+  const firstWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  const thirdFriday = 1 + ((5 - firstWeekday + 7) % 7) + 14;
+  if (day === thirdFriday) return true;
+  if (day !== thirdFriday - 1) return false;
+  const friday = `${expiry.slice(0, 8)}${String(thirdFriday).padStart(2, "0")}`;
+  try {
+    return !isXnysSessionDate(friday);
+  } catch (error) {
+    if (error instanceof RangeError) return true;
+    throw error;
+  }
+}
+
+/**
+ * How an `SPX`-root OCC ticker relates to the PM-settled `SPXW` series.
+ *
+ * The `SPX` root lists only the AM-settled monthly contract. Every other SPX
+ * expiration (weeklies, dailies) is a PM-settled contract listed only as
+ * `SPXW`, so for those expirations the `SPXW` ticker names the one contract an
+ * `SPX`-root leg can mean. On a possible monthly expiration the two roots are
+ * different contracts and are never interchanged.
+ */
+export type SpxPmSeries =
+  | { kind: "not-spx" }
+  | { kind: "pm-series"; occTicker: string }
+  | { kind: "am-monthly"; occTicker: string; expiry: string };
+
+export function spxPmSeries(occTicker: string): SpxPmSeries {
+  const match = occTicker.match(SPX_OCC_RE);
+  if (!match) return { kind: "not-spx" };
+  const [, yy, mm, dd, contract] = match;
+  const pmTicker = `SPXW${yy}${mm}${dd}${contract}`;
+  const expiry = `20${yy}-${mm}-${dd}`;
+  return isPossibleSpxAmMonthlyExpiry(expiry)
+    ? { kind: "am-monthly", occTicker: pmTicker, expiry }
+    : { kind: "pm-series", occTicker: pmTicker };
+}
+
+function describeQuoteRows(rows: readonly QuoteRow[] | undefined): string {
+  if (!rows || rows.length === 0) return "no quote rows in the local cache";
+  return (
+    `${rows.length} quote rows, none usable ` +
+    `(bid and ask must both be positive, at or after ${SESSION_OPEN_CUTOFF} ET)`
+  );
+}
+
+/**
+ * Choose the usable quotes that replay one leg, or name why there are none.
+ *
+ * The leg's own ticker wins whenever it has a usable quote. An `SPX`-root leg
+ * on a PM-series expiration falls back to its `SPXW` ticker (see
+ * {@link spxPmSeries}); the returned `occTicker` is the contract replayed.
+ * `quotesByOcc` must already hold the reads for every ticker consulted here.
+ */
+export function chooseLegQuotes(
+  occTicker: string,
+  quotesByOcc: ReadonlyMap<string, readonly QuoteRow[]>,
+): { occTicker: string; quotes: QuoteRow[] } | { unavailable: string } {
+  const own = quotesByOcc.get(occTicker);
+  const ownUsable = (own ?? []).filter(isUsableQuote);
+  if (ownUsable.length > 0) return { occTicker, quotes: ownUsable };
+
+  const reason = `${occTicker}: ${describeQuoteRows(own)}`;
+  const pm = spxPmSeries(occTicker);
+  if (pm.kind === "pm-series") {
+    const pmRows = quotesByOcc.get(pm.occTicker);
+    const pmUsable = (pmRows ?? []).filter(isUsableQuote);
+    if (pmUsable.length > 0) return { occTicker: pm.occTicker, quotes: pmUsable };
+    return {
+      unavailable:
+        `${reason}; ${pm.occTicker}, the PM-settled contract listed for that expiration: ` +
+        describeQuoteRows(pmRows),
+    };
+  }
+  if (pm.kind === "am-monthly") {
+    return {
+      unavailable:
+        `${reason}; ${pm.expiry} is the AM-settled SPX monthly expiration, so the PM-settled ` +
+        `${pm.occTicker} is a different contract and is not substituted ` +
+        `(replay explicit legs with ticker "SPXW" if that is the contract traded)`,
+    };
+  }
+  return { unavailable: reason };
 }
 
 // ---------------------------------------------------------------------------

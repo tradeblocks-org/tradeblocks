@@ -717,7 +717,11 @@ for these normal nonzero values), with one extra rounding margin.
 
 Replay historical trades using minute-level option bars for P&L analysis with greeks.
 
-**Data source:** Reads option-leg quotes via QuoteStore and underlying bars via SpotStore from local storage only. Replay does not fetch from a provider on cache miss; missing data can yield a degenerate replay. Backfill quotes with `fetch_quotes` and underlying bars with `fetch_bars`, or import compatible local data, before replaying.
+**Data source:** Reads option-leg quotes via QuoteStore and underlying bars via SpotStore from local storage only. Replay does not fetch from a provider on cache miss. Backfill quotes with `fetch_quotes` and underlying bars with `fetch_bars`, or import compatible local data, before replaying.
+
+**Missing quotes are an error, not a zero result.** When any leg has no usable cached quote in the replay window, or no quote at or after the trade's entry time, `replay_trade` returns an error naming each such leg's OCC ticker and why (no rows, or rows without a positive bid and ask from 09:32 ET). A failed quote read is reported the same way. `analyze_exit_triggers` and `decompose_greeks` return the same error; `batch_exit_analysis` lists the trade under `skippedTrades` with that message.
+
+**SPX and SPXW roots.** The `SPX` root lists only the AM-settled monthly contract (third Friday, or the Thursday before when that Friday is an exchange holiday). Every other SPX expiration is a PM-settled contract listed as `SPXW`. Option Omega tradelogs record the underlying as `SPX`, so an `SPX`-root leg on a weekly or daily expiration that has no `SPX` quotes replays the `SPXW` contract for that expiration, and the leg's `occTicker` in the output shows `SPXW`. On a monthly expiration the two roots are different contracts: replay uses `SPX` quotes only, and if there are none it returns an error rather than substituting `SPXW`. Pass `ticker: "SPXW"` in hypothetical mode to replay the PM-settled contract on that date. `NDX`/`NDXP` and `RUT`/`RUTW` legs are matched only by their exact root.
 
 **Two modes:**
 

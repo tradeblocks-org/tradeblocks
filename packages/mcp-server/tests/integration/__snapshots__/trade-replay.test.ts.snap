@@ -1,0 +1,157 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`replay_trade integration SPX root resolution and missing quotes an SPXW replay keeps its output in every format (compatibility): full 1`] = `
+{
+  "greeksWarning": null,
+  "legs": [
+    {
+      "entryPrice": 5.1,
+      "multiplier": 100,
+      "occTicker": "SPXW250124P05900000",
+      "quantity": -1,
+    },
+    {
+      "entryPrice": 3.05,
+      "multiplier": 100,
+      "occTicker": "SPXW250124P05800000",
+      "quantity": 1,
+    },
+  ],
+  "mae": -5,
+  "maeTimestamp": "2025-01-17 09:33",
+  "mfe": 0,
+  "mfeTimestamp": "2025-01-17 09:32",
+  "pnlPath": [
+    {
+      "legPrices": [
+        5.1,
+        3.05,
+      ],
+      "strategyPnl": 0,
+      "timestamp": "2025-01-17 09:32",
+    },
+    {
+      "legPrices": [
+        5.3,
+        3.2,
+      ],
+      "strategyPnl": -5,
+      "timestamp": "2025-01-17 09:33",
+    },
+    {
+      "legPrices": [
+        4.8,
+        2.7,
+      ],
+      "strategyPnl": -5,
+      "timestamp": "2025-01-17 09:34",
+    },
+  ],
+  "totalBars": 3,
+  "totalPnl": -5,
+}
+`;
+
+exports[`replay_trade integration SPX root resolution and missing quotes an SPXW replay keeps its output in every format (compatibility): sampled 1`] = `
+{
+  "greeksWarning": null,
+  "legs": [
+    {
+      "entryPrice": 5.1,
+      "multiplier": 100,
+      "occTicker": "SPXW250124P05900000",
+      "quantity": -1,
+    },
+    {
+      "entryPrice": 3.05,
+      "multiplier": 100,
+      "occTicker": "SPXW250124P05800000",
+      "quantity": 1,
+    },
+  ],
+  "mae": -5,
+  "maeTimestamp": "2025-01-17 09:33",
+  "mfe": 0,
+  "mfeTimestamp": "2025-01-17 09:32",
+  "pnlPath": [
+    {
+      "legPrices": [
+        5.1,
+        3.05,
+      ],
+      "strategyPnl": 0,
+      "timestamp": "2025-01-17 09:32",
+    },
+    {
+      "legPrices": [
+        5.3,
+        3.2,
+      ],
+      "strategyPnl": -5,
+      "timestamp": "2025-01-17 09:33",
+    },
+    {
+      "legPrices": [
+        4.8,
+        2.7,
+      ],
+      "strategyPnl": -5,
+      "timestamp": "2025-01-17 09:34",
+    },
+  ],
+  "totalBars": 3,
+  "totalPnl": -5,
+}
+`;
+
+exports[`replay_trade integration SPX root resolution and missing quotes an SPXW replay keeps its output in every format (compatibility): summary 1`] = `
+{
+  "greeksWarning": null,
+  "legs": [
+    {
+      "entryPrice": 5.1,
+      "multiplier": 100,
+      "occTicker": "SPXW250124P05900000",
+      "quantity": -1,
+    },
+    {
+      "entryPrice": 3.05,
+      "multiplier": 100,
+      "occTicker": "SPXW250124P05800000",
+      "quantity": 1,
+    },
+  ],
+  "mae": -5,
+  "maeTimestamp": "2025-01-17 09:33",
+  "mfe": 0,
+  "mfeTimestamp": "2025-01-17 09:32",
+  "pnlPath": [
+    {
+      "legPrices": [
+        5.1,
+        3.05,
+      ],
+      "strategyPnl": 0,
+      "timestamp": "2025-01-17 09:32",
+    },
+    {
+      "legPrices": [
+        5.3,
+        3.2,
+      ],
+      "strategyPnl": -5,
+      "timestamp": "2025-01-17 09:33",
+    },
+    {
+      "legPrices": [
+        4.8,
+        2.7,
+      ],
+      "strategyPnl": -5,
+      "timestamp": "2025-01-17 09:34",
+    },
+  ],
+  "totalBars": 3,
+  "totalPnl": -5,
+}
+`;
