@@ -123,6 +123,19 @@ describe("ThetaData session recovery through an exported endpoint", () => {
     },
   );
 
+  it("gives a later request its own login after a failed re-authentication", async () => {
+    const f = fixture("auth-fails");
+    try {
+      await f.client.connect();
+      await expect(f.request()).rejects.toMatchObject({ code: 16 });
+      await expect(f.request()).resolves.toEqual([]);
+      expect(f.authCount()).toBe(3);
+      expect(f.sessions).toEqual(["session-1", "session-1", "session-3"]);
+    } finally {
+      f.client.close();
+    }
+  });
+
   it("does not resurrect a connection closed during re-authentication", async () => {
     const f = fixture("close");
     await f.client.connect();

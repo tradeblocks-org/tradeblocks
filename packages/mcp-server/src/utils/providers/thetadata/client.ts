@@ -189,11 +189,20 @@ export class ThetaMddsClient {
     if (this.sessionId !== session) return;
     if (!this.reauthPromise || this.reauthSession !== session) {
       this.reauthSession = session;
-      this.reauthPromise = (async () => {
+      const promise = (async () => {
         const auth = await authenticateThetaData(resolveThetaCredentials(this.env), this.fetchImpl);
         this.assertOpen(generation);
         this.sessionId = auth.sessionId;
       })();
+      // A failed login is shared by the requests waiting on it, but must not be
+      // cached: a later request gets its own attempt instead of the old rejection.
+      promise.catch(() => {
+        if (this.reauthPromise === promise) {
+          this.reauthPromise = null;
+          this.reauthSession = null;
+        }
+      });
+      this.reauthPromise = promise;
     }
     await this.reauthPromise;
     this.assertOpen(generation);
