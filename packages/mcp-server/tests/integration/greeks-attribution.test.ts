@@ -11,6 +11,10 @@ import type {
 } from "../../src/test-exports.ts";
 import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
 import type { MarketStores } from "../../src/market/stores/index.ts";
+import type { QuoteRow } from "../../src/market/stores/types.ts";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 const SPY_470C_BARS = [
   { t: 1737124320000, o: 5.0, h: 5.2, l: 4.9, c: 5.1 },
@@ -40,8 +44,10 @@ describe("get_greeks_attribution integration", () => {
   let db: DuckDBInstance;
   let conn: DuckDBConnection;
   let stores: MarketStores;
+  let dataDir: string;
 
   beforeEach(async () => {
+    dataDir = mkdtempSync(join(tmpdir(), "test-greeks-attribution-"));
     db = await DuckDBInstance.create(":memory:");
     conn = await db.connect();
     await conn.run(`CREATE SCHEMA IF NOT EXISTS trades`);
@@ -65,12 +71,8 @@ describe("get_greeks_attribution integration", () => {
       )
     `);
 
-    // handleReplayTrade (called by greeks-attribution) reads underlying bars
-    // via stores.spot.readBars + VIX IVP via stores.enriched.read. Create the
-    // minimal market schema in this in-memory DuckDB so the store-backed
-    // handler calls succeed (empty data matches the prior fetch-based
-    // behavior since the test mocks fetch).
-    await conn.run(`CREATE SCHEMA IF NOT EXISTS market`);
+    // Store reads use the same attached market catalog as production.
+    await conn.run(`ATTACH ':memory:' AS market`);
     await conn.run(`
       CREATE TABLE market.spot (
         ticker VARCHAR NOT NULL,
@@ -94,25 +96,7 @@ describe("get_greeks_attribution integration", () => {
       )
     `);
 
-    // Option-leg reads flow through stores.quote.readQuotes →
-    // market.option_quote_minutes. Schema mirrors production market-schemas.ts
-    // (PK underlying, date, ticker, time).
-    await conn.run(`
-      CREATE TABLE market.option_quote_minutes (
-        underlying      VARCHAR NOT NULL,
-        date            VARCHAR NOT NULL,
-        ticker          VARCHAR NOT NULL,
-        time            VARCHAR NOT NULL,
-        bid             DOUBLE,
-        ask             DOUBLE,
-        mid             DOUBLE,
-        last_updated_ns BIGINT,
-        source          VARCHAR,
-        PRIMARY KEY (underlying, date, ticker, time)
-      )
-    `);
-
-    stores = buildTestStores({ conn, dataDir: "/tmp/test-greeks-attribution" });
+    stores = buildTestStores({ conn, dataDir: dataDir });
 
     process.env.MASSIVE_API_KEY = "test-key-attribution";
   });
@@ -121,6 +105,8 @@ describe("get_greeks_attribution integration", () => {
     delete process.env.MASSIVE_API_KEY;
     jest.restoreAllMocks();
     conn.closeSync();
+    db.closeSync();
+    rmSync(dataDir, { recursive: true, force: true });
   });
 
   // Seed SPY underlying bars directly into market.spot since handleReplayTrade
@@ -152,6 +138,7 @@ describe("get_greeks_attribution integration", () => {
     underlying: string,
     bars: Array<{ t: number; o: number; h: number; l: number; c: number }>,
   ) => {
+    const byDate = new Map<string, QuoteRow[]>();
     for (const b of bars) {
       const date = new Date(b.t).toISOString().slice(0, 10);
       const utcMinutes = Math.floor((b.t / 60_000) % (60 * 24));
@@ -160,18 +147,16 @@ describe("get_greeks_attribution integration", () => {
       const etTime = `${String(etHours).padStart(2, "0")}:${mm}`;
       const bid = b.c - 0.05;
       const ask = b.c + 0.05;
-      const mid = (bid + ask) / 2;
-      await conn.run(
-        `INSERT INTO market.option_quote_minutes
-           (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, 'fixture')`,
-        [underlying, date, occTicker, etTime, bid, ask, mid],
-      );
+      const rows = byDate.get(date) ?? [];
+      rows.push({ occ_ticker: occTicker, timestamp: `${date} ${etTime}`, bid, ask });
+      byDate.set(date, rows);
+    }
+    for (const [date, rows] of byDate) {
+      await stores.quote.writeQuotes(underlying, date, rows);
     }
   };
 
-  // Option-leg quotes seeded directly into market.option_quote_minutes via
-  // seedOptionQuotes (replaces mockFetch).
+  // Seed option partitions through the production store, without provider calls.
   test("summary mode keeps raw factor P&Ls and reports execution edge separately", async () => {
     await conn.run(`
       INSERT INTO trades.trade_data
@@ -191,7 +176,7 @@ describe("get_greeks_attribution integration", () => {
         multiplier: 100,
         skip_quotes: true,
       },
-      "/tmp/test-greeks-attribution",
+      dataDir,
       stores,
       conn,
     );
@@ -202,7 +187,7 @@ describe("get_greeks_attribution integration", () => {
         mode: "summary",
         skip_quotes: true,
       },
-      "/tmp/test-greeks-attribution",
+      dataDir,
       stores,
       conn,
     )) as AttributionSummaryResult;
@@ -242,7 +227,7 @@ describe("get_greeks_attribution integration", () => {
         skip_quotes: true,
         detailed: true,
       },
-      "/tmp/test-greeks-attribution",
+      dataDir,
       stores,
       conn,
     )) as AttributionInstanceResult;
@@ -281,7 +266,7 @@ describe("get_greeks_attribution integration", () => {
         multiplier: 100,
         skip_quotes: true,
       },
-      "/tmp/test-greeks-attribution",
+      dataDir,
       stores,
       conn,
     );
@@ -293,7 +278,7 @@ describe("get_greeks_attribution integration", () => {
         strategy: "second",
         skip_quotes: true,
       },
-      "/tmp/test-greeks-attribution",
+      dataDir,
       stores,
       conn,
     )) as AttributionSummaryResult;

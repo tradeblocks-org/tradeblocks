@@ -1,6 +1,39 @@
 # Market Data Guide
 
-TradeBlocks supports multiple paths for importing market data: CSV files, the Massive.com API (default), and custom data providers. All paths write to the same DuckDB tables and trigger the same enrichment pipeline.
+TradeBlocks supports multiple paths for importing market data: CSV files, the Massive.com API (default), and custom data providers. They share the market stores and enrichment pipeline. Option chains, minute quotes, and daily open interest are always stored as Parquet partitions under the data directory, regardless of provider or storage setting.
+
+## Storage and configuration
+
+Option fetches (including bulk quotes) and `import_flat_file` option imports need no storage setting.
+Chains live at `market/option_chain/underlying=<symbol>/date=<YYYY-MM-DD>/data.parquet`;
+minute quotes live at `market/option_quote_minutes/underlying=<symbol>/date=<YYYY-MM-DD>/data.parquet`
+under the data directory (or `--data-root` when configured). DuckDB queries these files through
+`market.option_chain` and `market.option_quote_minutes` views after the first publication and on
+reconnect. The store readers also read partitions directly.
+
+`TRADEBLOCKS_PARQUET` defaults **off** (unset). Setting it to the exact string `"true"` switches
+spot bars and enriched market data to Parquet writes and operational metadata and strategy profiles
+to JSON files. It does **not** switch option storage: option data is Parquet-native in both modes.
+Without the setting, spot/enriched data and metadata/profiles retain their DuckDB storage.
+CSV trade imports and local market-file imports require neither provider credentials nor this setting.
+Guided `setup` does not add it because it is optional.
+
+To opt in, add `env` to the TradeBlocks server entry in your MCP client's configuration, then restart
+the server. For example, in Claude Desktop's JSON config:
+
+```json
+{
+  "mcpServers": {
+    "tradeblocks": {
+      "command": "npx",
+      "args": ["-y", "tradeblocks-mcp", "/path/to/backtests"],
+      "env": { "TRADEBLOCKS_PARQUET": "true" }
+    }
+  }
+}
+```
+
+For other clients, set the same environment variable on the registered TradeBlocks subprocess.
 
 ## Published risk-free rates
 

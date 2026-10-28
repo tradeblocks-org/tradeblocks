@@ -131,6 +131,20 @@ export class ParquetChainStore extends ChainStore {
         exercise_style: String(r[7]),
       }));
     }
+    // A fresh archive has no view until its first publication. Preserve the
+    // legacy date-only read path, but an absent partition is an empty chain.
+    if (
+      !existsSync(
+        path.join(
+          resolveMarketDir(this.ctx.dataDir),
+          "option_chain",
+          `date=${date}`,
+          "data.parquet",
+        ),
+      )
+    ) {
+      return [];
+    }
     // Builder inlines values; unbound runAndReadAll(sql) bypasses extract_statements.
     const { sql } = buildReadChainSQL(underlying, date);
     const reader = await this.ctx.conn.runAndReadAll(sql);
@@ -161,7 +175,12 @@ export class ParquetChainStore extends ChainStore {
       );
       if (existsSync(partitionPath)) directPaths.push(partitionPath);
     }
-    if (directPaths.length === 0) return super.readChainDates(underlying, dates);
+    if (directPaths.length === 0) {
+      const hasLegacyPartition = dates.some((date) =>
+        existsSync(path.join(marketDir, "option_chain", `date=${date}`, "data.parquet")),
+      );
+      return hasLegacyPartition ? super.readChainDates(underlying, dates) : [];
+    }
 
     const fileList = directPaths.map((filePath) => `'${escapeSqlLiteral(filePath)}'`).join(", ");
     // Direct path: omit params arg entirely to bypass extract_statements

@@ -53,10 +53,9 @@ export abstract class ChainStore {
 
   /**
    * Bulk read chains for N dates under a single underlying. Returns a flat list;
-   * the caller groups by `date`. Both backends share the same SQL path since
-   * `market.option_chain` resolves to either a Parquet view or a physical table
-   * with identical columns. Use this instead of N per-date `readChain` calls —
-   * per-call glob-expansion / planning overhead dominates for view reads.
+   * the caller groups by `date`. The SQL read surface is a Parquet view in both
+   * storage modes. Use this instead of N per-date `readChain` calls when
+   * per-call glob-expansion / planning overhead dominates view reads.
    */
   async readChainDates(underlying: string, dates: string[]): Promise<ContractRow[]> {
     if (dates.length === 0) return [];

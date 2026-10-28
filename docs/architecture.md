@@ -13,11 +13,12 @@ TradeBlocks is an options trading analytics platform with two main components:
 1. Import
    CSV upload (web) ──────────────> IndexedDB (client-side)
    CSV files (MCP) ────────────────> DuckDB (server-side)
-   Massive.com API (MCP) ──────────> DuckDB (server-side)
+   Market providers/files (MCP) ──> Market stores (DuckDB + Parquet)
 
 2. Storage
    IndexedDB ── client-side trades, daily logs, block metadata
-   DuckDB ───── server-side analytics, market data, strategy profiles
+   DuckDB ───── server-side analytics; spot/enriched/metadata/profiles by default
+   Parquet ──── option chains, minute quotes, daily open interest in both modes
 
 3. Enrichment (automatic after import)
    Tier 1: Raw OHLCV ──> ~20 technical indicators (RSI, ATR, etc.)
@@ -59,6 +60,20 @@ the runtime field catalog joins built-in market fields and registered `dataset.c
 
 VIX tenors (VIX, VIX9D, VIX3M, etc.) are stored as regular ticker rows in `market.enriched` with
 `ivr` and `ivp` columns. The enrichment pipeline discovers them dynamically.
+
+Option chains and minute quotes always live under the data directory as
+`market/option_chain/underlying=<symbol>/date=<YYYY-MM-DD>/data.parquet` and
+`market/option_quote_minutes/underlying=<symbol>/date=<YYYY-MM-DD>/data.parquet`.
+Their SQL names above are Parquet-backed views, not writable physical tables.
+The canonical atomic publishers register missing option views after the first write;
+connection startup registers views over existing partitions. Store readers can read files directly.
+
+`TRADEBLOCKS_PARQUET` is optional and defaults off. The exact value `"true"` switches
+spot/enriched writes to Parquet and operational metadata/strategy profiles to JSON;
+it does not affect option storage. Without it, those other datasets use DuckDB.
+Set it in the MCP client's server `env` configuration and restart the server;
+see the [configuration example](market-data.md#storage-and-configuration).
+CSV imports need no provider or setting, and guided setup leaves this optional setting unset.
 
 See [Market Data Guide](market-data.md) for the full enrichment field reference and import instructions.
 

@@ -1,14 +1,7 @@
 /**
  * ParquetQuoteStore.readWindow tests (Phase 2 entry-pipeline-rebuild — A4).
  *
- * Mirrors A3's DuckdbQuoteStore.readWindow tests but seeds the same fixture
- * data through ParquetChainStore + ParquetQuoteStore (which write Hive-
- * partitioned data.parquet files under the fixture's tmp dir) and reads via
- * `read_parquet(...)` SQL composed by `ParquetQuoteStore.readWindow`.
- *
- * Adds a parity check: write the same fixture rows to both backends, run the
- * same `readWindow` params against each, and assert identical row counts and
- * sorted ticker|time|strike keys.
+ * Seeds chain and quote partitions and exercises the direct-Parquet read seam.
  */
 import { describe, it, expect } from "@jest/globals";
 import { readFileSync, readdirSync } from "fs";
@@ -16,8 +9,6 @@ import { join } from "path";
 import {
   ParquetQuoteStore,
   ParquetChainStore,
-  DuckdbQuoteStore,
-  DuckdbChainStore,
   hasQuoteGreeks,
   createMarketParquetViews,
   writeQuoteMinutesPartition,
@@ -118,43 +109,6 @@ async function setUpParquetStoreWithFixtures(): Promise<{
     conn: {
       close: async () => {
         fixture.cleanup();
-      },
-    },
-  };
-}
-
-/**
- * Set up parity fixtures: build a Parquet-backed store and a DuckDB-backed
- * store seeded with identical chain + quote rows so cross-backend equality
- * tests can compare `readWindow(...)` output.
- */
-async function setUpParquetAndDuckdbWithFixtures(): Promise<{
-  parquet: ParquetQuoteStore;
-  duckdb: DuckdbQuoteStore;
-  conn: { close: () => Promise<void> };
-}> {
-  const parquetFixture = await buildStoreFixture({ parquetMode: true });
-  const parquetStore = new ParquetQuoteStore(parquetFixture.ctx);
-  const parquetChainStore = new ParquetChainStore(parquetFixture.ctx);
-
-  const duckdbFixture = await buildStoreFixture({ parquetMode: false });
-  const duckdbStore = new DuckdbQuoteStore(duckdbFixture.ctx);
-  const duckdbChainStore = new DuckdbChainStore(duckdbFixture.ctx);
-
-  const { chainRows, quoteRows } = buildFixtureRows();
-
-  await parquetChainStore.writeChain("SPX", DATE, chainRows);
-  await parquetStore.writeQuotes("SPX", DATE, quoteRows);
-  await duckdbChainStore.writeChain("SPX", DATE, chainRows);
-  await duckdbStore.writeQuotes("SPX", DATE, quoteRows);
-
-  return {
-    parquet: parquetStore,
-    duckdb: duckdbStore,
-    conn: {
-      close: async () => {
-        parquetFixture.cleanup();
-        duckdbFixture.cleanup();
       },
     },
   };
@@ -563,28 +517,6 @@ describe("ParquetQuoteStore.readWindow", () => {
         neededGreeks: ["rho"] as never,
       }),
     ).rejects.toThrow(/Unknown greek "rho"/);
-    await conn.close();
-  });
-
-  it("returns same row count as DuckdbQuoteStore.readWindow for the same envelope", async () => {
-    const { parquet, duckdb, conn } = await setUpParquetAndDuckdbWithFixtures();
-    const params = {
-      underlying: "SPX",
-      date: DATE,
-      timeStart: "09:35",
-      timeEnd: "09:36",
-      legEnvelopes: [
-        { contractType: "put" as const, dteMin: 7, dteMax: 11, strikeMin: 4500, strikeMax: 4800 },
-        { contractType: "call" as const, dteMin: 7, dteMax: 11, strikeMin: 4800, strikeMax: 5100 },
-      ],
-    };
-    const a = await parquet.readWindow(params);
-    const b = await duckdb.readWindow(params);
-    expect(a.length).toBe(b.length);
-    expect(a.length).toBeGreaterThan(0);
-    const keyA = a.map((r) => `${r.ticker}|${r.time}|${r.strike}`).sort();
-    const keyB = b.map((r) => `${r.ticker}|${r.time}|${r.strike}`).sort();
-    expect(keyA).toEqual(keyB);
     await conn.close();
   });
 });

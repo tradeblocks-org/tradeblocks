@@ -1,20 +1,10 @@
 /**
  * Market Data 3.0 — Store factory + barrel re-exports.
  *
- * Phase 1: createMarketStores returned typed null-cast placeholders per
- * CONTEXT.md D-04 so the compiler-typed bundle was available before concrete
- * backends shipped.
- *
- * Phase 2 (Plan 02-05): the body below replaces that placeholder with real
- * backend dispatch per D-03. The factory reads the backend flag ONCE and
- * returns monomorphic instances; concrete method bodies must NEVER re-inspect
- * it (D-02). EnrichedStore receives the SpotStore via constructor
- * injection (D-15) so the enricher's IO boundaries (minute-bar reads,
- * watermark get/upsert) are satisfied without re-plumbing.
- *
- * Downstream consumers (Phase 2 integration tests, Phase 4 tool migrations)
- * import from this barrel so only `./index.js` depends on the concrete file
- * layout.
+ * The factory snapshots the mode once. Spot/enriched select their backend;
+ * option chains, minute quotes and daily open interest always use Parquet.
+ * Only a fully Parquet-backed bundle carries canonical Parquet authority.
+ * EnrichedStore receives SpotStore through constructor injection.
  */
 import { resolve } from "node:path";
 import { SpotStore } from "./spot-store.ts";
@@ -28,9 +18,7 @@ import { DuckdbSpotStore } from "./duckdb-spot-store.ts";
 import { ParquetEnrichedStore } from "./parquet-enriched-store.ts";
 import { DuckdbEnrichedStore } from "./duckdb-enriched-store.ts";
 import { ParquetChainStore } from "./parquet-chain-store.ts";
-import { DuckdbChainStore } from "./duckdb-chain-store.ts";
 import { ParquetQuoteStore } from "./parquet-quote-store.ts";
-import { DuckdbQuoteStore } from "./duckdb-quote-store.ts";
 import { ParquetOiDailyStore } from "./parquet-oi-daily-store.ts";
 import type { TickerRegistry } from "../tickers/registry.ts";
 
@@ -144,13 +132,9 @@ export function getMarketStoresAuthority(stores: MarketStores): MarketStoresAuth
 }
 
 /**
- * Construct a MarketStores bundle using backend-appropriate concrete classes.
- *
- * D-03: reads the backend flag once and returns monomorphic instances. The
- * concrete method bodies never re-inspect the flag (D-02).
- * D-15: EnrichedStore takes `SpotStore` via constructor injection so the
- * enricher's IO refactor (Plan 02-04) receives the right backend for minute-bar
- * reads without any separate lookup.
+ * Construct a MarketStores bundle, selecting spot/enriched backends once.
+ * Option data is Parquet-native in both modes. EnrichedStore receives the
+ * selected SpotStore for minute-bar reads and enrichment watermarks.
  */
 export function createMarketStores(ctx: StoreContext): MarketStores {
   // Open interest is daily-granularity option market data persisted Parquet-
@@ -182,8 +166,10 @@ export function createMarketStores(ctx: StoreContext): MarketStores {
     const oiDaily = new ParquetOiDailyStore(ctx);
     const spot = new DuckdbSpotStore(ctx);
     const enriched = new DuckdbEnrichedStore(ctx, spot);
-    const chain = new DuckdbChainStore(ctx);
-    const quote = new DuckdbQuoteStore(ctx);
+    // Option data is always Parquet-native. Like oiDaily, these stores use
+    // the raw context here; this mixed bundle does not gain Parquet authority.
+    const chain = new ParquetChainStore(ctx);
+    const quote = new ParquetQuoteStore(ctx);
     stores = { spot, enriched, chain, quote, oiDaily };
   }
   const brandedStores = Object.freeze(stores);

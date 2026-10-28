@@ -4,9 +4,8 @@ import { jest } from "@jest/globals";
  * Integration tests for replay_trade MCP tool (handleReplayTrade)
  *
  * Tests both hypothetical and tradelog replay modes with a real in-memory
- * DuckDB seeded via stores.spot.writeBars and direct option_quote_minutes
- * INSERTs; option-leg reads flow through stores.quote.readQuotes so the
- * full path is store-backed.
+ * DuckDB and isolated Parquet option partitions, seeded and read through
+ * the production market stores.
  */
 
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
@@ -18,6 +17,10 @@ import {
 } from "../../src/tools/batch-exit-analysis.ts";
 import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
 import type { MarketStores } from "../../src/market/stores/index.ts";
+import type { QuoteRow } from "../../src/market/stores/types.ts";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 // Minute bars for SPY 470C — 3 minutes starting at 09:32 ET on 2025-01-17 (the first
 // minute the replay accepts; 09:30/09:31 are the opening rotation and are dropped)
@@ -49,8 +52,10 @@ describe("replay_trade integration", () => {
   let db: DuckDBInstance;
   let conn: DuckDBConnection;
   let stores: MarketStores;
+  let dataDir: string;
 
   beforeEach(async () => {
+    dataDir = mkdtempSync(join(tmpdir(), "test-replay-"));
     // In-memory DuckDB for tradelog mode
     db = await DuckDBInstance.create(":memory:");
     conn = await db.connect();
@@ -75,14 +80,8 @@ describe("replay_trade integration", () => {
       )
     `);
 
-    // handleReplayTrade reads underlying bars via stores.spot.readBars and
-    // VIX IVP via stores.enriched.read. Create the minimal market schema in
-    // the in-memory DuckDB so those store calls succeed. The tests
-    // intentionally leave these empty — option-leg bars are mocked via
-    // fetch, and the underlying-bars empty result triggers the
-    // readDailyBars fallback (also empty), then handleReplayTrade omits
-    // greeks.
-    await conn.run(`CREATE SCHEMA IF NOT EXISTS market`);
+    // Store reads use the same attached market catalog as production.
+    await conn.run(`ATTACH ':memory:' AS market`);
     await conn.run(`
       CREATE TABLE market.spot (
         ticker VARCHAR NOT NULL,
@@ -106,26 +105,7 @@ describe("replay_trade integration", () => {
       )
     `);
 
-    // handleReplayTrade reads option-leg quotes via stores.quote.readQuotes
-    // which queries market.option_quote_minutes. Schema mirrors the
-    // production market-schemas.ts shape (PK underlying, date, ticker, time
-    // + bid/ask/mid columns). Tests seed via seedOptionQuotes() below.
-    await conn.run(`
-      CREATE TABLE market.option_quote_minutes (
-        underlying      VARCHAR NOT NULL,
-        date            VARCHAR NOT NULL,
-        ticker          VARCHAR NOT NULL,
-        time            VARCHAR NOT NULL,
-        bid             DOUBLE,
-        ask             DOUBLE,
-        mid             DOUBLE,
-        last_updated_ns BIGINT,
-        source          VARCHAR,
-        PRIMARY KEY (underlying, date, ticker, time)
-      )
-    `);
-
-    stores = buildTestStores({ conn, dataDir: "/tmp/test-replay" });
+    stores = buildTestStores({ conn, dataDir: dataDir });
 
     process.env.MASSIVE_API_KEY = "test-key-replay";
   });
@@ -135,6 +115,8 @@ describe("replay_trade integration", () => {
     delete process.env.MASSIVE_DATA_TIER;
     jest.restoreAllMocks();
     conn.closeSync();
+    db.closeSync();
+    rmSync(dataDir, { recursive: true, force: true });
   });
 
   // Seed option_quote_minutes for the option-leg tests. Bar inputs come from
@@ -147,6 +129,7 @@ describe("replay_trade integration", () => {
     underlying: string,
     bars: Array<{ t: number; o: number; h: number; l: number; c: number }>,
   ) => {
+    const byDate = new Map<string, QuoteRow[]>();
     for (const b of bars) {
       const date = new Date(b.t).toISOString().slice(0, 10);
       const utcMinutes = Math.floor((b.t / 60_000) % (60 * 24));
@@ -159,13 +142,12 @@ describe("replay_trade integration", () => {
       // close. Keep a small spread for realism.
       const bid = b.c - 0.05;
       const ask = b.c + 0.05;
-      const mid = (bid + ask) / 2;
-      await conn.run(
-        `INSERT INTO market.option_quote_minutes
-           (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, 'fixture')`,
-        [underlying, date, occTicker, etTime, bid, ask, mid],
-      );
+      const rows = byDate.get(date) ?? [];
+      rows.push({ occ_ticker: occTicker, timestamp: `${date} ${etTime}`, bid, ask });
+      byDate.set(date, rows);
+    }
+    for (const [date, rows] of byDate) {
+      await stores.quote.writeQuotes(underlying, date, rows);
     }
   };
 
@@ -195,7 +177,7 @@ describe("replay_trade integration", () => {
           close_date: "2025-01-17",
           multiplier: 100,
         },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -248,7 +230,7 @@ describe("replay_trade integration", () => {
           close_date: "2025-01-17",
           multiplier: 100,
         },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -291,7 +273,7 @@ describe("replay_trade integration", () => {
           open_time: "09:33",
           multiplier: 100,
         },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -320,7 +302,7 @@ describe("replay_trade integration", () => {
             close_date: "2025-01-17",
             multiplier: 100,
           },
-          "/tmp/test-replay",
+          dataDir,
           stores,
         ),
       ).rejects.toThrow("open_date and close_date are required");
@@ -372,7 +354,7 @@ describe("replay_trade integration", () => {
           multiplier: 100,
           skip_quotes: true,
         },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -408,7 +390,7 @@ describe("replay_trade integration", () => {
           trade_index: 0,
           multiplier: 100,
         },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -433,7 +415,7 @@ describe("replay_trade integration", () => {
 
       const result = await handleReplayTrade(
         { block_id: "test-block", trade_index: 0, multiplier: 100, close_at: "trade" },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -458,7 +440,7 @@ describe("replay_trade integration", () => {
 
       const result = await handleReplayTrade(
         { block_id: "test-block", trade_index: 0, multiplier: 100, close_at: "expiry" },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -477,20 +459,24 @@ describe("replay_trade integration", () => {
           ('test-block', '2025-01-17', '2025-01-17', 'SPY 470C', 500.0, 1, 50.0, 'SPY')
       `);
 
-      // Two priced rows in the opening rotation, then the regular fixture.
-      for (const time of ["09:30", "09:31"]) {
-        await conn.run(
-          `INSERT INTO market.option_quote_minutes
-             (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source)
-           VALUES ('SPY', '2025-01-17', 'SPY250117C00470000', $1, 0.95, 1.05, 1.0, NULL, 'fixture')`,
-          [time],
-        );
-      }
+      // Seed the whole ticker batch: writeQuotes replaces that ticker's series.
       await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+      const existing = (
+        await stores.quote.readQuotes(["SPY250117C00470000"], "2025-01-17", "2025-01-17")
+      ).get("SPY250117C00470000")!;
+      await stores.quote.writeQuotes("SPY", "2025-01-17", [
+        ...["09:30", "09:31"].map((time) => ({
+          occ_ticker: "SPY250117C00470000",
+          timestamp: `2025-01-17 ${time}`,
+          bid: 0.95,
+          ask: 1.05,
+        })),
+        ...existing,
+      ]);
 
       const result = await handleReplayTrade(
         { block_id: "test-block", trade_index: 0, multiplier: 100 },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -511,15 +497,17 @@ describe("replay_trade integration", () => {
 
       // 09:32 and 09:34 priced; 09:33 reported as bid=ask=0.
       await seedOptionQuotes("SPY250117C00470000", "SPY", [SPY_470C_BARS[0], SPY_470C_BARS[2]]);
-      await conn.run(
-        `INSERT INTO market.option_quote_minutes
-           (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source)
-         VALUES ('SPY', '2025-01-17', 'SPY250117C00470000', '09:33', 0, 0, 0, NULL, 'fixture')`,
-      );
+      const existing = (
+        await stores.quote.readQuotes(["SPY250117C00470000"], "2025-01-17", "2025-01-17")
+      ).get("SPY250117C00470000")!;
+      await stores.quote.writeQuotes("SPY", "2025-01-17", [
+        ...existing,
+        { occ_ticker: "SPY250117C00470000", timestamp: "2025-01-17 09:33", bid: 0, ask: 0 },
+      ]);
 
       const result = await handleReplayTrade(
         { block_id: "test-block", trade_index: 0, multiplier: 100 },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -544,7 +532,7 @@ describe("replay_trade integration", () => {
 
       const result = await handleReplayTrade(
         { block_id: "test-block", trade_index: 0, multiplier: 100 },
-        "/tmp/test-replay",
+        dataDir,
         stores,
         conn,
       );
@@ -569,7 +557,7 @@ describe("replay_trade integration", () => {
             trade_index: 0,
             multiplier: 100,
           },
-          "/tmp/test-replay",
+          dataDir,
           stores,
           conn,
         ),
@@ -585,7 +573,7 @@ describe("replay_trade integration", () => {
             trade_index: 0,
             multiplier: 100,
           },
-          "/tmp/test-replay",
+          dataDir,
           stores,
           conn,
         ),
@@ -606,7 +594,7 @@ describe("replay_trade integration", () => {
             close_date: "2025-01-17",
             multiplier: 100,
           },
-          "/tmp/test-replay",
+          dataDir,
           stores,
         ),
       ).rejects.toThrow("Provide either legs[]");

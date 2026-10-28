@@ -22,21 +22,6 @@ describe("MarketIngestor.ingestChain", () => {
     conn = await instance.connect();
     await conn.run(`ATTACH ':memory:' AS market`);
     await ensureMarketDataTables(conn);
-    // option_chain is NOT created by ensureMarketDataTables — in production it is a
-    // Parquet-backed view. Tests must create the physical fallback table directly.
-    await conn.run(`
-      CREATE TABLE IF NOT EXISTS market.option_chain (
-        underlying     VARCHAR NOT NULL,
-        date           VARCHAR NOT NULL,
-        ticker         VARCHAR NOT NULL,
-        contract_type  VARCHAR NOT NULL,
-        strike         DOUBLE,
-        expiration     VARCHAR,
-        dte            INTEGER,
-        exercise_style VARCHAR,
-        PRIMARY KEY (underlying, date, ticker)
-      )
-    `);
     tickers = new TickerRegistry([{ underlying: "SPX", roots: ["SPX", "SPXW"] }]);
   });
 

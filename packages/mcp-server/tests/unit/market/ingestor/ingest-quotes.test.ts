@@ -32,38 +32,6 @@ describe("MarketIngestor.ingestQuotes", () => {
     conn = await instance.connect();
     await conn.run(`ATTACH ':memory:' AS market`);
     await ensureMarketDataTables(conn);
-    // option_chain + option_quote_minutes are not created by ensureMarketDataTables
-    // (they're Parquet views in production; tests must create the physical fallback
-    // tables directly). option_chain is required because enrichQuoteRows reads it
-    // for every (underlying, date) batch — the .catch(() => []) swallow that
-    // previously hid the missing-table error here has been removed.
-    await conn.run(`
-      CREATE TABLE IF NOT EXISTS market.option_chain (
-        underlying      VARCHAR NOT NULL,
-        date            VARCHAR NOT NULL,
-        ticker          VARCHAR NOT NULL,
-        contract_type   VARCHAR NOT NULL,
-        strike          DOUBLE NOT NULL,
-        expiration      VARCHAR NOT NULL,
-        dte             INTEGER NOT NULL,
-        exercise_style  VARCHAR,
-        PRIMARY KEY (underlying, date, ticker)
-      )
-    `);
-    await conn.run(`
-      CREATE TABLE IF NOT EXISTS market.option_quote_minutes (
-        underlying      VARCHAR NOT NULL,
-        date            VARCHAR NOT NULL,
-        ticker          VARCHAR NOT NULL,
-        time            VARCHAR NOT NULL,
-        bid             DOUBLE,
-        ask             DOUBLE,
-        mid             DOUBLE,
-        last_updated_ns BIGINT,
-        source          VARCHAR,
-        PRIMARY KEY (underlying, date, ticker, time)
-      )
-    `);
     tickers = new TickerRegistry([{ underlying: "SPXW", roots: ["SPXW"] }]);
   });
 
@@ -924,8 +892,7 @@ describe("MarketIngestor.ingestQuotes", () => {
     expect(result.status).toBe("ok");
     expect(result.rowsWritten).toBe(1);
 
-    // Read back via the store reader. parquetMode: false → DuckdbQuoteStore.
-    // Both backends now persist `source` (Task 5).
+    // Option data is Parquet-native even with parquetMode: false.
     const persisted = await stores.quote.readQuotes(
       ["SPX250107C05000000"],
       "2025-01-07",

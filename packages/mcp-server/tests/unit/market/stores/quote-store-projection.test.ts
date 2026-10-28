@@ -210,6 +210,7 @@ it("keeps the default canonical SQL identical and its no-Greeks row positions st
   );
   const fixture = await buildStoreFixture({ parquetMode: false });
   try {
+    await createMarketStores(fixture.ctx).quote.writeQuotes("SPX", "2025-01-06", [quote]);
     const reader = await fixture.ctx.conn.runAndReadAll(
       `SELECT ${projection} FROM market.option_quote_minutes AS q`,
     );

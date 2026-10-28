@@ -796,13 +796,11 @@ export type { EnrichmentWatermarks } from "./db/json-adapters.ts";
 export { ParquetSpotStore } from "./market/stores/parquet-spot-store.ts";
 export { DuckdbSpotStore } from "./market/stores/duckdb-spot-store.ts";
 
-// Concrete Chain store pair
+// Parquet-native option stores (both storage modes)
 export { ParquetChainStore } from "./market/stores/parquet-chain-store.ts";
-export { DuckdbChainStore } from "./market/stores/duckdb-chain-store.ts";
 
-// Concrete Quote store pair
+// Option minute quotes
 export { ParquetQuoteStore } from "./market/stores/parquet-quote-store.ts";
-export { DuckdbQuoteStore } from "./market/stores/duckdb-quote-store.ts";
 
 // Daily open-interest store
 export { ParquetOiDailyStore } from "./market/stores/parquet-oi-daily-store.ts";

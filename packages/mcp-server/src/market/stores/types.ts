@@ -17,9 +17,8 @@ import type { TickerRegistry } from "../tickers/registry.ts";
 /**
  * StoreContext — one per MCP process (or standalone script).
  *
- * Locked to exactly four fields per CONTEXT.md D-03. `parquetMode` is a snapshot
- * taken at construction time (see RESEARCH.md Pitfall 8 — do not re-read the env var
- * mid-process, since concrete stores may cache backend choice).
+ * `parquetMode` is snapshotted at construction, not re-read mid-process.
+ * It selects spot/enriched storage; option stores always use Parquet.
  */
 export interface StoreContext {
   conn: DuckDBConnection;

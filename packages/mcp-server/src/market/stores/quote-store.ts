@@ -13,8 +13,7 @@
  * throw clearly when a mixed batch arrives (first-iteration behavior — may
  * relax to transparent grouping if a real Phase 4 consumer needs it).
  *
- * Concrete subclasses (ParquetQuoteStore, DuckdbQuoteStore) ship in Plan
- * 02-03 Task 3.
+ * ParquetQuoteStore implements persistence in both storage modes.
  */
 import type {
   StoreContext,

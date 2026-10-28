@@ -28,40 +28,6 @@ describe("MarketIngestor.refresh — weekend short-circuit", () => {
     conn = await instance.connect();
     await conn.run(`ATTACH ':memory:' AS market`);
     await ensureMarketDataTables(conn);
-    await conn.run(`
-      CREATE TABLE IF NOT EXISTS market.option_chain (
-        underlying      VARCHAR NOT NULL,
-        date            VARCHAR NOT NULL,
-        ticker          VARCHAR NOT NULL,
-        contract_type   VARCHAR NOT NULL,
-        strike          DOUBLE NOT NULL,
-        expiration      VARCHAR NOT NULL,
-        dte             INTEGER NOT NULL,
-        exercise_style  VARCHAR,
-        PRIMARY KEY (underlying, date, ticker)
-      )
-    `);
-    await conn.run(`
-      CREATE TABLE IF NOT EXISTS market.option_quote_minutes (
-        underlying      VARCHAR NOT NULL,
-        date            VARCHAR NOT NULL,
-        ticker          VARCHAR NOT NULL,
-        time            VARCHAR NOT NULL,
-        bid             DOUBLE,
-        ask             DOUBLE,
-        mid             DOUBLE,
-        last_updated_ns BIGINT,
-        source          VARCHAR,
-        delta           DOUBLE,
-        gamma           DOUBLE,
-        theta           DOUBLE,
-        vega            DOUBLE,
-        iv              DOUBLE,
-        greeks_source   VARCHAR,
-        greeks_revision INTEGER,
-        PRIMARY KEY (underlying, date, ticker, time)
-      )
-    `);
     tickers = new TickerRegistry([{ underlying: "SPX", roots: ["SPX", "SPXW"] }]);
   });
 
@@ -300,40 +266,6 @@ describe("MarketIngestor.refresh", () => {
     conn = await instance.connect();
     await conn.run(`ATTACH ':memory:' AS market`);
     await ensureMarketDataTables(conn);
-    await conn.run(`
-      CREATE TABLE IF NOT EXISTS market.option_chain (
-        underlying      VARCHAR NOT NULL,
-        date            VARCHAR NOT NULL,
-        ticker          VARCHAR NOT NULL,
-        contract_type   VARCHAR NOT NULL,
-        strike          DOUBLE NOT NULL,
-        expiration      VARCHAR NOT NULL,
-        dte             INTEGER NOT NULL,
-        exercise_style  VARCHAR,
-        PRIMARY KEY (underlying, date, ticker)
-      )
-    `);
-    await conn.run(`
-      CREATE TABLE IF NOT EXISTS market.option_quote_minutes (
-        underlying      VARCHAR NOT NULL,
-        date            VARCHAR NOT NULL,
-        ticker          VARCHAR NOT NULL,
-        time            VARCHAR NOT NULL,
-        bid             DOUBLE,
-        ask             DOUBLE,
-        mid             DOUBLE,
-        last_updated_ns BIGINT,
-        source          VARCHAR,
-        delta           DOUBLE,
-        gamma           DOUBLE,
-        theta           DOUBLE,
-        vega            DOUBLE,
-        iv              DOUBLE,
-        greeks_source   VARCHAR,
-        greeks_revision INTEGER,
-        PRIMARY KEY (underlying, date, ticker, time)
-      )
-    `);
     tickers = new TickerRegistry([{ underlying: "SPX", roots: ["SPX", "SPXW"] }]);
   });
 
@@ -1833,11 +1765,12 @@ describe("MarketIngestor.refresh", () => {
     );
     expect(quotes.get("SPXW260107C04800000")).toEqual([
       expect.objectContaining({
-        delta: 0.22,
-        gamma: 0.05,
-        theta: -0.12,
-        vega: 0.31,
-        iv: 0.19,
+        // Parquet persists provider greeks as REAL (FLOAT32).
+        delta: expect.closeTo(0.22, 6),
+        gamma: expect.closeTo(0.05, 6),
+        theta: expect.closeTo(-0.12, 6),
+        vega: expect.closeTo(0.31, 6),
+        iv: expect.closeTo(0.19, 6),
         greeks_source: "thetadata",
         greeks_revision: null,
       }),

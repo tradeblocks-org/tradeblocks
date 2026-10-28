@@ -40,6 +40,10 @@ npm run build -w packages/mcp-server
 node packages/mcp-server/server/cli.js ~/Trading/backtests
 ```
 
+Option market data is always stored as Parquet partitions; no storage setting is required.
+Optional `TRADEBLOCKS_PARQUET=true` switches spot/enriched writes to Parquet and metadata/profiles
+to JSON (default off). See [storage and MCP client configuration](docs/market-data.md#storage-and-configuration).
+
 ### Testing
 
 ```bash

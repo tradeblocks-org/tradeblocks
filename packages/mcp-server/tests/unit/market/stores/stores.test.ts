@@ -27,9 +27,7 @@ import {
   ParquetEnrichedStore,
   DuckdbEnrichedStore,
   ParquetChainStore,
-  DuckdbChainStore,
   ParquetQuoteStore,
-  DuckdbQuoteStore,
   ParquetOiDailyStore,
 } from "../../../../src/test-exports.ts";
 import type {
@@ -221,14 +219,15 @@ describe("createMarketStores factory (Pitfall 6 resolution — real DuckDB fixtu
     }
   });
 
-  it("picks DuckDB backend concretes when parquetMode=false (D-03)", async () => {
+  it("keeps spot/enriched in DuckDB and option data in Parquet when parquetMode=false", async () => {
     const fixture = await buildStoreFixture({ parquetMode: false });
     try {
       const stores = createMarketStores(fixture.ctx);
       expect(stores.spot).toBeInstanceOf(DuckdbSpotStore);
       expect(stores.enriched).toBeInstanceOf(DuckdbEnrichedStore);
-      expect(stores.chain).toBeInstanceOf(DuckdbChainStore);
-      expect(stores.quote).toBeInstanceOf(DuckdbQuoteStore);
+      expect(stores.chain).toBeInstanceOf(ParquetChainStore);
+      expect(stores.quote).toBeInstanceOf(ParquetQuoteStore);
+      expect(getMarketStoresAuthority(stores)?.parquetMode).toBe(false);
     } finally {
       fixture.cleanup();
     }

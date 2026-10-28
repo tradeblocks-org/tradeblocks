@@ -6,9 +6,8 @@
  * StoreContext, ready for feeding into a concrete store class constructor, plus
  * a cleanup function that releases the DB connection and removes the tmp dir.
  *
- * Writes hit physical DuckDB tables in DuckDB-mode; Parquet-mode writes hit the
- * filesystem under `<tmpDir>/market/<dataset>/...` and reads are served via
- * `createMarketParquetViews` (tests refresh views after each write).
+ * Option writes always use Parquet partitions; spot and enriched writes use
+ * physical DuckDB tables when parquetMode is false.
  *
  * Pattern adapted from `tests/unit/parquet-writer-multi.test.ts:15-47` and the
  * Phase 2 Wave 1 `views.test.ts` fixture.
@@ -68,45 +67,9 @@ export async function buildStoreFixture(opts: BuildFixtureOpts): Promise<Fixture
   const conn: DuckDBConnection = await db.connect();
   await conn.run(`ATTACH ':memory:' AS market`);
 
-  // Both modes need physical tables available: DuckDB-mode uses them for reads
-  // and writes; Parquet-mode needs them so Parquet views can DROP TABLE IF EXISTS
-  // before creating a view with the same name without error.
+  // Physical spot/enriched fallback tables and mutable metadata match startup.
   await ensureMutableMarketTables(conn);
   await ensureMarketDataTables(conn);
-
-  // Phase 6 Wave D retired the legacy option_chain + option_quote_minutes
-  // physical fallback CREATE TABLE blocks from `ensureMarketDataTables`. The
-  // Duckdb{Chain,Quote}Store tests still need writable physical tables, so
-  // this fixture re-creates them locally at the Phase 2 schema shape. In
-  // production, DuckDB-mode for these stores is exercised via the Parquet
-  // view layer over writes that flow through the Parquet writers.
-  await conn.run(`
-    CREATE TABLE IF NOT EXISTS market.option_chain (
-      underlying     VARCHAR NOT NULL,
-      date           VARCHAR NOT NULL,
-      ticker         VARCHAR NOT NULL,
-      contract_type  VARCHAR NOT NULL,
-      strike         DOUBLE  NOT NULL,
-      expiration     VARCHAR NOT NULL,
-      dte            INTEGER,
-      exercise_style VARCHAR,
-      PRIMARY KEY (underlying, date, ticker)
-    )
-  `);
-  await conn.run(`
-    CREATE TABLE IF NOT EXISTS market.option_quote_minutes (
-      underlying      VARCHAR NOT NULL,
-      date            VARCHAR NOT NULL,
-      ticker          VARCHAR NOT NULL,
-      time            VARCHAR NOT NULL,
-      bid             DOUBLE,
-      ask             DOUBLE,
-      mid             DOUBLE,
-      last_updated_ns BIGINT,
-      source          VARCHAR,
-      PRIMARY KEY (underlying, date, ticker, time)
-    )
-  `);
 
   // Minimal registry — SPX + SPXW both map to SPX so extractRoot("SPXW...") +
   // resolve works end-to-end in the quote-store contract test. QQQ maps to itself

@@ -1,13 +1,8 @@
 /**
- * ChainStore dual-backend contract tests (Phase 2 Plan 03 Task 2).
- *
- * Mirrors spot-store.contract.test.ts: `describe.each([parquet, duckdb])` runs
- * the same suite against both backends, plus a final parity describe block
- * asserts that both backends return identical readChain output for the same
- * writeChain input.
+ * ChainStore Parquet persistence contract tests.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import { ParquetChainStore, DuckdbChainStore } from "../../../../src/test-exports.ts";
+import { ParquetChainStore } from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
@@ -23,14 +18,6 @@ async function makeParquetChain(): Promise<{
   return { store: new ParquetChainStore(fixture.ctx), fixture };
 }
 
-async function makeDuckdbChain(): Promise<{
-  store: DuckdbChainStore;
-  fixture: FixtureHandle;
-}> {
-  const fixture = await buildStoreFixture({ parquetMode: false });
-  return { store: new DuckdbChainStore(fixture.ctx), fixture };
-}
-
 describe.each([
   {
     name: "parquet",
@@ -39,16 +26,9 @@ describe.each([
       await createMarketParquetViews(f.ctx.conn, f.ctx.dataDir);
     },
   },
-  {
-    name: "duckdb",
-    make: makeDuckdbChain,
-    refreshViews: async (_f: FixtureHandle) => {
-      /* no-op */
-    },
-  },
 ])("ChainStore contract — $name backend", ({ make, refreshViews }) => {
   let fixture: FixtureHandle;
-  let store: ParquetChainStore | DuckdbChainStore;
+  let store: ParquetChainStore;
 
   beforeEach(async () => {
     const built = await make();
@@ -63,6 +43,9 @@ describe.each([
   it("writeChain + readChain round-trip (3 contracts)", async () => {
     const rows = makeContracts("SPX", "2025-01-06");
     await store.writeChain("SPX", "2025-01-06", rows);
+    expect(
+      (await fixture.ctx.conn.runAndReadAll("SELECT count(*) FROM market.option_chain")).getRows(),
+    ).toEqual([[3n]]);
     await refreshViews(fixture);
 
     const read = await store.readChain("SPX", "2025-01-06");
@@ -82,6 +65,9 @@ describe.each([
   it("getCoverage reports written dates with correct earliest/latest/totalDates", async () => {
     await store.writeChain("SPX", "2025-01-06", makeContracts("SPX", "2025-01-06"));
     await store.writeChain("SPX", "2025-01-07", makeContracts("SPX", "2025-01-07"));
+    expect(
+      (await fixture.ctx.conn.runAndReadAll("SELECT count(*) FROM market.option_chain")).getRows(),
+    ).toEqual([[6n]]);
     await refreshViews(fixture);
 
     const cov = await store.getCoverage("SPX", "2025-01-01", "2025-01-31");
@@ -116,29 +102,5 @@ describe.each([
     const read = await store.readChain("SPX", "2025-01-06");
     expect(read.length).toBe(2);
     expect(read.map((r) => r.contract_type).sort()).toEqual(["call", "put"]);
-  });
-});
-
-describe("ChainStore backend parity", () => {
-  it("Parquet and DuckDB return identical readChain output for the same input", async () => {
-    const p = await makeParquetChain();
-    const d = await makeDuckdbChain();
-    try {
-      const rows = makeContracts("SPX", "2025-01-06");
-      await p.store.writeChain("SPX", "2025-01-06", rows);
-      await d.store.writeChain("SPX", "2025-01-06", rows);
-      await createMarketParquetViews(p.fixture.ctx.conn, p.fixture.ctx.dataDir);
-
-      const fromP = (await p.store.readChain("SPX", "2025-01-06")).sort((a, b) =>
-        a.ticker.localeCompare(b.ticker),
-      );
-      const fromD = (await d.store.readChain("SPX", "2025-01-06")).sort((a, b) =>
-        a.ticker.localeCompare(b.ticker),
-      );
-      expect(fromP).toEqual(fromD);
-    } finally {
-      p.fixture.cleanup();
-      d.fixture.cleanup();
-    }
   });
 });

@@ -2,7 +2,7 @@
  * Parquet Writer Utility
  *
  * Provides atomic Parquet file writing via DuckDB's COPY TO command.
- * Used by all market data importers and enrichers when TRADEBLOCKS_PARQUET=true.
+ * Used for option data in both modes and spot/enriched data in Parquet mode.
  *
  * Pattern: INSERT into staging temp table -> COPY TO Parquet -> DROP staging.
  * This ensures atomicity: if COPY TO fails, the original Parquet file is untouched.

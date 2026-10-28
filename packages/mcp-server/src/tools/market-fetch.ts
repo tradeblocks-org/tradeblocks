@@ -227,7 +227,7 @@ export function registerMarketFetchTools(
         "  spot_bars      → market.spot                 — partition {ticker, date}\n" +
         "  option_quotes  → market.option_quote_minutes — partition {underlying, date}\n" +
         "  option_chain   → market.option_chain         — partition {underlying, date}\n\n" +
-        "The SELECT must output the target store's canonical columns in order. Writes are single-partition: every row must belong to the named partition. Works in both Parquet and DuckDB modes — the store handles mode routing.",
+        "The SELECT must output the target store's canonical columns in order. Writes are single-partition: every row must belong to the named partition. Options always use Parquet partitions; spot bars follow the configured storage mode.",
       inputSchema: z.object({
         file_path: z
           .string()

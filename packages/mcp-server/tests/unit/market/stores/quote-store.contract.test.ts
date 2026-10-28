@@ -1,5 +1,5 @@
 /**
- * QuoteStore dual-backend contract tests (Phase 2 Plan 03 Task 3).
+ * QuoteStore Parquet persistence contract tests.
  *
  * Asserts:
  *   - The new multi-ticker grouped-series readQuotes (D-06 / D-08) returns
@@ -10,10 +10,9 @@
  *   - Underlying resolution flows through `extractRoot` +
  *     `ctx.tickers.resolve` — SPXW_CALL (root "SPXW") resolves to "SPX"
  *   - getCoverage reports written dates per underlying
- *   - Backend parity: Parquet and DuckDB return identical Maps
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import { ParquetQuoteStore, DuckdbQuoteStore } from "../../../../src/test-exports.ts";
+import { ParquetQuoteStore } from "../../../../src/test-exports.ts";
 import {
   buildStoreFixture,
   type FixtureHandle,
@@ -33,14 +32,6 @@ async function makeParquetQuote(): Promise<{
   return { store: new ParquetQuoteStore(fixture.ctx), fixture };
 }
 
-async function makeDuckdbQuote(): Promise<{
-  store: DuckdbQuoteStore;
-  fixture: FixtureHandle;
-}> {
-  const fixture = await buildStoreFixture({ parquetMode: false });
-  return { store: new DuckdbQuoteStore(fixture.ctx), fixture };
-}
-
 describe.each([
   {
     name: "parquet",
@@ -49,16 +40,9 @@ describe.each([
       await createMarketParquetViews(f.ctx.conn, f.ctx.dataDir);
     },
   },
-  {
-    name: "duckdb",
-    make: makeDuckdbQuote,
-    refreshViews: async (_f: FixtureHandle) => {
-      /* no-op */
-    },
-  },
 ])("QuoteStore contract — $name backend", ({ make, refreshViews }) => {
   let fixture: FixtureHandle;
-  let store: ParquetQuoteStore | DuckdbQuoteStore;
+  let store: ParquetQuoteStore;
 
   beforeEach(async () => {
     const built = await make();
@@ -75,6 +59,11 @@ describe.each([
       ...makeQuotes(SPX_CALL, "2025-01-06"),
       ...makeQuotes(SPX_PUT, "2025-01-06"),
     ]);
+    expect(
+      (
+        await fixture.ctx.conn.runAndReadAll("SELECT count(*) FROM market.option_quote_minutes")
+      ).getRows(),
+    ).toEqual([[6n]]);
     await refreshViews(fixture);
 
     const result = await store.readQuotes([SPX_CALL, SPX_PUT], "2025-01-06", "2025-01-06");
@@ -128,6 +117,11 @@ describe.each([
   it("getCoverage reports written dates per underlying", async () => {
     await store.writeQuotes("SPX", "2025-01-06", makeQuotes(SPX_CALL, "2025-01-06"));
     await store.writeQuotes("SPX", "2025-01-07", makeQuotes(SPX_CALL, "2025-01-07"));
+    expect(
+      (
+        await fixture.ctx.conn.runAndReadAll("SELECT count(*) FROM market.option_quote_minutes")
+      ).getRows(),
+    ).toEqual([[6n]]);
     await refreshViews(fixture);
 
     const cov = await store.getCoverage("SPX", "2025-01-01", "2025-01-31");
@@ -161,27 +155,6 @@ describe.each([
 
     const result = await store.readQuotes([SPX_CALL], "2025-01-06", "2025-01-06");
     expect(result.get(SPX_CALL)?.length).toBe(2);
-  });
-});
-
-describe("QuoteStore backend parity", () => {
-  it("Parquet and DuckDB return identical readQuotes output for the same input", async () => {
-    const p = await makeParquetQuote();
-    const d = await makeDuckdbQuote();
-    try {
-      const quotes = makeQuotes(SPX_CALL, "2025-01-06");
-      await p.store.writeQuotes("SPX", "2025-01-06", quotes);
-      await d.store.writeQuotes("SPX", "2025-01-06", quotes);
-      await createMarketParquetViews(p.fixture.ctx.conn, p.fixture.ctx.dataDir);
-
-      const fromP = await p.store.readQuotes([SPX_CALL], "2025-01-06", "2025-01-06");
-      const fromD = await d.store.readQuotes([SPX_CALL], "2025-01-06", "2025-01-06");
-      expect(Array.from(fromP.keys()).sort()).toEqual(Array.from(fromD.keys()).sort());
-      expect(fromP.get(SPX_CALL)).toEqual(fromD.get(SPX_CALL));
-    } finally {
-      p.fixture.cleanup();
-      d.fixture.cleanup();
-    }
   });
 });
 

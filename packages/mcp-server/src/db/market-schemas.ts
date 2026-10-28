@@ -17,10 +17,9 @@
  * after ATTACH '...' AS market. Do NOT create a schema within market.duckdb.
  *
  * The legacy fallback CREATE TABLE blocks for daily / date_context / intraday /
- * option_chain / option_quote_minutes have been removed. option_chain and
- * option_quote_minutes live only as Parquet views (no physical fallback);
- * spot / enriched / enriched_context are the only physical fallback tables
- * that remain.
+ * option_chain / option_quote_minutes have been removed. Option stores always
+ * publish Parquet partitions; these SQL names are views with no physical fallback.
+ * spot / enriched / enriched_context are the only physical fallback tables.
  */
 
 import type { DuckDBConnection } from "@duckdb/node-api";
@@ -66,8 +65,8 @@ export async function ensureMutableMarketTables(conn: DuckDBConnection): Promise
 /**
  * Ensure the v3.0 physical market data tables exist in the attached market.duckdb.
  *
- * This is the FALLBACK path — only called when Parquet views are not active
- * (public repo, fresh clones without Parquet files).
+ * This is the FALLBACK path for spot/enriched data when Parquet views are not
+ * active. Option data always uses Parquet stores, including on fresh clones.
  *
  * Must be called AFTER `ATTACH '...' AS market` in openReadWriteConnection.
  * Creates all columns upfront so writers do not need ALTER TABLE.

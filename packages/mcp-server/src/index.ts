@@ -103,6 +103,8 @@ Environment:
   TRADEBLOCKS_BLOCKS_DIR  Directory for CSV block folders (overrides default, overridden by --blocks-dir)
   TRADEBLOCKS_DATA_ROOT   Root directory for shared data (overrides default, overridden by --data-root)
   MARKET_DB_PATH      Path to market.duckdb (overrides default, overridden by --market-db)
+  TRADEBLOCKS_PARQUET  Set to true for spot/enriched Parquet writes and metadata/profile JSON (default off).
+                      Option chains and quotes always use Parquet, with or without this setting.
 
 Commands:
   setup            Guided local client setup; --client, --folder, --yes, --replace, --json
@@ -354,7 +356,9 @@ export async function startTradeBlocksMcp(options: StartTradeBlocksMcpOptions = 
   // stdio transport reserves stdout for the MCP JSON protocol — anything else
   // on stdout (even diagnostics) makes the client throw "not valid JSON".
   // Diagnostic output must go to stderr.
-  console.error(`[market-stores] Constructed: ${parquetMode ? "parquet" : "duckdb"} backend`);
+  console.error(
+    `[market-stores] Constructed: ${parquetMode ? "parquet" : "duckdb spot/enriched; parquet options"} backend`,
+  );
 
   // Factory function to create configured MCP server instances
   // Used by HTTP transport which needs fresh instances per request (stateless mode)

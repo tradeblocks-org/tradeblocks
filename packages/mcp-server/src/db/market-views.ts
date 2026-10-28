@@ -5,16 +5,16 @@
  * When Parquet files exist, views replace physical tables for reads —
  * DuckDB becomes a query engine over immutable Parquet rather than a data store.
  *
- * Falls back gracefully: missing files are tracked in `tablesKept` so the caller
- * can create physical tables for those datasets instead.
+ * Missing files are tracked in `tablesKept`. Only spot/enriched datasets have
+ * physical fallbacks; option views appear after the first publication.
  *
- * Parquet directory layout (v3.0 — produced by import pipelines when TRADEBLOCKS_PARQUET=true):
+ * Parquet directory layout (options in both modes, spot/enriched when opted in):
  *   {dataDir}/market/
  *     spot/ticker=X/date=Y/data.parquet                   (ticker-first Hive-partitioned minute bars)
  *     enriched/ticker=X/date=Y/data.parquet               (bounded ticker indicator Parquet)
  *     enriched/context/date=Y/data.parquet                (bounded cross-ticker context Parquet)
- *     option_chain/date=YYYY-MM-DD/data.parquet           (Hive-partitioned)
- *     option_quote_minutes/date=YYYY-MM-DD/data.parquet   (Hive-partitioned)
+ *     option_chain/underlying=X/date=Y/data.parquet
+ *     option_quote_minutes/underlying=X/date=Y/data.parquet
  *
  * View surface registered over these files: market.spot, market.spot_daily (RTH aggregation),
  * market.enriched, market.enriched_context, market.option_chain, market.option_quote_minutes.
@@ -123,7 +123,7 @@ function hasEnrichedContextFile(dir: string): boolean {
  * For each v3.0 market dataset (spot, enriched, enriched_context, option_chain,
  * option_quote_minutes, spot_daily):
  *   - If the Parquet file/directory exists: DROP any existing physical TABLE, then CREATE VIEW
- *   - If missing: record in tablesKept (caller should create physical table as fallback)
+ *   - If missing: record in tablesKept (only spot/enriched have physical fallbacks)
  *
  * The legacy single-file (daily, date_context) and Hive-partitioned
  * (intraday) view registrations have been retired; reads against those

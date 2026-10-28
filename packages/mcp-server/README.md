@@ -105,6 +105,12 @@ verification starts.
 The server's first npx launch may need network access to download TradeBlocks;
 setup does not install clients, Node/npm, or change system settings.
 
+Option chains and minute quotes are always persisted as Parquet partitions under your data directory.
+No storage setting or provider key is needed for local file imports.
+`TRADEBLOCKS_PARQUET=true` is an optional switch for spot/enriched Parquet writes and
+metadata/profile JSON storage, default off; setup does not add it.
+See [storage and client configuration](../../docs/market-data.md#storage-and-configuration).
+
 For **Claude Code only**, the separate
 [tradeblocks-skills plugin](https://github.com/tradeblocks-org/tradeblocks-skills)
 is optional and is not installed by setup. Manual CSV import and core analysis
