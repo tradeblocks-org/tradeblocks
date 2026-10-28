@@ -17,7 +17,10 @@ dropped. An existing partition is never guessed to be mergeable: the original ta
 `market.option_chain_legacy_retained_<id>`, with its exact name reported on stderr, while
 nonoverlapping dates are published. Inspect that retained table with `run_sql` before reconciling it
 with your partitions. After an interrupted copy, a retry treats already-published partitions the
-same conservative way. Nonstandard physical option-quote tables are retained under
+same conservative way. The whole table is also retained, with nothing published, when the archive
+holds date-only (`option_chain/date=…`) chain partitions, because the two partition layouts cannot be
+read together; and when a partition fails to publish, so startup still completes. Nonstandard
+physical option-quote tables are retained under
 `market.option_quote_minutes_legacy_retained_<id>` and reported rather than automatically migrated.
 
 `TRADEBLOCKS_PARQUET` defaults **off** (unset). Setting it to the exact string `"true"` switches
