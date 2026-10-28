@@ -583,6 +583,11 @@ Sort-aware work admission caps permutation at 30 million units per field and
 90 million per request, refusing the whole request before any sweeps. At 1,100 trades,
 55 months, 499 iterations and default thresholds, the largest admitted family is
 3 fully covered fields (87,751,152 estimated units); 4 fields exceed the cap.
+Both work refusals return `maxIterationsThatFit`, the largest iteration count the
+unchanged request would be admitted at (null when even one iteration does not fit).
+Optional `minKeptFraction` (0 < x ≤ 1) excludes thresholds keeping fewer than that
+share of covered trades/days from `bestThreshold` and from every permuted sweep;
+`keptShareFloor` reports how many candidates it excluded. Omitting it changes nothing.
 Field, objective and mode choices across separate requests are outside the Holm family.
 Monthly blocks retain within-month dependence, not cross-month dependence; block
 exchangeability is an assumption. See [the full contract](../../docs/mcp-tools.md#filter-curve-significance-and-stability).
@@ -593,7 +598,8 @@ refused as `day_field_varies`, with the varying dates. Cheap request/work admiss
 precedes causal field resolution and counts the chosen unit conservatively before
 coverage. Omitted `unit` retains trade-mode outputs.
 Day mode also offers `sharpe` (daily dollar P&L, rf=0, sample std, √252),
-`mar` (calendar-day CAGR / drawdown fraction of observed starting capital), and
+`mar` (calendar-day CAGR / drawdown fraction of capital at the start of the analyzed
+window, which includes prior P&L when `startDate` is set), and
 `maxDrawdown` (dollar drawdown reduction; smaller is better). Filtered dates are
 flat. Trade units refuse these objectives; MAR additionally refuses missing capital.
 `objectiveMetadata` documents definitions and undefined cases. This dollar-P&L
