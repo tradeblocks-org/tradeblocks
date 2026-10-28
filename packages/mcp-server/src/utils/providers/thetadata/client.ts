@@ -68,6 +68,8 @@ export class ThetaMddsClient {
   private sessionId: string | null = null;
   private stub: MddsClientStub | null = null;
   private connectPromise: Promise<void> | null = null;
+  private reauthPromise: Promise<void> | null = null;
+  private reauthSession: string | null = null;
   private connectionGeneration = 0;
   private concurrencyLimit = 1;
   private inFlight = 0;
@@ -137,6 +139,8 @@ export class ThetaMddsClient {
     this.stub = null;
     this.sessionId = null;
     this.connectPromise = null;
+    this.reauthPromise = null;
+    this.reauthSession = null;
     this.inFlight = 0;
     const waiters = this.waiters.splice(0);
     for (const waiter of waiters) {
@@ -180,20 +184,53 @@ export class ThetaMddsClient {
     return candidate as MddsStreamMethod;
   }
 
+  private async reauthenticate(session: string | null, generation: number): Promise<void> {
+    this.assertOpen(generation);
+    if (this.sessionId !== session) return;
+    if (!this.reauthPromise || this.reauthSession !== session) {
+      this.reauthSession = session;
+      this.reauthPromise = (async () => {
+        const auth = await authenticateThetaData(resolveThetaCredentials(this.env), this.fetchImpl);
+        this.assertOpen(generation);
+        this.sessionId = auth.sessionId;
+      })();
+    }
+    await this.reauthPromise;
+    this.assertOpen(generation);
+  }
+
+  private sessionError(error: unknown): Error {
+    const message = error instanceof Error ? error.message : String(error);
+    return Object.assign(
+      new Error(message, { cause: error }),
+      typeof error === "object" && error !== null ? error : {},
+      {
+        message: `${message}. Another ThetaData terminal or client may be logged in with the same account; ThetaData allows one active session per account. Close the other client, then retry.`,
+      },
+    );
+  }
+
   async callStream<T>(method: string, request: unknown): Promise<T[]> {
     if (!this.stub) await this.connect();
     const callGeneration = this.connectionGeneration;
     const config = getThetaMddsConfig(this.env);
     let lastError: unknown;
+    let reauthenticated = false;
     for (let attempt = 1; attempt <= config.maxAttempts; attempt++) {
       this.assertOpen(callGeneration);
       await this.acquire();
       let releasePermit = true;
+      let requestSession = this.sessionId;
       try {
         this.assertOpen(callGeneration);
         const stub = this.stub!;
         const streamMethod = this.getStreamMethod(stub, method);
-        const call = streamMethod.call(stub, request) as MddsStreamCall<T>;
+        requestSession = this.sessionId;
+        const currentRequest =
+          typeof request === "object" && request !== null && "queryInfo" in request
+            ? { ...request, queryInfo: this.queryInfo() }
+            : request;
+        const call = streamMethod.call(stub, currentRequest) as MddsStreamCall<T>;
         return await new Promise<T[]>((resolve, reject) => {
           const rows: T[] = [];
           call.on("data", (chunk: T) => rows.push(chunk));
@@ -206,6 +243,20 @@ export class ThetaMddsClient {
           typeof error === "object" && error && "code" in error
             ? Number((error as { code: unknown }).code)
             : undefined;
+        if (code === grpc.status.UNAUTHENTICATED) {
+          if (reauthenticated) throw this.sessionError(error);
+          reauthenticated = true;
+          this.release();
+          releasePermit = false;
+          try {
+            await this.reauthenticate(requestSession, callGeneration);
+          } catch {
+            this.assertOpen(callGeneration);
+            throw this.sessionError(error);
+          }
+          attempt--;
+          continue;
+        }
         if (!isRetryableGrpcCode(code) || attempt === config.maxAttempts) throw error;
         this.release();
         releasePermit = false;

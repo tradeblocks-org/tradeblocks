@@ -63,6 +63,44 @@ function createClient(): ThetaMddsClient {
 }
 
 describe("ThetaDataProvider.fetchBars", () => {
+  it.each([
+    ["2025-07-11", "2025-07-15", ["2025-07-11", "2025-07-14", "2025-07-15"]],
+    ["2025-07-03", "2025-07-07", ["2025-07-03", "2025-07-07"]],
+    ["2021-07-02", "2021-07-06", ["2021-07-02", "2021-07-05", "2021-07-06"]],
+  ])("requests only eligible intraday dates from %s through %s", async (from, to, dates) => {
+    const stockHistoryOhlc = jest.fn<StockOhlcEndpoint>(async (_client, params) => [
+      {
+        date: params.startDate,
+        msOfDay: 34_200_000,
+        open: 1,
+        high: 2,
+        low: 1,
+        close: 2,
+        volume: 1,
+      },
+    ]);
+    const provider = createProvider({ client: createClient(), stockHistoryOhlc });
+    const bars = await provider.fetchBars({ ticker: "SPY", from, to, timespan: "minute" });
+    expect(stockHistoryOhlc.mock.calls.map(([, params]) => params.startDate)).toEqual(dates);
+    expect(bars.map((bar) => bar.date)).toEqual(dates);
+  });
+
+  it("names a trading-day NOT_FOUND in the bars error", async () => {
+    const provider = createProvider({
+      client: createClient(),
+      stockHistoryOhlc: async () => {
+        throw new Error("5 NOT_FOUND: No data found");
+      },
+    });
+    await expect(
+      provider.fetchBars({
+        ticker: "SPY",
+        from: "2025-07-07",
+        to: "2025-07-07",
+        timespan: "minute",
+      }),
+    ).rejects.toThrow(/2025-07-07.*NOT_FOUND/);
+  });
   it("uses indexHistoryEod for daily index bars and maps rows to BarRow", async () => {
     const client = createClient();
     const indexHistoryEod = jest.fn<StockEodEndpoint>().mockResolvedValue([

@@ -63,6 +63,57 @@ function firstOrderRow(overrides: Partial<ThetaFirstOrderGreekRow> = {}): ThetaF
 }
 
 describe("ThetaDataProvider.fetchQuotes", () => {
+  it.each([
+    ["2025-07-11", "2025-07-15", ["2025-07-11", "2025-07-14", "2025-07-15"]],
+    ["2025-07-03", "2025-07-07", ["2025-07-03", "2025-07-07"]],
+    ["2021-07-02", "2021-07-06", ["2021-07-02", "2021-07-05", "2021-07-06"]],
+  ])("requests only eligible quote dates from %s through %s", async (from, to, dates) => {
+    const quoteEndpoint = jest.fn<QuoteEndpoint>(async (_client, params) => [
+      quoteRow({ timestamp: `${params.date} 09:30` }),
+    ]);
+    const firstOrderEndpoint = jest.fn<FirstOrderEndpoint>().mockResolvedValue([]);
+    const provider = createProvider({ client: createClient(), quoteEndpoint, firstOrderEndpoint });
+    const quotes = await provider.fetchQuotes("SPXW250815C05725000", from, to);
+    expect(quoteEndpoint.mock.calls.map(([, params]) => params.date)).toEqual(dates);
+    expect(firstOrderEndpoint.mock.calls.map(([, params]) => params.date)).toEqual(dates);
+    expect([...quotes.keys()]).toEqual(dates.map((date) => `${date} 09:30`));
+  });
+
+  it.each(["2025-07-04", "2025-07-05", "2021-07-03"])(
+    "skips chain and bulk endpoints on non-session %s",
+    async (date) => {
+      const contractListEndpoint = jest.fn<ContractListEndpoint>().mockResolvedValue([]);
+      const quoteEndpoint = jest.fn<QuoteEndpoint>().mockResolvedValue([]);
+      const provider = createProvider({
+        client: createClient(),
+        contractListEndpoint,
+        quoteEndpoint,
+      });
+      expect(await provider.fetchContractList({ underlying: "SPX", as_of: date })).toEqual({
+        underlying: "SPX",
+        contracts: [],
+      });
+      const chunks = [];
+      for await (const chunk of provider.fetchBulkQuotes({ underlying: "SPX", date }))
+        chunks.push(chunk);
+      expect(chunks).toEqual([]);
+      expect(contractListEndpoint).not.toHaveBeenCalled();
+      expect(quoteEndpoint).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps a trading-day quote failure visible without a receipt observer", async () => {
+    const provider = createProvider({
+      client: createClient(),
+      quoteEndpoint: async () => {
+        throw new Error("5 NOT_FOUND");
+      },
+      firstOrderEndpoint: async () => [],
+    });
+    await expect(
+      provider.fetchQuotes("SPXW250815C05725000", "2025-07-07", "2025-07-07"),
+    ).rejects.toThrow(/2025-07-07.*NOT_FOUND/);
+  });
   it("uses injected MDDS quote and first-order endpoints and preserves quote/greek provenance", async () => {
     const client = createClient();
     const quoteEndpoint = jest.fn<QuoteEndpoint>().mockResolvedValue([quoteRow()]);

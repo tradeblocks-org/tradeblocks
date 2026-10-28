@@ -311,7 +311,19 @@ Advanced ThetaData MDDS settings are optional:
 
 ThetaTerminal-specific settings from the old terminal/REST path no longer apply to `MARKET_DATA_PROVIDER=thetadata`, including `THETADATA_BASE_URL`, `THETADATA_HOME`, `THETADATA_JAR`, `THETADATA_CREDS_FILE`, `THETADATA_SKIP_AUTO_START`, and terminal auto-start flags. `THETADATA_MDDS_CLIENT_TYPE=terminal` is only the MDDS client identity string and does not mean TradeBlocks launches or depends on ThetaTerminal.
 
-ThetaData MDDS supports daily and intraday bars (stocks, indices), option minute quotes, contract lists, and first-order greeks. The option snapshot tool is not yet wired to MDDS — use Massive.com for `fetch_chain` until the MDDS snapshot endpoint lands.
+ThetaData MDDS supports daily and intraday bars (stocks, indices), option minute quotes, contract lists for `fetch_chain`, and first-order greeks. Full option snapshots are not yet wired to MDDS.
+
+ThetaData intraday bars, per-ticker quotes, bulk quotes, and contract lists skip
+non-session dates using the bundled XNYS calendar (2022–2030). Outside that window,
+only weekends are skipped; weekdays are requested without a holiday guarantee.
+A missing trading day's intraday bars fail the fetch with the date named rather
+than reporting an empty success. Per-ticker quotes retain successful dates and
+report failed dates in `requests[]`, with `partial` or `error` status.
+
+If MDDS rejects a session as unauthenticated, TradeBlocks re-authenticates once
+and retries with the new session. Concurrent failures share that login. ThetaData
+allows one active session per account: if recovery fails, close any other
+ThetaData terminal or client using the account, then retry.
 
 ### fetch_bars
 
@@ -390,15 +402,17 @@ weekends do not participate), otherwise `partial` when any request failed.
 The text summary declares the failure too. Genuine
 empty success still returns top-level `ok` with zero written rows.
 
-Both Massive NBBO and the `synth_close` fallback report receipts. Successful
-quote values and the existing result fields remain unchanged; no input option
-or new credential requirement is introduced. ThetaData does not implement the
-optional receipt observer; its existing output and bulk progress remain unchanged.
+Massive NBBO, its `synth_close` fallback, and ThetaData per-ticker quotes report
+receipts. Successful quote values and the existing result fields remain unchanged;
+no input option or new credential requirement is introduced. ThetaData bulk
+progress remains separate from per-ticker receipts.
 The provider `fetchQuotes(ticker, from, to, onRequest?)` still returns its Map,
 and the optional observer receives `{date, outcome, httpStatus?, errorClass?,
-pagesFetched}`. Massive reports fetch failures through that observer, rather
-than throwing and losing good dates. Existing throwing behavior of the
-aggregate fallback without an observer is preserved.
+pagesFetched}`. ThetaData reports `errorClass: "exception"` for failed daily
+requests; `pagesFetched` is 1 for a complete date and 0 for a failed date, not a
+count of gRPC chunks. Without an observer, ThetaData throws with the failed date.
+Existing throwing behavior of the Massive aggregate fallback without an observer
+is preserved.
 
 ### fetch_chain
 

@@ -10,6 +10,8 @@ import { ensureMarketDataTables } from "../../../../src/db/market-schemas.ts";
 import { TickerRegistry } from "../../../../src/market/tickers/registry.ts";
 import type { MarketDataProvider } from "../../../../src/utils/market-provider.ts";
 import { MassiveProvider } from "../../../../src/utils/providers/massive.ts";
+import { ThetaDataProvider } from "../../../../src/utils/providers/thetadata.ts";
+import type { ThetaMddsClient } from "../../../../src/utils/providers/thetadata/client.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -42,6 +44,62 @@ describe("MarketIngestor.ingestQuotes", () => {
       /* ignore */
     }
     rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("surfaces real ThetaData trading-day error receipts while caching the other dates", async () => {
+    const provider = new ThetaDataProvider({
+      client: {} as ThetaMddsClient,
+      quoteEndpoint: async (_client, params) => {
+        if (params.date === "2025-07-07") throw new Error("5 NOT_FOUND: No data found");
+        if (params.date === "2025-07-09") return [];
+        return [
+          {
+            symbol: "SPXW",
+            expiration: "2025-08-15",
+            strike: 5725,
+            right: "call",
+            timestamp: `${params.date} 09:30`,
+            bid: 10,
+            ask: 12,
+          },
+        ];
+      },
+      firstOrderEndpoint: async () => [],
+    });
+    const stores = createMarketStores({ conn, dataDir, parquetMode: false, tickers });
+    const ingestor = new MarketIngestor({
+      stores,
+      dataRoot: dataDir,
+      providerFactory: () => provider,
+    });
+    const ticker = "SPXW250815C05725000";
+    const result = await ingestor.ingestQuotes({
+      tickers: [ticker],
+      from: "2025-07-03",
+      to: "2025-07-09",
+    });
+    expect(result.status).toBe("partial");
+    expect(result.rowsWritten).toBe(2);
+    expect(result.error).toMatch(/1 quote request/);
+    expect(result.requests).toEqual([
+      { ticker, date: "2025-07-03", outcome: "ok", pagesFetched: 1, rows: 1 },
+      {
+        ticker,
+        date: "2025-07-07",
+        outcome: "error",
+        errorClass: "exception",
+        pagesFetched: 0,
+        rows: 0,
+      },
+      { ticker, date: "2025-07-08", outcome: "ok", pagesFetched: 1, rows: 1 },
+      { ticker, date: "2025-07-09", outcome: "empty", pagesFetched: 1, rows: 0 },
+    ]);
+    expect(
+      (await stores.quote.readQuotes([ticker], "2025-07-07", "2025-07-07")).get(ticker) ?? [],
+    ).toHaveLength(0);
+    expect(
+      (await stores.quote.readQuotes([ticker], "2025-07-08", "2025-07-08")).get(ticker),
+    ).toHaveLength(1);
   });
 
   it("returns unsupported when provider lacks fetchQuotes", async () => {

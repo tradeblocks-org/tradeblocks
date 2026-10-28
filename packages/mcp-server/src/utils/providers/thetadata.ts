@@ -1,3 +1,5 @@
+import type { ThetaQuoteGreekJoinResult } from "./thetadata/join.ts";
+import { isXnysSessionDate } from "../../market/provenance/xnys-session-calendar.ts";
 import { buildOccTicker } from "../trade-replay.ts";
 import {
   ThetaMddsClient,
@@ -34,6 +36,7 @@ import type {
   MinuteQuote,
   OpenInterestRow,
   ProviderCapabilities,
+  QuoteRequestOutcome,
 } from "../market-provider.ts";
 import { bulkQuoteRootsForUnderlying } from "./thetadata/bulk-roots.ts";
 export {
@@ -95,12 +98,23 @@ function formatIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function enumerateDates(from: string, to: string): string[] {
+function isThetaRequestDate(date: string): boolean {
+  try {
+    return isXnysSessionDate(date);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    const day = parseIsoDate(date).getUTCDay();
+    return day !== 0 && day !== 6;
+  }
+}
+
+function enumerateRequestDates(from: string, to: string): string[] {
   const dates: string[] = [];
   const cursor = parseIsoDate(from);
   const end = parseIsoDate(to);
   while (cursor <= end) {
-    dates.push(formatIsoDate(cursor));
+    const date = formatIsoDate(cursor);
+    if (isThetaRequestDate(date)) dates.push(date);
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return dates;
@@ -275,24 +289,36 @@ export class ThetaDataProvider implements MarketDataProvider {
     }
 
     const bars: BarRow[] = [];
-    for (const date of enumerateDates(options.from, options.to)) {
-      const rows = await ohlcEndpoint(this.client, {
-        symbol,
-        startDate: date,
-        endDate: date,
-        interval,
-      });
-      bars.push(...rows.map((row) => stockOhlcRowToBar(ticker, row)));
+    for (const date of enumerateRequestDates(options.from, options.to)) {
+      try {
+        const rows = await ohlcEndpoint(this.client, {
+          symbol,
+          startDate: date,
+          endDate: date,
+          interval,
+        });
+        bars.push(...rows.map((row) => stockOhlcRowToBar(ticker, row)));
+      } catch (error) {
+        throw new Error(
+          `ThetaData bars ${date}: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
     }
     return bars;
   }
 
-  async fetchQuotes(ticker: string, from: string, to: string): Promise<Map<string, MinuteQuote>> {
+  async fetchQuotes(
+    ticker: string,
+    from: string,
+    to: string,
+    onRequest?: (outcome: QuoteRequestOutcome) => void,
+  ): Promise<Map<string, MinuteQuote>> {
     await this.client.connect?.();
     const occ = parseOccTicker(ticker);
     const result = new Map<string, MinuteQuote>();
 
-    for (const date of enumerateDates(from, to)) {
+    for (const date of enumerateRequestDates(from, to)) {
       const request = {
         symbol: occ.root,
         expiration: occ.expiration,
@@ -301,20 +327,34 @@ export class ThetaDataProvider implements MarketDataProvider {
         date,
         interval: "1m",
       } as const;
-      const [quotes, providerGreeks] = await Promise.all([
-        this.quoteEndpoint(this.client, request),
-        this.firstOrderEndpoint(this.client, { ...request, rateType: "sofr" }),
-      ]);
-      const joined = joinThetaQuotesAndFirstOrderGreeks({ quotes, providerGreeks });
+      let joined: ThetaQuoteGreekJoinResult;
+      try {
+        const [quotes, providerGreeks] = await Promise.all([
+          this.quoteEndpoint(this.client, request),
+          this.firstOrderEndpoint(this.client, { ...request, rateType: "sofr" }),
+        ]);
+        joined = joinThetaQuotesAndFirstOrderGreeks({ quotes, providerGreeks });
+      } catch (error) {
+        if (!onRequest) {
+          throw new Error(
+            `ThetaData quotes ${date}: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          );
+        }
+        onRequest({ date, outcome: "error", errorClass: "exception", pagesFetched: 0 });
+        continue;
+      }
       for (const row of joined.rows) {
         result.set(row.timestamp, toMinuteQuote(row));
       }
+      onRequest?.({ date, outcome: joined.rows.length > 0 ? "ok" : "empty", pagesFetched: 1 });
     }
 
     return result;
   }
 
   async *fetchBulkQuotes(options: BulkQuotesOptions): AsyncGenerator<BulkQuoteRow[], void, void> {
+    if (!isThetaRequestDate(options.date)) return;
     // Wildcard fetch path: instead of one quote request per contract (which on
     // a dense post-2024 SPX chain is 5000+ sequential gRPC calls), issue one
     // `strike="*"` request per (root, expiration, right). That collapses the
@@ -433,6 +473,9 @@ export class ThetaDataProvider implements MarketDataProvider {
   }
 
   async fetchContractList(options: FetchContractListOptions): Promise<FetchContractListResult> {
+    if (!isThetaRequestDate(options.as_of)) {
+      return { contracts: [], underlying: options.underlying.toUpperCase() };
+    }
     await this.client.connect?.();
     const underlying = options.underlying.toUpperCase();
     const contracts: ContractReference[] = [];
