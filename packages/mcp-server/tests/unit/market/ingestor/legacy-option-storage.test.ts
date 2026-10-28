@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -13,6 +13,7 @@ import {
 import { createMarketStores } from "../../../../src/market/stores/index.ts";
 import { TickerRegistry } from "../../../../src/market/tickers/registry.ts";
 import {
+  resolveMarketDir,
   writeChainPartition,
   writeQuoteMinutesPartition,
 } from "../../../../src/db/market-datasets.ts";
@@ -192,6 +193,31 @@ it("retains a legacy chain table whose partition cannot be published instead of 
   ).toEqual([[3n]]);
   expect(errors.mock.calls.some((call) => String(call[0]).includes(`market.${name}`))).toBe(true);
   expect((await stores(false).chain.readChain("SPY", OLD_DATE))[0].strike).toBe(600);
+});
+
+it("retains a legacy chain table beside date-only chain partitions instead of mixing layouts", async () => {
+  await seedLegacy();
+  const chainDir = join(resolveMarketDir(dataDir), "option_chain");
+  mkdirSync(join(chainDir, `date=${NEW_DATE}`), { recursive: true });
+  const db = await DuckDBInstance.create(":memory:");
+  const conn = await db.connect();
+  await conn.run(
+    `COPY (SELECT * EXCLUDE (date) FROM (${chainSelect(NEW_DATE)})) TO '${join(chainDir, `date=${NEW_DATE}`, "data.parquet")}' (FORMAT PARQUET)`,
+  );
+  conn.closeSync();
+  db.closeSync();
+  const errors = jest.spyOn(console, "error").mockImplementation(() => {});
+  await getConnection(dataDir);
+  const retained = await getCurrentConnection().runAndReadAll(
+    "SELECT table_name FROM information_schema.tables WHERE table_catalog = 'market' AND table_name LIKE 'option_chain_legacy_retained_%'",
+  );
+  expect(retained.getRows()).toHaveLength(1);
+  const name = String(retained.getRows()[0][0]);
+  expect(
+    (await getCurrentConnection().runAndReadAll(`SELECT count(*) FROM market."${name}"`)).getRows(),
+  ).toEqual([[2n]]);
+  expect(readdirSync(chainDir)).toEqual([`date=${NEW_DATE}`]);
+  expect(errors.mock.calls.some((call) => String(call[0]).includes(`market.${name}`))).toBe(true);
 });
 
 it.each([

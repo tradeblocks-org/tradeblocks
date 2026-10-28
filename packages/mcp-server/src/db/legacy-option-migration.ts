@@ -1,6 +1,6 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { resolveMarketDir, writeChainPartition } from "./market-datasets.ts";
 import { escapeSqlLiteral } from "../utils/quote-parquet-projection.ts";
@@ -44,6 +44,17 @@ export async function migrateLegacyOptionTables(
 
     // The shipped chain schema has underlying and all eight canonical columns.
     // Keep the source intact during publication, including on interruption.
+    const datasetDir = join(resolveMarketDir(dataDir), "option_chain");
+    // Publishing underlying-first partitions beside date-only ones would put two
+    // Hive layouts under one view glob, which DuckDB cannot read.
+    if (existsSync(datasetDir) && readdirSync(datasetDir).some((e) => e.startsWith("date="))) {
+      await retainTable(
+        conn,
+        table,
+        "date-only chain partitions exist; publishing underlying-first partitions beside them would mix layouts",
+      );
+      continue;
+    }
     const partitions = await conn.runAndReadAll(`
       SELECT underlying, date, count(*) FROM market.option_chain GROUP BY underlying, date
     `);
@@ -53,10 +64,8 @@ export async function migrateLegacyOptionTables(
     for (const [underlyingValue, dateValue, count] of partitions.getRows()) {
       const underlying = String(underlyingValue);
       const date = String(dateValue);
-      const datasetDir = join(resolveMarketDir(dataDir), "option_chain");
       if (
-        existsSync(join(datasetDir, `underlying=${underlying}`, `date=${date}`, "data.parquet")) ||
-        existsSync(join(datasetDir, `date=${date}`, "data.parquet"))
+        existsSync(join(datasetDir, `underlying=${underlying}`, `date=${date}`, "data.parquet"))
       ) {
         // This also covers a retry after interrupted publication: already
         // published partitions are not guessed to be identical to the source.
