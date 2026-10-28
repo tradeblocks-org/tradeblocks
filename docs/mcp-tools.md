@@ -247,7 +247,7 @@ than numeric bins; prior-session timing is unchanged.
 
 Use either `field: "signal.score"` or `fields: ["signal.score", "other.score"]`
 (up to 10 distinct fields). Single-field calls without new options retain the existing
-response. `fields`, `objective`, or `permutation` opts into `bestThreshold` and `perYear`;
+response. `fields`, `objective`, `minKeptFraction`, or `permutation` opts into `bestThreshold` and `perYear`;
 multi-field results live in `fields`, including named unavailable/uncovered entries.
 Each field has its own covered baseline; dataset timing and `maxMissedSessions` are unchanged.
 
@@ -279,8 +279,8 @@ They refuse trade units as `objective_requires_day`.
   simulation helper. This intentionally differs from portfolio return Sharpe,
   which uses historical Treasury rates: a risk-free dollar P&L deduction needs
   capital, while this measure does not.
-- **MAR** is CAGR / maximum drawdown as a fraction of starting capital. CAGR uses
-  the first through last covered entry dates and 365.25 calendar days per year,
+- **MAR** is CAGR / maximum drawdown as a fraction of capital at the start of the analyzed window.
+  CAGR uses the first through last covered entry dates and 365.25 calendar days per year,
   measured from calendar parts rather than elapsed local-midnight milliseconds
   so daylight-saving transitions do not add or subtract an hour from the span,
   matching the portfolio annualization convention. Capital comes from the existing
@@ -294,9 +294,10 @@ They refuse trade units as `objective_requires_day`.
   sets `marUnstable: true`, and its MAR objective delta is null. A span of exactly
   90 days is eligible. Whole-population ranking and permutation are unchanged.
 - **maxDrawdown** reports the positive maximum decline of cumulative daily P&L,
-  starting at zero, in dollars and percent of starting capital when observed.
-  Its objective delta is **baseline drawdown minus kept drawdown**: smaller is
-  better. The percent denominator is starting capital, not the rolling peak.
+  starting at zero, in dollars and percent of capital at the start of the analyzed
+  window when observed. Its objective delta is **baseline drawdown minus kept
+  drawdown**: smaller is better. The percent denominator is window-start capital,
+  not the rolling peak or necessarily the block's initial capital.
 
 When `strategy` is supplied, portfolio daily logs are never a capital basis.
 Following the performance-chart convention, capital is reconstructed only from
@@ -309,6 +310,12 @@ Without a strategy filter, daily-log evidence is restricted to the same `startDa
 and `endDate` window as the trades before resolving capital. The first daily log
 inside that window supplies its starting capital when valid; absent evidence
 falls back to the existing observed trade-funds policy, never a pre-window balance.
+This is account value at the start of the analyzed window (`startDate` when set,
+including prior P&L; otherwise the block's first observation), using the first
+available observation under the existing resolver. `objectiveMetadata.startingCapital`
+reports that denominator, and `startingCapitalSource` identifies `daily_log` or
+`observed_trade_funds` when available. The MAR definition and
+`maxDrawdownPercentBasis` explicitly name this window-start basis; no figures change.
 
 Response `objectiveMetadata` states these definitions. Every risk candidate shows
 its objective delta against the covered baseline. Ranking shares the existing
@@ -347,6 +354,20 @@ unchanged. Per-year rows partition entries by calendar year, including uncovered
 years, and show covered baseline, kept/removed count, P&L and win rate, objective delta,
 and uncovered counts/P&L. Fewer than 30 baseline, kept or removed entries is flagged,
 not dropped. Values equal to the threshold are removed because comparisons are strict.
+
+Optional `minKeptFraction` must satisfy `0 < x <= 1`; it defaults to no floor.
+It opts into `totalPl` selection if no objective was supplied. A candidate must
+retain at least `ceil(x * coveredCount)` observations, after strategy/date filters,
+field coverage, and (for `unit: "day"`) day aggregation. The same eligible family
+is used in observed and every shuffled sweep because field values stay fixed.
+Descriptive `thresholds` and `sweetSpots` remain unchanged, including the separate
+20% sweet-spot criterion. When supplied, the analysis includes `keptShareFloor`:
+`minKeptFraction`, `minimumKeptCount`, `coveredCount`, and `excludedCandidates`
+(requested threshold/direction candidates otherwise keeping and removing at least
+one observation that fall below the floor). Analysis properties appear alongside
+`bestThreshold` in each field's response. If no candidate survives, `bestThreshold`
+is null and permutation refuses with `no_eligible_threshold` and no p-value;
+the refused field still occupies conservative p=1 in the requested Holm family.
 
 ```json
 {
@@ -392,6 +413,11 @@ admitted family at this size is **3 fields** (87,751,152 units); 4 fields requir
 If either is exceeded the entire request is refused before any field sweep, with
 `permutation_work_limit` (per field) or `permutation_request_work_limit` (request),
 `estimatedWork`, `workLimit`, the requested permutation settings and per-field estimates.
+Both work-limit refusals also return `maxIterationsThatFit`: the largest integer
+from 1 through 499 satisfying **both** limits for the unchanged request under the
+same estimator. Retry with that many iterations; changing any other input changes
+the estimate. If even one iteration cannot fit, the field is null and
+`iterationsFitReason: "minimum_iterations_exceeds_work_limit"` explains why.
 No block count is calculated for admission refusals. Other refusals return requested
 iterations, block, seed, block count and status.
 These exploratory p-values adjust threshold/field selection within this request.

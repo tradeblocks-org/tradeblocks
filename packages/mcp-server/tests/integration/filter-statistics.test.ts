@@ -468,6 +468,43 @@ test("request work admission refuses the combined field family before producing 
     permutation: { iterations: 499, block: "month", seed: 42, status: "refused" },
   });
   expect(fieldRefusal.structuredContent).not.toHaveProperty("thresholds");
+  for (const [selection, reason] of [
+    [
+      { fields: ["custom.signal", "custom.noise", "custom.trend", "openingPrice"] },
+      "permutation_request_work_limit",
+    ],
+    [
+      { field: "custom.signal", thresholds: Array.from({ length: 100 }, (_, i) => i / 100) },
+      "permutation_work_limit",
+    ],
+  ] as const) {
+    const request = { blockId: "sample", mode: "both", ...selection };
+    const refused = (
+      await handlers.filter_curve({
+        ...request,
+        permutation: { iterations: 499, block: "month", seed: 42 },
+      })
+    ).structuredContent!;
+    expect(refused.reason).toBe(reason);
+    expect(refused.maxIterationsThatFit).toEqual(expect.any(Number));
+    const iterations = refused.maxIterationsThatFit as number;
+    expect(iterations).toBeGreaterThanOrEqual(1);
+    expect(iterations).toBeLessThan(499);
+    const admitted = (
+      await handlers.filter_curve({
+        ...request,
+        permutation: { iterations, block: "month", seed: 42 },
+      })
+    ).structuredContent!;
+    expect(admitted.status).not.toBe("refused");
+    const next = (
+      await handlers.filter_curve({
+        ...request,
+        permutation: { iterations: iterations + 1, block: "month", seed: 42 },
+      })
+    ).structuredContent!;
+    expect(next).toMatchObject({ status: "refused", reason });
+  }
 });
 
 test("Kendall admits realistic blocks and refuses excessive total pair work without restricting other methods", async () => {
@@ -584,6 +621,35 @@ test("large daily dataset filter completes or names its work refusal", async () 
       expect(performance.now() - started).toBeLessThan(10_000);
     } else expect(output.structuredContent).toMatchObject({ status: "refused" });
   }
+  const dayRefusal = (
+    await handlers.filter_curve({
+      blockId: "sample",
+      field: "signal.score",
+      unit: "day",
+      mode: "both",
+      permutation: { iterations: 499, block: "month", seed: 42 },
+    })
+  ).structuredContent!;
+  // n=2200 days: 501 * (2200*12 + 6*2200*7 + 3*7*4).
+  expect(dayRefusal).toMatchObject({
+    reason: "permutation_work_limit",
+    estimatedWork: 59_560_884,
+    fields: [{ field: "signal.score", coveredCount: 2200, estimatedWork: 59_560_884 }],
+  });
+  const noneFits = (
+    await handlers.filter_curve({
+      blockId: "sample",
+      field: "signal.score",
+      mode: "both",
+      thresholds: Array.from({ length: 100 }, (_, i) => i / 100),
+      permutation: { iterations: 499, block: "month", seed: 42 },
+    })
+  ).structuredContent!;
+  expect(noneFits).toMatchObject({
+    reason: "permutation_work_limit",
+    maxIterationsThatFit: null,
+    iterationsFitReason: "minimum_iterations_exceeds_work_limit",
+  });
 }, 180_000);
 
 test("day sweeps and month permutations equal an entry-day oracle, not an eleven-fold trade shuffle", async () => {
@@ -1201,7 +1267,11 @@ test("date-windowed risk capital uses the window's first daily log rather than t
         endDate: "2025-04-02",
       })
     ).structuredContent!;
-    expect(result.objectiveMetadata).toMatchObject({ startingCapital: 20000 });
+    expect(result.objectiveMetadata).toMatchObject({
+      startingCapital: 20000,
+      startingCapitalSource: "daily_log",
+      maxDrawdownPercentBasis: expect.stringContaining("start of the analyzed window"),
+    });
     expect(result.baseline).toMatchObject({
       count: 2,
       totalPl: 20,
@@ -1220,5 +1290,56 @@ test("date-windowed risk capital uses the window's first daily log rather than t
       endDate: "2025-04-02",
     })
   ).structuredContent!;
-  expect(strategy.objectiveMetadata).toMatchObject({ startingCapital: 10020 });
+  expect(strategy.objectiveMetadata).toMatchObject({
+    startingCapital: 10020,
+    startingCapitalSource: "observed_trade_funds",
+  });
+});
+
+test("kept-share floor restricts observed and shuffled selection without hiding descriptive rows", async () => {
+  await fixture(
+    Array.from({ length: 32 }, (_, i) => ({
+      date: `2025-${String(Math.floor(i / 4) + 1).padStart(2, "0")}-${String((i % 4) + 1).padStart(2, "0")}`,
+      signal: i,
+      pl: i < 2 ? 100 : i < 16 ? -1 : -10,
+    })),
+  );
+  const input = {
+    blockId: "sample",
+    field: "custom.signal",
+    mode: "lt",
+    thresholds: [1.5, 15.5],
+    permutation: { iterations: 19, block: "month", seed: 42 },
+  };
+  const unfloored = (await handlers.filter_curve(input)).structuredContent!;
+  expect(unfloored.bestThreshold).toMatchObject({ threshold: 1.5, kept: { count: 2 } });
+  const floored = (await handlers.filter_curve({ ...input, minKeptFraction: 0.5 }))
+    .structuredContent!;
+  expect(floored.bestThreshold).toMatchObject({ threshold: 15.5, kept: { count: 16 } });
+  expect(floored.keptShareFloor).toEqual({
+    minKeptFraction: 0.5,
+    minimumKeptCount: 16,
+    coveredCount: 32,
+    excludedCandidates: 1,
+  });
+  expect(floored.thresholds).toEqual(unfloored.thresholds);
+  expect(floored.sweetSpots).toEqual(unfloored.sweetSpots);
+  // None of the 19 seeded month draws keeps all four original first-half months.
+  // Allowing the two-entry candidate in shuffled sweeps instead gives 2 exceedances.
+  expect(floored.permutation).toMatchObject({ status: "ok", exceedances: 0, pValue: 0.05 });
+  const excluded = (await handlers.filter_curve({ ...input, minKeptFraction: 1 }))
+    .structuredContent!;
+  expect(excluded.bestThreshold).toBeNull();
+  expect(excluded.keptShareFloor).toMatchObject({ minimumKeptCount: 32, excludedCandidates: 2 });
+  expect(excluded.permutation).toMatchObject({
+    status: "refused",
+    reason: "no_eligible_threshold",
+  });
+  expect(excluded.permutation).not.toHaveProperty("pValue");
+  const implicit = (
+    await handlers.filter_curve({ ...input, permutation: undefined, minKeptFraction: 0.5 })
+  ).structuredContent!;
+  expect(implicit).toMatchObject({ objective: "totalPl", bestThreshold: { threshold: 15.5 } });
+  for (const minKeptFraction of [0, -0.1, 1.01])
+    expect(schemas.filter_curve.safeParse({ ...input, minKeptFraction }).success).toBe(false);
 });

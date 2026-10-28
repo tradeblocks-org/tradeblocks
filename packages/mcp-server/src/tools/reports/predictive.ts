@@ -250,6 +250,12 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
           .describe(
             "Opt into best-threshold and per-year analysis; defaults to totalPl with fields or permutation.",
           ),
+        minKeptFraction: z
+          .number()
+          .gt(0)
+          .max(1)
+          .optional()
+          .describe("Minimum share of covered trades/days retained by best-threshold selection."),
         permutation: z
           .object({
             iterations: z.number().int().min(1).max(499),
@@ -288,6 +294,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
         field,
         fields,
         objective,
+        minKeptFraction,
         permutation,
         unit,
         groupBy,
@@ -387,35 +394,47 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                 },
               );
             const candidates = thresholds?.length || percentileSteps?.length || 7;
-            const estimates = names.map((name) => {
-              const coveredCount =
-                unit === "day"
-                  ? new Set(trades.map((trade) => trade.dateOpened.getTime())).size
-                  : trades.length;
-              // Include sorting values/candidates and filtering/scoring both directions on every sweep.
-              const sweepWork =
-                coveredCount * Math.ceil(Math.log2(Math.max(2, coveredCount))) +
-                6 * coveredCount * candidates +
-                3 * candidates * Math.ceil(Math.log2(Math.max(2, 2 * candidates)));
-              const pathWork = riskObjective ? 36 * coveredCount * candidates : 0;
-              return {
-                field: name,
-                coveredCount,
-                estimatedWork: (permutation.iterations + 2) * (sweepWork + pathWork),
-              };
-            });
+            const coveredCount =
+              unit === "day"
+                ? new Set(trades.map((trade) => trade.dateOpened.getTime())).size
+                : trades.length;
+            // Include sorting values/candidates and filtering/scoring both directions on every sweep.
+            const sweepWork =
+              coveredCount * Math.ceil(Math.log2(Math.max(2, coveredCount))) +
+              6 * coveredCount * candidates +
+              3 * candidates * Math.ceil(Math.log2(Math.max(2, 2 * candidates)));
+            const pathWork = riskObjective ? 36 * coveredCount * candidates : 0;
+            const estimateWork = (iterations: number) => (iterations + 2) * (sweepWork + pathWork);
+            const estimates = names.map((name) => ({
+              field: name,
+              coveredCount,
+              estimatedWork: estimateWork(permutation.iterations),
+            }));
             const estimatedWork = estimates.reduce((sum, field) => sum + field.estimatedWork, 0);
             const overField = estimates.find((field) => field.estimatedWork > 30_000_000);
-            if (overField || estimatedWork > 90_000_000)
+            if (overField || estimatedWork > 90_000_000) {
+              let maxIterationsThatFit: number | null = null;
+              for (let iterations = 499; iterations >= 1; iterations--) {
+                const fieldWork = estimateWork(iterations);
+                if (fieldWork <= 30_000_000 && fieldWork * names.length <= 90_000_000) {
+                  maxIterationsThatFit = iterations;
+                  break;
+                }
+              }
               return createToolOutput("Filter curve permutation refused by work admission", {
                 blockId,
                 status: "refused",
                 reason: overField ? "permutation_work_limit" : "permutation_request_work_limit",
                 estimatedWork: overField ? overField.estimatedWork : estimatedWork,
                 workLimit: overField ? 30_000_000 : 90_000_000,
+                maxIterationsThatFit,
+                ...(maxIterationsThatFit === null
+                  ? { iterationsFitReason: "minimum_iterations_exceeds_work_limit" }
+                  : {}),
                 permutation: { ...permutation, status: "refused" },
                 fields: estimates,
               });
+            }
           }
           const groupEntry = groupBy
             ? (await runtimeFieldCatalog(await getConnection(baseDir))).find(
@@ -471,10 +490,19 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                   percentileSteps,
                   objective:
                     objective ??
-                    (fields || permutation || groupBy || unit === "day" ? "totalPl" : undefined),
+                    (fields ||
+                    permutation ||
+                    groupBy ||
+                    unit === "day" ||
+                    minKeptFraction !== undefined
+                      ? "totalPl"
+                      : undefined),
                   permutation,
+                  minKeptFraction,
                   startingCapital:
                     capital?.source !== "assumed_default" ? capital?.amount : undefined,
+                  startingCapitalSource:
+                    capital?.source !== "assumed_default" ? capital?.source : undefined,
                   capitalReason,
                   groupBy:
                     groupEntry && groupValues

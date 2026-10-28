@@ -13,7 +13,9 @@ interface Options<T extends CurveTrade> {
   thresholds?: number[];
   percentileSteps?: number[];
   objective?: CurveObjective;
+  minKeptFraction?: number;
   startingCapital?: number;
+  startingCapitalSource?: "daily_log" | "observed_trade_funds";
   capitalReason?: string;
   permutation?: { iterations: number; block: "month"; seed: number };
   groupBy?: {
@@ -241,12 +243,27 @@ export function analyzeFilterCurve<T extends CurveTrade>(
       scoreFormula: "winRateDelta * avgPlDelta (higher = better)",
     },
   };
-  if (!options.objective && !options.permutation) return { ...legacy, analysis: undefined };
+  if (!options.objective && !options.permutation && options.minKeptFraction === undefined)
+    return { ...legacy, analysis: undefined };
   const pairs = covered.map((trade) => ({
     value: valueOf(trade)!,
     pl: trade.pl,
     dateOpened: trade.dateOpened,
   }));
+  const minimumKeptCount =
+    options.minKeptFraction === undefined ? 0 : Math.ceil(options.minKeptFraction * covered.length);
+  const excludedCandidates = sweeps.reduce(
+    (count, sweep) =>
+      count +
+      (["lt", "gt"] as const).filter(
+        (direction) =>
+          (options.mode === "both" || options.mode === direction) &&
+          sweep[direction].length > 0 &&
+          sweep[direction].length < covered.length &&
+          sweep[direction].length < minimumKeptCount,
+      ).length,
+    0,
+  );
   function best(items: Array<{ value: number; pl: number; dateOpened: Date }>) {
     const original = riskObjective ? riskStats(items, items) : undefined;
     const candidates = sweepThresholds(
@@ -260,7 +277,8 @@ export function analyzeFilterCurve<T extends CurveTrade>(
         if (
           (options.mode !== "both" && options.mode !== direction) ||
           !kept.length ||
-          kept.length === items.length
+          kept.length === items.length ||
+          kept.length < minimumKeptCount
         )
           return [];
         const stats = population(kept);
@@ -435,25 +453,42 @@ export function analyzeFilterCurve<T extends CurveTrade>(
     ...legacy,
     analysis: {
       objective,
+      ...(options.minKeptFraction === undefined
+        ? {}
+        : {
+            keptShareFloor: {
+              minKeptFraction: options.minKeptFraction,
+              minimumKeptCount,
+              coveredCount: covered.length,
+              excludedCandidates,
+            },
+          }),
       bestThreshold,
       perYear,
       ...(perGroup ? { groupBy: options.groupBy!.field, perGroup } : {}),
       ...(riskObjective
         ? {
             ...(objective === "mar" && !chosen
-              ? { status: "refused", reason: "mar_undefined" }
+              ? {
+                  status: "refused",
+                  reason: excludedCandidates ? "no_eligible_threshold" : "mar_undefined",
+                }
               : {}),
             objectiveMetadata: {
               definition:
                 objective === "sharpe"
                   ? "daily P&L, rf=0, sqrt(252), sample std"
                   : objective === "mar"
-                    ? "CAGR (365.25 calendar days/year) / max drawdown as percent of starting capital"
+                    ? "CAGR (365.25 calendar days/year) / max drawdown as percent of capital at the start of the analyzed window (account value on startDate when set, including prior P&L; otherwise the block's first observation)"
                     : "covered baseline max drawdown dollars minus kept max drawdown dollars; smaller drawdown is better",
               startingCapital: options.startingCapital ?? null,
+              ...(options.startingCapitalSource
+                ? { startingCapitalSource: options.startingCapitalSource }
+                : {}),
               ...(options.capitalReason ? { capitalReason: options.capitalReason } : {}),
               dailyCurve: "covered entry dates; filtered dates flat (0 P&L)",
-              maxDrawdownPercentBasis: "starting capital",
+              maxDrawdownPercentBasis:
+                "capital at the start of the analyzed window (account value on startDate when set, including prior P&L; otherwise the block's first observation), not the rolling peak",
               zeroVarianceSharpe: 0,
               undefinedMar:
                 "null (zero drawdown, nonpositive ending capital, or zero elapsed time)",
