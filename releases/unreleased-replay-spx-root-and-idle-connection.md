@@ -33,7 +33,10 @@ after the trade's entry time. A failed quote read returns the database error.
 - `batch_exit_analysis` lists such trades under `skippedTrades` with the
   message, and leaves them out of the aggregate.
 - `get_greeks_attribution` counts them in `trades_skipped`. Before, it counted
-  them as decomposed trades with zero factors.
+  them as decomposed trades with zero factors: their actual P&L entered
+  `total_pnl` with no matching mark change, so it all landed in
+  `execution_edge`. On blocks with missing quotes, `total_pnl`,
+  `mark_total_pnl` and `execution_edge` now exclude those trades.
 
 Callers that treated an empty `pnlPath` as "no data" should handle the error
 instead.
