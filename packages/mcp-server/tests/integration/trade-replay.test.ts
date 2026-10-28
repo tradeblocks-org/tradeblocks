@@ -18,7 +18,7 @@ import {
 import { buildTestStores } from "../fixtures/market-stores/build-stores.ts";
 import type { MarketStores } from "../../src/market/stores/index.ts";
 import type { QuoteRow } from "../../src/market/stores/types.ts";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -763,14 +763,16 @@ describe("replay_trade integration", () => {
 
     test("a leg whose quotes are all unusable is refused by name", async () => {
       await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
-      for (const time of ["09:32", "09:33", "09:34"]) {
-        await conn.run(
-          `INSERT INTO market.option_quote_minutes
-             (underlying, date, ticker, time, bid, ask, mid, last_updated_ns, source)
-           VALUES ('SPY', '2025-01-17', 'SPY250117C00475000', $1, 0, 3.1, 1.55, NULL, 'fixture')`,
-          [time],
-        );
-      }
+      await stores.quote.writeQuotes(
+        "SPY",
+        "2025-01-17",
+        ["09:32", "09:33", "09:34"].map((time) => ({
+          occ_ticker: "SPY250117C00475000",
+          timestamp: `2025-01-17 ${time}`,
+          bid: 0,
+          ask: 3.1,
+        })),
+      );
 
       await expect(replaySpySpread()).rejects.toThrow(
         /leg 2 SPY250117C00475000: 3 quote rows, none usable \(bid and ask must both be positive, at or after 09:32 ET\)/,
@@ -778,7 +780,20 @@ describe("replay_trade integration", () => {
     });
 
     test("a quote-read failure is surfaced, not read as missing data", async () => {
-      await conn.run(`DROP TABLE market.option_quote_minutes`);
+      await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
+      // Keep a real partition present but unreadable: an absent partition
+      // would exercise missing data, not the read-failure contract.
+      writeFileSync(
+        join(
+          dataDir,
+          "market",
+          "option_quote_minutes",
+          "underlying=SPY",
+          "date=2025-01-17",
+          "data.parquet",
+        ),
+        "corrupted parquet fixture",
+      );
 
       await expect(replaySpySpread()).rejects.toThrow(
         /^Replay unavailable: reading SPY option quotes for SPY250117C00470000, SPY250117C00475000 failed: .*option_quote_minutes/,

@@ -22,10 +22,11 @@ const SPY_470C_BARS = [
   { t: 1737124440000, o: 5.3, h: 5.4, l: 4.7, c: 4.8 },
 ];
 
+// The second trade must use a real session: Jan 18 is Saturday and Jan 20 is MLK Day.
 const SPY_475C_BARS = [
-  { t: 1737210720000, o: 3.0, h: 3.1, l: 2.9, c: 3.05 },
-  { t: 1737210780000, o: 3.05, h: 3.3, l: 3.0, c: 3.2 },
-  { t: 1737210840000, o: 3.2, h: 3.3, l: 2.6, c: 2.7 },
+  { t: 1737469920000, o: 3.0, h: 3.1, l: 2.9, c: 3.05 },
+  { t: 1737469980000, o: 3.05, h: 3.3, l: 3.0, c: 3.2 },
+  { t: 1737470040000, o: 3.2, h: 3.3, l: 2.6, c: 2.7 },
 ];
 
 const SPY_UNDERLYING_DAY1_BARS = [
@@ -35,9 +36,9 @@ const SPY_UNDERLYING_DAY1_BARS = [
 ];
 
 const SPY_UNDERLYING_DAY2_BARS = [
-  { t: 1737210720000, o: 468.0, h: 468.3, l: 467.6, c: 467.9 },
-  { t: 1737210780000, o: 467.9, h: 468.1, l: 467.1, c: 467.4 },
-  { t: 1737210840000, o: 467.4, h: 467.8, l: 466.8, c: 467.0 },
+  { t: 1737469920000, o: 468.0, h: 468.3, l: 467.6, c: 467.9 },
+  { t: 1737469980000, o: 467.9, h: 468.1, l: 467.1, c: 467.4 },
+  { t: 1737470040000, o: 467.4, h: 467.8, l: 466.8, c: 467.0 },
 ];
 
 describe("get_greeks_attribution integration", () => {
@@ -249,14 +250,13 @@ describe("get_greeks_attribution integration", () => {
         (block_id, date_opened, date_closed, strategy, legs, premium, num_contracts, pl, ticker)
       VALUES
         ('test-block', '2025-01-17', '2025-01-17', 'first', 'SPY 470C', 500.0, 1, 100.0, 'SPY'),
-        ('test-block', '2025-01-18', '2025-01-18', 'second', 'SPY 475C', 300.0, 1, -80.0, 'SPY')
+        ('test-block', '2025-01-21', '2025-01-21', 'second', 'SPY 475C', 300.0, 1, -80.0, 'SPY')
     `);
 
     await seedSpyUnderlying([...SPY_UNDERLYING_DAY1_BARS, ...SPY_UNDERLYING_DAY2_BARS]);
-    // Option-leg quotes seeded directly into market.option_quote_minutes
-    // (replaces mockFetch on option tickers).
+    // Option-leg quotes are seeded through the Parquet store, with no provider.
     await seedOptionQuotes("SPY250117C00470000", "SPY", SPY_470C_BARS);
-    await seedOptionQuotes("SPY250118C00475000", "SPY", SPY_475C_BARS);
+    await seedOptionQuotes("SPY250121C00475000", "SPY", SPY_475C_BARS);
 
     const direct = await handleDecomposeGreeks(
       {
