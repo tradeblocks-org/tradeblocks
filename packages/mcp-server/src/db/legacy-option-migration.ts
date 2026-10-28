@@ -47,7 +47,9 @@ export async function migrateLegacyOptionTables(
     const partitions = await conn.runAndReadAll(`
       SELECT underlying, date, count(*) FROM market.option_chain GROUP BY underlying, date
     `);
-    let overlap = false;
+    // Any partition that cannot be published cleanly keeps the whole source
+    // table (renamed and logged) rather than blocking startup or losing rows.
+    let retainReason: string | null = null;
     for (const [underlyingValue, dateValue, count] of partitions.getRows()) {
       const underlying = String(underlyingValue);
       const date = String(dateValue);
@@ -56,31 +58,30 @@ export async function migrateLegacyOptionTables(
         existsSync(join(datasetDir, `underlying=${underlying}`, `date=${date}`, "data.parquet")) ||
         existsSync(join(datasetDir, `date=${date}`, "data.parquet"))
       ) {
-        overlap = true;
+        // This also covers a retry after interrupted publication: already
+        // published partitions are not guessed to be identical to the source.
+        retainReason =
+          "one or more chain partitions already exist; overlapping rows were not merged or overwritten";
         continue;
       }
-      const { rowCount } = await writeChainPartition(conn, {
-        dataDir,
-        underlying,
-        date,
-        selectQuery: `SELECT underlying, date, ticker, contract_type, strike, expiration, dte, exercise_style
+      try {
+        const { rowCount } = await writeChainPartition(conn, {
+          dataDir,
+          underlying,
+          date,
+          selectQuery: `SELECT underlying, date, ticker, contract_type, strike, expiration, dte, exercise_style
           FROM market.option_chain WHERE underlying = '${escapeSqlLiteral(underlying)}' AND date = '${escapeSqlLiteral(date)}'`,
-        quality: { inputRows: Number(count), droppedRows: 0 },
-      });
-      if (rowCount !== Number(count)) {
-        throw new Error(
-          `Legacy option_chain migration published ${rowCount} of ${count} rows for ${underlying}/${date}; source table retained`,
-        );
+          quality: { inputRows: Number(count), droppedRows: 0 },
+        });
+        if (rowCount !== Number(count)) {
+          retainReason = `published ${rowCount} of ${count} rows for ${underlying}/${date}`;
+        }
+      } catch (err) {
+        retainReason = `publishing ${underlying}/${date} failed: ${err instanceof Error ? err.message : String(err)}`;
       }
     }
-    if (overlap) {
-      // This also safely handles a retry after interrupted publication: already
-      // published partitions are not guessed to be identical to the source.
-      await retainTable(
-        conn,
-        table,
-        "one or more chain partitions already exist; overlapping rows were not merged or overwritten",
-      );
+    if (retainReason !== null) {
+      await retainTable(conn, table, retainReason);
     } else {
       // Every row has been published through the canonical atomic writer.
       await conn.run("DROP TABLE market.option_chain");

@@ -173,6 +173,27 @@ it("retains a nonstandard quote table without inventing a schema migration", asy
   expect(errors.mock.calls.some((call) => String(call[0]).includes(`market.${name}`))).toBe(true);
 });
 
+it("retains a legacy chain table whose partition cannot be published instead of failing startup", async () => {
+  await seedLegacy();
+  const db = await DuckDBInstance.create(join(dataDir, "market.duckdb"));
+  const conn = await db.connect();
+  await conn.run(`INSERT INTO option_chain ${chainSelect("not-a-date")}`);
+  conn.closeSync();
+  db.closeSync();
+  const errors = jest.spyOn(console, "error").mockImplementation(() => {});
+  await getConnection(dataDir);
+  const retained = await getCurrentConnection().runAndReadAll(
+    "SELECT table_name FROM information_schema.tables WHERE table_catalog = 'market' AND table_name LIKE 'option_chain_legacy_retained_%'",
+  );
+  expect(retained.getRows()).toHaveLength(1);
+  const name = String(retained.getRows()[0][0]);
+  expect(
+    (await getCurrentConnection().runAndReadAll(`SELECT count(*) FROM market."${name}"`)).getRows(),
+  ).toEqual([[3n]]);
+  expect(errors.mock.calls.some((call) => String(call[0]).includes(`market.${name}`))).toBe(true);
+  expect((await stores(false).chain.readChain("SPY", OLD_DATE))[0].strike).toBe(600);
+});
+
 it.each([
   ["option_chain", "ATTACH ':memory:' AS market"],
   ["option_quote_minutes", "ATTACH ':memory:' AS market"],
