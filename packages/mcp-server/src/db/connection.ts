@@ -100,6 +100,7 @@ import { promisify } from "util";
 import { ensureSyncTables, ensureTradeDataTable, ensureReportingDataTable } from "./schemas.ts";
 import { ensureMutableMarketTables, ensureMarketDataTables } from "./market-schemas.ts";
 import { ensureProfilesSchema } from "./profile-schemas.ts";
+import { migrateLegacyOptionTables } from "./legacy-option-migration.ts";
 import { createMarketParquetViews } from "./market-views.ts";
 import { migrateMetadataToJson } from "./json-migration.ts";
 import { getDataRoot } from "./data-root.ts";
@@ -436,6 +437,10 @@ async function openReadWriteConnection(
 
   const dataDir = path.dirname(dbPath);
   const dataRoot = getDataRoot(dataDir);
+  // Preserve shipped physical option data before any Parquet view can replace it.
+  // Once migrated, the canonical table names are views (or absent), so later
+  // opens only perform the cheap base-table discovery.
+  await migrateLegacyOptionTables(connection, dataRoot);
 
   // Parquet view overlay: create views over shared Parquet files when present.
   // The env var controls WRITE path; the read path is always opportunistic —
@@ -1066,6 +1071,7 @@ export async function openMarketOnlyConnection(baseDir: string): Promise<MarketO
   // also be Parquet-backed. First option publication registers any missing
   // view in the same connection. CREATE OR REPLACE is idempotent.
   const dataRoot = getDataRoot(baseDir);
+  await migrateLegacyOptionTables(conn, dataRoot);
   await createMarketParquetViews(conn, dataRoot);
 
   let closed = false;

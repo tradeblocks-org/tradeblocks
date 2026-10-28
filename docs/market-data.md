@@ -11,6 +11,15 @@ under the data directory (or `--data-root` when configured). DuckDB queries thes
 `market.option_chain` and `market.option_quote_minutes` views after the first publication and on
 reconnect. The store readers also read partitions directly.
 
+Read-write startup migrates physical option-chain tables left by older releases before registering
+views, in either mode. Every row is published through the canonical writer before the source is
+dropped. An existing partition is never guessed to be mergeable: the original table is retained as
+`market.option_chain_legacy_retained_<id>`, with its exact name reported on stderr, while
+nonoverlapping dates are published. Inspect that retained table with `run_sql` before reconciling it
+with your partitions. After an interrupted copy, a retry treats already-published partitions the
+same conservative way. Nonstandard physical option-quote tables are retained under
+`market.option_quote_minutes_legacy_retained_<id>` and reported rather than automatically migrated.
+
 `TRADEBLOCKS_PARQUET` defaults **off** (unset). Setting it to the exact string `"true"` switches
 spot bars and enriched market data to Parquet writes and operational metadata and strategy profiles
 to JSON files. It does **not** switch option storage: option data is Parquet-native in both modes.

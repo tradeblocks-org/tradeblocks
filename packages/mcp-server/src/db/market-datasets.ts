@@ -175,7 +175,7 @@ export async function writeSpotPartition(
 
 // Register the first published option partition on this connection. Existing
 // views glob subsequent partitions automatically; do not rescan the archive on
-// every write. Publication remains exclusively in the atomic writer below.
+// every write. Legacy base tables remain intact until startup migration finishes.
 async function ensureOptionView(
   conn: DuckDBConnection,
   dataDir: string,
@@ -188,6 +188,11 @@ async function ensureOptionView(
        AND NOT EXISTS (
          SELECT 1 FROM information_schema.views
          WHERE table_catalog = 'market' AND table_schema = 'main' AND table_name = '${dataset}'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM information_schema.tables
+         WHERE table_catalog = 'market' AND table_schema = 'main' AND table_type = 'BASE TABLE'
+           AND table_name IN ('option_chain', 'option_quote_minutes')
        )`,
   );
   if (missing.getRows().length > 0) await createMarketParquetViews(conn, dataDir);

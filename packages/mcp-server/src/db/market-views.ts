@@ -117,12 +117,29 @@ function hasEnrichedContextFile(dir: string): boolean {
   }
 }
 
+async function assertOptionTableReplaceable(conn: DuckDBConnection, table: string): Promise<void> {
+  const physical = await conn.runAndReadAll(
+    `SELECT 1 FROM information_schema.tables
+       WHERE ((table_catalog = 'market' AND table_schema = 'main')
+         OR (table_catalog = current_database() AND table_schema = 'market'))
+       AND table_type = 'BASE TABLE' AND table_name = '${table}'`,
+  );
+  if (physical.getRows().length === 0) return;
+  const rows = await conn.runAndReadAll(`SELECT 1 FROM market.${table} LIMIT 1`);
+  if (rows.getRows().length > 0) {
+    throw new Error(
+      `Refusing to replace populated legacy market.${table}; open a read-write connection to migrate or retain it first`,
+    );
+  }
+}
+
 /**
  * Create DuckDB views over canonical market Parquet files.
  *
  * For each v3.0 market dataset (spot, enriched, enriched_context, option_chain,
  * option_quote_minutes, spot_daily):
  *   - If the Parquet file/directory exists: DROP any existing physical TABLE, then CREATE VIEW
+ *     (populated option tables must first be migrated or retained at RW startup)
  *   - If missing: record in tablesKept (only spot/enriched have physical fallbacks)
  *
  * The legacy single-file (daily, date_context) and Hive-partitioned
@@ -162,6 +179,7 @@ export async function createMarketParquetViews(
     const hasLegacyLayout =
       partitionKey !== "date" && existsSync(dirPath) && hasParquetPartitions(dirPath, "date");
     if (hasNewLayout || hasLegacyLayout) {
+      await assertOptionTableReplaceable(conn, name);
       try {
         await conn.run(`DROP VIEW IF EXISTS market.${name}`);
       } catch {
@@ -203,6 +221,7 @@ export async function createMarketParquetViews(
   const optionQuoteHasNewLayout = hasParquetPartitions(optionMinuteQuoteDir, "underlying");
   const optionQuoteHasLegacyLayout = hasParquetPartitions(optionMinuteQuoteDir, "date");
   if (optionQuoteHasNewLayout || optionQuoteHasLegacyLayout) {
+    await assertOptionTableReplaceable(conn, "option_quote_minutes");
     try {
       await conn.run("DROP VIEW IF EXISTS market.option_quote_minutes");
     } catch {

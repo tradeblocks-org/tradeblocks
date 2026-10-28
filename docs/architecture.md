@@ -67,6 +67,11 @@ Option chains and minute quotes always live under the data directory as
 Their SQL names above are Parquet-backed views, not writable physical tables.
 The canonical atomic publishers register missing option views after the first write;
 connection startup registers views over existing partitions. Store readers can read files directly.
+Before that overlay, read-write startup migrates shipped legacy chain tables through the canonical
+publisher. The source stays intact until every row has been published; an overlapping partition
+instead causes the source table to be retained under a new name reported on stderr. Nonstandard
+physical quote tables are retained, not schema-guessed. View registration refuses to drop populated
+option tables. See [storage migration details](market-data.md#storage-and-configuration).
 
 `TRADEBLOCKS_PARQUET` is optional and defaults off. The exact value `"true"` switches
 spot/enriched writes to Parquet and operational metadata/strategy profiles to JSON;
