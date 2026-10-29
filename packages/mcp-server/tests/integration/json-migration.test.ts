@@ -364,17 +364,9 @@ describe("json-migration", () => {
     const profile = await getProfileJson("block-ts", "Timestamp Test", blocksDir);
     expect(profile).not.toBeNull();
 
-    // The createdAt and updatedAt should be close to the originals
-    // DuckDB may add timezone info, so we compare the date portions
-    const createdDate = profile!.createdAt;
-    const updatedDate = profile!.updatedAt;
-
-    expect(createdDate.getFullYear()).toBe(2024);
-    expect(createdDate.getMonth()).toBe(2); // March = 2
-    expect(createdDate.getDate()).toBe(15);
-
-    expect(updatedDate.getFullYear()).toBe(2025);
-    expect(updatedDate.getMonth()).toBe(0); // January = 0
-    expect(updatedDate.getDate()).toBe(20);
+    // A naive DuckDB TIMESTAMP is read as UTC, so the instant is preserved
+    // exactly whatever the host time zone.
+    expect(profile!.createdAt.toISOString()).toBe("2024-03-15T09:30:00.000Z");
+    expect(profile!.updatedAt.toISOString()).toBe("2025-01-20T14:45:00.000Z");
   });
 });

@@ -1002,6 +1002,12 @@ Public CI runs both suites, with the root suite in the required `Frontend
 tags are pushed only after the version's npm package is published, not on
 every source push.
 
+The required `MCP Server` check runs the MCP suite twice: in the runner's UTC and
+under `TZ=Pacific/Kiritimati` (UTC+14). In UTC a local-midnight calendar date
+equals the UTC instant, so code or tests that mix the two pass there and shift
+the day for users in other zones; at UTC+14 that mix fails. Reproduce locally
+with `TZ=Pacific/Kiritimati npm test -w packages/mcp-server`.
+
 ## Development Tips
 
 - Use the `.planning/` directory for task breakdowns if you want structured TODOs (optional).

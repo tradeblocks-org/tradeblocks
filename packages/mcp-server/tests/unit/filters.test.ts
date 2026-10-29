@@ -20,10 +20,19 @@ import {
 // Test Data Helpers
 // =============================================================================
 
+/**
+ * A calendar day as the block loader builds it: local midnight
+ * (parseDatePreservingCalendarDay), so the day is the same in every host zone.
+ */
+function localMidnight(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 /** Minimal Trade-like object for filter testing */
 function makeTrade(dateStr: string, strategy = "Test Strategy", pl = 100) {
   return {
-    dateOpened: new Date(dateStr + "T14:00:00.000Z"), // midday UTC to test timezone handling
+    dateOpened: localMidnight(dateStr),
     timeOpened: "09:30:00",
     openingPrice: 100,
     legs: "1 SPY 470C",
@@ -42,7 +51,7 @@ function makeTrade(dateStr: string, strategy = "Test Strategy", pl = 100) {
 /** Minimal DailyLogEntry-like object */
 function makeDailyLog(dateStr: string) {
   return {
-    date: new Date(dateStr + "T14:00:00.000Z"),
+    date: localMidnight(dateStr),
     netLiquidity: 10000,
     currentFunds: 10000,
     withdrawn: 0,
@@ -170,15 +179,6 @@ describe("filterByDateRange", () => {
   });
 
   // --- Timezone safety ---
-
-  test("local-midnight dates preserve calendar date (parseDatePreservingCalendarDay pattern)", () => {
-    // This is how dates are actually created: new Date(year, month, day) at local midnight
-    const trade = makeTrade("2025-01-07");
-    trade.dateOpened = new Date(2025, 0, 7); // local midnight Jan 7
-
-    const result = filterByDateRange([trade], "2025-01-07", "2025-01-07");
-    expect(result).toHaveLength(1); // Must be Jan 7 regardless of server timezone
-  });
 
   test("string dateOpened extracts calendar date without timezone conversion", () => {
     // After JSON serialization, dateOpened may be an ISO string

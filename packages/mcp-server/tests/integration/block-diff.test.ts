@@ -11,9 +11,10 @@ import { fileURLToPath } from "url";
 // @ts-expect-error - importing from bundled output
 import { loadBlock } from "../../src/test-exports.ts";
 
-// Import PortfolioStatsCalculator for expected value verification
+// Import PortfolioStatsCalculator for expected value verification, and the
+// tool's own calendar-date filter so date filtering is the production path.
 // @ts-expect-error - importing from bundled output
-import { PortfolioStatsCalculator } from "../../src/test-exports.ts";
+import { PortfolioStatsCalculator, filterByDateRange } from "../../src/test-exports.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,25 +38,7 @@ async function simulateBlockDiff(
     loadBlock(baseDir, blockIdB),
   ]);
 
-  // Filter by date range if provided
-  const filterByDateRange = (
-    trades: Array<{ dateOpened: Date }>,
-    startDate?: string,
-    endDate?: string,
-  ) => {
-    let filtered = trades;
-    if (startDate) {
-      const start = new Date(startDate);
-      filtered = filtered.filter((t) => new Date(t.dateOpened) >= start);
-    }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      filtered = filtered.filter((t) => new Date(t.dateOpened) <= end);
-    }
-    return filtered;
-  };
-
+  // Filter by date range if provided, exactly as block_diff does
   const tradesA = filterByDateRange(blockA.trades, options.startDate, options.endDate);
   const tradesB = filterByDateRange(blockB.trades, options.startDate, options.endDate);
 
@@ -233,9 +216,7 @@ describe("block_diff", () => {
     });
 
     it("should filter trades by end date", async () => {
-      // Due to timezone quirks with how dates are compared (trade timestamps at 06:00Z
-      // vs filter end time at local 23:59 which is ~06:00Z UTC), use a future end date
-      // to verify filtering excludes later trades.
+      // endDate is inclusive of its calendar day.
       const result = await simulateBlockDiff(FIXTURES_DIR, "mock-block", "diff-block-b", {
         endDate: "2024-01-07", // Includes Jan 2-5 for diff-block-b, Jan 2-4 for mock-block (excludes Jan 8, 9)
       });

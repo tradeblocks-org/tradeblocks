@@ -121,3 +121,11 @@ jobs:
       # before V8 aborts under the Jest suite's peak memory.
       - name: Run MCP Server Tests
         run: NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=6144' npx jest --config packages/mcp-server/jest.config.js
+
+      # Hosted runners run in UTC, where a local-midnight calendar date and a UTC
+      # instant coincide, so code or tests that mix the two pass here and shift
+      # the day elsewhere. Run the suite again at UTC+14, where a local-midnight
+      # day falls on the previous UTC day and a midday UTC instant on the next
+      # local day, so either kind of mix fails.
+      - name: Run MCP Server Tests (TZ=Pacific/Kiritimati)
+        run: TZ=Pacific/Kiritimati NODE_OPTIONS='--experimental-vm-modules --max-old-space-size=6144' npx jest --config packages/mcp-server/jest.config.js
