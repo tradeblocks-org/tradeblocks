@@ -145,7 +145,7 @@
     "@modelcontextprotocol/sdk": "^1.31.0",
     "csv-parse": "^7.0.2",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.6.2",
+    "express-rate-limit": "^8.7.2",
     "fzstd": "^0.1.1",
     "jose": "^6.2.8",
     "protobufjs": "^8.8.1",
