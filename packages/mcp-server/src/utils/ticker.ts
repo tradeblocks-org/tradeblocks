@@ -73,6 +73,22 @@ export function resolveTickerFromCsvRow(
 }
 
 /**
+ * Explain the legacy market-context assumption without rejecting native OO exports.
+ * Count trades before deduplicating market lookup keys.
+ */
+export function tickerFallbackWarnings(trades: readonly Pick<Trade, "customFields">[]): string[] {
+  const count = trades.reduce(
+    (total, trade) => total + (resolveTickerFromFields(trade.customFields) === null ? 1 : 0),
+    0,
+  );
+  return count
+    ? [
+        `Assuming ${DEFAULT_MARKET_TICKER} market context for ${count} trades with no supported ticker value; the underlying is not known. Add an Underlying (or Ticker/Symbol) column to the trade CSV.`,
+      ]
+    : [];
+}
+
+/**
  * Stable composite key for ticker+date maps.
  */
 export function marketTickerDateKey(ticker: string, date: string): string {

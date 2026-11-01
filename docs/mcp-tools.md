@@ -211,6 +211,23 @@ See [per-request details](market-data.md#fetch_quotes).
 | `delete_daily_dataset`       | Delete a dataset and unregister its fields                             |
 | `list_analysis_fields`       | Runtime catalog of built-in and dataset analysis fields                |
 
+Market-joined analysis keeps the legacy SPX fallback for trades without a usable ticker,
+but reports it as an **assumption**, not a known underlying. Returned `warnings` count
+the affected trades and ask for an `Underlying` (or supported `Ticker`/`Symbol`) CSV
+column, even when SPX market data is present and the join succeeds. The profile-aware
+health check reports the same warning in its existing `flags` list. Counts are trade
+counts, not unique ticker/date keys; `enrich_trades` counts only the returned page.
+Explicit SPX or another supported ticker does not produce this warning. Analyses that
+only filter tickers or use trade/dataset fields without a market join do not warn.
+This is additive output only: tool inputs and the existing fallback are unchanged, so
+native Option Omega exports without a ticker column remain usable without credentials.
+
+The importer recognizes an `Underlying` header by name regardless of its position.
+Previously captured non-SPX CSVs missing that column cannot recover their underlying
+from P/L or legs alone. Regenerate/re-import the CSV with the actual underlying from
+the original source, or add a verified per-trade `Underlying` column and re-import.
+This warning does not repair existing captures automatically.
+
 Market-filter analyses are screens on the supplied trade tape, not new backtest results.
 Confirm a surviving filter by adding it to the Option Omega backtest and running it natively.
 These local tools do not require an Option Omega connection.

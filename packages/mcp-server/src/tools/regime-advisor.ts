@@ -15,7 +15,12 @@ import { getConnection } from "../db/connection.ts";
 import { listProfiles } from "../db/profile-schemas.ts";
 import { filterByStrategy } from "./shared/filters.ts";
 import { buildLookaheadFreeQuery, type MarketLookupKey } from "../utils/field-timing.ts";
-import { DEFAULT_MARKET_TICKER, marketTickerDateKey, resolveTradeTicker } from "../utils/ticker.ts";
+import {
+  DEFAULT_MARKET_TICKER,
+  marketTickerDateKey,
+  resolveTradeTicker,
+  tickerFallbackWarnings,
+} from "../utils/ticker.ts";
 import { computeSliceStats, type SliceStats } from "../utils/analysis-stats.ts";
 import { upgradeToReadWrite, downgradeToReadOnly, getConnectionMode } from "../db/connection.ts";
 import { syncAllBlocks } from "../sync/index.ts";
@@ -229,6 +234,7 @@ export async function handleRegimeAllocationAdvisor(
       const result = await conn.runAndReadAll(sql, params);
       const marketRecords = resultToRecords(result);
       const marketMap = recordsByTickerDate(marketRecords);
+      warnings.push(...tickerFallbackWarnings(trades));
 
       // Match trades to market records
       interface TradeWithMarket {

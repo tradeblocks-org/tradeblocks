@@ -22,7 +22,12 @@ import {
   CLOSE_KNOWN_FIELDS,
   STATIC_FIELDS,
 } from "../utils/field-timing.ts";
-import { DEFAULT_MARKET_TICKER, marketTickerDateKey, resolveTradeTicker } from "../utils/ticker.ts";
+import {
+  DEFAULT_MARKET_TICKER,
+  marketTickerDateKey,
+  resolveTradeTicker,
+  tickerFallbackWarnings,
+} from "../utils/ticker.ts";
 import { computeSliceStats, type SliceStats } from "../utils/analysis-stats.ts";
 import { buildFilterPredicate, type FilterPredicate } from "../utils/filter-predicates.ts";
 import { withSyncedBlock } from "./middleware/sync-middleware.ts";
@@ -383,7 +388,7 @@ export async function handleAnalyzeStructureFit(
     (row) => row.builtIn || datasetFields.some((field) => getRaw(row.market, field) !== undefined),
   );
   const datasetAge = summarizeDatasetAge(allTrades, rows);
-  const warnings: string[] = [...marketFilters.warnings];
+  const warnings: string[] = [...marketFilters.warnings, ...tickerFallbackWarnings(allTrades)];
   const uncovered = marketFilters.filters
     .filter(
       (filter) =>
@@ -696,6 +701,7 @@ export async function handleValidateEntryFilters(
     input.maxMissedSessions,
     new Set(predicates.flatMap((predicate) => predicate.fields)),
   );
+  warnings.push(...tickerFallbackWarnings(allTrades));
   const matched = rows.filter(({ market }) =>
     predicates.every((predicate) => predicate.hasData(market)),
   );
@@ -1022,6 +1028,7 @@ export async function handlePortfolioStructureMap(
       const dailyResult = await conn.runAndReadAll(sql, params);
       const dailyRecords = resultToRecords(dailyResult);
       const daily = recordsByTickerDate(dailyRecords);
+      warnings.push(...tickerFallbackWarnings(trades));
 
       for (const trade of trades) {
         const lookup = getTradeLookupKey(trade);
