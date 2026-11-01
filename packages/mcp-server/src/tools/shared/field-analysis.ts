@@ -21,7 +21,7 @@ export async function suggestFieldFilters(
   objective: FilterObjective,
   maxMissedSessions?: number,
 ) {
-  const { catalog, values, datasetAge } = await resolveAnalysisFields(
+  const { catalog, values, datasetAge, warnings } = await resolveAnalysisFields(
     baseDir,
     trades,
     maxMissedSessions,
@@ -122,6 +122,7 @@ export async function suggestFieldFilters(
     fieldBaselines,
     comparisonPopulation: "fieldBaselines",
     ...datasetAgeOutput(datasetAge, fields),
+    ...(warnings.length ? { warnings } : {}),
     minImprovementThreshold: objective === "winRate" ? (minImprovementPct ?? 3) : null,
   });
 }
@@ -175,7 +176,7 @@ export async function analyzeFieldRegimes(
   bins?: number[],
   maxMissedSessions?: number,
 ) {
-  const { catalog, values, datasetAge } = await resolveAnalysisFields(
+  const { catalog, values, datasetAge, warnings } = await resolveAnalysisFields(
     baseDir,
     trades,
     maxMissedSessions,
@@ -220,9 +221,10 @@ export async function analyzeFieldRegimes(
       tradesUnmatched: uncovered,
       overall,
       segments,
-      warnings: uncovered
-        ? [`${uncovered} trades have no available value for ${field} at entry`]
-        : [],
+      warnings: [
+        ...warnings,
+        ...(uncovered ? [`${uncovered} trades have no available value for ${field} at entry`] : []),
+      ],
     },
   );
 }

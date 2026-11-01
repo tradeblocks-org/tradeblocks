@@ -8,7 +8,7 @@ import {
   type DatasetFieldAge,
 } from "../db/dataset-schemas.ts";
 import { buildLookaheadFreeQuery, CLOSE_KNOWN_FIELDS } from "./field-timing.ts";
-import { marketTickerDateKey, resolveTradeTicker } from "./ticker.ts";
+import { marketTickerDateKey, resolveTradeTicker, tickerFallbackWarnings } from "./ticker.ts";
 
 export async function resolveAnalysisFields(
   baseDir: string,
@@ -38,12 +38,14 @@ export async function resolveAnalysisFields(
     ...new Map(keys.map((key) => [marketTickerDateKey(key.ticker, key.date), key])).values(),
   ];
   const market = new Map<string, Record<string, unknown>>();
+  const warnings: string[] = [];
   if (
     unique.length &&
     (!requestedFields ||
       catalog.some((entry) => entry.source === "market" && requestedFields.has(entry.field)))
   ) {
     const { sql, params } = buildLookaheadFreeQuery(unique);
+    warnings.push(...tickerFallbackWarnings(trades));
     const result = await conn.runAndReadAll(sql, params);
     const names = Array.from({ length: result.columnCount }, (_, i) => result.columnName(i));
     for (const row of result.getRows()) {
@@ -70,7 +72,7 @@ export async function resolveAnalysisFields(
     }
     return result;
   });
-  return { catalog, values, datasetAge: summarizeDatasetAge(trades, datasetMatches) };
+  return { catalog, values, datasetAge: summarizeDatasetAge(trades, datasetMatches), warnings };
 }
 
 export function requireCoveredField(

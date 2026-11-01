@@ -93,6 +93,13 @@ Each trading strategy is a "block" — a directory containing CSV files (tradelo
 
 Close-derived fields (RSI, VIX_Close, Vol_Regime, and ~35 others) are only known after market close. When joining trades with market data, `buildLookaheadFreeQuery()` applies `LAG()` to these fields so analysis uses only information available at the time of trade entry. Open-known fields (Gap_Pct, VIX_Open, Prior_Close) and static fields (Day_of_Week, Month, Is_Opex) are safe to use same-day.
 
+Trade market lookups resolve the ticker from supported custom CSV fields, including
+`Underlying`, `Ticker` and `Symbol`. If no usable value exists, they retain the legacy
+SPX fallback and return a warning naming the assumption, the affected trade count and
+the missing-column remedy. Explicit SPX is not an assumption. The same header lookup
+sets the synced `trades.trade_data.ticker` column; it does not change trade economics.
+Ticker-only filters and analyses without a market join do not emit this warning.
+
 #### Static Dataset timing
 
 New Static Dataset imports declare `close` (default) or `open` for every column.

@@ -33,6 +33,7 @@ import {
   marketTickerDateKey,
   normalizeTicker,
   resolveTradeTicker,
+  tickerFallbackWarnings,
 } from "../utils/ticker.ts";
 import { checkDataAvailability } from "../utils/data-availability.ts";
 import { getProfile } from "../db/profile-schemas.ts";
@@ -350,6 +351,7 @@ export function registerMarketDataTools(
           // Check data availability and collect warnings
           const resolvedTicker = normalizeTicker(ticker || "") || DEFAULT_MARKET_TICKER;
           const availability = await checkDataAvailability(stores, resolvedTicker);
+          availability.warnings.push(...tickerFallbackWarnings(trades));
 
           const { sql: lagSql, params: lagParams } = buildLookaheadFreeQuery(tradeKeys);
           const dailyResult = await conn.runAndReadAll(lagSql, lagParams);
@@ -666,6 +668,7 @@ export function registerMarketDataTools(
           // Check data availability and collect warnings
           const resolvedTickerSF = normalizeTicker(ticker || "") || DEFAULT_MARKET_TICKER;
           const availabilitySF = await checkDataAvailability(stores, resolvedTickerSF);
+          availabilitySF.warnings.push(...tickerFallbackWarnings(trades));
 
           const { sql, params } = buildLookaheadFreeQuery(tradeKeys);
           const dailyResult = await conn.runAndReadAll(sql, params);
@@ -690,12 +693,10 @@ export function registerMarketDataTools(
 
           if (matchedTrades.length < 10) {
             return {
-              content: [
-                {
-                  type: "text",
-                  text: "Not enough trades matched to market data for analysis (need at least 10)",
-                },
-              ],
+              ...createToolOutput(
+                "Not enough trades matched to market data for analysis (need at least 10)",
+                { warnings: availabilitySF.warnings },
+              ),
               isError: true,
             };
           }
@@ -1516,7 +1517,7 @@ export function registerMarketDataTools(
               "WARNING: outcomeFields contain same-day close-derived values that were NOT available at trade entry time. Do not use these for entry signal analysis.";
           }
 
-          const warnings = [...availabilityET.warnings];
+          const warnings = [...availabilityET.warnings, ...tickerFallbackWarnings(paginated)];
           for (const { dataset } of datasets) {
             for (const column of dataset.columns) {
               const field = `${dataset.name}.${column}`;
