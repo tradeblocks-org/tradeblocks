@@ -105,7 +105,7 @@
     "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.1",
     "lint-staged": "17.4.1",
-    "prettier": "3.9.6",
+    "prettier": "3.9.10",
     "repomix": "^1.18.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.12",
