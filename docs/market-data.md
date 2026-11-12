@@ -821,6 +821,12 @@ Written to `market.enriched` for the imported ticker. ~20 fields:
 | Structure    | Gap_Filled, Consecutive_Days                                     |
 | Calendar     | Day_of_Week, Month, Is_Opex                                      |
 
+`Day_of_Week` uses JavaScript weekday numbering: 0=Sunday, 1=Monday,
+2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday. It is a same-day
+calendar fact. `analyze_regime_performance` labels these values accordingly;
+`suggest_filters` skips Monday with value 1 and Friday with value 5.
+Existing enriched data already uses this convention and needs no re-enrichment.
+
 ### Tier 2: VIX Context
 
 Runs when VIX-family spot tickers exist. Discovers VIX tickers from their daily bars.

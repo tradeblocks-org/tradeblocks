@@ -103,7 +103,7 @@ export interface DailyMarketData {
   Consecutive_Days: number;
   Prev_Return_Pct: number;
   // Calendar (market.enriched, static)
-  Day_of_Week: number; // 2=Mon...6=Fri
+  Day_of_Week: number; // JS getDay(): 0=Sun, 1=Mon...5=Fri, 6=Sat
   Month: number;
   Is_Opex: number; // 0 or 1
   // VIX (market.spot_daily ticker='VIX' via JOIN for OHLCV; market.enriched ticker='VIX' for ivr/ivp)
@@ -251,11 +251,13 @@ function getTermStructureLabel(state: number): string {
  */
 function getDayLabel(dow: number): string {
   const labels: Record<number, string> = {
-    2: "Monday",
-    3: "Tuesday",
-    4: "Wednesday",
-    5: "Thursday",
-    6: "Friday",
+    0: "Sunday",
+    1: "Monday",
+    2: "Tuesday",
+    3: "Wednesday",
+    4: "Thursday",
+    5: "Friday",
+    6: "Saturday",
   };
   return labels[dow] || `Day ${dow}`;
 }
@@ -309,7 +311,7 @@ export function registerMarketDataTools(
         segmentBy: z
           .enum(["volRegime", "termStructure", "dayOfWeek", "gapDirection"])
           .optional()
-          .describe("Market dimension to segment by"),
+          .describe("Market dimension to segment by; dayOfWeek uses 0=Sunday through 6=Saturday"),
         strategy: z.string().optional().describe("Filter to specific strategy"),
         ticker: z.string().optional().describe("Underlying ticker symbol (default: SPX)"),
       }),
@@ -765,16 +767,16 @@ export function registerMarketDataTools(
               name: "Skip Fridays",
               field: "Day_of_Week",
               operator: "==",
-              value: 6,
-              test: (m) => getNum(m, "Day_of_Week") === 6,
+              value: 5,
+              test: (m) => getNum(m, "Day_of_Week") === 5,
               lagged: false,
             },
             {
               name: "Skip Mondays",
               field: "Day_of_Week",
               operator: "==",
-              value: 2,
-              test: (m) => getNum(m, "Day_of_Week") === 2,
+              value: 1,
+              test: (m) => getNum(m, "Day_of_Week") === 1,
               lagged: false,
             },
             // OPEX
