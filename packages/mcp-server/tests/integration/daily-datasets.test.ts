@@ -382,9 +382,9 @@ test("enriched weekdays retain JS numbering in regime labels and Monday/Friday f
   const days = [
     { date: "2026-11-09", label: "Monday", value: 1, pl: -100 },
     { date: "2026-11-10", label: "Tuesday", value: 2, pl: 100 },
-    { date: "2026-11-11", label: "Wednesday", value: 3, pl: 100 },
-    { date: "2026-11-12", label: "Thursday", value: 4, pl: 100 },
-    { date: "2026-11-13", label: "Friday", value: 5, pl: -100 },
+    { date: "2026-11-11", label: "Wednesday", value: 3, pl: 200 },
+    { date: "2026-11-12", label: "Thursday", value: 4, pl: 300 },
+    { date: "2026-11-13", label: "Friday", value: 5, pl: -200 },
   ];
   await mkdir(path.join(baseDir, "weekdays"));
   await writeFile(
@@ -452,15 +452,15 @@ test("enriched weekdays retain JS numbering in regime labels and Monday/Friday f
   expect(filters.structuredContent?.suggestedFilters).toEqual(
     expect.arrayContaining(
       [
-        { filter: "Skip Mondays", value: 1 },
-        { filter: "Skip Fridays", value: 5 },
-      ].map(({ filter, value }) =>
+        { filter: "Skip Mondays", value: 1, newTotalPl: 2000 },
+        { filter: "Skip Fridays", value: 5, newTotalPl: 2500 },
+      ].map(({ filter, value, newTotalPl }) =>
         expect.objectContaining({
           filter,
           condition: { field: "Day_of_Week", operator: "==", value, lagged: false },
           tradesRemoved: 5,
           newWinRate: 75,
-          newTotalPl: 1000,
+          newTotalPl,
         }),
       ),
     ),
