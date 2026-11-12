@@ -23,6 +23,7 @@ import { registerMarketDataTools } from "../../src/tools/market-data.ts";
 import { createMarketStores } from "../../src/market/stores/index.ts";
 import { TickerRegistry } from "../../src/market/tickers/registry.ts";
 import { writeEnrichedTickerPartition } from "../../src/db/market-datasets.ts";
+import { runEnrichment } from "../../src/utils/market-enricher.ts";
 
 let baseDir: string;
 const handlers: Record<string, (input: Record<string, unknown>) => Promise<ToolOutput>> = {};
@@ -345,7 +346,7 @@ test("profile filters use close carry-forward and open known-by rather than same
   );
   const conn = await getConnection(baseDir);
   await conn.run(
-    "INSERT INTO market.enriched (ticker, date, Day_of_Week, Gap_Pct, Is_Opex) VALUES ('SPX', '2025-01-03', 6, 0, 0), ('SPX', '2025-01-06', 2, 0, 0)",
+    "INSERT INTO market.enriched (ticker, date, Day_of_Week, Gap_Pct, Is_Opex) VALUES ('SPX', '2025-01-03', 5, 0, 0), ('SPX', '2025-01-06', 1, 0, 0)",
   );
   const defaults = await handlers.suggest_filters({ blockId: "sample", minImprovementPct: 3 });
   expect(defaults.structuredContent?.suggestedFilters).toEqual([
@@ -374,6 +375,95 @@ test("profile filters use close carry-forward and open known-by rather than same
     expect.arrayContaining([
       expect.objectContaining({ field: "signal.score", sampleSize: 10, direction: "negative" }),
     ]),
+  );
+});
+
+test("enriched weekdays retain JS numbering in regime labels and Monday/Friday filters", async () => {
+  const days = [
+    { date: "2026-11-09", label: "Monday", value: 1, pl: -100 },
+    { date: "2026-11-10", label: "Tuesday", value: 2, pl: 100 },
+    { date: "2026-11-11", label: "Wednesday", value: 3, pl: 100 },
+    { date: "2026-11-12", label: "Thursday", value: 4, pl: 100 },
+    { date: "2026-11-13", label: "Friday", value: 5, pl: -100 },
+  ];
+  await mkdir(path.join(baseDir, "weekdays"));
+  await writeFile(
+    path.join(baseDir, "weekdays", "tradelog.csv"),
+    [
+      "Date Opened,Time Opened,Opening Price,Legs,Premium,Closing Price,Date Closed,Time Closed,Avg. Closing Cost,Reason For Close,P/L,No. of Contracts,Funds at Close,Margin Req.,Strategy,Opening Commissions + Fees,Closing Commissions + Fees,Underlying",
+      ...days.flatMap(({ date, pl }) =>
+        Array.from(
+          { length: 5 },
+          () =>
+            `${date},10:00:00,1,SPX Put Spread,1,0,${date},15:00:00,0,Exit,${pl},1,10000,500,Test,0,0,SPX`,
+        ),
+      ),
+    ].join("\n"),
+  );
+  const conn = await upgradeToReadWrite(baseDir);
+  for (const { date } of days) {
+    await conn.run(
+      "INSERT INTO market.spot (ticker, date, time, open, high, low, close) VALUES ('SPX', $1, '09:30', 100, 101, 99, 100)",
+      [date],
+    );
+    await conn.run("INSERT INTO market.enriched (ticker, date) VALUES ('SPX', $1)", [date]);
+  }
+  await runEnrichment(conn, "SPX", { dataDir: baseDir, parquetMode: false });
+  const stored = await conn.runAndReadAll(
+    "SELECT CAST(date AS VARCHAR), Day_of_Week FROM market.enriched WHERE ticker = 'SPX' ORDER BY date",
+  );
+  expect(stored.getRows()).toEqual(days.map(({ date, value }) => [date, value]));
+
+  const server = {
+    registerTool(
+      name: string,
+      _config: unknown,
+      handler: (input: Record<string, unknown>) => Promise<ToolOutput>,
+    ) {
+      handlers[name] = handler;
+    },
+  } as unknown as McpServer;
+  registerMarketDataTools(
+    server,
+    baseDir,
+    createMarketStores({
+      get conn() {
+        return getCurrentConnection();
+      },
+      dataDir: baseDir,
+      parquetMode: false,
+      tickers: new TickerRegistry([{ underlying: "SPX", roots: ["SPX", "SPXW"] }]),
+    }),
+  );
+  const regimes = await handlers.analyze_regime_performance({
+    blockId: "weekdays",
+    segmentBy: "dayOfWeek",
+  });
+  expect(regimes.isError).not.toBe(true);
+  expect(regimes.structuredContent?.segments).toEqual(
+    expect.arrayContaining(
+      days.map(({ label, pl }) =>
+        expect.objectContaining({ segment: label, tradeCount: 5, totalPl: pl * 5 }),
+      ),
+    ),
+  );
+  const filters = await handlers.suggest_filters({ blockId: "weekdays", minImprovementPct: 3 });
+  expect(filters.isError).not.toBe(true);
+  expect(filters.structuredContent?.suggestedFilters).toEqual(
+    expect.arrayContaining(
+      [
+        { filter: "Skip Mondays", value: 1 },
+        { filter: "Skip Fridays", value: 5 },
+      ].map(({ filter, value }) =>
+        expect.objectContaining({
+          filter,
+          condition: { field: "Day_of_Week", operator: "==", value, lagged: false },
+          tradesRemoved: 5,
+          newWinRate: 75,
+          newTotalPl: 1000,
+        }),
+      ),
+    ),
   );
 });
 
