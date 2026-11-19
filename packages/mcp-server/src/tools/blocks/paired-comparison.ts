@@ -33,6 +33,17 @@ const ATTRIBUTION_NOTE =
   "strategies' trades (the union of their open and close dates) -- no market " +
   "calendar is assumed, so weekends or holidays appear only if a trade spans them.";
 
+/**
+ * attributionMethodology for grid "xnys". The default grid keeps ATTRIBUTION_NOTE
+ * unchanged so the default response stays byte-identical to earlier releases.
+ */
+const ATTRIBUTION_NOTE_XNYS =
+  "A trade's P&L is attributed evenly across the trading days it was open " +
+  "(dateOpened through dateClosed). Trading days follow the XNYS session calendar " +
+  "(every NYSE session from the compared strategies' first to their last trade " +
+  "date), plus any " +
+  "trade open or close date that is not a session.";
+
 // Frozen, mathematically-neutral defaults (documented on the schema). Block
 // length is NEVER defaulted to a constant -- it is derived from the submitted
 // block's own holding-period distribution unless the caller overrides it.
@@ -412,7 +423,7 @@ export function runPairedBootstrapComparison(
     resamples,
     seed: result.seed,
     ciLevel,
-    attributionMethodology: ATTRIBUTION_NOTE,
+    attributionMethodology: gridMode === "xnys" ? ATTRIBUTION_NOTE_XNYS : ATTRIBUTION_NOTE,
   };
 
   // Echoed only when a non-default day rule is in effect, so the default
@@ -422,8 +433,8 @@ export function runPairedBootstrapComparison(
     data.grid = gridMode;
     data.dayGridMethodology =
       (gridMode === "xnys"
-        ? "Grid: every NYSE session from the compared strategies' first to last trade date, " +
-          "plus trade dates. "
+        ? "Grid: the XNYS session calendar (every NYSE session from the compared " +
+          "strategies' first to last trade date), plus trade dates. "
         : "Grid: the union of the compared strategies' trade open and close dates. ") +
       (unobservedDays === "zero"
         ? `Days without a position count as 0 P&L from ${flatWindow!.from} to ${flatWindow!.through}.`

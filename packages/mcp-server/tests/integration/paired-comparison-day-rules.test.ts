@@ -46,6 +46,16 @@ function seededSeq(seed: number, n: number): number[] {
   return out;
 }
 
+/**
+ * attributionMethodology before the day rules (exact text, as set by the fix
+ * that builds the grid from the compared strategies only).
+ */
+const BASE_ATTRIBUTION_NOTE =
+  "A trade's P&L is attributed evenly across the trading days it was open " +
+  "(dateOpened through dateClosed). Trading days are derived from the compared " +
+  "strategies' trades (the union of their open and close dates) -- no market " +
+  "calendar is assumed, so weekends or holidays appear only if a trade spans them.";
+
 // ---------------------------------------------------------------------------
 // Days without a position: unobservedDays + grid
 // ---------------------------------------------------------------------------
@@ -57,7 +67,7 @@ describe("unobservedDays and grid", () => {
   const naive = noise.map((v, i) => makeTrade(i, i, i % 5 === 0 ? -100 : 20 + 10 * v, "naive"));
   const filtered = naive.filter((_, i) => i % 5 !== 0).map((t) => ({ ...t, strategy: "filtered" }));
 
-  function compare(unobservedDays?: "exclude" | "zero") {
+  function compare(unobservedDays?: "exclude" | "zero", grid?: "trades" | "xnys") {
     return runPairedBootstrapComparison({
       armATrades: filtered,
       armBTrades: naive,
@@ -68,6 +78,7 @@ describe("unobservedDays and grid", () => {
       strategyA: "filtered",
       strategyB: "naive",
       ...(unobservedDays === undefined ? {} : { unobservedDays }),
+      ...(grid === undefined ? {} : { grid }),
     });
   }
 
@@ -97,6 +108,32 @@ describe("unobservedDays and grid", () => {
     expect(data).not.toHaveProperty("grid");
     expect(data).not.toHaveProperty("dayGridMethodology");
     expect(compare().data).toEqual(compare("exclude").data);
+  });
+
+  it("adds no fields when both defaults are passed explicitly", () => {
+    const { data } = compare("exclude", "trades");
+    expect(data).not.toHaveProperty("unobservedDays");
+    expect(data).not.toHaveProperty("grid");
+    expect(data).not.toHaveProperty("dayGridMethodology");
+    expect(data).toEqual(compare().data);
+  });
+
+  it("keeps the default attribution text byte-identical to earlier releases", () => {
+    expect(compare().data.attributionMethodology).toBe(BASE_ATTRIBUTION_NOTE);
+    expect(compare("exclude", "trades").data.attributionMethodology).toBe(BASE_ATTRIBUTION_NOTE);
+    // The trades grid is unchanged by unobservedDays, so is its description.
+    expect(compare("zero").data.attributionMethodology).toBe(BASE_ATTRIBUTION_NOTE);
+  });
+
+  it("describes the XNYS session calendar in both text fields for grid xnys", () => {
+    for (const unobservedDays of ["exclude", "zero"] as const) {
+      const { data } = compare(unobservedDays, "xnys");
+      expect(data.grid).toBe("xnys");
+      for (const field of ["attributionMethodology", "dayGridMethodology"]) {
+        expect(data[field]).toContain("XNYS session calendar");
+        expect(data[field]).not.toContain("no market calendar is assumed");
+      }
+    }
   });
 
   it("xnys grid adds the NYSE sessions between trade dates and skips holidays", () => {
