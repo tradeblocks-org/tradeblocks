@@ -652,6 +652,11 @@ that day. Outside that window a 0 would be invented and bias the comparison.
   that opens before `dateRange.end` and closes after it would lose its P&L on
   the days after `end`. Such a trade is refused instead, naming the strategy,
   the trade dates and the `dateRange` bound; widen `dateRange` or omit it.
+- The mirror case is refused too: a trade that `dateRange` removes because it
+  opened before `dateRange.start` (or after `dateRange.end`) but that is still
+  held on a day inside the clipped coverage would turn its held days into 0 P&L
+  days. The refusal names the strategy, the trade dates, the `dateRange` bound
+  and the first held day inside the window; widen `dateRange` or omit it.
 - With `grid: "xnys"` the sessions span the coverage windows as well as the
   trades; `grid: "trades"` keeps the compared strategies' trade dates.
 - A strategy that is in the block but has no trades in the selected range can
@@ -672,7 +677,10 @@ do not overlap (one stopped trading before the other started), there is no
 common held window and the comparison is refused with "the two strategies'
 traded windows do not overlap"; pass `coverage`. In single-arm mode the window
 is the arm's own first open to last close. The held windows come from the kept
-trades' own open and close dates, so `dateRange` does not cut a trade here.
+trades' own open and close dates, so `dateRange` does not cut a kept trade here.
+A trade that `dateRange` removed (opened before its start or after its end) but
+that is still held inside the common held window is refused the same way as
+with coverage; widen `dateRange` or omit it.
 
 Under `"zero"` the response adds:
 
