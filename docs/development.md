@@ -1098,10 +1098,15 @@ auto-merge only when a minor or patch PR targeting `master` opens. A push or
 reopen does not re-arm it. If auto-merge was turned off, a maintainer must
 explicitly release the hold; a fresh Worf PASS does not release the hold itself.
 
-The maintainer relaying Worf's verdict posts the typed verdict on the PR first.
-Verify that it names this repository, the PR number, and the **full current PR
-head SHA**. Do not carry an earlier verdict to a new SHA, even for an unchanged
-diff. Then publish its projection from the base repository:
+The normal verdict relay posts the typed verdict on the PR and publishes its
+`Worf` status on the reviewed commit in the same step. The status links back
+to the verdict comment.
+
+**Manual fallback only:** If the relay could not publish the status, use the
+latest trusted typed verdict already posted on the PR. Verify that it names
+this repository, the PR number, and the **full current PR head SHA**. Do not
+replay an older verdict or carry it to a new SHA, even for an unchanged diff.
+Then publish its projection from the base repository:
 
 ```bash
 gh api -X POST "repos/tradeblocks-org/tradeblocks/statuses/$REVIEWED_HEAD" \
