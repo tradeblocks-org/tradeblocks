@@ -19,7 +19,10 @@ running. The optional `coverage: { A: { from, through }, B: { from, through } }`
 input (calendar dates, inclusive, only with `unobservedDays: "zero"`) states
 those dates per strategy, clipped to `dateRange`. An arm gets 0 P&L days only
 inside its own coverage, only days inside both coverages are compared, and a
-trade outside its strategy's coverage is refused. With `grid: "xnys"` the
+trade outside its strategy's coverage is refused. The same holds for the
+coverage clipped to `dateRange`: a trade that opens inside `dateRange` but closes
+after its end is refused (its P&L after the end would otherwise be dropped);
+widen `dateRange` or omit it. With `grid: "xnys"` the
 sessions also span the coverage windows. A strategy that is in the block but
 has no trades in the range can be compared as an all-flat arm when its
 coverage is given.
@@ -27,6 +30,8 @@ coverage is given.
 Without `coverage`, `"zero"` uses the common held window: the later first open
 to the earlier last close of the two strategies. Neither arm gets 0 P&L days
 before it started or after it stopped trading; flat days at the edges drop out.
+If the two strategies' traded windows do not overlap, the comparison is refused
+("the two strategies' traded windows do not overlap"); pass `coverage`.
 
 Under `"zero"` the response adds `coverage` (the windows used),
 `coverageSource` (`"caller"` or `"heldWindow"`) and, for the held window,

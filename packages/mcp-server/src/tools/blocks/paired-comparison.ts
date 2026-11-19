@@ -167,10 +167,11 @@ export const pairedComparisonInputSchema = z.object({
         "strategy was demonstrably running, e.g. its backtest range. A day without a position " +
         "counts as 0 P&L only inside the strategy's own coverage; days inside only one " +
         "coverage are not compared. Give A and B together when strategyB is set. Each " +
-        "coverage is clipped to dateRange; a trade outside its strategy's coverage is " +
-        "refused. With coverage, a known strategy without trades in the range is compared " +
+        "coverage is clipped to dateRange; a trade outside its strategy's clipped coverage " +
+        "(e.g. one that closes after dateRange end) is refused. With coverage, a known strategy without trades in the range is compared " +
         "as all flat. Without coverage, 'zero' uses the common held window of both strategies " +
-        "(the later first open to the earlier last close).",
+        "(the later first open to the earlier last close); it refuses when those windows " +
+        "do not overlap.",
     ),
 });
 
@@ -354,6 +355,35 @@ function assertTradesInsideCoverage(strategy: string, trades: Trade[], w: DayWin
 }
 
 /**
+ * Refuse a trade whose open or close date lies outside the coverage after the
+ * clip to dateRange. Its P&L on days outside the clipped window would otherwise
+ * be attributed to days that are never compared and vanish without a trace.
+ * dateRange keeps trades by open date, so this is typically a trade that opens
+ * before dateRange end and closes after it.
+ */
+function assertTradesInsideClippedCoverage(
+  strategy: string,
+  trades: Trade[],
+  clipped: DayWindow,
+  dateRange: { start?: string; end?: string } | undefined,
+): void {
+  for (const t of trades) {
+    const open = formatDateKey(t.dateOpened);
+    const close = formatDateKey(t.dateClosed ?? t.dateOpened);
+    if (open >= clipped.from && close <= clipped.through) continue;
+    const edge =
+      close > clipped.through
+        ? `after dateRange end ${dateRange?.end ?? clipped.through}`
+        : `before dateRange start ${dateRange?.start ?? clipped.from}`;
+    throw new Error(
+      `Strategy "${strategy}" has a trade opened ${open}, closed ${close}, ${edge}; its ` +
+        `coverage clipped to dateRange is ${clipped.from} to ${clipped.through}, so the ` +
+        "trade's P&L on the days outside it would be dropped; widen dateRange or omit it.",
+    );
+  }
+}
+
+/**
  * Check the coverage input against the comparison mode. Coverage only means
  * something when days without a position count as flat days.
  */
@@ -500,11 +530,15 @@ export function runPairedBootstrapComparison(
   let jointSpan: DayWindow | undefined;
   if (unobservedDays === "zero") {
     if (coverage !== undefined) {
+      // Both checks use the window the P&L is attributed on: first the stated
+      // coverage, then the coverage clipped to dateRange.
       assertTradesInsideCoverage(strategyA, armATrades, coverage.A);
       windowA = clipWindow("coverage.A", coverage.A, dateRange);
+      assertTradesInsideClippedCoverage(strategyA, armATrades, windowA, dateRange);
       if (twoArm) {
         assertTradesInsideCoverage(strategyB ?? "B", armBTrades, coverage.B!);
         windowB = clipWindow("coverage.B", coverage.B!, dateRange);
+        assertTradesInsideClippedCoverage(strategyB ?? "B", armBTrades, windowB, dateRange);
       }
     } else if (twoArm) {
       // Fallback: only the span in which both arms demonstrably ran.
@@ -514,6 +548,13 @@ export function runPairedBootstrapComparison(
         from: hA.from > hB.from ? hA.from : hB.from,
         through: hA.through < hB.through ? hA.through : hB.through,
       };
+      if (windowA.from > windowA.through) {
+        throw new Error(
+          `the two strategies' traded windows do not overlap ("${strategyA}" ${hA.from} to ` +
+            `${hA.through}, "${strategyB}" ${hB.from} to ${hB.through}), so there is no day ` +
+            "both demonstrably ran; pass coverage to say when each strategy was running.",
+        );
+      }
       windowB = windowA;
       jointSpan = heldWindow(allArmTrades);
     } else {

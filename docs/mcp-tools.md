@@ -655,6 +655,11 @@ that day. Outside that window a 0 would be invented and bias the comparison.
   the other arm.
 - A trade whose open or close date lies outside its strategy's coverage is
   refused, naming the strategy, the trade dates and the coverage.
+- The same check runs against the coverage clipped to `dateRange`, the window
+  the P&L is attributed on. `dateRange` keeps trades by open date, so a trade
+  that opens before `dateRange.end` and closes after it would lose its P&L on
+  the days after `end`. Such a trade is refused instead, naming the strategy,
+  the trade dates and the `dateRange` bound; widen `dateRange` or omit it.
 - With `grid: "xnys"` the sessions span the coverage windows as well as the
   trades; `grid: "trades"` keeps the compared strategies' trade dates.
 - A strategy that is in the block but has no trades in the selected range can
@@ -670,8 +675,12 @@ strategies: from the later of the two first opens to the earlier of the two last
 closes. Grid days outside it are not observed for either arm, so neither arm
 gets 0 P&L days before it started or after it stopped trading. The cost is that
 genuine flat days at the edges (a filter that let its first trade through late)
-drop out; pass `coverage` to keep them. In single-arm mode the window is the
-arm's own first open to last close.
+drop out; pass `coverage` to keep them. When the two strategies' traded windows
+do not overlap (one stopped trading before the other started), there is no
+common held window and the comparison is refused with "the two strategies'
+traded windows do not overlap"; pass `coverage`. In single-arm mode the window
+is the arm's own first open to last close. The held windows come from the kept
+trades' own open and close dates, so `dateRange` does not cut a trade here.
 
 Under `"zero"` the response adds:
 
