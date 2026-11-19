@@ -187,7 +187,10 @@ describe("coverage: different windows are never zero-filled outside their own co
   it("clips each coverage to dateRange", () => {
     const { data } = compare({
       armATrades: REPRO_A.filter((t) => isoOf(t.dateOpened) <= "2024-06-30"),
-      armBTrades: REPRO_B.filter((t) => isoOf(t.dateOpened) <= "2024-06-30"),
+      // As the handler's dateRange filter keeps them: by open date.
+      armBTrades: REPRO_B.filter(
+        (t) => isoOf(t.dateOpened) >= "2022-06-01" && isoOf(t.dateOpened) <= "2024-06-30",
+      ),
       unobservedDays: "zero",
       coverage: {
         A: { from: "2023-01-01", through: "2024-06-30" },

@@ -41,6 +41,19 @@ const csv = [
   ...rows,
 ].join("\n");
 
+// Straddle block: A holds one trade from Thursday 2023-02-23 through Monday
+// 2023-03-06; B trades flat one-day trades through 2023-02-24.
+const straddleRows: string[] = [];
+for (let d = new Date(Date.UTC(2023, 0, 2)); d <= new Date(Date.UTC(2023, 1, 24));) {
+  if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) {
+    const iso = d.toISOString().slice(0, 10);
+    straddleRows.push(`${iso},09:30:00,${iso},15:00:00,10,A,SPY,1000,1,100000`);
+    straddleRows.push(`${iso},09:30:00,${iso},15:00:00,0,B,SPY,1000,1,100000`);
+  }
+  d = new Date(d.getTime() + 86_400_000);
+}
+straddleRows.push("2023-02-23,09:30:00,2023-03-06,15:00:00,700,A,SPY,1000,1,100000");
+
 const YEAR_2024 = { start: "2024-01-01", end: "2024-12-31" };
 const COV_2024 = { from: "2024-01-01", through: "2024-12-31" };
 
@@ -75,6 +88,13 @@ describe("paired_bootstrap_comparison strategy presence and coverage (stdio)", (
       arguments: { csvPath, blockName: "Cov" },
     });
     expect(imported.isError).not.toBe(true);
+    const straddlePath = path.join(root, "straddle.csv");
+    await fs.writeFile(straddlePath, [csv.split("\n")[0], ...straddleRows].join("\n"));
+    const importedStraddle = await client.callTool({
+      name: "import_csv",
+      arguments: { csvPath: straddlePath, blockName: "Straddle" },
+    });
+    expect(importedStraddle.isError).not.toBe(true);
   }, 60_000);
 
   afterAll(async () => {
@@ -179,6 +199,23 @@ describe("paired_bootstrap_comparison strategy presence and coverage (stdio)", (
     expect(result.isError).toBe(true);
     expect(text(result)).toMatch(
       /Strategy "B" has a trade opened 2024-01-03.*outside its coverage 2023-01-01 to 2023-12-31/,
+    );
+  });
+
+  it("refuses a kept trade that closes after dateRange end instead of dropping its P&L", async () => {
+    const window = { from: "2023-01-02", through: "2023-03-31" };
+    const result = await call({
+      blockId: "straddle",
+      strategyA: "A",
+      strategyB: "B",
+      grid: "xnys",
+      unobservedDays: "zero",
+      coverage: { A: window, B: window },
+      dateRange: { start: "2023-01-02", end: "2023-02-27" },
+    });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(
+      /Strategy "A" has a trade opened 2023-02-23, closed 2023-03-06, after dateRange end 2023-02-27.*widen dateRange or omit it/,
     );
   });
 });
