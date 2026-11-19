@@ -350,3 +350,62 @@ describe("determinism", () => {
     expect(a.result.ci.low).not.toBe(b.result.ci.low);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression #622 — short shared runs must be resampled
+// ---------------------------------------------------------------------------
+
+describe("short shared runs (#622)", () => {
+  // 60 episodes: even = 1-day trade in both arms (A +100, B 0); odd = 5-day
+  // trade in both arms (+50 each, 2 grid days). After every episode a 1-day
+  // trade held only by A breaks the shared run. Point = 3000 / 90 = 33.33.
+  function issueFixture(): { armATrades: Trade[]; armBTrades: Trade[] } {
+    const armATrades: Trade[] = [];
+    const armBTrades: Trade[] = [];
+    let day = 0;
+    for (let e = 0; e < 60; e++) {
+      if (e % 2 === 0) {
+        armATrades.push(makeTrade(day, day, 100, "A"));
+        armBTrades.push(makeTrade(day, day, 0, "B"));
+        day += 1;
+      } else {
+        armATrades.push(makeTrade(day, day + 4, 50, "A"));
+        armBTrades.push(makeTrade(day, day + 4, 50, "B"));
+        day += 5;
+      }
+      armATrades.push(makeTrade(day, day, 10, "A"));
+      day += 1;
+    }
+    return { armATrades, armBTrades };
+  }
+
+  function run(blockDays?: number) {
+    const { armATrades, armBTrades } = issueFixture();
+    return runPairedBootstrapComparison({
+      armATrades,
+      armBTrades,
+      blockTrades: [...armATrades, ...armBTrades],
+      statistic: "mean_daily_pnl",
+      ciLevel: 0.95,
+      resamples: 2000,
+      seed: 42,
+      ...(blockDays === undefined ? {} : { blockDays }),
+      strategyA: "A",
+      strategyB: "B",
+    }).result;
+  }
+
+  it.each([undefined, 1, 2, 3])("CI contains the point estimate (blockDays %p)", (blockDays) => {
+    const result = run(blockDays);
+    expect(result.status).toBe("resolved");
+    expect(result.point).toBeCloseTo(100 / 3, 10);
+    expect(result.ci.low!).toBeLessThan(result.ci.high!);
+    expect(result.ci.low!).toBeLessThanOrEqual(result.point!);
+    expect(result.ci.high!).toBeGreaterThanOrEqual(result.point!);
+    for (const entry of result.sensitivity) {
+      expect(entry.status).toBe("resolved");
+      expect(entry.ci.low!).toBeLessThanOrEqual(result.point!);
+      expect(entry.ci.high!).toBeGreaterThanOrEqual(result.point!);
+    }
+  });
+});

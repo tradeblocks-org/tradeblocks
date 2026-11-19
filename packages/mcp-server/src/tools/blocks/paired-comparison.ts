@@ -299,7 +299,7 @@ export function runPairedBootstrapComparison(
   } else if (result.status === "underpowered") {
     refusalMessage =
       `Underpowered: the shared overlap is too short to resample at a block length of ` +
-      `${blockDays} trading day(s) (fewer than two drawable blocks). A confidence interval is withheld.`;
+      `${blockDays} trading day(s) (the shared days do not exceed one block). A confidence interval is withheld.`;
     summary = `Paired comparison (${comparisonLabel}): ${refusalMessage}`;
   } else {
     const point = result.point ?? 0;

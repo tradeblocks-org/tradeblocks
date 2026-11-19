@@ -754,3 +754,76 @@ describe("pairedPathBlockBootstrap", () => {
     ).toThrow("statistic result on observed paths must be a finite number");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression #622 — every overlap day carries equal resampling weight
+// ---------------------------------------------------------------------------
+
+describe("equal coverage of short runs (#622)", () => {
+  // Joint observation broken at irregular positions -> runs of length 1..6,
+  // and the delta on short runs differs from the delta on long runs.
+  const n = 240;
+  const observed = Array.from({ length: n }, (_, i) => i % 7 !== 3 && i % 11 !== 0);
+  const noise = seededSeq(622, n);
+  const values = noise.map((v, i) => v + (i % 7 < 3 ? 2 : 0));
+  const armA = mkSeries(values, observed);
+  const armB = mkSeries(
+    values.map(() => 0),
+    values.map(() => true),
+  );
+
+  it.each([1, 2, 3, 5, 8])(
+    "bootstrap mean matches the point estimate (blockDays %p)",
+    (blockDays) => {
+      const days = pairedBlockDays(
+        {
+          armA,
+          armB,
+          statistic: mean,
+          holdingRule: { blockDays },
+          ciLevel: 0.95,
+          resamples: 1,
+          seed: 1,
+        },
+        blockDays,
+      );
+      // Count how often each overlap day appears across all candidate blocks.
+      const coverage = new Map<string, number>();
+      for (const block of days) for (const d of block) coverage.set(d, (coverage.get(d) ?? 0) + 1);
+      const overlapDays = armA.index.filter((_, i) => observed[i]);
+      for (const d of overlapDays) expect(coverage.get(d) ?? 0).toBeGreaterThan(0);
+
+      const result = pairedBlockBootstrap({
+        armA,
+        armB,
+        statistic: mean,
+        holdingRule: { blockDays },
+        ciLevel: 0.95,
+        resamples: 2000,
+        seed: 5,
+      });
+      expect(result.status).toBe("resolved");
+      expect(result.ci.low!).toBeLessThanOrEqual(result.point!);
+      expect(result.ci.high!).toBeGreaterThanOrEqual(result.point!);
+      const mid = (result.ci.low! + result.ci.high!) / 2;
+      expect(Math.abs(mid - result.point!)).toBeLessThan((result.ci.high! - result.ci.low!) / 4);
+    },
+  );
+
+  it.each([2, 3, 5])("paired-path interval contains the point (blockDays %p)", (blockDays) => {
+    const result = pairedPathBlockBootstrap({
+      armA,
+      armB,
+      statistic: (a: number[], b: number[]) => mean(a) - mean(b),
+      holdingRule: { blockDays },
+      ciLevel: 0.95,
+      resamples: 2000,
+      seed: 5,
+      nullValue: 0,
+      alternative: "greater",
+    } as PairedPathBlockBootstrapInput);
+    expect(result.status).toBe("resolved");
+    expect(result.ci.low!).toBeLessThanOrEqual(result.point!);
+    expect(result.ci.high!).toBeGreaterThanOrEqual(result.point!);
+  });
+});
