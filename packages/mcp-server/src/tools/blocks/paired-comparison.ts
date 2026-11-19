@@ -168,7 +168,8 @@ export const pairedComparisonInputSchema = z.object({
         "counts as 0 P&L only inside the strategy's own coverage; days inside only one " +
         "coverage are not compared. Give A and B together when strategyB is set. Each " +
         "coverage is clipped to dateRange; a trade outside its strategy's clipped coverage " +
-        "(e.g. one that closes after dateRange end) is refused. With coverage, a known strategy without trades in the range is compared " +
+        "(e.g. one that closes after dateRange end) is refused, as is a trade dateRange removes " +
+        "that is still held inside the compared window. With coverage, a known strategy without trades in the range is compared " +
         "as all flat. Without coverage, 'zero' uses the common held window of both strategies " +
         "(the later first open to the earlier last close); it refuses when those windows " +
         "do not overlap.",
@@ -384,6 +385,36 @@ function assertTradesInsideClippedCoverage(
 }
 
 /**
+ * Refuse a trade that dateRange removed (it keeps trades by open date) but
+ * that is still held on a day inside the arm's compared window. Its held days
+ * would otherwise count as flat 0 P&L days although the strategy held a
+ * position on them.
+ */
+function assertNoCutTradeHeldInWindow(
+  strategy: string,
+  cutTrades: Trade[],
+  w: DayWindow,
+  dateRange: { start?: string; end?: string } | undefined,
+): void {
+  for (const t of cutTrades) {
+    const open = formatDateKey(t.dateOpened);
+    const close = formatDateKey(t.dateClosed ?? t.dateOpened);
+    if (open > w.through || close < w.from) continue;
+    const heldOn = open > w.from ? open : w.from;
+    const edge =
+      dateRange?.start !== undefined && open < dateRange.start
+        ? `before dateRange start ${dateRange.start}`
+        : `after dateRange end ${dateRange?.end ?? ""}`;
+    throw new Error(
+      `Strategy "${strategy}" has a trade opened ${open}, closed ${close}, ${edge}, still ` +
+        `held on ${heldOn} inside its compared window ${w.from} to ${w.through}; dateRange ` +
+        "removes the trade, so its held days would count as flat 0 P&L days; widen " +
+        "dateRange or omit it.",
+    );
+  }
+}
+
+/**
  * Check the coverage input against the comparison mode. Coverage only means
  * something when days without a position count as flat days.
  */
@@ -470,6 +501,11 @@ export interface PairedComparisonParams {
   coverage?: ArmCoverage;
   /** The tool's dateRange; used to clip coverage. */
   dateRange?: { start?: string; end?: string };
+  /**
+   * unobservedDays "zero" only: each arm's trades that dateRange removed. One
+   * still held inside the arm's compared window is refused.
+   */
+  rangeExcluded?: { A: Trade[]; B?: Trade[] };
 }
 
 export interface PairedComparisonReport {
@@ -502,6 +538,7 @@ export function runPairedBootstrapComparison(
     grid: gridMode = "trades",
     coverage,
     dateRange,
+    rangeExcluded,
   } = params;
   const twoArm = armBTrades !== null;
 
@@ -559,6 +596,12 @@ export function runPairedBootstrapComparison(
       jointSpan = heldWindow(allArmTrades);
     } else {
       windowA = heldWindow(armATrades);
+    }
+    if (rangeExcluded !== undefined) {
+      assertNoCutTradeHeldInWindow(strategyA, rangeExcluded.A, windowA, dateRange);
+      if (twoArm && rangeExcluded.B !== undefined) {
+        assertNoCutTradeHeldInWindow(strategyB ?? "B", rangeExcluded.B, windowB!, dateRange);
+      }
     }
   }
 
@@ -782,6 +825,19 @@ export function registerPairedComparisonTool(server: McpServer, baseDir: string)
 
         const armATrades = inRange(armAAll);
         const armBTrades = armBAll !== null ? inRange(armBAll) : null;
+        // Trades dateRange removed; under "zero" one still held inside an arm's
+        // compared window is refused rather than turned into flat days.
+        const cut = (all: Trade[], kept: Trade[]): Trade[] => {
+          const keptSet = new Set(kept);
+          return all.filter((t) => !keptSet.has(t));
+        };
+        const rangeExcluded =
+          dateRange !== undefined && input.unobservedDays === "zero"
+            ? {
+                A: cut(armAAll, armATrades),
+                ...(armBAll !== null && armBTrades !== null ? { B: cut(armBAll, armBTrades) } : {}),
+              }
+            : undefined;
 
         const { summary, data } = runPairedBootstrapComparison({
           armATrades,
@@ -798,6 +854,7 @@ export function registerPairedComparisonTool(server: McpServer, baseDir: string)
           grid: input.grid,
           coverage: input.coverage,
           dateRange,
+          rangeExcluded,
         });
 
         return createToolOutput(summary, { blockId, ...data });

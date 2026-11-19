@@ -22,7 +22,10 @@ inside its own coverage, only days inside both coverages are compared, and a
 trade outside its strategy's coverage is refused. The same holds for the
 coverage clipped to `dateRange`: a trade that opens inside `dateRange` but closes
 after its end is refused (its P&L after the end would otherwise be dropped);
-widen `dateRange` or omit it. With `grid: "xnys"` the
+widen `dateRange` or omit it. Likewise a trade that `dateRange` removes (it
+keeps trades by open date) but that is still held on a day inside the window is
+refused, with or without coverage, instead of turning its held days into 0 P&L
+days. With `grid: "xnys"` the
 sessions also span the coverage windows. A strategy that is in the block but
 has no trades in the range can be compared as an all-flat arm when its
 coverage is given.

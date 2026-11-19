@@ -54,6 +54,24 @@ for (let d = new Date(Date.UTC(2023, 0, 2)); d <= new Date(Date.UTC(2023, 1, 24)
 }
 straddleRows.push("2023-02-23,09:30:00,2023-03-06,15:00:00,700,A,SPY,1000,1,100000");
 
+// Carry block: daily A (10 $) and B (0 $) trades 2023-01-02 to 2023-02-17,
+// plus multi-day trades that a dateRange open-date filter can cut away:
+// A 2023-01-12 to 2023-01-20 (700 $), A and B 2023-02-13 to 2023-03-03, and
+// A 2023-02-22 to 2023-02-24.
+const carryRows: string[] = [];
+for (let d = new Date(Date.UTC(2023, 0, 2)); d <= new Date(Date.UTC(2023, 1, 17));) {
+  if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) {
+    const iso = d.toISOString().slice(0, 10);
+    carryRows.push(`${iso},09:30:00,${iso},15:00:00,10,A,SPY,1000,1,100000`);
+    carryRows.push(`${iso},09:30:00,${iso},15:00:00,0,B,SPY,1000,1,100000`);
+  }
+  d = new Date(d.getTime() + 86_400_000);
+}
+carryRows.push("2023-01-12,09:30:00,2023-01-20,15:00:00,700,A,SPY,1000,1,100000");
+carryRows.push("2023-02-13,09:30:00,2023-03-03,15:00:00,50,A,SPY,1000,1,100000");
+carryRows.push("2023-02-13,09:30:00,2023-03-03,15:00:00,0,B,SPY,1000,1,100000");
+carryRows.push("2023-02-22,09:30:00,2023-02-24,15:00:00,30,A,SPY,1000,1,100000");
+
 const YEAR_2024 = { start: "2024-01-01", end: "2024-12-31" };
 const COV_2024 = { from: "2024-01-01", through: "2024-12-31" };
 
@@ -95,6 +113,13 @@ describe("paired_bootstrap_comparison strategy presence and coverage (stdio)", (
       arguments: { csvPath: straddlePath, blockName: "Straddle" },
     });
     expect(importedStraddle.isError).not.toBe(true);
+    const carryPath = path.join(root, "carry.csv");
+    await fs.writeFile(carryPath, [csv.split("\n")[0], ...carryRows].join("\n"));
+    const importedCarry = await client.callTool({
+      name: "import_csv",
+      arguments: { csvPath: carryPath, blockName: "Carry" },
+    });
+    expect(importedCarry.isError).not.toBe(true);
   }, 60_000);
 
   afterAll(async () => {
@@ -217,5 +242,41 @@ describe("paired_bootstrap_comparison strategy presence and coverage (stdio)", (
     expect(text(result)).toMatch(
       /Strategy "A" has a trade opened 2023-02-23, closed 2023-03-06, after dateRange end 2023-02-27.*widen dateRange or omit it/,
     );
+  });
+
+  describe("a trade cut away by dateRange but held inside the compared window", () => {
+    const carry = (args: Record<string, unknown>) =>
+      call({ blockId: "carry", strategyA: "A", strategyB: "B", unobservedDays: "zero", ...args });
+    const window = { from: "2023-01-02", through: "2023-03-31" };
+    const CARRIED =
+      /Strategy "A" has a trade opened 2023-01-12, closed 2023-01-20, before dateRange start 2023-01-17, still held on 2023-01-17.*widen dateRange or omit it/;
+
+    it("refuses with coverage instead of counting its held days as flat", async () => {
+      const result = await carry({
+        coverage: { A: window, B: window },
+        dateRange: { start: "2023-01-17", end: "2023-03-31" },
+      });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toMatch(CARRIED);
+    });
+
+    it("refuses in the held-window fallback when it overlaps the common window", async () => {
+      const result = await carry({ dateRange: { start: "2023-01-17", end: "2023-03-31" } });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toMatch(CARRIED);
+    });
+
+    it("refuses in the fallback a trade opened after dateRange end inside the common window", async () => {
+      const result = await carry({ dateRange: { start: "2023-01-02", end: "2023-02-21" } });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toMatch(
+        /Strategy "A" has a trade opened 2023-02-22, closed 2023-02-24, after dateRange end 2023-02-21, still held on 2023-02-22.*widen dateRange or omit it/,
+      );
+    });
+
+    it("compares when no cut-away trade is held inside the window", async () => {
+      const result = await carry({ dateRange: { start: "2023-01-23", end: "2023-03-31" } });
+      expect(result.isError).not.toBe(true);
+    });
   });
 });
