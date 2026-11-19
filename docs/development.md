@@ -1091,6 +1091,33 @@ npm test
 
 For MCP server development details, see [packages/mcp-server/README.md](../packages/mcp-server/README.md).
 
+### Worf status and Dependabot auto-merge
+
+The `master` branch requires `Worf` alongside CI. The Dependabot workflow arms
+auto-merge only when a minor or patch PR targeting `master` opens. A push or
+reopen does not re-arm it. If auto-merge was turned off, a maintainer must
+explicitly release the hold; a fresh Worf PASS does not release the hold itself.
+
+The maintainer relaying Worf's verdict posts the typed verdict on the PR first.
+Verify that it names this repository, the PR number, and the **full current PR
+head SHA**. Do not carry an earlier verdict to a new SHA, even for an unchanged
+diff. Then publish its projection from the base repository:
+
+```bash
+gh api -X POST "repos/tradeblocks-org/tradeblocks/statuses/$REVIEWED_HEAD" \
+  -f context=Worf -f state="$STATE" -f target_url="$VERDICT_COMMENT_URL"
+```
+
+Use `success` for PASS or PASS + ADVISORIES, and `failure` for BLOCK or
+INCOMPLETE (including when revoking a prior pass on that SHA). Use the SHA
+from the verdict itself, never one looked up after the review. Check that
+GitHub shows the status on the expected head. A new head needs a new verdict.
+
+This status enforces sequencing, not reviewer identity: GitHub accepts the
+status from repository status writers and scopes it to the commit, not the PR.
+It does not replace independent review, the posted verdict, or the maintainer's
+pre-merge checks. Do not use admin bypass to skip Worf or CI.
+
 ## Implementation Conventions
 
 ### Testing Requirements

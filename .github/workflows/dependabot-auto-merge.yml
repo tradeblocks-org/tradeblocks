@@ -1,6 +1,10 @@
 name: Auto-merge Dependabot PRs
 
-on: pull_request
+on:
+  pull_request:
+    branches: [master]
+    # Never re-arm a human hold on a push or reopen. Branch protection gates landing.
+    types: [opened]
 
 permissions:
   contents: write
@@ -9,7 +13,7 @@ permissions:
 jobs:
   dependabot:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.run_attempt == 1
     steps:
       - name: Dependabot metadata
         id: metadata
@@ -18,8 +22,11 @@ jobs:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Enable auto-merge for patch and minor updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
-        run: gh pr merge --auto --squash "$PR_URL"
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --squash --match-head-commit "$PR_HEAD" "$PR_URL"
         env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
