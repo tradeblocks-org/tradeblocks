@@ -153,16 +153,16 @@ const MARKET_DATES = [
   { date: "2025-01-02", volRegime: 2, vixClose: 14, rsi14: 55, dayOfWeek: 4 }, // Thu
   // Trade dates
   { date: "2025-01-03", volRegime: 2, vixClose: 15, rsi14: 58, dayOfWeek: 5 }, // Fri
-  { date: "2025-01-06", volRegime: 3, vixClose: 18, rsi14: 45, dayOfWeek: 2 }, // Mon
-  { date: "2025-01-07", volRegime: 3, vixClose: 19, rsi14: 42, dayOfWeek: 3 }, // Tue
-  { date: "2025-01-08", volRegime: 1, vixClose: 12, rsi14: 62, dayOfWeek: 4 }, // Wed
-  { date: "2025-01-09", volRegime: 1, vixClose: 11, rsi14: 65, dayOfWeek: 5 }, // Thu
-  { date: "2025-01-10", volRegime: 4, vixClose: 22, rsi14: 35, dayOfWeek: 6 }, // Fri
-  { date: "2025-01-13", volRegime: 5, vixClose: 27, rsi14: 30, dayOfWeek: 2 }, // Mon
-  { date: "2025-01-14", volRegime: 5, vixClose: 28, rsi14: 25, dayOfWeek: 3 }, // Tue
-  { date: "2025-01-15", volRegime: 2, vixClose: 16, rsi14: 50, dayOfWeek: 4 }, // Wed
-  { date: "2025-01-16", volRegime: 2, vixClose: 15, rsi14: 52, dayOfWeek: 5 }, // Thu
-  { date: "2025-01-17", volRegime: 3, vixClose: 17, rsi14: 48, dayOfWeek: 6 }, // Fri
+  { date: "2025-01-06", volRegime: 3, vixClose: 18, rsi14: 45, dayOfWeek: 1 }, // Mon
+  { date: "2025-01-07", volRegime: 3, vixClose: 19, rsi14: 42, dayOfWeek: 2 }, // Tue
+  { date: "2025-01-08", volRegime: 1, vixClose: 12, rsi14: 62, dayOfWeek: 3 }, // Wed
+  { date: "2025-01-09", volRegime: 1, vixClose: 11, rsi14: 65, dayOfWeek: 4 }, // Thu
+  { date: "2025-01-10", volRegime: 4, vixClose: 22, rsi14: 35, dayOfWeek: 5 }, // Fri
+  { date: "2025-01-13", volRegime: 5, vixClose: 27, rsi14: 30, dayOfWeek: 1 }, // Mon
+  { date: "2025-01-14", volRegime: 5, vixClose: 28, rsi14: 25, dayOfWeek: 2 }, // Tue
+  { date: "2025-01-15", volRegime: 2, vixClose: 16, rsi14: 50, dayOfWeek: 3 }, // Wed
+  { date: "2025-01-16", volRegime: 2, vixClose: 15, rsi14: 52, dayOfWeek: 4 }, // Thu
+  { date: "2025-01-17", volRegime: 3, vixClose: 17, rsi14: 48, dayOfWeek: 5 }, // Fri
 ];
 
 // Trades using dates from index 1+ (index 0 is priming)

@@ -125,12 +125,22 @@ const MONTH_MAP: Record<string, string> = {
   Dec: "12",
 };
 
-/** Convert OO expiry hint "Mar 13" + year "2026" → "2026-03-13" */
-function resolveOOExpiryHint(hint: string, year: string): string {
+/**
+ * Convert OO expiry hint "Mar 13" + year "2026" → "2026-03-13".
+ *
+ * The hint carries no year. A leg cannot expire before the trade opens, so a
+ * date that resolves before `tradeOpenDate` belongs to the next year (a
+ * December entry with a January leg). A same-day expiry stays in `year`.
+ */
+function resolveOOExpiryHint(hint: string, year: string, tradeOpenDate: string): string {
   const [mon, day] = hint.split(" ");
   const mm = MONTH_MAP[mon] ?? "01";
   const dd = day.padStart(2, "0");
-  return `${year}-${mm}-${dd}`;
+  const resolved = `${year}-${mm}-${dd}`;
+  if (resolved < tradeOpenDate.slice(0, 10)) {
+    return `${Number(year) + 1}-${mm}-${dd}`;
+  }
+  return resolved;
 }
 
 /**
@@ -147,7 +157,7 @@ export function resolveOODateRange(
 ): { from: string; to: string } | null {
   const hints = parsedLegs
     .filter((l) => l.expiryHint)
-    .map((l) => resolveOOExpiryHint(l.expiryHint!, tradeYear));
+    .map((l) => resolveOOExpiryHint(l.expiryHint!, tradeYear, tradeOpenDate));
 
   if (hints.length === 0) return null;
 
@@ -254,12 +264,14 @@ export async function handleReplayTrade(
     // OO format provides per-leg entry price, contract count, and expiry hint
     const hasOOData = parsedLegs.some((l) => l.entryPrice !== undefined);
 
-    // Resolve per-leg expiry: OO expiryHint ("Mar 13") + year from trade date
-    const tradeYear = (open_date || dateOpened).split("-")[0];
+    // Resolve per-leg expiry: OO expiryHint ("Mar 13") + year from trade date,
+    // rolled to the next year when it would precede the open date
+    const tradeOpenDate = open_date || dateOpened;
+    const tradeYear = tradeOpenDate.split("-")[0];
 
     // Override fetch date range from OO expiryHints when available
     if (hasOOData) {
-      const ooRange = resolveOODateRange(parsedLegs, tradeYear, open_date || dateOpened);
+      const ooRange = resolveOODateRange(parsedLegs, tradeYear, tradeOpenDate);
       if (ooRange) {
         open_date = ooRange.from;
         close_date = ooRange.to;
@@ -269,7 +281,7 @@ export async function handleReplayTrade(
     replayLegs = parsedLegs.map((leg) => {
       let legExpiry = close_date!;
       if (hasOOData && leg.expiryHint) {
-        legExpiry = resolveOOExpiryHint(leg.expiryHint, tradeYear);
+        legExpiry = resolveOOExpiryHint(leg.expiryHint, tradeYear, tradeOpenDate);
       }
       return {
         occTicker: buildOccTicker(root, legExpiry, leg.type, leg.strike),

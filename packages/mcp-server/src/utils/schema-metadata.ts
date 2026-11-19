@@ -383,7 +383,7 @@ export const SCHEMA_DESCRIPTIONS: SchemaMetadata = {
           },
           // Calendar fields — static
           Day_of_Week: {
-            description: "Day of week (2=Monday through 6=Friday)",
+            description: "Day of week (0=Sunday, 1=Monday through 5=Friday, 6=Saturday)",
             hypothesis: true,
             timing: "static",
           },

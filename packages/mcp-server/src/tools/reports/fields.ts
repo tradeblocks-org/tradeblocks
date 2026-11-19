@@ -91,7 +91,12 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
           if (values.length === 0) {
             return createToolOutput(
               `Field "${field}" has no valid numeric values in the filtered trades.`,
-              { blockId, field, ...datasetAgeOutput(resolved.datasetAge, [field]) },
+              {
+                blockId,
+                field,
+                ...(resolved.warnings.length ? { warnings: resolved.warnings } : {}),
+                ...datasetAgeOutput(resolved.datasetAge, [field]),
+              },
             );
           }
 
@@ -113,6 +118,7 @@ export function registerFieldTools(server: McpServer, baseDir: string): void {
             statistics,
             percentiles,
             ...datasetAgeOutput(resolved.datasetAge, [field]),
+            ...(resolved.warnings.length ? { warnings: resolved.warnings } : {}),
             histogram,
           };
 

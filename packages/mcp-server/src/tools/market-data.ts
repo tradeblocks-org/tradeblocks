@@ -33,6 +33,7 @@ import {
   marketTickerDateKey,
   normalizeTicker,
   resolveTradeTicker,
+  tickerFallbackWarnings,
 } from "../utils/ticker.ts";
 import { checkDataAvailability } from "../utils/data-availability.ts";
 import { getProfile } from "../db/profile-schemas.ts";
@@ -102,7 +103,7 @@ export interface DailyMarketData {
   Consecutive_Days: number;
   Prev_Return_Pct: number;
   // Calendar (market.enriched, static)
-  Day_of_Week: number; // 2=Mon...6=Fri
+  Day_of_Week: number; // JS getDay(): 0=Sun, 1=Mon...5=Fri, 6=Sat
   Month: number;
   Is_Opex: number; // 0 or 1
   // VIX (market.spot_daily ticker='VIX' via JOIN for OHLCV; market.enriched ticker='VIX' for ivr/ivp)
@@ -250,11 +251,13 @@ function getTermStructureLabel(state: number): string {
  */
 function getDayLabel(dow: number): string {
   const labels: Record<number, string> = {
-    2: "Monday",
-    3: "Tuesday",
-    4: "Wednesday",
-    5: "Thursday",
-    6: "Friday",
+    0: "Sunday",
+    1: "Monday",
+    2: "Tuesday",
+    3: "Wednesday",
+    4: "Thursday",
+    5: "Friday",
+    6: "Saturday",
   };
   return labels[dow] || `Day ${dow}`;
 }
@@ -308,7 +311,7 @@ export function registerMarketDataTools(
         segmentBy: z
           .enum(["volRegime", "termStructure", "dayOfWeek", "gapDirection"])
           .optional()
-          .describe("Market dimension to segment by"),
+          .describe("Market dimension to segment by; dayOfWeek uses 0=Sunday through 6=Saturday"),
         strategy: z.string().optional().describe("Filter to specific strategy"),
         ticker: z.string().optional().describe("Underlying ticker symbol (default: SPX)"),
       }),
@@ -350,6 +353,7 @@ export function registerMarketDataTools(
           // Check data availability and collect warnings
           const resolvedTicker = normalizeTicker(ticker || "") || DEFAULT_MARKET_TICKER;
           const availability = await checkDataAvailability(stores, resolvedTicker);
+          availability.warnings.push(...tickerFallbackWarnings(trades));
 
           const { sql: lagSql, params: lagParams } = buildLookaheadFreeQuery(tradeKeys);
           const dailyResult = await conn.runAndReadAll(lagSql, lagParams);
@@ -666,6 +670,7 @@ export function registerMarketDataTools(
           // Check data availability and collect warnings
           const resolvedTickerSF = normalizeTicker(ticker || "") || DEFAULT_MARKET_TICKER;
           const availabilitySF = await checkDataAvailability(stores, resolvedTickerSF);
+          availabilitySF.warnings.push(...tickerFallbackWarnings(trades));
 
           const { sql, params } = buildLookaheadFreeQuery(tradeKeys);
           const dailyResult = await conn.runAndReadAll(sql, params);
@@ -690,12 +695,10 @@ export function registerMarketDataTools(
 
           if (matchedTrades.length < 10) {
             return {
-              content: [
-                {
-                  type: "text",
-                  text: "Not enough trades matched to market data for analysis (need at least 10)",
-                },
-              ],
+              ...createToolOutput(
+                "Not enough trades matched to market data for analysis (need at least 10)",
+                { warnings: availabilitySF.warnings },
+              ),
               isError: true,
             };
           }
@@ -764,16 +767,16 @@ export function registerMarketDataTools(
               name: "Skip Fridays",
               field: "Day_of_Week",
               operator: "==",
-              value: 6,
-              test: (m) => getNum(m, "Day_of_Week") === 6,
+              value: 5,
+              test: (m) => getNum(m, "Day_of_Week") === 5,
               lagged: false,
             },
             {
               name: "Skip Mondays",
               field: "Day_of_Week",
               operator: "==",
-              value: 2,
-              test: (m) => getNum(m, "Day_of_Week") === 2,
+              value: 1,
+              test: (m) => getNum(m, "Day_of_Week") === 1,
               lagged: false,
             },
             // OPEX
@@ -1516,7 +1519,7 @@ export function registerMarketDataTools(
               "WARNING: outcomeFields contain same-day close-derived values that were NOT available at trade entry time. Do not use these for entry signal analysis.";
           }
 
-          const warnings = [...availabilityET.warnings];
+          const warnings = [...availabilityET.warnings, ...tickerFallbackWarnings(paginated)];
           for (const { dataset } of datasets) {
             for (const column of dataset.columns) {
               const field = `${dataset.name}.${column}`;

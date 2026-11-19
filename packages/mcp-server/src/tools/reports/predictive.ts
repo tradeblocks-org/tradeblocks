@@ -154,6 +154,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             fieldsWithSufficientData: fieldsWithData,
             rankedFields,
             fieldsSkipped: skippedFields,
+            ...(resolved.warnings.length ? { warnings: resolved.warnings } : {}),
             ...datasetAgeOutput(resolved.datasetAge, [
               targetField,
               ...rankedFields.map(({ field }) => field),
@@ -584,6 +585,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             startDate: startDate ?? null,
             endDate: endDate ?? null,
           };
+          const warnings = [...resolved.warnings, ...(powerWarning ? [powerWarning] : [])];
           if (fields)
             return createToolOutput(
               `Filter curves for ${names.length} fields` +
@@ -592,7 +594,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
                 blockId,
                 mode,
                 filters,
-                ...(powerWarning ? { warnings: [powerWarning] } : {}),
+                ...(warnings.length ? { warnings } : {}),
                 fields: results,
               },
             );
@@ -611,7 +613,7 @@ export function registerPredictiveTools(server: McpServer, baseDir: string): voi
             {
               blockId,
               field: resultField,
-              ...(powerWarning ? { warnings: [powerWarning] } : {}),
+              ...(warnings.length ? { warnings } : {}),
               ...datasetAgeOutput(resolved.datasetAge, [resultField]),
               mode,
               filters,

@@ -29,6 +29,7 @@ import {
   DEFAULT_MARKET_TICKER,
   marketTickerDateKey,
   resolveTradeTicker,
+  tickerFallbackWarnings,
 } from "../../utils/ticker.ts";
 import { filterByStrategy } from "../shared/filters.ts";
 import type { StrategyProfile } from "../../models/strategy-profile.ts";
@@ -242,6 +243,13 @@ async function buildRegimeCoverageSection(
     const result = await conn.runAndReadAll(sql, params);
     const marketRecords = resultToRecords(result);
     marketMap = recordsByTickerDate(marketRecords);
+    flags.push(
+      ...tickerFallbackWarnings(blockTrades).map((message) => ({
+        type: "warning" as const,
+        dimension: "regimeCoverage",
+        message,
+      })),
+    );
   } catch {
     flags.push({
       type: "info",
