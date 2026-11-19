@@ -33,8 +33,32 @@ such as `calculatedAt`, sync times, and market-feed timestamps, remain ISO times
 | Tool                         | Description                                                     |
 | ---------------------------- | --------------------------------------------------------------- |
 | `get_performance_charts`     | Chart data: equity curve, drawdown, monthly returns (16+ types) |
-| `get_period_returns`         | Returns aggregated by period (daily, weekly, monthly)           |
+| `get_period_returns`         | Returns aggregated by period (daily, weekly, monthly, yearly)   |
 | `compare_backtest_to_actual` | Backtest vs live trade comparison with slippage analysis        |
+
+### Capital basis and top-day dependence (opt-in)
+
+`get_statistics` and `get_period_returns` accept an optional
+`capitalBasis`: `{ mode: "fixed", amount }` divides every return by the same
+amount; `{ mode: "compounding", amount? }` divides by the amount plus all earlier
+P&L (default amount: the block's resolved starting capital, reported as
+`amountSource`). The basis changes only percentages; dollar figures and trade
+sizes stay as logged (combine with `normalizeTo1Lot` on `get_period_returns` for
+fixed size).
+
+- `get_statistics` + `capitalBasis` adds `capitalBasis { mode, amount,
+amountSource, netPl, totalReturnPct, maxDrawdownDollars, maxDrawdownPct }`,
+  computed on amount + cumulative daily net P&L by close date.
+- `get_statistics` + `topDays` (e.g. `[1, 5, 10]`) adds `plWithoutBestDays[{ n,
+pl, removedPl, shareOfTotal, days }]`, `positiveYearShare`, `yearlyNetPl` and
+  `topDaysMethodology`. Days are realization (close) dates as in
+  `get_period_returns`; best days are the highest positive daily net P&L, ties to
+  the earlier date; `shareOfTotal` is null when total net P&L is not positive.
+- `get_period_returns` accepts `period: "yearly"`; with `capitalBasis` each
+  period and the totals carry `returnPct`, and the response echoes
+  `capitalBasis`.
+
+With these inputs omitted, both tools respond exactly as before.
 
 ## Trade Replay
 
