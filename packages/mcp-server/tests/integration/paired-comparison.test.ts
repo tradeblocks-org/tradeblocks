@@ -81,6 +81,8 @@ describe("paired_bootstrap_comparison registration", () => {
     expect(parsed.ciLevel).toBe(0.95);
     expect(parsed.resamples).toBe(2000);
     expect(parsed.seed).toBe(42);
+    expect(parsed.unobservedDays).toBe("exclude");
+    expect(parsed.grid).toBe("trades");
   });
 });
 

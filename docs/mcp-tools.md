@@ -614,6 +614,25 @@ dataset fields. Time-of-day uses valid trade times independently of market cover
 | `what_if_scaling`             | Trade-derived sizing counterfactuals, not the shared-funds result of a native Option Omega Portfolio backtest. Confirm a surviving fixed allocation with that native backtest.                                                      |
 | `paired_bootstrap_comparison` | Paired bootstrap intervals for two strategy runs                                                                                                                                                                                    |
 
+### Paired comparison: days without a position
+
+`paired_bootstrap_comparison` compares two arms day by day. By default
+(`unobservedDays: "exclude"`) a day counts only when both arms hold a position,
+and the grid is the union of the compared strategies' trade open and close
+dates (`grid: "trades"`). For a filtered strategy against its unfiltered version this
+drops exactly the days the filter skips, so the comparison cannot show what the
+filter gained or lost.
+
+- `unobservedDays: "zero"` counts a grid day without a position as a flat day
+  with 0 P&L, from the first to the last day either arm holds a position.
+- `grid: "xnys"` uses every NYSE session from the compared strategies' first to
+  their last trade date (calendar 2013-2030), plus any trade date that is not a session, so
+  holding periods and flat days are counted in sessions. Trades outside
+  2013-2030 are refused for this grid.
+
+With both options omitted the response is unchanged. Setting either adds
+`unobservedDays`, `grid` and `dayGridMethodology` to the response.
+
 ### Monte Carlo input series and marked-account risk
 
 `run_monte_carlo` defaults remain trade-based. Select `resampleMethod` explicitly
