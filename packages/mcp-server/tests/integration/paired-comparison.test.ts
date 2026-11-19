@@ -182,7 +182,7 @@ describe("zero-trade strategy filter", () => {
         seed: 42,
         strategyA: "Ghost",
       }),
-    ).toThrow(/No trades found for strategy "Ghost"/);
+    ).toThrow('Strategy "Ghost" has no trades in the selected date range.');
   });
 
   it("throws a clear error when arm B matched no trades", () => {
@@ -198,7 +198,7 @@ describe("zero-trade strategy filter", () => {
         strategyA: "A",
         strategyB: "Ghost",
       }),
-    ).toThrow(/No trades found for strategy "Ghost"/);
+    ).toThrow('Strategy "Ghost" has no trades in the selected date range.');
   });
 });
 

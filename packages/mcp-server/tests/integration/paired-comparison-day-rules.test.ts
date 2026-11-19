@@ -67,7 +67,11 @@ describe("unobservedDays and grid", () => {
   const naive = noise.map((v, i) => makeTrade(i, i, i % 5 === 0 ? -100 : 20 + 10 * v, "naive"));
   const filtered = naive.filter((_, i) => i % 5 !== 0).map((t) => ({ ...t, strategy: "filtered" }));
 
-  function compare(unobservedDays?: "exclude" | "zero", grid?: "trades" | "xnys") {
+  function compare(
+    unobservedDays?: "exclude" | "zero",
+    grid?: "trades" | "xnys",
+    coverage?: { A: { from: string; through: string }; B?: { from: string; through: string } },
+  ) {
     return runPairedBootstrapComparison({
       armATrades: filtered,
       armBTrades: naive,
@@ -79,6 +83,7 @@ describe("unobservedDays and grid", () => {
       strategyB: "naive",
       ...(unobservedDays === undefined ? {} : { unobservedDays }),
       ...(grid === undefined ? {} : { grid }),
+      ...(coverage === undefined ? {} : { coverage }),
     });
   }
 
@@ -90,8 +95,9 @@ describe("unobservedDays and grid", () => {
     expect((data.observedDays as { armA: number }).armA).toBe(96);
   });
 
-  it("zero counts skipped days as flat and shows the gain from skipping losers", () => {
-    const { result, data } = compare("zero");
+  it("zero with coverage counts skipped days as flat and shows the gain from skipping losers", () => {
+    const run = { from: "2022-01-01", through: "2022-04-30" };
+    const { result, data } = compare("zero", undefined, { A: run, B: run });
     // 24 skipped days x (0 - (-100)) over 120 days.
     expect(result.point).toBeCloseTo(20, 10);
     expect(result.ci.low!).toBeGreaterThan(0);
@@ -99,7 +105,25 @@ describe("unobservedDays and grid", () => {
     expect((data.observedDays as { armA: number; armB: number }).armA).toBe(120);
     expect(data.unobservedDays).toBe("zero");
     expect(data.grid).toBe("trades");
-    expect(data.dayGridMethodology).toContain("0 P&L from 2022-01-01 to 2022-04-30");
+    expect(data.coverageSource).toBe("caller");
+    expect(data.dayGridMethodology).toContain("filtered 2022-01-01 to 2022-04-30");
+  });
+
+  it("zero without coverage trims to the common held window", () => {
+    // The filtered arm's first trade is day 1 (day 0 was a skipped loser), so
+    // day 0 is outside the common held window and is not compared.
+    const { result, data } = compare("zero");
+    // 23 skipped days x (0 - (-100)) over the 119 days from 2022-01-02.
+    expect(result.point).toBeCloseTo(2300 / 119, 10);
+    expect((data.observedDays as { armA: number; armB: number }).armA).toBe(119);
+    expect(data.coverageSource).toBe("heldWindow");
+    expect(data.flatWindowTrimmed).toEqual({
+      trimmed: true,
+      from: "2022-01-02",
+      through: "2022-04-30",
+      droppedDays: 1,
+    });
+    expect(data.dayGridMethodology).toContain("common held window from 2022-01-02 to 2022-04-30");
   });
 
   it("leaves the default response unchanged", () => {
