@@ -698,6 +698,45 @@ describe("replay_trade integration", () => {
       expect(fromTradelog).toEqual(explicit);
     });
 
+    test("a December tradelog entry with January legs replays the next year's contracts", async () => {
+      // enterprise#5340: the OO leg hint "Jan 24" carries no year; the entry year
+      // would date it 2024-01-24, before the 2024-12-30 entry.
+      await conn.run(`
+        INSERT INTO trades.trade_data
+          (block_id, date_opened, date_closed, legs, premium, num_contracts, pl, ticker)
+        VALUES
+          ('spx-block', '2024-12-30', '2025-01-17',
+           '1 Jan 24 5900 P STO 5.1 | 1 Jan 24 5800 P BTO 3.05', 205.0, 1, 50.0, 'SPX')
+      `);
+      await seedSpread("SPXW", "250124");
+
+      const fromTradelog = await handleReplayTrade(
+        { block_id: "spx-block", trade_index: 0, multiplier: 100, format: "full" },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+      const explicit = await handleReplayTrade(
+        {
+          legs: spreadLegs("SPXW", "2025-01-24"),
+          open_date: "2024-12-30",
+          close_date: "2025-01-24",
+          multiplier: 100,
+          format: "full",
+        },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+      expect(fromTradelog.legs.map((leg) => leg.occTicker)).toEqual([
+        "SPXW250124P05900000",
+        "SPXW250124P05800000",
+      ]);
+      expect(fromTradelog.pnlPath.length).toBe(3);
+      expect(fromTradelog).toEqual(explicit);
+    });
+
     test("an SPX-root leg on the AM-settled monthly expiry is refused, not substituted", async () => {
       // 2025-01-17 is the third Friday: SPX250117 is the AM-settled monthly,
       // a different contract from the PM-settled SPXW250117.
