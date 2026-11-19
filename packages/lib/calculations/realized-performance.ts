@@ -566,7 +566,7 @@ export {
 /** Aggregate reported, gross and net P/L by the trade's close date (opening date if unclosed). */
 export function buildRealizedPeriodReturnsByCloseDate(
   trades: Trade[],
-  period: "daily" | "weekly" | "monthly",
+  period: "daily" | "weekly" | "monthly" | "yearly",
 ): {
   periods: Array<{
     period: string;
@@ -591,7 +591,9 @@ export function buildRealizedPeriodReturnsByCloseDate(
   trades.forEach((trade) => {
     const date = getRealizationDate(trade);
     let periodKey: string;
-    if (period === "monthly") {
+    if (period === "yearly") {
+      periodKey = String(date.getFullYear());
+    } else if (period === "monthly") {
       const y = date.getFullYear();
       const m = String(date.getMonth() + 1).padStart(2, "0");
       periodKey = `${y}-${m}`;
