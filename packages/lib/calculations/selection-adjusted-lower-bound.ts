@@ -67,7 +67,7 @@ export type SelectionAdjustedRefusalReason =
 export interface SelectionAdjustedLowerBoundDiagnostics {
   /** Number of days observed by the incumbent and every eligible member. */
   overlapDays: number;
-  /** Number of candidate blocks (one circular block per overlap day). */
+  /** Number of valid moving blocks available for sampling. */
   candidateBlocks: number;
   /**
    * Number of eligible members included in every bootstrap draw. This is the
@@ -286,18 +286,13 @@ function buildFamilyOverlap(
   };
 }
 
-// Circular blocks within each run, identical to paired-block-bootstrap.ts:
-// every overlap day starts one block and is covered with equal weight (#622).
-function enumerateBlocks(runs: ObservedRun[], blockDays: number): number[][] {
-  const blocks: number[][] = [];
+function enumerateBlockStarts(runs: ObservedRun[], blockDays: number): number[] {
+  const starts: number[] = [];
   for (const run of runs) {
-    for (let offset = 0; offset < run.length; offset++) {
-      const block: number[] = new Array(blockDays);
-      for (let k = 0; k < blockDays; k++) block[k] = run.start + ((offset + k) % run.length);
-      blocks.push(block);
-    }
+    const lastStart = run.length - blockDays;
+    for (let offset = 0; offset <= lastStart; offset++) starts.push(run.start + offset);
   }
-  return blocks;
+  return starts;
 }
 
 function mulberry32(seed: number): () => number {
@@ -315,12 +310,17 @@ function deriveSeed(seed: number, blockDays: number): number {
   return (seed + Math.imul(blockDays, 0x9e3779b1)) >>> 0;
 }
 
-function drawResampleIndices(rng: () => number, blocks: number[][], sampleSize: number): number[] {
+function drawResampleIndices(
+  rng: () => number,
+  blockStarts: number[],
+  blockDays: number,
+  sampleSize: number,
+): number[] {
   const indices: number[] = [];
   while (indices.length < sampleSize) {
-    const block = blocks[Math.floor(rng() * blocks.length)];
-    for (let offset = 0; offset < block.length && indices.length < sampleSize; offset++) {
-      indices.push(block[offset]);
+    const start = blockStarts[Math.floor(rng() * blockStarts.length)];
+    for (let offset = 0; offset < blockDays && indices.length < sampleSize; offset++) {
+      indices.push(start + offset);
     }
   }
   return indices;
@@ -369,7 +369,7 @@ export function pairedSelectionAdjustedLowerBound(
   const blockDays = Math.max(1, Math.round(input.holdingRule.blockDays));
   const overlap = buildFamilyOverlap(input.incumbent.series, input.eligibleMembers);
   const effectiveN = overlap.days.length / blockDays;
-  const blocks = enumerateBlocks(overlap.runs, blockDays);
+  const blockStarts = enumerateBlockStarts(overlap.runs, blockDays);
   const oneBasedRank = Math.ceil(input.confidenceLevel * (input.resamples + 1));
   const memberPoints: SelectionAdjustedMemberPoint[] = input.eligibleMembers.map(
     (member, index) => ({
@@ -394,7 +394,7 @@ export function pairedSelectionAdjustedLowerBound(
   if (input.effectiveNFloorBlocks !== undefined && effectiveN < input.effectiveNFloorBlocks) {
     status = "notComparable";
     refusalReason = "effective-n-below-floor";
-  } else if (overlap.days.length <= blockDays || selectedPoint === null) {
+  } else if (blockStarts.length < 2 || selectedPoint === null) {
     status = "underpowered";
     refusalReason = "insufficient-common-blocks";
   } else if (oneBasedRank > input.resamples) {
@@ -410,7 +410,7 @@ export function pairedSelectionAdjustedLowerBound(
     const centeredMaxima: number[] = new Array(input.resamples);
 
     for (let resample = 0; resample < input.resamples; resample++) {
-      const indices = drawResampleIndices(rng, blocks, overlap.days.length);
+      const indices = drawResampleIndices(rng, blockStarts, blockDays, overlap.days.length);
       const sampledIncumbent = indices.map((index) => overlap.incumbent[index]);
       let centeredMaximum = Number.NEGATIVE_INFINITY;
 
@@ -461,7 +461,7 @@ export function pairedSelectionAdjustedLowerBound(
     resamples: input.resamples,
     diagnostics: {
       overlapDays: overlap.days.length,
-      candidateBlocks: blocks.length,
+      candidateBlocks: blockStarts.length,
       kConsidered: input.eligibleMembers.length,
       centeredMaxCriticalValue: criticalValue,
       criticalValueOrderStatistic: {

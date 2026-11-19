@@ -164,10 +164,10 @@ describe("pairedSelectionAdjustedLowerBound", () => {
     });
 
     expect(adjusted.diagnostics.criticalValueOrderStatistic.oneBasedRank).toBe(1426);
-    expect(adjusted.diagnostics.centeredMaxCriticalValue).toBe(0.1035784211475402);
+    expect(adjusted.diagnostics.centeredMaxCriticalValue).toBe(0.10637053679674865);
     expect(adjusted.point).toBe(0.07799878807272762);
-    expect(adjusted.lowerBound.value).toBe(-0.02557963307481259);
-    expect(rawSelection.ci.low).toBe(0.032390968789695766);
+    expect(adjusted.lowerBound.value).toBe(-0.02837174872402104);
+    expect(rawSelection.ci.low).toBe(0.032968472654465585);
   });
 
   it("uses one shared index draw for all members", () => {
@@ -225,8 +225,7 @@ describe("pairedSelectionAdjustedLowerBound", () => {
 
     expect(result.status).toBe("underpowered");
     expect(result.lowerBound.value).toBeNull();
-    // Four overlap days do not exceed one four-day block.
-    expect(result.diagnostics.candidateBlocks).toBe(4);
+    expect(result.diagnostics.candidateBlocks).toBe(1);
     expect(result.diagnostics.refusalReason).toBe("insufficient-common-blocks");
   });
 
@@ -280,8 +279,8 @@ describe("pairedSelectionAdjustedLowerBound", () => {
 
     expect(result.diagnostics.overlapDays).toBe(28);
     expect(result.effectiveN).toBeCloseTo(28 / 3, 12);
-    // Runs of 8 and 20 days provide one circular three-day block per day.
-    expect(result.diagnostics.candidateBlocks).toBe(28);
+    // Runs of 8 and 20 days provide 6 + 18 valid three-day moving blocks.
+    expect(result.diagnostics.candidateBlocks).toBe(24);
   });
 
   it("rejects incomplete family bindings and malformed numeric inputs", () => {
