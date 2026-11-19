@@ -148,6 +148,24 @@ hypothesis count, caps at one and takes the running maximum. For example,
 
 The input is not mutated; an empty family returns `[]`. Non-finite values
 (including NaN) and values outside `[0, 1]` throw an indexed `RangeError`.
+
+`pairedBlockBootstrap` takes an optional `blockScheme`. The default, `moving`,
+starts a block only where `blockDays` consecutive shared days fit inside one
+run, so days in shorter runs are never drawn. `circular-within-run` starts one
+block on every shared day and wraps it within its own run: every shared day is
+in exactly `blockDays` candidate blocks, so the resampled mean equals the
+observed mean in expectation. That is the only property it provides; it does
+not centre every percentile interval and is not meant for nonlinear, path or
+selection statistics, and it is rejected for a selection set. Wrapping joins a
+run's last day to its first and repeats the days of runs shorter than the
+block. Both schemes take one seeded draw per block, so the same input and seed
+give the same result; for the same seed the two schemes give different
+intervals. Refusals (`notComparable`, then `underpowered`) are decided from run
+metadata before any candidate block is built. `paired_bootstrap_comparison`
+uses `circular-within-run` for `mean_daily_pnl` and `moving` for
+`median_daily_pnl`, and reports the scheme as `blockScheme`.
+`pairedPathBlockBootstrap` and `pairedSelectionAdjustedLowerBound` use moving
+blocks.
 The caller must declare the complete family and an explicit policy for
 unavailable bootstrap p-values. For example, conservatively substitute `1`
 for unavailable comparisons when counting the family, then continue to display

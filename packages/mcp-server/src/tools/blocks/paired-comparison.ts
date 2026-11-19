@@ -15,6 +15,7 @@ import {
   formatDateKey,
   pairedBlockBootstrap,
   holdingPeriodBlockDays,
+  type BlockScheme,
   type DaySeries,
   type PairedBlockBootstrapResult,
 } from "@tradeblocks/lib";
@@ -191,6 +192,14 @@ const STATISTIC_FNS: Record<PairedComparisonInput["statistic"], (d: number[]) =>
   median_daily_pnl: medianOf,
 };
 
+// Circular within-run blocks give every shared day equal weight, which centres
+// the resampled MEAN on the point estimate in expectation (#622). That property
+// is specific to the mean, so the median keeps the moving-block scheme.
+const STATISTIC_BLOCK_SCHEMES: Record<PairedComparisonInput["statistic"], BlockScheme> = {
+  mean_daily_pnl: "circular-within-run",
+  median_daily_pnl: "moving",
+};
+
 const STATISTIC_LABELS: Record<PairedComparisonInput["statistic"], string> = {
   mean_daily_pnl: "mean daily P&L",
   median_daily_pnl: "median daily P&L",
@@ -283,6 +292,7 @@ export function runPairedBootstrapComparison(
     resamples,
     seed,
     effectiveNFloorBlocks,
+    blockScheme: STATISTIC_BLOCK_SCHEMES[statistic],
   });
 
   const statLabel = STATISTIC_LABELS[statistic];
@@ -299,7 +309,11 @@ export function runPairedBootstrapComparison(
   } else if (result.status === "underpowered") {
     refusalMessage =
       `Underpowered: the shared overlap is too short to resample at a block length of ` +
-      `${blockDays} trading day(s) (the shared days do not exceed one block). A confidence interval is withheld.`;
+      `${blockDays} trading day(s) ` +
+      (result.blockScheme === "moving"
+        ? `(fewer than two drawable blocks).`
+        : `(the shared days do not exceed one block).`) +
+      ` A confidence interval is withheld.`;
     summary = `Paired comparison (${comparisonLabel}): ${refusalMessage}`;
   } else {
     const point = result.point ?? 0;
@@ -331,6 +345,7 @@ export function runPairedBootstrapComparison(
     effectiveN: result.effectiveN,
     blockDays: result.blockDays,
     blockDaysDerivation: blockDaysNote,
+    blockScheme: result.blockScheme,
     overlapWindow: result.overlapWindow,
     observedDays: {
       armA: countObserved(armA),
