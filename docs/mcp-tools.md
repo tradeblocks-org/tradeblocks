@@ -616,6 +616,10 @@ optional `rule.entryWindow` (`from`/`to`, `HH:mm`, inclusive, in the trade log's
 time zone), plus an optional `dateRange` of rule days (default: first through
 last entry date).
 
+The trade log records what was traded, not which expiries were listed. The tool
+therefore checks the observed DTE only and never whether an entry selected the
+first eligible listed expiry.
+
 - Rule days are NYSE sessions (XNYS calendar v2, 2013-2030) on the rule's
   weekdays. A holiday is never a rule day, so a skipped holiday Monday is not a
   missing entry. `missingRuleDays` lists rule days without an entry;
@@ -623,13 +627,28 @@ last entry date).
 - DTE is counted in calendar days from the open date to the front (earliest)
   leg expiry in the Option Omega legs column. An expiry without a year takes the
   open date's year, or the next year when it would fall before the open date.
-  Entries whose legs are not in Option Omega format are `unresolved`.
-- `selection: "exact"` expects every entry at exactly `dte`.
-  `selection: "firstAtLeast"` expects the first listed expiry at least `dte`
-  days out, so entries above the target reflect the expiries listed that day and
-  only entries below it count as `ruleViolations`. `dte.perYear` gives, per
-  year, entries at, above and below the target, `mismatchShare` and a DTE
-  histogram; `maxYearMismatchShare` is the worst year.
+  Entries whose legs are not in Option Omega format, or name a month/day that is
+  not a real calendar date in that year (`Feb 30`, `Apr 31`, `Feb 29` outside a
+  leap year), are `unresolved` and never get a DTE;
+  `dte.unresolved.impossibleExpiry` lists the impossible dates.
+- `selection: "exact"` expects every entry at exactly `dte`; any other observed
+  DTE counts as a `ruleViolation`.
+- `selection: "firstAtLeast"` states a rule that takes the first listed expiry
+  at least `dte` days out. What the tool checks is that the observed DTE meets
+  the minimum: only entries below `dte` count as `ruleViolations`. An entry
+  above `dte` meets the minimum, but the tool cannot tell whether it was the
+  first eligible listed expiry or a later one, so 100 % above-target entries
+  with zero violations is not evidence of first-listed compliance.
+  `dte.firstListedCompliance` is always
+  `{ "status": "not_checked", "reason": ... }`.
+- `dte.perYear` gives, per year, entries at, above and below the target,
+  `mismatchShare` (share of resolved entries whose observed DTE differs from
+  `dte`) and a DTE histogram; `maxYearMismatchShare` is the worst year.
+- Entry window: `checked` entries have a valid time (`H:mm` or `HH:mm`, optional
+  `:ss`) and are counted inside or in `outside`. A missing `Time Opened` is
+  `unknownTime` (the loader's `00:00:00` placeholder is not an entry time); a
+  malformed time (`09:35junk`, `25:00`) is `invalidTime`. Neither is counted
+  inside or outside the window.
 
 ### Monte Carlo input series and marked-account risk
 

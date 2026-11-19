@@ -33,7 +33,9 @@ export const ruleCalendarInputSchema = z.object({
         .enum(["exact", "firstAtLeast"])
         .describe(
           "'exact': every entry must expire exactly dte calendar days out. 'firstAtLeast': " +
-            "the first listed expiry at least dte calendar days out.",
+            "the first listed expiry at least dte calendar days out; only the minimum is " +
+            "checked, not whether the entry took the first eligible listed expiry (the trade " +
+            "log has no listing data).",
         ),
       entryWindow: z
         .object({
@@ -41,7 +43,10 @@ export const ruleCalendarInputSchema = z.object({
           to: z.string().regex(HHMM).describe("Latest entry time, HH:mm"),
         })
         .optional()
-        .describe("Inclusive entry window in the trade log's time zone."),
+        .describe(
+          "Inclusive entry window in the trade log's time zone. Entries without a time or " +
+            "with a malformed time are reported separately, not inside or outside.",
+        ),
     })
     .describe("The stated entry rule to check the entries against."),
   dateRange: z
@@ -60,7 +65,12 @@ const METHODOLOGY =
   "holiday is never a rule day. DTE is calendar days from the open date to the front " +
   "(earliest) leg expiry in the Option Omega legs column; an expiry without a year takes the " +
   "open date's year, or the next year when it would fall before the open date. Entries whose " +
-  "legs are not in Option Omega format are counted as unresolved.";
+  "legs are not in Option Omega format, or name a month/day that is not a real calendar date " +
+  "(e.g. Feb 30), are counted as unresolved. With selection 'firstAtLeast' only the observed " +
+  "DTE is checked against the minimum; whether an entry took the first eligible listed expiry " +
+  "is not checked, because the trade log has no listing data (dte.firstListedCompliance). " +
+  "For the entry window, a missing Time Opened is unknown and a malformed one is invalid; " +
+  "neither is counted inside or outside the window.";
 
 function pct(value: number | null): string {
   return value === null ? "n/a" : `${(value * 100).toFixed(1)}%`;
@@ -73,19 +83,27 @@ function summarize(strategy: string, report: RuleCalendarReport): string {
       `${report.missingRuleDays.count} missing (${pct(report.missingRuleDays.share)})`,
     `DTE ${report.dte.selection} ${report.dte.target}: ${pct(report.dte.mismatchShare)} of ` +
       `${report.dte.resolved} entries differ, worst year ${pct(report.dte.maxYearMismatchShare)}, ` +
-      `${report.dte.ruleViolations} break the rule`,
+      (report.dte.selection === "exact"
+        ? `${report.dte.ruleViolations} break the rule`
+        : `${report.dte.ruleViolations} below the minimum; first-listed expiry selection not ` +
+          `checked (no listing data)`),
   ];
   if (report.offRuleEntryDays.count > 0) {
     parts.push(`${report.offRuleEntryDays.count} entry day(s) are not rule days`);
   }
   if (report.dte.unresolved.count > 0) {
-    parts.push(`${report.dte.unresolved.count} entries without a readable expiry`);
+    const impossible = report.dte.unresolved.impossibleExpiry.count;
+    parts.push(
+      `${report.dte.unresolved.count} entries without a readable expiry` +
+        (impossible > 0 ? ` (${impossible} impossible date)` : ""),
+    );
   }
   if (report.entryWindow) {
-    parts.push(
-      `${report.entryWindow.outside.count} entries outside ` +
-        `${report.entryWindow.from}-${report.entryWindow.to}`,
-    );
+    const win = report.entryWindow;
+    let text = `${win.outside.count} of ${win.checked} timed entries outside ${win.from}-${win.to}`;
+    if (win.unknownTime > 0) text += `, ${win.unknownTime} without an entry time`;
+    if (win.invalidTime.count > 0) text += `, ${win.invalidTime.count} with an invalid time`;
+    parts.push(text);
   }
   return parts.join("; ") + ".";
 }
@@ -124,7 +142,9 @@ export function registerRuleCalendarTool(server: McpServer, baseDir: string): vo
         const report = buildRuleCalendar(
           trades.map((t) => ({
             openDate: formatDateKey(t.dateOpened),
-            openTime: t.timeOpened,
+            // The loader fills a missing Time Opened with "00:00:00" for sorting; that is
+            // not an observed entry time, so it stays unknown here.
+            openTime: t.timeOpenedProvided === false ? undefined : t.timeOpened,
             legs: t.legs,
           })),
           input.rule,
