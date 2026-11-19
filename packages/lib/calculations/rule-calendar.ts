@@ -1,0 +1,306 @@
+/**
+ * Rule Calendar
+ *
+ * Compares a block's actual entries with the calendar a stated entry rule
+ * implies: which NYSE sessions the rule trades on, which of them have no
+ * entry, how far each entry's front expiry is from the stated DTE, and which
+ * entries fall outside the stated entry window.
+ *
+ * Conventions:
+ *   - A rule day is an XNYS session (calendar v2, 2013-2030) whose weekday is
+ *     in the rule. An exchange holiday is never a rule day, so a skipped
+ *     holiday Monday is not a missing entry.
+ *   - DTE is counted in calendar days from the open date to the front expiry
+ *     (the earliest leg expiry; for a calendar spread, the front leg).
+ *   - Option Omega legs name an expiry without a year ("Mar 17"). The year is
+ *     the open date's year, or the next year when that would fall before the
+ *     open date.
+ *   - Dates are YYYY-MM-DD calendar days; times are HH:mm[:ss] as written in
+ *     the trade log.
+ */
+
+import { enumerateXnysSessionsV2 } from "./xnys-session-calendar.ts";
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+/**
+ * How the stated DTE is meant to be reached.
+ *   - "exact": every entry must expire exactly `dte` calendar days out.
+ *   - "firstAtLeast": the first listed expiry with DTE >= `dte` (what Option
+ *     Omega was observed to pick without exact DTE); an entry above the
+ *     target is the listing gap, an entry below it breaks the rule.
+ */
+export type DteSelection = "exact" | "firstAtLeast";
+
+export interface EntryRule {
+  /** JavaScript weekday numbers (1 = Monday ... 5 = Friday), or every session. */
+  entryWeekdays: number[] | "daily";
+  /** Stated days to expiry of the front leg, in calendar days. */
+  dte: number;
+  selection: DteSelection;
+  /** Inclusive entry window in the trade log's time zone, "HH:mm". */
+  entryWindow?: { from: string; to: string };
+}
+
+export interface RuleCalendarTrade {
+  openDate: string;
+  openTime?: string;
+  legs: string;
+}
+
+export interface RuleCalendarYear {
+  year: number;
+  trades: number;
+  resolved: number;
+  atTarget: number;
+  aboveTarget: number;
+  belowTarget: number;
+  /** Share of resolved entries whose DTE differs from the stated DTE. */
+  mismatchShare: number | null;
+  minDte: number | null;
+  maxDte: number | null;
+  /** Count of entries per actual DTE, keyed by the DTE as a string. */
+  dteHistogram: Record<string, number>;
+}
+
+export interface RuleCalendarReport {
+  calendar: "xnys-v2";
+  range: { from: string; through: string };
+  rule: EntryRule;
+  ruleDays: number;
+  tradedRuleDays: number;
+  missingRuleDays: { count: number; share: number | null; sample: string[] };
+  offRuleEntryDays: { count: number; sample: string[] };
+  dte: {
+    selection: DteSelection;
+    target: number;
+    expectation: string;
+    resolved: number;
+    unresolved: { count: number; sample: string[] };
+    mismatchShare: number | null;
+    maxYearMismatchShare: number | null;
+    ruleViolations: number;
+    perYear: RuleCalendarYear[];
+  };
+  entryWindow: {
+    from: string;
+    to: string;
+    outside: { count: number; sample: string[] };
+    unknownTime: number;
+  } | null;
+}
+
+/** Maximum number of example dates listed per finding. */
+export const RULE_CALENDAR_SAMPLE_SIZE = 20;
+
+// ---------------------------------------------------------------------------
+// Option Omega legs
+// ---------------------------------------------------------------------------
+
+const MONTHS: Record<string, number> = {
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+};
+
+// "{contracts} {Mon} {day} {strike} {P|C} {STO|BTO|STC|BTC} {price}"
+const OO_LEG_RE =
+  /^\d+\s+([A-Za-z]{3})\s+(\d{1,2})\s+\d+(?:\.\d+)?\s+[CP]\s+(?:STO|BTO|STC|BTC)\s+\d+(?:\.\d+)?$/i;
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * Front (earliest) expiry of an Option Omega legs string as YYYY-MM-DD, or
+ * null when any segment is not in Option Omega leg format.
+ */
+export function ooFrontExpiry(legs: string, openDate: string): string | null {
+  if (!legs || legs.trim() === "") return null;
+  const openYear = Number(openDate.slice(0, 4));
+  let front: string | null = null;
+  for (const segment of legs.split("|")) {
+    const match = segment.trim().match(OO_LEG_RE);
+    if (!match) return null;
+    const month = MONTHS[match[1].toLowerCase()];
+    const day = Number(match[2]);
+    if (month === undefined || day < 1 || day > 31) return null;
+    let expiry = `${openYear}-${pad2(month)}-${pad2(day)}`;
+    if (expiry < openDate) expiry = `${openYear + 1}-${pad2(month)}-${pad2(day)}`;
+    if (front === null || expiry < front) front = expiry;
+  }
+  return front;
+}
+
+/** Calendar days from `from` to `to` (both YYYY-MM-DD). */
+export function calendarDaysBetween(from: string, to: string): number {
+  const ms = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`);
+  return Math.round(ms / 86_400_000);
+}
+
+function weekdayOf(date: string): number {
+  return new Date(`${date}T00:00:00Z`).getUTCDay();
+}
+
+function hhmm(time: string | undefined): string | null {
+  if (!time) return null;
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})/);
+  return match ? `${pad2(Number(match[1]))}:${match[2]}` : null;
+}
+
+function share(part: number, whole: number): number | null {
+  return whole === 0 ? null : part / whole;
+}
+
+// ---------------------------------------------------------------------------
+// Report
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the rule-calendar report for one strategy's entries.
+ *
+ * `range` defaults to the first through last entry date. Throws RangeError
+ * when the range lies outside the XNYS v2 calendar (2013-2030).
+ */
+export function buildRuleCalendar(
+  trades: RuleCalendarTrade[],
+  rule: EntryRule,
+  range?: { from?: string; through?: string },
+): RuleCalendarReport {
+  const openDates = trades.map((t) => t.openDate).sort();
+  const from = range?.from ?? openDates[0];
+  const through = range?.through ?? openDates[openDates.length - 1];
+  if (from === undefined || through === undefined) {
+    throw new RangeError("rule calendar needs at least one trade or an explicit date range");
+  }
+
+  const inRange = trades.filter((t) => t.openDate >= from && t.openDate <= through);
+  const weekdays = rule.entryWeekdays === "daily" ? null : new Set(rule.entryWeekdays);
+  const isRuleDay = (date: string, sessions: Set<string>): boolean =>
+    sessions.has(date) && (weekdays === null || weekdays.has(weekdayOf(date)));
+
+  const sessions = new Set(enumerateXnysSessionsV2(from, through));
+  const ruleDays = [...sessions].filter((d) => isRuleDay(d, sessions)).sort();
+  const entryDates = new Set(inRange.map((t) => t.openDate));
+  const missing = ruleDays.filter((d) => !entryDates.has(d));
+  const offRule = [...entryDates].filter((d) => !isRuleDay(d, sessions)).sort();
+
+  const years = new Map<number, RuleCalendarYear>();
+  const unresolved: string[] = [];
+  let resolvedTotal = 0;
+  let mismatchTotal = 0;
+  let violations = 0;
+
+  for (const t of [...inRange].sort((a, b) => a.openDate.localeCompare(b.openDate))) {
+    const year = Number(t.openDate.slice(0, 4));
+    let row = years.get(year);
+    if (!row) {
+      row = {
+        year,
+        trades: 0,
+        resolved: 0,
+        atTarget: 0,
+        aboveTarget: 0,
+        belowTarget: 0,
+        mismatchShare: null,
+        minDte: null,
+        maxDte: null,
+        dteHistogram: {},
+      };
+      years.set(year, row);
+    }
+    row.trades++;
+    const expiry = ooFrontExpiry(t.legs, t.openDate);
+    if (expiry === null) {
+      unresolved.push(t.openDate);
+      continue;
+    }
+    const dte = calendarDaysBetween(t.openDate, expiry);
+    row.resolved++;
+    resolvedTotal++;
+    row.dteHistogram[String(dte)] = (row.dteHistogram[String(dte)] ?? 0) + 1;
+    row.minDte = row.minDte === null ? dte : Math.min(row.minDte, dte);
+    row.maxDte = row.maxDte === null ? dte : Math.max(row.maxDte, dte);
+    if (dte === rule.dte) {
+      row.atTarget++;
+    } else {
+      mismatchTotal++;
+      if (dte > rule.dte) row.aboveTarget++;
+      else row.belowTarget++;
+    }
+    const breaksRule = rule.selection === "exact" ? dte !== rule.dte : dte < rule.dte;
+    if (breaksRule) violations++;
+  }
+
+  const perYear = [...years.values()].sort((a, b) => a.year - b.year);
+  for (const row of perYear) {
+    row.mismatchShare = share(row.aboveTarget + row.belowTarget, row.resolved);
+  }
+  const yearShares = perYear.map((r) => r.mismatchShare).filter((s): s is number => s !== null);
+
+  let entryWindow: RuleCalendarReport["entryWindow"] = null;
+  if (rule.entryWindow) {
+    const { from: winFrom, to: winTo } = rule.entryWindow;
+    const outside: string[] = [];
+    let unknownTime = 0;
+    for (const t of inRange) {
+      const time = hhmm(t.openTime);
+      if (time === null) unknownTime++;
+      else if (time < winFrom || time > winTo) outside.push(`${t.openDate} ${time}`);
+    }
+    outside.sort();
+    entryWindow = {
+      from: winFrom,
+      to: winTo,
+      outside: { count: outside.length, sample: outside.slice(0, RULE_CALENDAR_SAMPLE_SIZE) },
+      unknownTime,
+    };
+  }
+
+  return {
+    calendar: "xnys-v2",
+    range: { from, through },
+    rule,
+    ruleDays: ruleDays.length,
+    tradedRuleDays: ruleDays.length - missing.length,
+    missingRuleDays: {
+      count: missing.length,
+      share: share(missing.length, ruleDays.length),
+      sample: missing.slice(0, RULE_CALENDAR_SAMPLE_SIZE),
+    },
+    offRuleEntryDays: {
+      count: offRule.length,
+      sample: offRule.slice(0, RULE_CALENDAR_SAMPLE_SIZE),
+    },
+    dte: {
+      selection: rule.selection,
+      target: rule.dte,
+      expectation:
+        rule.selection === "exact"
+          ? `Every entry expires exactly ${rule.dte} calendar days out; any other DTE breaks the rule.`
+          : `Each entry takes the first listed expiry at least ${rule.dte} calendar days out; ` +
+            `a DTE above ${rule.dte} reflects the expiries listed that day, a DTE below it breaks the rule.`,
+      resolved: resolvedTotal,
+      unresolved: {
+        count: unresolved.length,
+        sample: unresolved.slice(0, RULE_CALENDAR_SAMPLE_SIZE),
+      },
+      mismatchShare: share(mismatchTotal, resolvedTotal),
+      maxYearMismatchShare: yearShares.length === 0 ? null : Math.max(...yearShares),
+      ruleViolations: violations,
+      perYear,
+    },
+    entryWindow,
+  };
+}

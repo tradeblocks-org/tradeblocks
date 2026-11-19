@@ -613,6 +613,31 @@ dataset fields. Time-of-day uses valid trade times independently of market cover
 | `marginal_contribution`       | Marginal contribution of a strategy to portfolio risk/return                                                                                                                                                                        |
 | `what_if_scaling`             | Trade-derived sizing counterfactuals, not the shared-funds result of a native Option Omega Portfolio backtest. Confirm a surviving fixed allocation with that native backtest.                                                      |
 | `paired_bootstrap_comparison` | Paired bootstrap intervals for two strategy runs                                                                                                                                                                                    |
+| `get_rule_calendar`           | Check entries against a stated entry rule: missing rule days, stated vs. actual DTE per year, entries outside the entry window                                                                                                      |
+
+### Rule calendar
+
+`get_rule_calendar` checks one strategy's entries against the calendar a stated
+entry rule implies. Input: `rule.entryWeekdays` (1 = Monday ... 5 = Friday, or
+`"daily"`), `rule.dte` (front-leg days to expiry), `rule.selection` and an
+optional `rule.entryWindow` (`from`/`to`, `HH:mm`, inclusive, in the trade log's
+time zone), plus an optional `dateRange` of rule days (default: first through
+last entry date).
+
+- Rule days are NYSE sessions (XNYS calendar v2, 2013-2030) on the rule's
+  weekdays. A holiday is never a rule day, so a skipped holiday Monday is not a
+  missing entry. `missingRuleDays` lists rule days without an entry;
+  `offRuleEntryDays` lists entry dates that are not rule days.
+- DTE is counted in calendar days from the open date to the front (earliest)
+  leg expiry in the Option Omega legs column. An expiry without a year takes the
+  open date's year, or the next year when it would fall before the open date.
+  Entries whose legs are not in Option Omega format are `unresolved`.
+- `selection: "exact"` expects every entry at exactly `dte`.
+  `selection: "firstAtLeast"` expects the first listed expiry at least `dte`
+  days out, so entries above the target reflect the expiries listed that day and
+  only entries below it count as `ruleViolations`. `dte.perYear` gives, per
+  year, entries at, above and below the target, `mismatchShare` and a DTE
+  histogram; `maxYearMismatchShare` is the worst year.
 
 ### Monte Carlo input series and marked-account risk
 

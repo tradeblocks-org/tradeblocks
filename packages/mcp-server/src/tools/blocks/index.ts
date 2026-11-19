@@ -11,6 +11,7 @@ import { registerAnalysisBlockTools } from "./analysis.ts";
 import { registerSimilarityBlockTools } from "./similarity.ts";
 import { registerHealthBlockTools } from "./health.ts";
 import { registerPairedComparisonTool } from "./paired-comparison.ts";
+import { registerRuleCalendarTool } from "./rule-calendar.ts";
 
 /**
  * Register all block-related MCP tools
@@ -22,4 +23,5 @@ export function registerBlockTools(server: McpServer, baseDir: string): void {
   registerSimilarityBlockTools(server, baseDir);
   registerHealthBlockTools(server, baseDir);
   registerPairedComparisonTool(server, baseDir);
+  registerRuleCalendarTool(server, baseDir);
 }
