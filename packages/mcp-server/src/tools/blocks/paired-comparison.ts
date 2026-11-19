@@ -4,7 +4,7 @@
  * Honest confidence intervals for "is strategy A actually different from strategy
  * B (or from zero)". Wraps the paired day-block bootstrap primitive from
  * @tradeblocks/lib with a declarative attribution of each trade's P&L onto a
- * daily grid derived from the block's own trade data.
+ * daily grid derived from the compared strategies' own trades.
  */
 
 import { z } from "zod";
@@ -28,8 +28,8 @@ import { withSyncedBlock } from "../middleware/sync-middleware.ts";
  */
 const ATTRIBUTION_NOTE =
   "A trade's P&L is attributed evenly across the trading days it was open " +
-  "(dateOpened through dateClosed). Trading days are derived from the block's own " +
-  "trade data (the union of every trade's open and close dates) -- no market " +
+  "(dateOpened through dateClosed). Trading days are derived from the compared " +
+  "strategies' trades (the union of their open and close dates) -- no market " +
   "calendar is assumed, so weekends or holidays appear only if a trade spans them.";
 
 // Frozen, mathematically-neutral defaults (documented on the schema). Block
@@ -101,7 +101,7 @@ type PairedComparisonInput = z.infer<typeof pairedComparisonInputSchema>;
 // ---------------------------------------------------------------------------
 
 /**
- * The block's trading-day grid: the sorted, unique union of every trade's open
+ * The trading-day grid: the sorted, unique union of the given trades' open
  * and close calendar dates. Days strictly between an open and a close that are
  * not themselves any trade's open/close are unknown to be trading days and are
  * deliberately not invented.
@@ -204,8 +204,6 @@ export interface PairedComparisonParams {
   armATrades: Trade[];
   /** null -> compare arm A against a constant 0. */
   armBTrades: Trade[] | null;
-  /** All block trades -- defines the shared trading-day grid. */
-  blockTrades: Trade[];
   statistic: PairedComparisonInput["statistic"];
   ciLevel: number;
   resamples: number;
@@ -234,7 +232,6 @@ export function runPairedBootstrapComparison(
   const {
     armATrades,
     armBTrades,
-    blockTrades,
     statistic,
     ciLevel,
     resamples,
@@ -252,7 +249,9 @@ export function runPairedBootstrapComparison(
     throw new Error(`No trades found for strategy "${strategyB}".`);
   }
 
-  const grid = buildBlockTradingDayIndex(blockTrades);
+  // The grid comes from the compared arms only: other strategies in the block
+  // must not add days that split the arms' runs or dilute their attribution.
+  const grid = buildBlockTradingDayIndex([...armATrades, ...(armBTrades ?? [])]);
   const armA = buildArmDaySeries(armATrades, grid);
   const armB = armBTrades !== null ? buildArmDaySeries(armBTrades, grid) : null;
 
@@ -376,7 +375,6 @@ export function registerPairedComparisonTool(server: McpServer, baseDir: string)
         const inRange = (trades: Trade[]): Trade[] =>
           dateRange ? filterByDateRange(trades, dateRange.start, dateRange.end) : trades;
 
-        const blockTrades = inRange(block.trades);
         const armATrades = inRange(filterByStrategy(block.trades, strategyA));
         const armBTrades =
           strategyB !== undefined ? inRange(filterByStrategy(block.trades, strategyB)) : null;
@@ -384,7 +382,6 @@ export function registerPairedComparisonTool(server: McpServer, baseDir: string)
         const { summary, data } = runPairedBootstrapComparison({
           armATrades,
           armBTrades,
-          blockTrades,
           statistic,
           ciLevel: input.ciLevel,
           resamples: input.resamples,
