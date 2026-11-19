@@ -87,6 +87,21 @@ describe("ooFrontExpiry", () => {
     expect(ooFrontExpiry("", "2020-02-24")).toBeNull();
     expect(ooFrontExpiry("1 Foo 12 4700 P STO 3.00", "2020-02-24")).toBeNull();
   });
+
+  it("rejects expiries that are not real calendar dates", () => {
+    expect(ooFrontExpiry("1 Feb 30 4700 P STO 3.00", "2026-02-23")).toBeNull();
+    expect(ooFrontExpiry("1 Apr 31 4700 P STO 3.00", "2026-04-06")).toBeNull();
+    expect(ooFrontExpiry("1 Feb 29 4700 P STO 3.00", "2023-02-06")).toBeNull();
+    // One impossible leg makes the whole entry unresolved.
+    expect(
+      ooFrontExpiry("1 Feb 27 4700 P STO 3.00 | 1 Feb 30 4700 P BTO 2.00", "2026-02-23"),
+    ).toBeNull();
+  });
+
+  it("accepts Feb 29 in a leap year, also when it rolls into the next year", () => {
+    expect(ooFrontExpiry("1 Feb 29 4700 P STO 3.00", "2024-02-05")).toBe("2024-02-29");
+    expect(ooFrontExpiry("1 Feb 29 4700 P STO 3.00", "2023-03-06")).toBe("2024-02-29");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -203,9 +218,45 @@ describe("stated vs. actual DTE", () => {
       [{ openDate: "2023-01-09", openTime: "09:35", legs: "SPX 3900P/3850P" }],
       { entryWeekdays: [1], dte: 7, selection: "exact" },
     );
-    expect(report.dte.unresolved).toEqual({ count: 1, sample: ["2023-01-09"] });
+    expect(report.dte.unresolved).toEqual({
+      count: 1,
+      sample: ["2023-01-09"],
+      impossibleExpiry: { count: 0, sample: [] },
+    });
     expect(report.dte.resolved).toBe(0);
     expect(report.dte.mismatchShare).toBeNull();
+  });
+
+  it("never resolves an impossible expiry to a DTE", () => {
+    // Feb 23 + 7 calendar days would be "Feb 30", which does not exist.
+    const report = buildRuleCalendar(
+      [{ openDate: "2026-02-23", openTime: "09:35", legs: "1 Feb 30 4700 P STO 3.00" }],
+      { entryWeekdays: [1], dte: 7, selection: "exact" },
+    );
+    expect(report.dte.resolved).toBe(0);
+    expect(report.dte.perYear[0].atTarget).toBe(0);
+    expect(report.dte.unresolved).toEqual({
+      count: 1,
+      sample: ["2026-02-23"],
+      impossibleExpiry: { count: 1, sample: ["2026-02-23"] },
+    });
+  });
+
+  it("reports first-listed compliance as not checked", () => {
+    for (const selection of ["exact", "firstAtLeast"] as const) {
+      const report = buildRuleCalendar(a5Trades(), { entryWeekdays: [1], dte: 7, selection });
+      expect(report.dte.firstListedCompliance.status).toBe("not_checked");
+      expect(report.dte.firstListedCompliance.reason).toMatch(/no listing data/);
+    }
+    const report = buildRuleCalendar(a5Trades(), {
+      entryWeekdays: [1],
+      dte: 7,
+      selection: "firstAtLeast",
+    });
+    // The expectation states what is checked (the minimum), not first-listed selection.
+    expect(report.dte.expectation).toMatch(/at least 7/);
+    expect(report.dte.expectation).toMatch(/not checked/i);
+    expect(report.dte.expectation).not.toMatch(/reflects the expiries listed/);
   });
 });
 
@@ -235,6 +286,37 @@ describe("entry window", () => {
       `${base[3].openDate} 09:15`,
     ]);
     expect(report.entryWindow!.unknownTime).toBe(1);
+  });
+
+  it("keeps malformed times out of the window check instead of reading a clock prefix", () => {
+    const base = exactTrades().slice(0, 6);
+    const trades: RuleCalendarTrade[] = [
+      { ...base[0], openTime: "09:35:00" },
+      { ...base[1], openTime: "09:35junk" },
+      { ...base[2], openTime: "25:00" },
+      { ...base[3], openTime: "10:61:00" },
+      { ...base[4], openTime: "11:00:00 PM" },
+      { ...base[5], openTime: "" },
+    ];
+    const report = buildRuleCalendar(trades, {
+      entryWeekdays: [1],
+      dte: 7,
+      selection: "exact",
+      entryWindow: { from: "09:30", to: "10:00" },
+    });
+    const win = report.entryWindow!;
+    expect(win.checked).toBe(1);
+    expect(win.outside.count).toBe(0);
+    expect(win.unknownTime).toBe(1);
+    expect(win.invalidTime).toEqual({
+      count: 4,
+      sample: [
+        `${base[1].openDate} 09:35junk`,
+        `${base[2].openDate} 25:00`,
+        `${base[3].openDate} 10:61:00`,
+        `${base[4].openDate} 11:00:00 PM`,
+      ],
+    });
   });
 
   it("is null when the rule has no entry window", () => {

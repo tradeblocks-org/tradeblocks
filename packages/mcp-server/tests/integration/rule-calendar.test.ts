@@ -65,8 +65,26 @@ function a5TradeLog(): string {
   return rows.join("\n") + "\n";
 }
 
+/**
+ * Edge cases as an Option Omega trade log, "7 DTE, Mondays", exact DTE:
+ *   - 2026-02-23: the legs name "Feb 30", a date that does not exist;
+ *   - 2026-03-02: the Time Opened cell is empty;
+ *   - 2026-03-09: a clean 7-DTE entry inside the window.
+ */
+function edgeTradeLog(): string {
+  return (
+    [
+      "Date Opened,Time Opened,Date Closed,Time Closed,Legs,Premium,No. of Contracts,P/L,Strategy",
+      "2026-02-23,09:35:00,2026-03-02,16:00:00,1 Feb 30 5950 P STO 1.20 | 1 Feb 30 5900 P BTO 0.80,40,1,25,EDGE",
+      `2026-03-02,,2026-03-09,16:00:00,${ooLegs("2026-03-09")},40,1,25,EDGE`,
+      `2026-03-09,09:35:00,2026-03-16,16:00:00,${ooLegs("2026-03-16")},40,1,25,EDGE`,
+    ].join("\n") + "\n"
+  );
+}
+
 async function withTools(
   run: (call: (name: string, args: Record<string, unknown>) => Promise<Result>) => Promise<void>,
+  csv: string = a5TradeLog(),
 ) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "tb-rule-calendar-"));
   const handlers = new Map<string, Handler>();
@@ -79,7 +97,7 @@ async function withTools(
   registerRuleCalendarTool(server, root);
   try {
     const csvPath = path.join(root, "source.csv");
-    await fs.writeFile(csvPath, a5TradeLog());
+    await fs.writeFile(csvPath, csv);
     const imported = await handlers.get("import_csv")!({ csvPath, blockName: "A5" });
     expect(imported.isError).not.toBe(true);
     await run((name, args) => handlers.get(name)!(args));
@@ -161,6 +179,58 @@ describe("get_rule_calendar", () => {
       });
       expect(result.isError).toBe(true);
       expect(result.content?.[0]?.text).toMatch(/No trades found for strategy "nope"/);
+    });
+  });
+
+  it("keeps a missing entry time unknown and an impossible expiry unresolved", async () => {
+    await withTools(async (call) => {
+      const result = await call("get_rule_calendar", {
+        blockId: "a5",
+        rule: { ...RULE, selection: "exact" },
+      });
+      expect(result.isError).not.toBe(true);
+      const data = result.structuredContent as unknown as RuleCalendarReport;
+      expect(data.ruleDays).toBe(3);
+      expect(data.missingRuleDays.count).toBe(0);
+
+      // "Feb 30" is never resolved to a 7-DTE hit.
+      expect(data.dte.resolved).toBe(2);
+      expect(data.dte.unresolved).toEqual({
+        count: 1,
+        sample: ["2026-02-23"],
+        impossibleExpiry: { count: 1, sample: ["2026-02-23"] },
+      });
+      expect(data.dte.perYear[0].atTarget).toBe(2);
+      expect(data.dte.ruleViolations).toBe(0);
+
+      // The empty Time Opened is unknown, not an observed 00:00 entry outside the window.
+      expect(data.entryWindow!.checked).toBe(2);
+      expect(data.entryWindow!.unknownTime).toBe(1);
+      expect(data.entryWindow!.invalidTime.count).toBe(0);
+      expect(data.entryWindow!.outside).toEqual({ count: 0, sample: [] });
+
+      expect(data.dte.firstListedCompliance.status).toBe("not_checked");
+      const summary = result.content?.[0]?.text ?? "";
+      expect(summary).toMatch(/1 entries without a readable expiry \(1 impossible date\)/);
+      expect(summary).toMatch(/1 without an entry time/);
+    }, edgeTradeLog());
+  });
+
+  it("states that first-listed selection is not checked under firstAtLeast", async () => {
+    await withTools(async (call) => {
+      const result = await call("get_rule_calendar", {
+        blockId: "a5",
+        strategy: "PCS-7",
+        rule: RULE,
+      });
+      const data = result.structuredContent as unknown as RuleCalendarReport;
+      expect(data.dte.firstListedCompliance).toEqual({
+        status: "not_checked",
+        reason: expect.stringMatching(/no listing data/),
+      });
+      const summary = result.content?.[0]?.text ?? "";
+      expect(summary).toMatch(/below the minimum/);
+      expect(summary).toMatch(/first-listed expiry selection not checked/);
     });
   });
 });

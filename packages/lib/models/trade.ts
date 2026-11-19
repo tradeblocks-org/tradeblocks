@@ -12,6 +12,11 @@ export interface Trade {
   // Core trade identification
   dateOpened: Date;
   timeOpened: string; // HH:mm:ss format
+  /**
+   * False when the MCP trade CSV omitted or left Time Opened blank; `timeOpened` then holds
+   * the "00:00:00" sort placeholder, not an observed entry time.
+   */
+  timeOpenedProvided?: boolean;
   openingPrice: number;
   legs: string; // Option legs description
   /** Opening premium in dollars for one contract (one lot). */

@@ -14,9 +14,15 @@
  *     (the earliest leg expiry; for a calendar spread, the front leg).
  *   - Option Omega legs name an expiry without a year ("Mar 17"). The year is
  *     the open date's year, or the next year when that would fall before the
- *     open date.
- *   - Dates are YYYY-MM-DD calendar days; times are HH:mm[:ss] as written in
- *     the trade log.
+ *     open date. A month/day that is not a real date in that year ("Feb 30",
+ *     "Apr 31", "Feb 29" outside a leap year) is never resolved to a DTE.
+ *   - The trade log carries no listing tape, so the report checks the observed
+ *     DTE only. Under "firstAtLeast" it checks that the observed DTE meets the
+ *     minimum; it cannot check that the entry took the first eligible listed
+ *     expiry, and says so in `dte.firstListedCompliance`.
+ *   - Dates are YYYY-MM-DD calendar days; times are H:mm or HH:mm[:ss] as
+ *     written in the trade log. A missing time is unknown and a malformed time
+ *     is invalid; neither is counted inside or outside the entry window.
  */
 
 import { enumerateXnysSessionsV2 } from "./xnys-session-calendar.ts";
@@ -28,9 +34,11 @@ import { enumerateXnysSessionsV2 } from "./xnys-session-calendar.ts";
 /**
  * How the stated DTE is meant to be reached.
  *   - "exact": every entry must expire exactly `dte` calendar days out.
- *   - "firstAtLeast": the first listed expiry with DTE >= `dte` (what Option
- *     Omega was observed to pick without exact DTE); an entry above the
- *     target is the listing gap, an entry below it breaks the rule.
+ *   - "firstAtLeast": the rule takes the first listed expiry with DTE >= `dte`
+ *     (what Option Omega was observed to pick without exact DTE). From trades
+ *     alone only the minimum is checkable: an entry below `dte` breaks it; an
+ *     entry above `dte` meets it, but whether it was the first eligible listed
+ *     expiry is not checked (no listing data).
  */
 export type DteSelection = "exact" | "firstAtLeast";
 
@@ -65,6 +73,21 @@ export interface RuleCalendarYear {
   dteHistogram: Record<string, number>;
 }
 
+/**
+ * Whether entries took the first eligible listed expiry. Always "not_checked":
+ * the trade log has no listing tape, so above-target DTE cannot be attributed
+ * to the expiries that were available.
+ */
+export interface FirstListedCompliance {
+  status: "not_checked";
+  reason: string;
+}
+
+export const FIRST_LISTED_NOT_CHECKED_REASON =
+  "The trade log has no listing data (which expiries were listed on each entry day), so " +
+  "whether an entry took the first eligible listed expiry cannot be checked. Only the " +
+  "observed DTE is compared with the stated DTE.";
+
 export interface RuleCalendarReport {
   calendar: "xnys-v2";
   range: { from: string; through: string };
@@ -78,17 +101,36 @@ export interface RuleCalendarReport {
     target: number;
     expectation: string;
     resolved: number;
-    unresolved: { count: number; sample: string[] };
+    /**
+     * Entries without a usable front expiry: legs not in Option Omega format,
+     * or (also listed in `impossibleExpiry`) a month/day that is not a real
+     * calendar date.
+     */
+    unresolved: {
+      count: number;
+      sample: string[];
+      impossibleExpiry: { count: number; sample: string[] };
+    };
     mismatchShare: number | null;
     maxYearMismatchShare: number | null;
+    /**
+     * Entries whose observed DTE breaks the stated DTE: any DTE other than the
+     * target under "exact", a DTE below the minimum under "firstAtLeast".
+     */
     ruleViolations: number;
+    firstListedCompliance: FirstListedCompliance;
     perYear: RuleCalendarYear[];
   };
   entryWindow: {
     from: string;
     to: string;
+    /** Entries with a valid entry time, each counted inside or outside. */
+    checked: number;
     outside: { count: number; sample: string[] };
+    /** Entries without an entry time; not counted inside or outside. */
     unknownTime: number;
+    /** Entries whose time is not a valid clock time; not counted inside or outside. */
+    invalidTime: { count: number; sample: string[] };
   } | null;
 }
 
@@ -122,25 +164,44 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/**
- * Front (earliest) expiry of an Option Omega legs string as YYYY-MM-DD, or
- * null when any segment is not in Option Omega leg format.
- */
-export function ooFrontExpiry(legs: string, openDate: string): string | null {
-  if (!legs || legs.trim() === "") return null;
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+type FrontExpiry = { expiry: string } | { expiry: null; reason: "format" | "impossible_date" };
+
+function parseOoFrontExpiry(legs: string, openDate: string): FrontExpiry {
+  if (!legs || legs.trim() === "") return { expiry: null, reason: "format" };
   const openYear = Number(openDate.slice(0, 4));
+  const openMonthDay = openDate.slice(5);
   let front: string | null = null;
+  let impossible = false;
   for (const segment of legs.split("|")) {
     const match = segment.trim().match(OO_LEG_RE);
-    if (!match) return null;
+    if (!match) return { expiry: null, reason: "format" };
     const month = MONTHS[match[1].toLowerCase()];
+    if (month === undefined) return { expiry: null, reason: "format" };
     const day = Number(match[2]);
-    if (month === undefined || day < 1 || day > 31) return null;
-    let expiry = `${openYear}-${pad2(month)}-${pad2(day)}`;
-    if (expiry < openDate) expiry = `${openYear + 1}-${pad2(month)}-${pad2(day)}`;
+    const monthDay = `${pad2(month)}-${pad2(day)}`;
+    const year = monthDay < openMonthDay ? openYear + 1 : openYear;
+    if (day < 1 || day > daysInMonth(year, month)) {
+      impossible = true;
+      continue;
+    }
+    const expiry = `${year}-${monthDay}`;
     if (front === null || expiry < front) front = expiry;
   }
-  return front;
+  if (impossible || front === null) return { expiry: null, reason: "impossible_date" };
+  return { expiry: front };
+}
+
+/**
+ * Front (earliest) expiry of an Option Omega legs string as YYYY-MM-DD, or
+ * null when any segment is not in Option Omega leg format or names a
+ * month/day that is not a real calendar date in the resolved year.
+ */
+export function ooFrontExpiry(legs: string, openDate: string): string | null {
+  return parseOoFrontExpiry(legs, openDate).expiry;
 }
 
 /** Calendar days from `from` to `to` (both YYYY-MM-DD). */
@@ -153,10 +214,14 @@ function weekdayOf(date: string): number {
   return new Date(`${date}T00:00:00Z`).getUTCDay();
 }
 
-function hhmm(time: string | undefined): string | null {
-  if (!time) return null;
-  const match = time.trim().match(/^(\d{1,2}):(\d{2})/);
-  return match ? `${pad2(Number(match[1]))}:${match[2]}` : null;
+// The whole value must be a clock time: H:mm, HH:mm, H:mm:ss or HH:mm:ss.
+const CLOCK_RE = /^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/;
+
+/** "unknown" for a missing time, "invalid" for a malformed one, else HH:mm. */
+function parseEntryTime(time: string | undefined): string | "unknown" | "invalid" {
+  if (time === undefined || time.trim() === "") return "unknown";
+  const match = time.trim().match(CLOCK_RE);
+  return match ? `${pad2(Number(match[1]))}:${match[2]}` : "invalid";
 }
 
 function share(part: number, whole: number): number | null {
@@ -198,6 +263,7 @@ export function buildRuleCalendar(
 
   const years = new Map<number, RuleCalendarYear>();
   const unresolved: string[] = [];
+  const impossibleExpiry: string[] = [];
   let resolvedTotal = 0;
   let mismatchTotal = 0;
   let violations = 0;
@@ -221,11 +287,13 @@ export function buildRuleCalendar(
       years.set(year, row);
     }
     row.trades++;
-    const expiry = ooFrontExpiry(t.legs, t.openDate);
-    if (expiry === null) {
+    const parsed = parseOoFrontExpiry(t.legs, t.openDate);
+    if (parsed.expiry === null) {
       unresolved.push(t.openDate);
+      if (parsed.reason === "impossible_date") impossibleExpiry.push(t.openDate);
       continue;
     }
+    const expiry = parsed.expiry;
     const dte = calendarDaysBetween(t.openDate, expiry);
     row.resolved++;
     resolvedTotal++;
@@ -253,18 +321,27 @@ export function buildRuleCalendar(
   if (rule.entryWindow) {
     const { from: winFrom, to: winTo } = rule.entryWindow;
     const outside: string[] = [];
+    const invalid: string[] = [];
     let unknownTime = 0;
+    let checked = 0;
     for (const t of inRange) {
-      const time = hhmm(t.openTime);
-      if (time === null) unknownTime++;
-      else if (time < winFrom || time > winTo) outside.push(`${t.openDate} ${time}`);
+      const time = parseEntryTime(t.openTime);
+      if (time === "unknown") unknownTime++;
+      else if (time === "invalid") invalid.push(`${t.openDate} ${t.openTime!.trim()}`);
+      else {
+        checked++;
+        if (time < winFrom || time > winTo) outside.push(`${t.openDate} ${time}`);
+      }
     }
     outside.sort();
+    invalid.sort();
     entryWindow = {
       from: winFrom,
       to: winTo,
+      checked,
       outside: { count: outside.length, sample: outside.slice(0, RULE_CALENDAR_SAMPLE_SIZE) },
       unknownTime,
+      invalidTime: { count: invalid.length, sample: invalid.slice(0, RULE_CALENDAR_SAMPLE_SIZE) },
     };
   }
 
@@ -289,16 +366,23 @@ export function buildRuleCalendar(
       expectation:
         rule.selection === "exact"
           ? `Every entry expires exactly ${rule.dte} calendar days out; any other DTE breaks the rule.`
-          : `Each entry takes the first listed expiry at least ${rule.dte} calendar days out; ` +
-            `a DTE above ${rule.dte} reflects the expiries listed that day, a DTE below it breaks the rule.`,
+          : `The rule takes the first listed expiry at least ${rule.dte} calendar days out. ` +
+            `Checked: whether the observed DTE meets the minimum of ${rule.dte} (a DTE below it ` +
+            `breaks the rule). Not checked: whether a DTE above ${rule.dte} was the first eligible ` +
+            `listed expiry, because the trade log has no listing data.`,
       resolved: resolvedTotal,
       unresolved: {
         count: unresolved.length,
         sample: unresolved.slice(0, RULE_CALENDAR_SAMPLE_SIZE),
+        impossibleExpiry: {
+          count: impossibleExpiry.length,
+          sample: impossibleExpiry.slice(0, RULE_CALENDAR_SAMPLE_SIZE),
+        },
       },
       mismatchShare: share(mismatchTotal, resolvedTotal),
       maxYearMismatchShare: yearShares.length === 0 ? null : Math.max(...yearShares),
       ruleViolations: violations,
+      firstListedCompliance: { status: "not_checked", reason: FIRST_LISTED_NOT_CHECKED_REASON },
       perYear,
     },
     entryWindow,
