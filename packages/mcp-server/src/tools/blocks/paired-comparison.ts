@@ -12,6 +12,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadBlock } from "../../utils/block-loader.ts";
 import { createToolOutput, formatCurrency } from "../../utils/output-formatter.ts";
 import {
+  enumerateXnysSessionsV2,
   formatDateKey,
   pairedBlockBootstrap,
   holdingPeriodBlockDays,
@@ -39,6 +40,9 @@ const DEFAULT_CI_LEVEL = 0.95;
 const DEFAULT_RESAMPLES = 2000;
 const DEFAULT_SEED = 42;
 const SENSITIVITY_MULTIPLIERS = [0.5, 2];
+
+export type UnobservedDays = "exclude" | "zero";
+export type DayGrid = "trades" | "xnys";
 
 export const pairedComparisonInputSchema = z.object({
   blockId: z.string().describe("Block folder name to analyze"),
@@ -92,6 +96,24 @@ export const pairedComparisonInputSchema = z.object({
       "Optional: refuse with notComparable when the shared overlap yields fewer distinct " +
         "blocks than this floor. When omitted, only structural degeneracy refuses (underpowered).",
     ),
+  unobservedDays: z
+    .enum(["exclude", "zero"])
+    .default("exclude")
+    .describe(
+      "How a grid day without an open position is treated. 'exclude' (default): the day is " +
+        "not observed and only days both arms hold are compared. 'zero': the day counts as " +
+        "a flat day with 0 P&L, from the first to the last day either arm holds a position, " +
+        "so days a filter skips stay in the comparison.",
+    ),
+  grid: z
+    .enum(["trades", "xnys"])
+    .default("trades")
+    .describe(
+      "Daily grid, built from the compared strategies' trades only. 'trades' (default): the " +
+        "union of their open and close dates. 'xnys': every NYSE session from their first to " +
+        "their last trade date (2013-2030), " +
+        "plus any trade date that is not a session.",
+    ),
 });
 
 type PairedComparisonInput = z.infer<typeof pairedComparisonInputSchema>;
@@ -106,11 +128,26 @@ type PairedComparisonInput = z.infer<typeof pairedComparisonInputSchema>;
  * not themselves any trade's open/close are unknown to be trading days and are
  * deliberately not invented.
  */
-export function buildBlockTradingDayIndex(trades: Trade[]): string[] {
+export function buildBlockTradingDayIndex(trades: Trade[], grid: DayGrid = "trades"): string[] {
   const days = new Set<string>();
   for (const t of trades) {
     days.add(formatDateKey(t.dateOpened));
     days.add(formatDateKey(t.dateClosed ?? t.dateOpened));
+  }
+  if (grid === "xnys" && days.size > 0) {
+    const sorted = Array.from(days).sort();
+    const from = sorted[0];
+    const through = sorted[sorted.length - 1];
+    let sessions: readonly string[];
+    try {
+      sessions = enumerateXnysSessionsV2(from, through);
+    } catch (error) {
+      throw new Error(
+        `grid "xnys" covers NYSE sessions 2013-2030 only; trades span ${from} to ${through} ` +
+          `(${(error as Error).message}).`,
+      );
+    }
+    for (const d of sessions) days.add(d);
   }
   return Array.from(days).sort();
 }
@@ -143,14 +180,38 @@ export function armHoldingPeriods(armTrades: Trade[], grid: string[]): number[] 
 }
 
 /**
+ * First open and last close calendar date across the given trades; the window
+ * in which unobservedDays "zero" treats days without a position as flat.
+ */
+export function heldWindow(trades: Trade[]): { from: string; through: string } {
+  let from = "9999-12-31";
+  let through = "0000-01-01";
+  for (const t of trades) {
+    const open = formatDateKey(t.dateOpened);
+    const close = formatDateKey(t.dateClosed ?? t.dateOpened);
+    if (open < from) from = open;
+    if (close > through) through = close;
+  }
+  return { from, through };
+}
+
+/**
  * Build one arm's DaySeries on the shared trading-day grid. Each trade's P&L is
  * spread evenly across the grid days it was open; a grid day the arm did not
  * hold a position is not-observed (mask false), while a held day with a net-zero
  * attributed P&L is a genuine observation (mask true).
  */
-export function buildArmDaySeries(armTrades: Trade[], grid: string[]): DaySeries {
+export function buildArmDaySeries(
+  armTrades: Trade[],
+  grid: string[],
+  flatWindow?: { from: string; through: string },
+): DaySeries {
   const values = new Array<number>(grid.length).fill(0);
-  const observedMask = new Array<boolean>(grid.length).fill(false);
+  // With a flat window every grid day inside it is observed: a day without an
+  // open position is a genuine flat day with 0 P&L, not a missing one.
+  const observedMask = grid.map((d) =>
+    flatWindow === undefined ? false : d >= flatWindow.from && d <= flatWindow.through,
+  );
 
   for (const t of armTrades) {
     const openStr = formatDateKey(t.dateOpened);
@@ -213,6 +274,10 @@ export interface PairedComparisonParams {
   effectiveNFloorBlocks?: number;
   strategyA: string;
   strategyB?: string;
+  /** Default "exclude": only days both arms hold are compared. */
+  unobservedDays?: UnobservedDays;
+  /** Default "trades": grid from the compared arms' trade open/close dates. */
+  grid?: DayGrid;
 }
 
 export interface PairedComparisonReport {
@@ -240,6 +305,8 @@ export function runPairedBootstrapComparison(
     effectiveNFloorBlocks,
     strategyA,
     strategyB,
+    unobservedDays = "exclude",
+    grid: gridMode = "trades",
   } = params;
 
   if (armATrades.length === 0) {
@@ -251,9 +318,11 @@ export function runPairedBootstrapComparison(
 
   // The grid comes from the compared arms only: other strategies in the block
   // must not add days that split the arms' runs or dilute their attribution.
-  const grid = buildBlockTradingDayIndex([...armATrades, ...(armBTrades ?? [])]);
-  const armA = buildArmDaySeries(armATrades, grid);
-  const armB = armBTrades !== null ? buildArmDaySeries(armBTrades, grid) : null;
+  const grid = buildBlockTradingDayIndex([...armATrades, ...(armBTrades ?? [])], gridMode);
+  const flatWindow =
+    unobservedDays === "zero" ? heldWindow([...armATrades, ...(armBTrades ?? [])]) : undefined;
+  const armA = buildArmDaySeries(armATrades, grid, flatWindow);
+  const armB = armBTrades !== null ? buildArmDaySeries(armBTrades, grid, flatWindow) : null;
 
   // Block length: derived from the LONGER arm's 95th-percentile holding period
   // (the conservative choice), unless the caller overrides it.
@@ -346,6 +415,21 @@ export function runPairedBootstrapComparison(
     attributionMethodology: ATTRIBUTION_NOTE,
   };
 
+  // Echoed only when a non-default day rule is in effect, so the default
+  // response stays byte-identical to earlier releases.
+  if (unobservedDays !== "exclude" || gridMode !== "trades") {
+    data.unobservedDays = unobservedDays;
+    data.grid = gridMode;
+    data.dayGridMethodology =
+      (gridMode === "xnys"
+        ? "Grid: every NYSE session from the compared strategies' first to last trade date, " +
+          "plus trade dates. "
+        : "Grid: the union of the compared strategies' trade open and close dates. ") +
+      (unobservedDays === "zero"
+        ? `Days without a position count as 0 P&L from ${flatWindow!.from} to ${flatWindow!.through}.`
+        : "Days without a position are not observed; only days both arms hold are compared.");
+  }
+
   return { summary, data, result };
 }
 
@@ -390,6 +474,8 @@ export function registerPairedComparisonTool(server: McpServer, baseDir: string)
           effectiveNFloorBlocks: input.effectiveNFloorBlocks,
           strategyA,
           strategyB,
+          unobservedDays: input.unobservedDays,
+          grid: input.grid,
         });
 
         return createToolOutput(summary, { blockId, ...data });
