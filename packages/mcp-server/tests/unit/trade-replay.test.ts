@@ -10,6 +10,7 @@ import {
   isPossibleSpxAmMonthlyExpiry,
   spxPmSeries,
   chooseLegQuotes,
+  ooLegOccTicker,
   type ReplayLeg,
   type PnlPoint,
   type BarRow,
@@ -59,6 +60,21 @@ describe("spxPmSeries", () => {
     for (const occ of ["SPXW250124P05900000", "SPY250117C00470000", "NDX250124P20000000"]) {
       expect(spxPmSeries(occ)).toEqual({ kind: "not-spx" });
     }
+  });
+});
+
+describe("ooLegOccTicker", () => {
+  it("names SPXW for an SPX leg on a possible AM-settled monthly expiry", () => {
+    expect(ooLegOccTicker("SPX", "2025-01-17", "P", 5900)).toBe("SPXW250117P05900000");
+    // Thursday before Good Friday 2025-04-18, an exchange holiday.
+    expect(ooLegOccTicker("SPX", "2025-04-17", "C", 5300)).toBe("SPXW250417C05300000");
+  });
+
+  it("leaves every other leg as buildOccTicker builds it", () => {
+    expect(ooLegOccTicker("SPX", "2025-01-24", "P", 5900)).toBe("SPX250124P05900000");
+    expect(ooLegOccTicker("SPXW", "2025-01-17", "P", 5900)).toBe("SPXW250117P05900000");
+    expect(ooLegOccTicker("SPY", "2025-01-17", "C", 470)).toBe("SPY250117C00470000");
+    expect(ooLegOccTicker("NDX", "2025-01-17", "P", 20000)).toBe("NDX250117P20000000");
   });
 });
 

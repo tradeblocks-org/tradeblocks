@@ -24,6 +24,7 @@ import {
   computeReplayMfeMae,
   markPrice,
   chooseLegQuotes,
+  ooLegOccTicker,
   spxPmSeries,
   type ReplayLeg,
   type ReplayResult,
@@ -294,7 +295,10 @@ export async function handleReplayTrade(
         legExpiry = resolveOOExpiryHint(leg.expiryHint, tradeYear, tradeOpenDate);
       }
       return {
-        occTicker: buildOccTicker(root, legExpiry, leg.type, leg.strike),
+        // OO fills SPX legs from SPXW, the monthly expiration included.
+        occTicker: hasOOData
+          ? ooLegOccTicker(root, legExpiry, leg.type, leg.strike)
+          : buildOccTicker(root, legExpiry, leg.type, leg.strike),
         quantity: hasOOData
           ? leg.quantity * (leg.contracts ?? 1)
           : leg.quantity * (numContracts > 0 ? numContracts : 1),
@@ -316,7 +320,8 @@ export async function handleReplayTrade(
   // exactly, so an SPX-root ticker never reads SPXW-ingested quotes on its
   // own. Tradelogs carry the root "SPX" for SPXW trades, so for each SPX-root
   // leg on a PM-series expiration the SPXW ticker is read alongside it and
-  // chooseLegQuotes decides which contract the leg replays.
+  // chooseLegQuotes decides which contract the leg replays. An Option Omega
+  // leg on a monthly expiration already names SPXW (ooLegOccTicker).
   //
   // Group OCC tickers by underlying before each readQuotes call: the store
   // enforces a single-underlying invariant per call.
@@ -630,8 +635,9 @@ export function registerReplayTools(
         "Replay a trade using historical minute-level option bars. " +
         "Reads option-leg quotes via QuoteStore and underlying bars via SpotStore (cache only); " +
         "a leg with no usable cached quotes returns an error naming the leg, never a zero-valued replay. " +
-        "SPX-root legs on weekly/daily (PM-settled) expirations replay the listed SPXW contract; " +
-        "the AM-settled monthly SPX contract is never substituted. " +
+        "SPX-root legs on weekly/daily (PM-settled) expirations replay the listed SPXW contract. " +
+        "On the AM-settled monthly expiration, Option Omega tradelog legs replay SPXW (the contract Option Omega fills); " +
+        "explicit SPX legs and other tradelogs replay the SPX monthly, which is never substituted. " +
         "Use the data-pipeline tools to backfill cache. " +
         "Returns minute-by-minute P&L path with MFE (Maximum Favorable Excursion) and MAE (Maximum Adverse Excursion). " +
         "Two modes: (A) Hypothetical — provide explicit legs with strikes, expiry, entry prices. " +

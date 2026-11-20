@@ -185,7 +185,9 @@ export function isPossibleSpxAmMonthlyExpiry(expiry: string): boolean {
  * expiration (weeklies, dailies) is a PM-settled contract listed only as
  * `SPXW`, so for those expirations the `SPXW` ticker names the one contract an
  * `SPX`-root leg can mean. On a possible monthly expiration the two roots are
- * different contracts and are never interchanged.
+ * different contracts, so an explicit `SPX` leg is never interchanged with
+ * `SPXW`; an Option Omega tradelog leg names `SPXW` there instead (see
+ * {@link ooLegOccTicker}).
  */
 export type SpxPmSeries =
   | { kind: "not-spx" }
@@ -248,6 +250,28 @@ export function chooseLegQuotes(
     };
   }
   return { unavailable: reason };
+}
+
+/**
+ * The OCC ticker an Option Omega tradelog leg replays.
+ *
+ * Option Omega records the underlying as `SPX` for every SPX trade and fills
+ * those legs from the PM-settled `SPXW` series, on the AM-settled monthly
+ * expiration too: its third-Friday fills equal the `SPXW` mid at the entry
+ * minute, not the `SPX` monthly's. So on a possible monthly expiration the leg
+ * names the `SPXW` contract directly. Every other ticker is returned
+ * unchanged, and {@link chooseLegQuotes} still resolves an `SPX`-root leg on a
+ * PM-series expiration to `SPXW`.
+ */
+export function ooLegOccTicker(
+  root: string,
+  expiry: string,
+  type: "C" | "P",
+  strike: number,
+): string {
+  const occTicker = buildOccTicker(root, expiry, type, strike);
+  const pm = spxPmSeries(occTicker);
+  return pm.kind === "am-monthly" ? pm.occTicker : occTicker;
 }
 
 // ---------------------------------------------------------------------------

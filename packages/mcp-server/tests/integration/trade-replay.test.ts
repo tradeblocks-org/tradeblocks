@@ -759,6 +759,69 @@ describe("replay_trade integration", () => {
       expect(result.pnlPath.length).toBe(3);
     });
 
+    // Option Omega fills SPX legs from SPXW on the monthly expiry too: its
+    // fills equal the SPXW mid at entry, not the SPX monthly's.
+    const insertMonthlyOoTrade = () =>
+      conn.run(`
+        INSERT INTO trades.trade_data
+          (block_id, date_opened, date_closed, legs, premium, num_contracts, pl, ticker)
+        VALUES
+          ('spx-block', '2025-01-17', '2025-01-17',
+           '1 Jan 17 5900 P STO 5.1 | 1 Jan 17 5800 P BTO 3.05', 205.0, 1, 50.0, 'SPX')
+      `);
+
+    test("an Option Omega tradelog leg on the monthly expiry replays SPXW, and decompose agrees", async () => {
+      await insertMonthlyOoTrade();
+      // SPXW mids at 09:32 equal the fills (5.1, 3.05); the SPX monthly's do not.
+      await seedSpread("SPXW", "250117");
+      await seedOptionQuotes("SPX250117P05900000", "SPX", SPY_475C_BARS);
+      await seedOptionQuotes("SPX250117P05800000", "SPX", SPY_470C_BARS);
+      for (const b of SPY_UNDERLYING_BARS) {
+        const minute = new Date(b.t).toISOString().slice(14, 16);
+        await conn.run(
+          `INSERT INTO market.spot (ticker, date, time, open, high, low, close, bid, ask)
+           VALUES ('SPX', '2025-01-17', $1, $2, $3, $4, $5, NULL, NULL)`,
+          [`09:${minute}`, b.o * 12.5, b.h * 12.5, b.l * 12.5, b.c * 12.5],
+        );
+      }
+
+      const tradelog = { block_id: "spx-block", trade_index: 0, multiplier: 100 };
+      const replay = await handleReplayTrade(
+        { ...tradelog, format: "full" },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+      const decomposed = await handleDecomposeGreeks(
+        { ...tradelog, format: "summary" },
+        "/tmp/test-replay",
+        stores,
+        conn,
+      );
+
+      expect(replay.legs.map((leg) => leg.occTicker)).toEqual([
+        "SPXW250117P05900000",
+        "SPXW250117P05800000",
+      ]);
+      expect(replay.pnlPath[0].strategyPnl).toBeCloseTo(0, 6);
+      expect(decomposed.totalPnlChange).toBeCloseTo(replay.totalPnl, 6);
+      expect(replay).toEqual(await replaySpread("SPXW", "2025-01-17"));
+    });
+
+    test("an Option Omega tradelog leg on the monthly expiry is refused without SPXW quotes", async () => {
+      await insertMonthlyOoTrade();
+      await seedSpread("SPX", "250117");
+
+      await expect(
+        handleReplayTrade(
+          { block_id: "spx-block", trade_index: 0, multiplier: 100, format: "full" },
+          "/tmp/test-replay",
+          stores,
+          conn,
+        ),
+      ).rejects.toThrow(/2 of 2 legs.*leg 1 SPXW250117P05900000: no quote rows in the local cache/);
+    });
+
     const spyCallSpread = [
       {
         ticker: "SPY",
