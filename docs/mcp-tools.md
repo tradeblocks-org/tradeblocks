@@ -613,6 +613,59 @@ dataset fields. Time-of-day uses valid trade times independently of market cover
 | `marginal_contribution`       | Marginal contribution of a strategy to portfolio risk/return                                                                                                                                                                        |
 | `what_if_scaling`             | Trade-derived sizing counterfactuals, not the shared-funds result of a native Option Omega Portfolio backtest. Confirm a surviving fixed allocation with that native backtest.                                                      |
 | `paired_bootstrap_comparison` | Paired bootstrap intervals for two strategy runs                                                                                                                                                                                    |
+| `get_rule_calendar`           | Check entries against a stated entry rule: missing rule days, stated vs. actual DTE per year, entries outside the entry window                                                                                                      |
+
+### Rule calendar
+
+`get_rule_calendar` checks one strategy's entries against the calendar a stated
+entry rule implies. Input: `rule.entryWeekdays` (1 = Monday ... 5 = Friday, or
+`"daily"`), `rule.dte` (front-leg days to expiry), `rule.selection` and an
+optional `rule.entryWindow` (`from`/`to`, `HH:mm`, inclusive, in the trade log's
+time zone), plus an optional `dateRange` of rule days (default: first through
+last entry date) and an optional `recordEnd` (see below).
+
+The trade log records what was traded, not which expiries were listed. The tool
+therefore checks the observed DTE only and never whether an entry selected the
+first eligible listed expiry.
+
+- Rule days are NYSE sessions (XNYS calendar v2, 2013-2030) on the rule's
+  weekdays. A holiday is never a rule day, so a skipped holiday Monday is not a
+  missing entry. `missingRuleDays` lists rule days without an entry;
+  `offRuleEntryDays` lists entry dates that are not rule days.
+- DTE is counted in calendar days from the open date to the front (earliest)
+  leg expiry in the Option Omega legs column. An expiry without a year takes the
+  open date's year, or the next year when it would fall before the open date.
+  Entries whose legs are not in Option Omega format, or name a month/day that is
+  not a real calendar date in that year (`Feb 30`, `Apr 31`, `Feb 29` outside a
+  leap year), are `unresolved` and never get a DTE;
+  `dte.unresolved.impossibleExpiry` lists the impossible dates.
+- `selection: "exact"` expects every entry at exactly `dte`; any other observed
+  DTE counts as a `ruleViolation`.
+- `selection: "firstAtLeast"` states a rule that takes the first listed expiry
+  at least `dte` days out. What the tool checks is that the observed DTE meets
+  the minimum: only entries below `dte` count as `ruleViolations`. An entry
+  above `dte` meets the minimum, but the tool cannot tell whether it was the
+  first eligible listed expiry or a later one, so 100 % above-target entries
+  with zero violations is not evidence of first-listed compliance.
+  `dte.firstListedCompliance` is always
+  `{ "status": "not_checked", "reason": ... }`.
+- `dte.perYear` gives, per year, entries at, above and below the target,
+  `mismatchShare` (share of resolved entries whose observed DTE differs from
+  `dte`) and a DTE histogram; `maxYearMismatchShare` is the worst year.
+- Entry window: `checked` entries have a valid time (`H:mm` or `HH:mm`, optional
+  `:ss`) and are counted inside or in `outside`. A missing `Time Opened` is
+  `unknownTime` (the loader's `00:00:00` placeholder is not an entry time); a
+  malformed time (`09:35junk`, `25:00`) is `invalidTime`. Neither is counted
+  inside or outside the window.
+- End of the record: a backtest reports no close after its last day (Option
+  Omega's `rangeEnd`; a position still open then is left out of the log or
+  closed that day). Pass that day as `recordEnd`. A rule day without an entry
+  whose earliest expiry under the rule (open date + `dte` calendar days) falls
+  after `recordEnd` is listed in `unobservableRuleDays` (`recordEnd`, `count`,
+  `sample`) and left out of `missingRuleDays` and its share. A rule day whose
+  expiry is on or before `recordEnd` still counts as missing; 0 DTE is never
+  affected. Without `recordEnd` the report is unchanged and has no
+  `unobservableRuleDays`.
 
 ### Monte Carlo input series and marked-account risk
 
