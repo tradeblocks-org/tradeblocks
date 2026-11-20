@@ -288,6 +288,7 @@ export {
   isPossibleSpxAmMonthlyExpiry,
   spxPmSeries,
   chooseLegQuotes,
+  ooLegOccTicker,
   type ReplayLeg,
   type ReplayResult,
   type PnlPoint,
