@@ -81,6 +81,8 @@ describe("paired_bootstrap_comparison registration", () => {
     expect(parsed.ciLevel).toBe(0.95);
     expect(parsed.resamples).toBe(2000);
     expect(parsed.seed).toBe(42);
+    expect(parsed.unobservedDays).toBe("exclude");
+    expect(parsed.grid).toBe("trades");
   });
 });
 
@@ -121,7 +123,6 @@ describe("two-strategy comparison", () => {
     const { data, result, summary } = runPairedBootstrapComparison({
       armATrades,
       armBTrades,
-      blockTrades: [...armATrades, ...armBTrades],
       statistic: "mean_daily_pnl",
       ciLevel: 0.95,
       resamples: 800,
@@ -151,7 +152,6 @@ describe("single-arm vs zero", () => {
     const { result, data } = runPairedBootstrapComparison({
       armATrades,
       armBTrades: null,
-      blockTrades: armATrades,
       statistic: "mean_daily_pnl",
       ciLevel: 0.95,
       resamples: 500,
@@ -176,14 +176,13 @@ describe("zero-trade strategy filter", () => {
       runPairedBootstrapComparison({
         armATrades: [],
         armBTrades: null,
-        blockTrades: [],
         statistic: "mean_daily_pnl",
         ciLevel: 0.95,
         resamples: 100,
         seed: 42,
         strategyA: "Ghost",
       }),
-    ).toThrow(/No trades found for strategy "Ghost"/);
+    ).toThrow('Strategy "Ghost" has no trades in the selected date range.');
   });
 
   it("throws a clear error when arm B matched no trades", () => {
@@ -192,7 +191,6 @@ describe("zero-trade strategy filter", () => {
       runPairedBootstrapComparison({
         armATrades,
         armBTrades: [],
-        blockTrades: armATrades,
         statistic: "mean_daily_pnl",
         ciLevel: 0.95,
         resamples: 100,
@@ -200,7 +198,7 @@ describe("zero-trade strategy filter", () => {
         strategyA: "A",
         strategyB: "Ghost",
       }),
-    ).toThrow(/No trades found for strategy "Ghost"/);
+    ).toThrow('Strategy "Ghost" has no trades in the selected date range.');
   });
 });
 
@@ -226,7 +224,6 @@ describe("block-length derivation vs override", () => {
     const { result } = runPairedBootstrapComparison({
       armATrades,
       armBTrades,
-      blockTrades,
       statistic: "mean_daily_pnl",
       ciLevel: 0.95,
       resamples: 300,
@@ -243,7 +240,6 @@ describe("block-length derivation vs override", () => {
     const { result, data } = runPairedBootstrapComparison({
       armATrades,
       armBTrades,
-      blockTrades,
       statistic: "mean_daily_pnl",
       ciLevel: 0.95,
       resamples: 300,
@@ -275,7 +271,6 @@ describe("refusal path", () => {
     const { result, summary, data } = runPairedBootstrapComparison({
       armATrades,
       armBTrades,
-      blockTrades: [...armATrades, ...armBTrades],
       statistic: "mean_daily_pnl",
       ciLevel: 0.95,
       resamples: 300,
@@ -301,7 +296,6 @@ describe("refusal path", () => {
     const { result, summary, data } = runPairedBootstrapComparison({
       armATrades,
       armBTrades,
-      blockTrades: [...armATrades, ...armBTrades],
       statistic: "mean_daily_pnl",
       ciLevel: 0.95,
       resamples: 300,
@@ -331,7 +325,6 @@ describe("determinism", () => {
   const params = {
     armATrades,
     armBTrades: null,
-    blockTrades: armATrades,
     statistic: "mean_daily_pnl" as const,
     ciLevel: 0.95,
     resamples: 400,
