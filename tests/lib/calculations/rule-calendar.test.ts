@@ -335,3 +335,75 @@ describe("determinism", () => {
     expect(buildRuleCalendar(a5Trades(), rule)).toEqual(buildRuleCalendar(a5Trades(), rule));
   });
 });
+
+describe("end of the record (recordEnd)", () => {
+  // Mondays 2023, 7 DTE exact. 2023-12-25 is a holiday, so 2023-12-18 is the
+  // last rule day. A backtest whose record ends there leaves that entry open
+  // (its expiry, 2023-12-25, is after the end) and out of the trade log.
+  const rule = { entryWeekdays: [1], dte: 7, selection: "exact" as const };
+  const range = { from: "2023-01-02", through: "2023-12-18" };
+  const allButLast = () => exactTrades().filter((t) => t.openDate < "2023-12-18");
+
+  it("does not count a rule day whose entry would expire after recordEnd as missing", () => {
+    const before = buildRuleCalendar(allButLast(), rule, range);
+    expect(before.missingRuleDays.count).toBe(1);
+
+    const report = buildRuleCalendar(allButLast(), rule, range, { recordEnd: "2023-12-18" });
+    expect(report.missingRuleDays).toEqual({ count: 0, share: 0, sample: [] });
+    expect(report.unobservableRuleDays).toEqual({
+      recordEnd: "2023-12-18",
+      count: 1,
+      sample: ["2023-12-18"],
+    });
+    expect(
+      report.tradedRuleDays + report.missingRuleDays.count + report.unobservableRuleDays!.count,
+    ).toBe(report.ruleDays);
+  });
+
+  it("still counts a rule day whose expiry is on or before recordEnd as missing", () => {
+    // 2023-12-11 expires 2023-12-18 = recordEnd: the trade would be in the log.
+    const trades = allButLast().filter((t) => t.openDate !== "2023-12-11");
+    const report = buildRuleCalendar(trades, rule, range, { recordEnd: "2023-12-18" });
+    expect(report.missingRuleDays.count).toBe(1);
+    expect(report.missingRuleDays.sample).toEqual(["2023-12-11"]);
+    expect(report.unobservableRuleDays!.count).toBe(1);
+    expect(report.missingRuleDays.share).toBeCloseTo(1 / (report.ruleDays - 1), 12);
+  });
+
+  it("counts a traded rule day after the record end as traded", () => {
+    // closeOpenTradesAtTestCompletion: the entry is closed on the last day and reported.
+    const report = buildRuleCalendar(exactTrades(), rule, range, { recordEnd: "2023-12-18" });
+    expect(report.tradedRuleDays).toBe(report.ruleDays);
+    expect(report.missingRuleDays.count).toBe(0);
+    expect(report.unobservableRuleDays!.count).toBe(0);
+  });
+
+  it("leaves 0 DTE unchanged: a same-day expiry is never after recordEnd", () => {
+    const sessions = enumerateXnysSessionsV2("2023-12-01", "2023-12-29");
+    const trades = sessions
+      .slice(0, -1)
+      .map((d) => ({ openDate: d, openTime: "09:35:00", legs: ooLegs(d) }));
+    const rule0 = { entryWeekdays: "daily" as const, dte: 0, selection: "exact" as const };
+    const r = { from: "2023-12-01", through: "2023-12-29" };
+    const without = buildRuleCalendar(trades, rule0, r);
+    const withEnd = buildRuleCalendar(trades, rule0, r, { recordEnd: "2023-12-29" });
+    expect(withEnd.missingRuleDays).toEqual(without.missingRuleDays);
+    expect(withEnd.missingRuleDays.sample).toEqual(["2023-12-29"]);
+    expect(withEnd.unobservableRuleDays!.count).toBe(0);
+  });
+
+  it("uses the minimum DTE for 'firstAtLeast': a day is excluded only if even the earliest eligible expiry is after recordEnd", () => {
+    const fal = { ...rule, selection: "firstAtLeast" as const };
+    const trades = allButLast().filter((t) => t.openDate !== "2023-12-11");
+    const report = buildRuleCalendar(trades, fal, range, { recordEnd: "2023-12-18" });
+    expect(report.missingRuleDays.sample).toEqual(["2023-12-11"]);
+    expect(report.unobservableRuleDays!.sample).toEqual(["2023-12-18"]);
+  });
+
+  it("keeps the default report unchanged and refuses an impossible recordEnd", () => {
+    expect(buildRuleCalendar(allButLast(), rule, range)).not.toHaveProperty("unobservableRuleDays");
+    expect(() => buildRuleCalendar(allButLast(), rule, range, { recordEnd: "2023-02-30" })).toThrow(
+      RangeError,
+    );
+  });
+});

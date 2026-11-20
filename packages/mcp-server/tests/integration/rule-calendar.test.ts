@@ -82,6 +82,23 @@ function edgeTradeLog(): string {
   );
 }
 
+/**
+ * "7 DTE, Mondays", exact DTE, record ending on Monday 2023-12-18: that entry
+ * would expire after the end and is not in the log (the backtest left it open).
+ */
+function recordEndTradeLog(): string {
+  const rows = [
+    "Date Opened,Time Opened,Date Closed,Time Closed,Legs,Premium,No. of Contracts,P/L,Strategy",
+  ];
+  const mondays = enumerateXnysSessionsV2("2023-11-06", "2023-12-11").filter(
+    (d) => new Date(`${d}T00:00:00Z`).getUTCDay() === 1,
+  );
+  for (const d of mondays) {
+    rows.push(`${d},09:35:00,${addDays(d, 7)},16:00:00,${ooLegs(addDays(d, 7))},40,1,25,END`);
+  }
+  return rows.join("\n") + "\n";
+}
+
 async function withTools(
   run: (call: (name: string, args: Record<string, unknown>) => Promise<Result>) => Promise<void>,
   csv: string = a5TradeLog(),
@@ -232,5 +249,38 @@ describe("get_rule_calendar", () => {
       expect(summary).toMatch(/below the minimum/);
       expect(summary).toMatch(/first-listed expiry selection not checked/);
     });
+  });
+
+  it("does not count a rule day after the record end as missing (recordEnd)", async () => {
+    await withTools(async (call) => {
+      const args = {
+        blockId: "a5",
+        rule: { entryWeekdays: [1], dte: 7, selection: "exact" },
+        dateRange: { start: "2023-11-06", end: "2023-12-18" },
+      };
+      const before = (await call("get_rule_calendar", args))
+        .structuredContent as unknown as RuleCalendarReport;
+      expect(before.missingRuleDays.sample).toEqual(["2023-12-18"]);
+      expect(before).not.toHaveProperty("unobservableRuleDays");
+
+      const result = await call("get_rule_calendar", { ...args, recordEnd: "2023-12-18" });
+      expect(result.isError).not.toBe(true);
+      const data = result.structuredContent as unknown as RuleCalendarReport;
+      expect(data.missingRuleDays).toEqual({ count: 0, share: 0, sample: [] });
+      expect(data.unobservableRuleDays).toEqual({
+        recordEnd: "2023-12-18",
+        count: 1,
+        sample: ["2023-12-18"],
+      });
+      const summary = result.content?.[0]?.text ?? "";
+      expect(summary).toMatch(/6 of 7 rule days traded, 0 missing/);
+      expect(summary).toMatch(
+        /1 rule day\(s\) not checkable: the entry would expire after the record end 2023-12-18/,
+      );
+
+      const bad = await call("get_rule_calendar", { ...args, recordEnd: "2023-02-30" });
+      expect(bad.isError).toBe(true);
+      expect(bad.content?.[0]?.text).toMatch(/recordEnd 2023-02-30 is not a calendar date/);
+    }, recordEndTradeLog());
   });
 });

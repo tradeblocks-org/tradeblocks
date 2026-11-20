@@ -20,3 +20,9 @@ took the first eligible listed expiry; the report says so in
 `dte.firstListedCompliance` (`"not_checked"`). Entries without an entry time, or
 with a malformed one, are reported apart and not counted inside or outside the
 entry window.
+
+A backtest reports no close after the end of its range, so an entry on one of
+the last rule days that would expire after the end is not in the trade log.
+Pass that day as `recordEnd`: such rule days are listed in
+`unobservableRuleDays` instead of being counted as missing. Without `recordEnd`
+the report is unchanged.
