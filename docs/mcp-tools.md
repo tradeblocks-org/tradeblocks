@@ -622,7 +622,7 @@ entry rule implies. Input: `rule.entryWeekdays` (1 = Monday ... 5 = Friday, or
 `"daily"`), `rule.dte` (front-leg days to expiry), `rule.selection` and an
 optional `rule.entryWindow` (`from`/`to`, `HH:mm`, inclusive, in the trade log's
 time zone), plus an optional `dateRange` of rule days (default: first through
-last entry date).
+last entry date) and an optional `recordEnd` (see below).
 
 The trade log records what was traded, not which expiries were listed. The tool
 therefore checks the observed DTE only and never whether an entry selected the
@@ -657,6 +657,15 @@ first eligible listed expiry.
   `unknownTime` (the loader's `00:00:00` placeholder is not an entry time); a
   malformed time (`09:35junk`, `25:00`) is `invalidTime`. Neither is counted
   inside or outside the window.
+- End of the record: a backtest reports no close after its last day (Option
+  Omega's `rangeEnd`; a position still open then is left out of the log or
+  closed that day). Pass that day as `recordEnd`. A rule day without an entry
+  whose earliest expiry under the rule (open date + `dte` calendar days) falls
+  after `recordEnd` is listed in `unobservableRuleDays` (`recordEnd`, `count`,
+  `sample`) and left out of `missingRuleDays` and its share. A rule day whose
+  expiry is on or before `recordEnd` still counts as missing; 0 DTE is never
+  affected. Without `recordEnd` the report is unchanged and has no
+  `unobservableRuleDays`.
 
 ### Monte Carlo input series and marked-account risk
 

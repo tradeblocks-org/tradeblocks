@@ -56,6 +56,17 @@ export const ruleCalendarInputSchema = z.object({
     })
     .optional()
     .describe("Range of rule days. Defaults to the first through last entry date."),
+  recordEnd: z
+    .string()
+    .regex(ISO_DAY)
+    .optional()
+    .describe(
+      "Last day the trade log can report a close (YYYY-MM-DD), e.g. an Option Omega " +
+        "backtest's rangeEnd: a position still open then is left out of the log or closed " +
+        "that day. A rule day without an entry whose earliest expiry (open date + dte) falls " +
+        "after it is reported in unobservableRuleDays instead of as missing. Omit for a log " +
+        "that keeps reporting closes after the range.",
+    ),
 });
 
 type RuleCalendarInput = z.infer<typeof ruleCalendarInputSchema>;
@@ -70,7 +81,10 @@ const METHODOLOGY =
   "DTE is checked against the minimum; whether an entry took the first eligible listed expiry " +
   "is not checked, because the trade log has no listing data (dte.firstListedCompliance). " +
   "For the entry window, a missing Time Opened is unknown and a malformed one is invalid; " +
-  "neither is counted inside or outside the window.";
+  "neither is counted inside or outside the window. With recordEnd, a rule day without an " +
+  "entry whose earliest expiry (open date + dte calendar days) falls after recordEnd cannot " +
+  "appear in the log; it is listed in unobservableRuleDays and left out of missingRuleDays " +
+  "and its share.";
 
 function pct(value: number | null): string {
   return value === null ? "n/a" : `${(value * 100).toFixed(1)}%`;
@@ -88,6 +102,12 @@ function summarize(strategy: string, report: RuleCalendarReport): string {
         : `${report.dte.ruleViolations} below the minimum; first-listed expiry selection not ` +
           `checked (no listing data)`),
   ];
+  if (report.unobservableRuleDays && report.unobservableRuleDays.count > 0) {
+    parts.push(
+      `${report.unobservableRuleDays.count} rule day(s) not checkable: the entry would expire ` +
+        `after the record end ${report.unobservableRuleDays.recordEnd}`,
+    );
+  }
   if (report.offRuleEntryDays.count > 0) {
     parts.push(`${report.offRuleEntryDays.count} entry day(s) are not rule days`);
   }
@@ -149,6 +169,7 @@ export function registerRuleCalendarTool(server: McpServer, baseDir: string): vo
           })),
           input.rule,
           { from: input.dateRange?.start, through: input.dateRange?.end },
+          input.recordEnd === undefined ? undefined : { recordEnd: input.recordEnd },
         );
         const strategy = input.strategy ?? [...strategies][0];
         return createToolOutput(summarize(strategy, report), {

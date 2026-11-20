@@ -95,6 +95,14 @@ export interface RuleCalendarReport {
   ruleDays: number;
   tradedRuleDays: number;
   missingRuleDays: { count: number; share: number | null; sample: string[] };
+  /**
+   * Only with `recordEnd`: rule days without an entry whose earliest expiry
+   * under the rule (open date + `dte` calendar days) falls after `recordEnd`.
+   * Such an entry, if taken, was still open at the end of the record and is not
+   * in the trade log, so the day can be neither traded nor missing. They are
+   * left out of `missingRuleDays` and of its share's denominator.
+   */
+  unobservableRuleDays?: { recordEnd: string; count: number; sample: string[] };
   offRuleEntryDays: { count: number; sample: string[] };
   dte: {
     selection: DteSelection;
@@ -210,6 +218,12 @@ export function calendarDaysBetween(from: string, to: string): number {
   return Math.round(ms / 86_400_000);
 }
 
+function addCalendarDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function weekdayOf(date: string): number {
   return new Date(`${date}T00:00:00Z`).getUTCDay();
 }
@@ -222,6 +236,12 @@ function parseEntryTime(time: string | undefined): string | "unknown" | "invalid
   if (time === undefined || time.trim() === "") return "unknown";
   const match = time.trim().match(CLOCK_RE);
   return match ? `${pad2(Number(match[1]))}:${match[2]}` : "invalid";
+}
+
+function isCalendarDay(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const [y, m, d] = date.split("-").map(Number);
+  return m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth(y, m);
 }
 
 function share(part: number, whole: number): number | null {
@@ -237,12 +257,23 @@ function share(part: number, whole: number): number | null {
  *
  * `range` defaults to the first through last entry date. Throws RangeError
  * when the range lies outside the XNYS v2 calendar (2013-2030).
+ *
+ * `options.recordEnd` is the last day the trade log can report a close (for
+ * an Option Omega backtest its `rangeEnd`: a position still open then is left
+ * out of the log or closed on that day). A rule day without an entry whose
+ * earliest expiry falls after it is reported in `unobservableRuleDays`, not
+ * as missing. Throws RangeError for a recordEnd that is not a calendar date.
  */
 export function buildRuleCalendar(
   trades: RuleCalendarTrade[],
   rule: EntryRule,
   range?: { from?: string; through?: string },
+  options?: { recordEnd?: string },
 ): RuleCalendarReport {
+  const recordEnd = options?.recordEnd;
+  if (recordEnd !== undefined && !isCalendarDay(recordEnd)) {
+    throw new RangeError(`recordEnd ${recordEnd} is not a calendar date (YYYY-MM-DD)`);
+  }
   const openDates = trades.map((t) => t.openDate).sort();
   const from = range?.from ?? openDates[0];
   const through = range?.through ?? openDates[openDates.length - 1];
@@ -258,7 +289,12 @@ export function buildRuleCalendar(
   const sessions = new Set(enumerateXnysSessionsV2(from, through));
   const ruleDays = [...sessions].filter((d) => isRuleDay(d, sessions)).sort();
   const entryDates = new Set(inRange.map((t) => t.openDate));
-  const missing = ruleDays.filter((d) => !entryDates.has(d));
+  const untraded = ruleDays.filter((d) => !entryDates.has(d));
+  // The earliest expiry the rule allows is open date + dte under both selections.
+  const unobservable =
+    recordEnd === undefined ? [] : untraded.filter((d) => addCalendarDays(d, rule.dte) > recordEnd);
+  const unobservableSet = new Set(unobservable);
+  const missing = untraded.filter((d) => !unobservableSet.has(d));
   const offRule = [...entryDates].filter((d) => !isRuleDay(d, sessions)).sort();
 
   const years = new Map<number, RuleCalendarYear>();
@@ -350,12 +386,21 @@ export function buildRuleCalendar(
     range: { from, through },
     rule,
     ruleDays: ruleDays.length,
-    tradedRuleDays: ruleDays.length - missing.length,
+    tradedRuleDays: ruleDays.length - untraded.length,
     missingRuleDays: {
       count: missing.length,
-      share: share(missing.length, ruleDays.length),
+      share: share(missing.length, ruleDays.length - unobservable.length),
       sample: missing.slice(0, RULE_CALENDAR_SAMPLE_SIZE),
     },
+    ...(recordEnd === undefined
+      ? {}
+      : {
+          unobservableRuleDays: {
+            recordEnd,
+            count: unobservable.length,
+            sample: unobservable.slice(0, RULE_CALENDAR_SAMPLE_SIZE),
+          },
+        }),
     offRuleEntryDays: {
       count: offRule.length,
       sample: offRule.slice(0, RULE_CALENDAR_SAMPLE_SIZE),
