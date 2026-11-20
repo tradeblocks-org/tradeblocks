@@ -7,6 +7,7 @@
 export * from "./portfolio-stats.ts";
 export * from "./return-series-stats.ts";
 export * from "./realized-performance.ts";
+export * from "./capital-basis.ts";
 export * from "./marked-equity.ts";
 export * from "./book-replay.ts";
 export * from "./replay-calibration.ts";

@@ -20,6 +20,10 @@ import {
   formatDateKey,
   rebuildEquityCurve,
   getNetPl,
+  dailyNetPlByCloseDate,
+  plWithoutBestDays,
+  positiveYears,
+  summarizeCapitalBasis,
 } from "@tradeblocks/lib";
 import type { Trade, DailyLogEntry, PeakExposure, EquityCurvePoint } from "@tradeblocks/lib";
 import { resolveTradeTicker } from "../../utils/ticker.ts";
@@ -29,6 +33,7 @@ import {
   filterDailyLogsByDateRange,
 } from "../shared/filters.ts";
 import { withSyncedBlock, withFullSync } from "../middleware/sync-middleware.ts";
+import { capitalBasisSchema, resolveCapitalBasis } from "../shared/capital-basis.ts";
 
 function rebuildMissingFundsEquity(trades: Trade[], initialCapital: number): Trade[] {
   const rebuilt = rebuildEquityCurve(trades, { initialCapital, useNetPl: true });
@@ -423,12 +428,32 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
           .describe(
             "Optional fixed annual risk-free rate in percentage points (for example, 2 means 2%). Omit to use historical FRED DTB3 rates.",
           ),
+        capitalBasis: capitalBasisSchema.optional(),
+        topDays: z
+          .array(z.number().int().min(1).max(250))
+          .min(1)
+          .max(10)
+          .optional()
+          .describe(
+            "Optional: report net P&L without the best N days for each N (e.g. [1, 5, 10]), " +
+              "the share of total P&L those days carry, and the share of positive calendar years. " +
+              "Days are realization (close) dates, as in get_period_returns.",
+          ),
       }),
     },
     withSyncedBlock(
       baseDir,
       async (
-        { blockId, strategy, tickerFilter, startDate, endDate, riskFreeRateAnnualPct },
+        {
+          blockId,
+          strategy,
+          tickerFilter,
+          startDate,
+          endDate,
+          riskFreeRateAnnualPct,
+          capitalBasis,
+          topDays,
+        },
         { syncResult },
       ) => {
         try {
@@ -507,6 +532,26 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
           // Calculate peak daily exposure
           const peakExposure = calculatePeakExposure(trades, stats.initialCapital);
 
+          // Opt-in figures: added to the response only when requested.
+          const optIn: Record<string, unknown> = {};
+          if (capitalBasis || topDays) {
+            const daily = dailyNetPlByCloseDate(trades);
+            if (capitalBasis) {
+              const { basis, amountSource } = resolveCapitalBasis(capitalBasis, capital);
+              optIn.capitalBasis = { ...summarizeCapitalBasis(daily, basis), amountSource };
+            }
+            if (topDays) {
+              const years = positiveYears(daily);
+              optIn.plWithoutBestDays = plWithoutBestDays(daily, topDays);
+              optIn.positiveYearShare = years.share;
+              optIn.yearlyNetPl = years.perYear;
+              optIn.topDaysMethodology =
+                "Net P&L summed per realization (close) date; best days = highest positive daily " +
+                "net P&L, ties to the earlier date; shareOfTotal = removed P&L / total net P&L " +
+                "(null when the total is not positive); a year is positive when its net P&L > 0.";
+            }
+          }
+
           // Brief summary for user display
           const summary = `Stats: ${blockId}${strategy ? ` (${strategy})` : ""} | ${stats.totalTrades} trades | Win: ${formatPercent(stats.winRate * 100)} | Net P&L: ${formatCurrency(stats.netPl)} | Sharpe: ${formatRatio(stats.sharpeRatio)}`;
 
@@ -554,6 +599,7 @@ export function registerCoreBlockTools(server: McpServer, baseDir: string): void
               byPercent: peakExposure.peakByPercent,
             },
             calculationMethodology,
+            ...optIn,
             // Add sync info if sync occurred
             ...(syncResult.status === "synced"
               ? { syncInfo: { status: "synced", tradeCount: syncResult.tradeCount } }

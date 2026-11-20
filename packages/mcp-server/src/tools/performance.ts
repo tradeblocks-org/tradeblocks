@@ -10,6 +10,7 @@ import { loadBlock, loadReportingLog } from "../utils/block-loader.ts";
 import { resolveStartingCapital } from "../utils/starting-capital.ts";
 import { createToolOutput, formatPercent, formatCurrency } from "../utils/output-formatter.ts";
 import { filterByRealizationDateRange, filterDailyLogsByDateRange } from "./shared/filters.ts";
+import { capitalBasisSchema, resolveCapitalBasis } from "./shared/capital-basis.ts";
 import type { Trade, ReportingTrade } from "@tradeblocks/lib";
 import {
   normalizeToOneLot,
@@ -33,6 +34,7 @@ import {
   buildRealizedHoldingPeriods as buildHoldingPeriods,
   buildRealizedPremiumEfficiencyByCloseDate as buildPremiumEfficiency,
   buildRealizedPeriodReturnsByCloseDate,
+  periodReturnPct,
   computeTotalPremium,
   computeTotalMaxProfit,
   computeTotalMaxLoss,
@@ -945,12 +947,12 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
     "get_period_returns",
     {
       description:
-        "Get P&L breakdown by period (monthly, weekly, or daily) with reported P/L, commissions, and basis-aware net P/L. Option Omega reported P/L already includes fees.",
+        "Get P&L breakdown by period (yearly, monthly, weekly, or daily) with reported P/L, commissions, and basis-aware net P/L. Option Omega reported P/L already includes fees. Optionally add each period's return in percent on a fixed or compounding capital basis.",
       inputSchema: z.object({
         blockId: z.string().describe("Block folder name"),
         strategy: z.string().optional().describe("Filter by strategy name (case-insensitive)"),
         period: z
-          .enum(["monthly", "weekly", "daily"])
+          .enum(["monthly", "weekly", "daily", "yearly"])
           .default("monthly")
           .describe("Time period for grouping (default: monthly)"),
         year: z
@@ -968,9 +970,10 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
           .boolean()
           .default(false)
           .describe("Normalize all trades to 1 contract for fair comparison"),
+        capitalBasis: capitalBasisSchema.optional(),
       }),
     },
-    async ({ blockId, strategy, period, year, dateRange, normalizeTo1Lot }) => {
+    async ({ blockId, strategy, period, year, dateRange, normalizeTo1Lot, capitalBasis }) => {
       try {
         const block = await loadBlock(baseDir, blockId);
         let trades = block.trades;
@@ -1010,6 +1013,23 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
 
         const { periods, totals } = buildRealizedPeriodReturnsByCloseDate(trades, period);
 
+        // Percent returns only when a capital basis is requested, so the
+        // default response stays unchanged.
+        let basisData: Record<string, unknown> = {};
+        if (capitalBasis) {
+          const { basis, amountSource } = resolveCapitalBasis(
+            capitalBasis,
+            // A strategy filter makes the portfolio-wide daily log the wrong source.
+            resolveStartingCapital(block.trades, strategy ? undefined : block.dailyLogs),
+          );
+          const pct = periodReturnPct(periods, basis);
+          basisData = {
+            capitalBasis: { mode: basis.mode, amount: basis.amount, amountSource },
+            periods: periods.map((p, i) => ({ ...p, returnPct: pct[i] })),
+            totals: { ...totals, returnPct: (totals.netPl / basis.amount) * 100 },
+          };
+        }
+
         // Brief summary for user display
         const filters: string[] = [];
         if (strategy) filters.push(`strategy=${strategy}`);
@@ -1040,7 +1060,14 @@ export function registerPerformanceTools(server: McpServer, baseDir: string): vo
             reportedPl: "source_reported_basis",
             grossPl: "gross_before_fees_reconstructed_from_declared_basis",
             netPl: "net_after_fees_deducted_exactly_once",
+            ...(capitalBasis
+              ? {
+                  returnPct:
+                    "net P/L / amount (fixed) or / (amount + earlier periods' net P/L) (compounding); totals: net P/L / amount",
+                }
+              : {}),
           },
+          ...basisData,
         };
 
         return createToolOutput(summary, structuredData);
