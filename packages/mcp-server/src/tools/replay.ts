@@ -138,7 +138,8 @@ const MONTH_MAP: Record<string, string> = {
  */
 function resolveOOExpiryHint(hint: string, year: string, tradeOpenDate: string): string {
   const [mon, day] = hint.split(" ");
-  const mm = MONTH_MAP[mon.toLowerCase()];
+  const key = mon.toLowerCase();
+  const mm = Object.hasOwn(MONTH_MAP, key) ? MONTH_MAP[key] : undefined;
   if (mm === undefined) {
     throw new Error(
       `Unknown month "${mon}" in OO leg expiry "${hint}" — expected a three-letter month such as "Mar"`,

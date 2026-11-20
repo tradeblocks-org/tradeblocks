@@ -848,6 +848,10 @@ describe("resolveOODateRange", () => {
     ];
 
     expect(() => resolveOODateRange(legs, "2026", "2026-03-14")).toThrow(/Unknown month "Foo"/);
+    for (const word of ["constructor", "__proto__"]) {
+      const proto = [{ ...legs[0], expiryHint: `${word} 17` }];
+      expect(() => resolveOODateRange(proto, "2026", "2026-03-14")).toThrow(/Unknown month/);
+    }
   });
 
   it("returns null when no legs have expiryHint", () => {
