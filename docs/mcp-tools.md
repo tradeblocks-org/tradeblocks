@@ -73,6 +73,14 @@ All exit tools read cached option-leg quotes via QuoteStore and underlying bars 
 [computed option-Greeks method](market-data.md#computed-option-greeks-method);
 its attribution is distinct from cached quote-Greek provenance.
 
+`decompose_greeks` explains the mark-to-mark change along the replay path: its
+`totalPnlChange` runs from the path's first bar (the first at or after entry
+when the entry time is known) to its last. `replay_trade`'s `totalPnl` is
+measured from the trade's entry prices. The two differ by the first bar's
+`strategyPnl`, the gap between each leg's entry price and its first mid.
+Option Omega fills at the entry-minute mid, so for its trades the gap is only
+the rounding of that mid to a tick.
+
 ## Greek Attribution
 
 | Tool                     | Description                                      |
