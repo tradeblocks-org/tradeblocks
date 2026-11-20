@@ -110,19 +110,20 @@ export const replayTradeSchema = z.object({
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** OO leg month abbreviation (lower-cased) → two-digit month. */
 const MONTH_MAP: Record<string, string> = {
-  Jan: "01",
-  Feb: "02",
-  Mar: "03",
-  Apr: "04",
-  May: "05",
-  Jun: "06",
-  Jul: "07",
-  Aug: "08",
-  Sep: "09",
-  Oct: "10",
-  Nov: "11",
-  Dec: "12",
+  jan: "01",
+  feb: "02",
+  mar: "03",
+  apr: "04",
+  may: "05",
+  jun: "06",
+  jul: "07",
+  aug: "08",
+  sep: "09",
+  oct: "10",
+  nov: "11",
+  dec: "12",
 };
 
 /**
@@ -131,10 +132,19 @@ const MONTH_MAP: Record<string, string> = {
  * The hint carries no year. A leg cannot expire before the trade opens, so a
  * date that resolves before `tradeOpenDate` belongs to the next year (a
  * December entry with a January leg). A same-day expiry stays in `year`.
+ *
+ * The month matches case-insensitively ("Mar", "MAR"); any other word is
+ * refused rather than guessed.
  */
 function resolveOOExpiryHint(hint: string, year: string, tradeOpenDate: string): string {
   const [mon, day] = hint.split(" ");
-  const mm = MONTH_MAP[mon] ?? "01";
+  const key = mon.toLowerCase();
+  const mm = Object.hasOwn(MONTH_MAP, key) ? MONTH_MAP[key] : undefined;
+  if (mm === undefined) {
+    throw new Error(
+      `Unknown month "${mon}" in OO leg expiry "${hint}" — expected a three-letter month such as "Mar"`,
+    );
+  }
   const dd = day.padStart(2, "0");
   const resolved = `${year}-${mm}-${dd}`;
   if (resolved < tradeOpenDate.slice(0, 10)) {

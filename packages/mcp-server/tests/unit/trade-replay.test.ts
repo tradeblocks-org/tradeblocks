@@ -833,6 +833,27 @@ describe("resolveOODateRange", () => {
     expect(result).toEqual({ from: "2025-12-29", to: "2026-01-16" });
   });
 
+  it("maps an upper-case month to the same month", () => {
+    const legs = [
+      { root: "", strike: 5900, type: "P" as const, quantity: 1, expiryHint: "MAR 17" },
+    ];
+
+    const result = resolveOODateRange(legs, "2026", "2026-03-14");
+    expect(result).toEqual({ from: "2026-03-14", to: "2026-03-17" });
+  });
+
+  it("refuses an unrecognized month instead of defaulting to January", () => {
+    const legs = [
+      { root: "", strike: 5900, type: "P" as const, quantity: 1, expiryHint: "Foo 17" },
+    ];
+
+    expect(() => resolveOODateRange(legs, "2026", "2026-03-14")).toThrow(/Unknown month "Foo"/);
+    for (const word of ["constructor", "__proto__"]) {
+      const proto = [{ ...legs[0], expiryHint: `${word} 17` }];
+      expect(() => resolveOODateRange(proto, "2026", "2026-03-14")).toThrow(/Unknown month/);
+    }
+  });
+
   it("returns null when no legs have expiryHint", () => {
     const legs = [
       { root: "SPY", strike: 470, type: "C" as const, quantity: 1 },
