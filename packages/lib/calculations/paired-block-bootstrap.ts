@@ -14,8 +14,11 @@
  *   2. Serial dependence. Resampling draws contiguous day-blocks (moving-block
  *      bootstrap) whose length is derived from the caller's holding periods, so
  *      the confidence interval widens honestly when returns cluster in time.
- *   3. Gap awareness. A drawn block never crosses a dormancy gap and never
- *      wraps the series end; blocks live inside contiguous observed runs.
+ *   3. Gap awareness. A drawn block never crosses a dormancy gap; blocks live
+ *      inside contiguous observed runs. The default `moving` scheme never
+ *      wraps a run. The opt-in `circular-within-run` scheme (see
+ *      {@link BlockScheme}) wraps within a run so every overlap day carries
+ *      equal resampling weight; it is meant for the mean.
  *   4. Selection. When several candidate comparisons are considered and only the
  *      extremum is reported, the bootstrap distribution is of "the selected
  *      extremum", so the interval is selection-adjusted by construction.
@@ -80,6 +83,31 @@ export interface SelectionSet {
   extremum: "max" | "min";
 }
 
+/**
+ * How candidate blocks are formed inside each contiguous jointly observed run.
+ *
+ *   - `moving` (default): a block starts wherever `blockDays` consecutive days
+ *     fit inside one run. Days in runs shorter than the block are never drawn
+ *     and days near run ends are drawn less often than interior days.
+ *   - `circular-within-run`: every overlap day starts one block, which wraps
+ *     from the end of its run back to the run's start. Every overlap day is in
+ *     exactly `blockDays` candidates, and at every within-block position each
+ *     overlap day appears exactly once, so a resample's mean equals the
+ *     observed mean in expectation (#622). That is the only property claimed:
+ *     it does not make every percentile interval centred, and it says nothing
+ *     about nonlinear, path or selection statistics. Wrapping joins a run's
+ *     last day to its first and repeats the days of runs shorter than the
+ *     block (a one-day run becomes a block of one repeated day). Only use it
+ *     with the mean; it is rejected for a selection set.
+ *
+ * Both schemes draw one uniform candidate per block from the seeded PRNG, so
+ * the same input and seed always give the same draws. For the same seed the
+ * two schemes give different draws and therefore different intervals.
+ */
+export type BlockScheme = "moving" | "circular-within-run";
+
+const BLOCK_SCHEMES: readonly BlockScheme[] = ["moving", "circular-within-run"];
+
 export interface PairedBlockBootstrapInput {
   armA: DaySeries;
   /** Omitted -> single-arm mode; a constant -> arm A minus threshold. */
@@ -105,6 +133,8 @@ export interface PairedBlockBootstrapInput {
    * below it the result is `notComparable` with a null interval.
    */
   effectiveNFloorBlocks?: number;
+  /** Candidate-block scheme; default `moving`. See {@link BlockScheme}. */
+  blockScheme?: BlockScheme;
 }
 
 export interface ConfidenceInterval {
@@ -148,6 +178,8 @@ export interface PairedBlockBootstrapResult {
   selection: SelectionSummary | null;
   status: PairedBlockBootstrapStatus;
   seed: number;
+  /** Candidate-block scheme the interval was drawn with. */
+  blockScheme: BlockScheme;
 }
 
 /** Direction of a caller-specified one-sided bootstrap test. */
@@ -529,41 +561,112 @@ function buildPairedPathOverlap(armA: DaySeries, armB: DaySeries): PairedPathOve
 // ---------------------------------------------------------------------------
 
 /**
- * Global start indices of every valid moving block of length `blockDays`.
+ * Number of candidate blocks, from run metadata only.
  *
- * Within each run a block may start at [0, runLength - blockDays]; a block never
- * crosses a run boundary (a gap) and never wraps the series end. The returned
- * indices point into the overlap `days`/`delta` arrays.
+ * `moving`: a run of length L offers max(0, L - blockDays + 1) starts.
+ * `circular-within-run`: a run of length L offers L starts (one per day).
+ * Allocates nothing, so refusal checks can run before any candidate is built.
  */
-function enumerateBlockStarts(runs: ObservedRun[], blockDays: number): number[] {
-  const starts: number[] = [];
+function countCandidates(runs: ObservedRun[], blockDays: number, scheme: BlockScheme): number {
+  let count = 0;
   for (const run of runs) {
-    const lastStart = run.length - blockDays;
-    for (let offset = 0; offset <= lastStart; offset++) {
-      starts.push(run.start + offset);
-    }
+    count += scheme === "moving" ? Math.max(0, run.length - blockDays + 1) : run.length;
   }
-  return starts;
+  return count;
+}
+
+/**
+ * Candidate blocks described by start/run metadata. Candidates are numbered
+ * run by run, offsets ascending; `firstCandidate[r]` is run r's first number.
+ * No per-candidate or per-day index arrays are stored.
+ */
+interface BlockCandidates {
+  runs: ObservedRun[];
+  blockDays: number;
+  scheme: BlockScheme;
+  firstCandidate: number[];
+  count: number;
+}
+
+function describeCandidates(
+  runs: ObservedRun[],
+  blockDays: number,
+  scheme: BlockScheme,
+): BlockCandidates {
+  const firstCandidate: number[] = new Array(runs.length);
+  let count = 0;
+  for (let r = 0; r < runs.length; r++) {
+    firstCandidate[r] = count;
+    count += scheme === "moving" ? Math.max(0, runs[r].length - blockDays + 1) : runs[r].length;
+  }
+  return { runs, blockDays, scheme, firstCandidate, count };
+}
+
+/**
+ * Append candidate `c`'s overlap positions to `out`, stopping at `limit`.
+ * The candidate's run is the last run whose first candidate is <= c (runs
+ * that offer no candidate share their number with the next run).
+ */
+function emitCandidate(candidates: BlockCandidates, c: number, out: number[], limit: number): void {
+  const { runs, firstCandidate, blockDays, scheme } = candidates;
+  let lo = 0;
+  let hi = runs.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1;
+    if (firstCandidate[mid] <= c) lo = mid;
+    else hi = mid - 1;
+  }
+  const run = runs[lo];
+  const offset = c - firstCandidate[lo];
+  for (let k = 0; k < blockDays && out.length < limit; k++) {
+    out.push(
+      scheme === "moving" ? run.start + offset + k : run.start + ((offset + k) % run.length),
+    );
+  }
 }
 
 /**
  * Draw a resampled sequence of overlap positions of length `n` by concatenating
- * moving blocks drawn with replacement, truncating the final block to length.
+ * candidate blocks drawn uniformly with replacement, truncating the final
+ * block to length. One PRNG draw per block; for `moving` this reproduces the
+ * draws of the original start-array implementation exactly.
  */
-function drawResampleIndices(
-  rng: () => number,
-  blockStarts: number[],
-  blockDays: number,
-  n: number,
-): number[] {
+function drawResampleIndices(rng: () => number, candidates: BlockCandidates, n: number): number[] {
   const indices: number[] = [];
   while (indices.length < n) {
-    const start = blockStarts[Math.floor(rng() * blockStarts.length)];
-    for (let k = 0; k < blockDays && indices.length < n; k++) {
-      indices.push(start + k);
-    }
+    emitCandidate(candidates, Math.floor(rng() * candidates.count), indices, n);
   }
   return indices;
+}
+
+/** Materialize every candidate block (audit helpers only, after a size check). */
+function materializeCandidates(candidates: BlockCandidates): number[][] {
+  const blocks: number[][] = [];
+  for (let c = 0; c < candidates.count; c++) {
+    const block: number[] = [];
+    emitCandidate(candidates, c, block, candidates.blockDays);
+    blocks.push(block);
+  }
+  return blocks;
+}
+
+/**
+ * Refuse to list more candidate days than fit comfortably in memory. Only the
+ * circular scheme can exceed the overlap length per block; moving blocks are
+ * bounded by their run and keep their original behaviour.
+ */
+function assertListable(count: number, blockDays: number): void {
+  if (count * blockDays > 50_000_000) {
+    throw new RangeError("too many candidate block days to list; use a shorter blockDays");
+  }
+}
+
+function resolveBlockScheme(scheme: unknown): BlockScheme {
+  if (scheme === undefined) return "moving";
+  if (!BLOCK_SCHEMES.includes(scheme as BlockScheme)) {
+    throw new TypeError(`blockScheme must be one of ${BLOCK_SCHEMES.join(", ")}`);
+  }
+  return scheme as BlockScheme;
 }
 
 // ---------------------------------------------------------------------------
@@ -604,6 +707,7 @@ function computeCore(params: {
   ciLevel: number;
   statistic: (delta: number[]) => number;
   effectiveNFloorBlocks?: number;
+  blockScheme: BlockScheme;
 }): CoreResult {
   const {
     overlapDays,
@@ -617,6 +721,7 @@ function computeCore(params: {
     ciLevel,
     statistic,
     effectiveNFloorBlocks,
+    blockScheme,
   } = params;
 
   const n = overlapDays.length;
@@ -635,22 +740,27 @@ function computeCore(params: {
     point = statistic(deltaSeries);
   }
 
-  const blockStarts = enumerateBlockStarts(runs, blockDays);
-
+  // Refusals run before any candidate is built, so a block longer than the
+  // overlap refuses instead of allocating.
   // Honest refusal: caller-calibrated power floor takes precedence.
   if (effectiveNFloorBlocks !== undefined && effectiveN < effectiveNFloorBlocks) {
     return { point, low: null, high: null, effectiveN, status: "notComparable" };
   }
 
-  // Structurally degenerate: cannot draw a bootstrap distribution.
-  if (blockStarts.length < 2) {
+  // Structurally degenerate: no bootstrap distribution can be drawn. Moving
+  // blocks need two drawable starts; circular blocks need the overlap to
+  // exceed one block.
+  const degenerate =
+    blockScheme === "moving" ? countCandidates(runs, blockDays, blockScheme) < 2 : n <= blockDays;
+  if (degenerate) {
     return { point, low: null, high: null, effectiveN, status: "underpowered" };
   }
 
+  const candidates = describeCandidates(runs, blockDays, blockScheme);
   const rng = mulberry32(deriveSeed(seed, blockDays));
   const distribution: number[] = new Array(resamples);
   for (let r = 0; r < resamples; r++) {
-    const idx = drawResampleIndices(rng, blockStarts, blockDays, n);
+    const idx = drawResampleIndices(rng, candidates, n);
     if (memberDeltas) {
       const stats = memberDeltas.map((d) => statistic(idx.map((i) => d[i])));
       distribution[r] = takeExtremum(stats);
@@ -718,7 +828,6 @@ function computePairedPathCore(params: {
           [...armB],
           "statistic result on observed paths",
         );
-  const blockStarts = enumerateBlockStarts(runs, blockDays);
 
   if (effectiveNFloorBlocks !== undefined && effectiveN < effectiveNFloorBlocks) {
     return {
@@ -732,7 +841,9 @@ function computePairedPathCore(params: {
     };
   }
 
-  if (blockStarts.length < 2 || point === null) {
+  // Moving blocks only; the count needs run metadata alone, so this refusal
+  // runs before any candidate is built.
+  if (countCandidates(runs, blockDays, "moving") < 2 || point === null) {
     return {
       point,
       low: null,
@@ -744,13 +855,14 @@ function computePairedPathCore(params: {
     };
   }
 
+  const candidates = describeCandidates(runs, blockDays, "moving");
   const rng = mulberry32(deriveSeed(seed, blockDays));
   const centeredErrors: number[] = new Array(resamples);
   let tailCount = 0;
   const observedDisplacement = point - nullValue;
 
   for (let r = 0; r < resamples; r++) {
-    const idx = drawResampleIndices(rng, blockStarts, blockDays, n);
+    const idx = drawResampleIndices(rng, candidates, n);
     const draw = evaluatePairedPathStatistic(
       statistic,
       idx.map((i) => armA[i]),
@@ -841,21 +953,28 @@ function buildSelectionOverlap(members: SelectionMember[]): SelectionOverlap {
 // ---------------------------------------------------------------------------
 
 /**
- * The ISO days of every valid moving block for the primary comparison.
+ * The ISO days of every candidate block for the primary comparison.
  *
- * Each inner array is one candidate block: exactly `blockDays` consecutive
- * observed days drawn from a single contiguous run. The bootstrap draws
- * exclusively from these blocks, so this is the exact set a resample can touch
- * -- exposing it lets callers verify that no block ever spans a dormancy gap.
+ * Each inner array is one candidate block of `blockDays` observed days from a
+ * single contiguous run, formed by `input.blockScheme` (default `moving`:
+ * consecutive days that fit inside the run; `circular-within-run`: one block
+ * per day, wrapping within its run). The bootstrap draws exclusively from
+ * these blocks, so this is the exact set a resample can touch -- exposing it
+ * lets callers verify that no block ever spans a dormancy gap.
  */
 export function pairedBlockDays(input: PairedBlockBootstrapInput, blockDays: number): string[][] {
+  const scheme = resolveBlockScheme(input.blockScheme);
   const overlap = buildComparisonOverlap(input.armA, input.armB);
-  const starts = enumerateBlockStarts(overlap.runs, blockDays);
-  return starts.map((start) => overlap.days.slice(start, start + blockDays));
+  if (scheme !== "moving") {
+    assertListable(countCandidates(overlap.runs, blockDays, scheme), blockDays);
+  }
+  return materializeCandidates(describeCandidates(overlap.runs, blockDays, scheme)).map((block) =>
+    block.map((i) => overlap.days[i]),
+  );
 }
 
 /**
- * The ISO days of every valid moving block for a paired-path comparison.
+ * The ISO days of every moving candidate block for a paired-path comparison.
  *
  * This is the exact candidate set used by {@link pairedPathBlockBootstrap}; it
  * is exposed so callers can audit overlap and gap handling without inspecting
@@ -873,8 +992,9 @@ export function pairedPathBlockDays(
   }
   const overlap = buildPairedPathOverlap(input.armA, input.armB);
   const normalizedBlockDays = Math.max(1, Math.round(blockDays));
-  const starts = enumerateBlockStarts(overlap.runs, normalizedBlockDays);
-  return starts.map((start) => overlap.days.slice(start, start + normalizedBlockDays));
+  return materializeCandidates(describeCandidates(overlap.runs, normalizedBlockDays, "moving")).map(
+    (block) => block.map((i) => overlap.days[i]),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -915,6 +1035,12 @@ export function holdingPeriodBlockDays(
 export function pairedBlockBootstrap(input: PairedBlockBootstrapInput): PairedBlockBootstrapResult {
   const blockDays = Math.max(1, Math.round(input.holdingRule.blockDays));
   const { ciLevel, resamples, seed, statistic, effectiveNFloorBlocks } = input;
+  const blockScheme = resolveBlockScheme(input.blockScheme);
+  if (blockScheme !== "moving" && input.selectionSet) {
+    throw new TypeError(
+      "blockScheme circular-within-run is for the mean of one comparison, not a selection set",
+    );
+  }
 
   // Resolve the overlap and delta structure (selection vs single comparison).
   let overlapDays: string[];
@@ -969,6 +1095,7 @@ export function pairedBlockBootstrap(input: PairedBlockBootstrapInput): PairedBl
     ciLevel,
     statistic,
     effectiveNFloorBlocks,
+    blockScheme,
   });
 
   // Sensitivity band: rerun the interval at each requested multiplied block
@@ -991,6 +1118,7 @@ export function pairedBlockBootstrap(input: PairedBlockBootstrapInput): PairedBl
       ciLevel,
       statistic,
       effectiveNFloorBlocks,
+      blockScheme,
     });
     sensitivity.push({
       blockDays: sensBlockDays,
@@ -1009,6 +1137,7 @@ export function pairedBlockBootstrap(input: PairedBlockBootstrapInput): PairedBl
     selection,
     status: primary.status,
     seed,
+    blockScheme,
   };
 }
 

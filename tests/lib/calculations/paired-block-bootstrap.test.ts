@@ -754,3 +754,194 @@ describe("pairedPathBlockBootstrap", () => {
     ).toThrow("statistic result on observed paths must be a finite number");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression #622 — circular within-run blocks for the mean
+// ---------------------------------------------------------------------------
+
+// Typed loosely so this file also compiles against a build without the option.
+type BlockScheme = "moving" | "circular-within-run";
+function withScheme(
+  input: PairedBlockBootstrapInput,
+  blockScheme: BlockScheme,
+): PairedBlockBootstrapInput {
+  return { ...input, blockScheme } as PairedBlockBootstrapInput;
+}
+
+/** Day series whose joint observation is broken into runs of the given lengths. */
+function runLayout(runLengths: number[]): { armA: DaySeries; armB: DaySeries; days: string[] } {
+  const observed: boolean[] = [];
+  for (const length of runLengths) {
+    for (let k = 0; k < length; k++) observed.push(true);
+    observed.push(false);
+  }
+  const values = seededSeq(runLengths.length * 31 + 7, observed.length);
+  const armA = mkSeries(values, observed);
+  const armB = mkSeries(
+    values.map(() => 0),
+    values.map(() => true),
+  );
+  return { armA, armB, days: armA.index.filter((_, i) => observed[i]) };
+}
+
+function baseInput(armA: DaySeries, armB: DaySeries, blockDays: number): PairedBlockBootstrapInput {
+  return {
+    armA,
+    armB,
+    statistic: mean,
+    holdingRule: { blockDays },
+    ciLevel: 0.95,
+    resamples: 2000,
+    seed: 42,
+  };
+}
+
+describe("circular within-run blocks (#622)", () => {
+  const layouts: Array<[string, number[]]> = [
+    ["only singleton runs", [1, 1, 1, 1, 1, 1, 1, 1]],
+    ["singletons between long runs", [1, 9, 1, 1, 12, 1]],
+    ["runs of length 1..6", [3, 1, 6, 2, 5, 1, 4, 2]],
+    ["one long run", [40]],
+  ];
+
+  describe.each(layouts)("equal coverage: %s", (_label, runLengths) => {
+    it.each([1, 2, 3, 5, 8])("every day is in exactly blockDays candidates (b=%p)", (b) => {
+      const { armA, armB, days } = runLayout(runLengths);
+      const blocks = pairedBlockDays(
+        withScheme(baseInput(armA, armB, b), "circular-within-run"),
+        b,
+      );
+
+      // One candidate block per overlap day, each exactly b long.
+      expect(blocks).toHaveLength(days.length);
+      for (const block of blocks) expect(block).toHaveLength(b);
+
+      const coverage = new Map<string, number>();
+      for (const block of blocks)
+        for (const d of block) coverage.set(d, (coverage.get(d) ?? 0) + 1);
+      expect(coverage.size).toBe(days.length);
+      for (const d of days) expect(coverage.get(d)).toBe(b);
+
+      // Stronger: for every within-block position k the k-th elements of all
+      // candidates are each overlap day exactly once. A uniformly drawn block
+      // therefore puts a uniformly drawn day at every position, so the mean of
+      // a resample (even with a truncated last block) equals the observed mean
+      // in expectation.
+      for (let k = 0; k < b; k++) {
+        expect(blocks.map((block) => block[k]).sort()).toEqual([...days].sort());
+      }
+    });
+  });
+
+  it("keeps the base moving-block candidates by default", () => {
+    const { armA, armB, days } = runLayout([8, 1, 20]);
+    const blocks = pairedBlockDays(baseInput(armA, armB, 3), 3);
+
+    // Runs of 8 and 20 days give 6 + 18 moving blocks; the singleton run gives none.
+    expect(blocks).toHaveLength(24);
+    for (const block of blocks) {
+      const positions = block.map((d) => days.indexOf(d));
+      expect(positions).toEqual([positions[0], positions[0] + 1, positions[0] + 2]);
+    }
+  });
+
+  it("reports the block scheme it used", () => {
+    const { armA, armB } = runLayout([10, 1, 10]);
+    expect(pairedBlockBootstrap(baseInput(armA, armB, 2)).blockScheme).toBe("moving");
+    expect(
+      pairedBlockBootstrap(withScheme(baseInput(armA, armB, 2), "circular-within-run")).blockScheme,
+    ).toBe("circular-within-run");
+  });
+
+  it.each([1, 2, 3, 5, 8])("bootstrap interval brackets the point estimate (b=%p)", (blockDays) => {
+    const n = 240;
+    const observed = Array.from({ length: n }, (_, i) => i % 7 !== 3 && i % 11 !== 0);
+    const noise = seededSeq(622, n);
+    const values = noise.map((v, i) => v + (i % 7 < 3 ? 2 : 0));
+    const armA = mkSeries(values, observed);
+    const armB = mkSeries(
+      values.map(() => 0),
+      values.map(() => true),
+    );
+    const result = pairedBlockBootstrap(
+      withScheme({ ...baseInput(armA, armB, blockDays), seed: 5 }, "circular-within-run"),
+    );
+    expect(result.status).toBe("resolved");
+    expect(result.ci.low!).toBeLessThanOrEqual(result.point!);
+    expect(result.ci.high!).toBeGreaterThanOrEqual(result.point!);
+    const mid = (result.ci.low! + result.ci.high!) / 2;
+    expect(Math.abs(mid - result.point!)).toBeLessThan((result.ci.high! - result.ci.low!) / 4);
+  });
+
+  it("is deterministic per seed and pins the circular draws", () => {
+    const { armA, armB } = runLayout([3, 1, 6, 2, 5, 1, 4, 2]);
+    const input = withScheme(baseInput(armA, armB, 3), "circular-within-run");
+    const first = pairedBlockBootstrap(input);
+    expect(pairedBlockBootstrap(input)).toEqual(first);
+    expect(pairedBlockBootstrap({ ...input, seed: 43 }).ci.low).not.toBe(first.ci.low);
+  });
+
+  it("rejects the circular scheme for a selection set", () => {
+    const { armA, armB } = runLayout([10, 1, 10]);
+    const input = withScheme(
+      {
+        ...baseInput(armA, armB, 2),
+        selectionSet: { members: [{ id: "m", armA, armB }], extremum: "max" },
+      },
+      "circular-within-run",
+    );
+    expect(() => pairedBlockBootstrap(input)).toThrow(TypeError);
+  });
+});
+
+describe("refusal before candidate allocation", () => {
+  const huge = 2 ** 32;
+
+  it.each<BlockScheme>(["moving", "circular-within-run"])(
+    "a block longer than the overlap refuses as underpowered (%s)",
+    (scheme) => {
+      const { armA, armB } = runLayout([5, 1, 7]);
+      const result = pairedBlockBootstrap(
+        withScheme(
+          { ...baseInput(armA, armB, huge), holdingRule: { blockDays: huge, sensitivity: [2] } },
+          scheme,
+        ),
+      );
+      expect(result.status).toBe("underpowered");
+      expect(result.ci.low).toBeNull();
+      expect(result.ci.high).toBeNull();
+      expect(result.sensitivity).toEqual([
+        { blockDays: 2 * huge, ci: { low: null, high: null }, status: "underpowered" },
+      ]);
+    },
+  );
+
+  it.each<BlockScheme>(["moving", "circular-within-run"])(
+    "the caller's power floor still refuses first (%s)",
+    (scheme) => {
+      const { armA, armB } = runLayout([5, 1, 7]);
+      const result = pairedBlockBootstrap(
+        withScheme({ ...baseInput(armA, armB, huge), effectiveNFloorBlocks: 1 }, scheme),
+      );
+      expect(result.status).toBe("notComparable");
+      expect(result.ci.low).toBeNull();
+    },
+  );
+
+  it("the paired-path bootstrap refuses a block longer than the overlap", () => {
+    const { armA, armB } = runLayout([5, 1, 7]);
+    const result = pairedPathBlockBootstrap({
+      armA,
+      armB,
+      statistic: (a: number[], b: number[]) => mean(a) - mean(b),
+      holdingRule: { blockDays: huge },
+      ciLevel: 0.95,
+      resamples: 200,
+      seed: 1,
+      nullValue: 0,
+      alternative: "greater",
+    } as PairedPathBlockBootstrapInput);
+    expect(result.status).toBe("underpowered");
+    expect(result.ci.low).toBeNull();
+  });
+});
