@@ -18,6 +18,46 @@ describe("validateQuery — hard blocks", () => {
   });
 });
 
+describe("validateQuery — configuration and code-loading statements", () => {
+  it.each([
+    ["SELECT 1; SET enable_external_access=true", "SET"],
+    ["/* x */ SET enable_external_access=true", "SET"],
+    ["-- x\nSET enable_external_access=true", "SET"],
+    ["select 1;\nset enable_external_access = true", "SET"],
+    ["RESET enable_external_access", "RESET"],
+    ["INSTALL httpfs", "INSTALL"],
+    ["FORCE INSTALL httpfs FROM 'http://example.invalid'", "INSTALL"],
+    ["LOAD httpfs", "LOAD"],
+    ["SELECT 1; LOAD httpfs", "LOAD"],
+    ["CALL enable_logging(storage='file')", "enable_logging()"],
+  ])("blocks %s", (sql, op) => {
+    expect(validateQuery(sql, DATA_ROOT)).toContain(op);
+  });
+
+  it("does not mistake UPDATE ... SET or quoted text for a SET statement", () => {
+    expect(
+      validateQuery("UPDATE trades.trade_data SET pl = 1 WHERE block_id = 'x'", DATA_ROOT),
+    ).toBeNull();
+    expect(validateQuery("SELECT 'a; SET x=1' AS note", DATA_ROOT)).toBeNull();
+    expect(validateQuery("SELECT 1 -- ; SET x=1", DATA_ROOT)).toBeNull();
+  });
+});
+
+describe("validateQuery — auto-detecting readers are path-gated like read_csv", () => {
+  it.each([
+    "read_csv_auto",
+    "read_json_auto",
+    "read_ndjson_auto",
+    "read_json_objects",
+    "parquet_scan",
+  ])("blocks %s outside data-root and allows it inside", (fn) => {
+    expect(validateQuery(`SELECT * FROM ${fn}('/etc/passwd')`, DATA_ROOT)).toContain(
+      "must be under --data-root",
+    );
+    expect(validateQuery(`SELECT * FROM ${fn}('${DATA_ROOT}/x')`, DATA_ROOT)).toBeNull();
+  });
+});
+
 describe("validateQuery — path-gated read_parquet", () => {
   it("allows read_parquet under data-root", () => {
     const sql = `SELECT * FROM read_parquet('${DATA_ROOT}/market/spot/ticker=SPX/date=2024-06-03/data.parquet')`;

@@ -7,8 +7,12 @@
  *
  * Security:
  *   - SELECT queries run freely; DELETE/UPDATE require confirm=true
- *   - No file access functions (read_csv, write_csv, etc.)
- *   - No schema modifications (CREATE, ALTER, DROP)
+ *   - Queries run on a DuckDB instance locked down by DuckDB's own settings
+ *     (see ../db/query-sandbox.ts): file and URL access is limited to --data-root,
+ *     extensions cannot be installed or loaded, and configuration cannot be
+ *     changed. This holds for every reader, COPY, ATTACH and replacement scan;
+ *     the SQL-text checks below only give earlier, friendlier errors.
+ *   - Confirmed mutations (INSERT, CREATE, ...) run under the same lockdown
  *   - 30-second query timeout with clear error message
  *
  * Available tables:
@@ -27,7 +31,15 @@ import * as path from "path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DuckDBDateValue, type DuckDBConnection } from "@duckdb/node-api";
-import { getConnection, upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
+import { upgradeToReadWrite, downgradeToReadOnly } from "../db/connection.ts";
+import {
+  assertReadOnlyStatements,
+  lockDownConnection,
+  openQuerySandbox,
+  statementLeadingKeywords,
+  sandboxAllowedDirectories,
+  type QuerySandbox,
+} from "../db/query-sandbox.ts";
 import { getDataRoot } from "../db/data-root.ts";
 import { withFullSync } from "./middleware/sync-middleware.ts";
 import { createToolOutput } from "../utils/output-formatter.ts";
@@ -49,6 +61,9 @@ const AVAILABLE_TABLES = [
 
 /**
  * Always-blocked SQL patterns — external access, writes, and config changes.
+ *
+ * These give an early, readable refusal. They are not the security boundary:
+ * the sandbox (../db/query-sandbox.ts) enforces the same limits inside DuckDB.
  */
 const BLOCKED_PATTERNS: Array<{ pattern: RegExp; operation: string }> = [
   // External access
@@ -61,16 +76,51 @@ const BLOCKED_PATTERNS: Array<{ pattern: RegExp; operation: string }> = [
   { pattern: /\bread_text\s*\(/i, operation: "read_text()" },
   { pattern: /\bwrite_csv\s*\(/i, operation: "write_csv()" },
 
-  // Configuration changes (standalone SET, not UPDATE ... SET)
-  { pattern: /^\s*SET\b/i, operation: "SET" },
+  // Logging setters write to caller-chosen storage
+  { pattern: /\b(?:enable|disable)_logging\s*\(/i, operation: "enable_logging()" },
 ];
+
+/**
+ * Statement-leading keywords that change configuration or load code. Checked on
+ * every statement of a multi-statement query (not only the first), with
+ * comments and quoted text ignored. `UPDATE ... SET` is unaffected: only a
+ * statement's first word counts.
+ */
+const BLOCKED_STATEMENT_KEYWORDS = new Set(["SET", "RESET", "INSTALL", "LOAD", "FORCE"]);
+
+export { statementLeadingKeywords };
+
+/** Name of the first blocked operation in `sql`, or null. */
+function findBlockedOperation(sql: string): string | null {
+  for (const { pattern, operation } of BLOCKED_PATTERNS) {
+    if (pattern.test(sql)) return operation;
+  }
+  for (const keyword of statementLeadingKeywords(sql)) {
+    if (BLOCKED_STATEMENT_KEYWORDS.has(keyword)) {
+      return keyword === "FORCE" ? "INSTALL" : keyword;
+    }
+  }
+  return null;
+}
 
 /**
  * File-read functions allowed only when every path argument resolves under
  * --data-root. Lets debug queries inspect managed Parquet/CSV/JSON while
- * preventing filesystem traversal via SQL.
+ * preventing filesystem traversal via SQL. Early, friendly refusal only: the
+ * sandbox enforces the same limit for every reader inside DuckDB.
  */
-const PATH_GATED_READ_FUNCTIONS = ["read_parquet", "read_csv", "read_json"] as const;
+const PATH_GATED_READ_FUNCTIONS = [
+  "read_parquet",
+  "parquet_scan",
+  "read_csv",
+  "read_csv_auto",
+  "read_json",
+  "read_json_auto",
+  "read_ndjson",
+  "read_ndjson_auto",
+  "read_json_objects",
+  "read_ndjson_objects",
+] as const;
 
 interface FileReadCall {
   fn: string;
@@ -160,10 +210,9 @@ const CONFIRM_REQUIRED_PATTERNS: Array<{ pattern: RegExp; operation: string }> =
  * Returns null if valid, or an error message if invalid.
  */
 export function validateQuery(sql: string, dataRoot: string): string | null {
-  for (const { pattern, operation } of BLOCKED_PATTERNS) {
-    if (pattern.test(sql)) {
-      return `${operation} operations are not allowed.`;
-    }
+  const blocked = findBlockedOperation(sql);
+  if (blocked) {
+    return `${blocked} operations are not allowed.`;
   }
 
   const calls = extractFileReadCalls(sql);
@@ -193,10 +242,9 @@ export function validateQuery(sql: string, dataRoot: string): string | null {
  * it's writing to — it cannot exfiltrate or write outside the data root.
  */
 export function validateImportSelect(sql: string): string | null {
-  for (const { pattern, operation } of BLOCKED_PATTERNS) {
-    if (pattern.test(sql)) {
-      return `${operation} operations are not allowed in select_sql.`;
-    }
+  const blocked = findBlockedOperation(sql);
+  if (blocked) {
+    return `${blocked} operations are not allowed in select_sql.`;
   }
   if (/^\s*SELECT\b/i.test(sql) === false && /^\s*WITH\b/i.test(sql) === false) {
     return "select_sql must be a SELECT or WITH statement.";
@@ -290,6 +338,12 @@ async function executeWithTimeout(
   // Create timeout promise
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => {
+      // Stop the work: the sandbox instance is closed right after this returns.
+      try {
+        conn.interrupt();
+      } catch {
+        /* nothing running */
+      }
       reject(
         new Error("Query exceeded 30s timeout. Consider adding LIMIT or filtering by block_id."),
       );
@@ -427,10 +481,13 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
       if (destructive && !confirm) {
         // For DELETE/UPDATE, try to preview affected row count
         if (operation === "DELETE" || operation === "UPDATE") {
+          let sandbox: QuerySandbox | null = null;
           try {
-            const conn = await getConnection(baseDir);
+            // The preview embeds the caller's WHERE clause, so it runs sandboxed.
+            sandbox = await openQuerySandbox(baseDir, getDataRoot(baseDir));
             const previewSql = toPreviewQuery(query);
-            const result = await executeWithTimeout(conn, previewSql, 1);
+            await assertReadOnlyStatements(sandbox.conn, previewSql);
+            const result = await executeWithTimeout(sandbox.conn, previewSql, 1);
             const count = result.rows[0]?.affected_rows ?? "unknown";
             return createToolOutput(
               `⚠️ ${operation} would affect ${count} row(s). Re-run with confirm=true to execute.`,
@@ -441,6 +498,8 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
               `⚠️ ${operation} requires confirm=true. Could not preview: ${error instanceof Error ? error.message : String(error)}`,
               { operation, query, preview: true },
             );
+          } finally {
+            sandbox?.close();
           }
         }
         // For other mutating ops (INSERT, CREATE, ALTER, DROP, TRUNCATE) — no preview, just gate
@@ -452,14 +511,14 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
       }
 
       try {
-        // Get DuckDB connection
-        const conn = await getConnection(baseDir);
-
         if (destructive && confirm) {
-          // Upgrade to read-write for mutations
-          await upgradeToReadWrite(baseDir);
+          // Upgrade to read-write for mutations, then lock the instance down so the
+          // statement cannot read outside --data-root, reach the network or change
+          // configuration. downgradeToReadOnly closes this instance and reopens a
+          // fresh, unrestricted read-only one for the server's other tools.
           try {
-            const rwConn = await getConnection(baseDir);
+            const rwConn = await upgradeToReadWrite(baseDir);
+            await lockDownConnection(rwConn, sandboxAllowedDirectories(getDataRoot(baseDir)));
             const result = await rwConn.run(query);
             const changed = Number(result.rowsChanged);
             return createToolOutput(`${operation} completed: ${changed} row(s) affected.`, {
@@ -471,8 +530,16 @@ export function registerSQLTools(server: McpServer, baseDir: string): void {
           }
         }
 
-        // Execute SELECT query with timeout
-        const result = await executeWithTimeout(conn, query, limit);
+        // Execute SELECT query with timeout on a locked-down, read-only instance
+        // that exists only for this call.
+        const sandbox = await openQuerySandbox(baseDir, getDataRoot(baseDir));
+        let result: QueryResult;
+        try {
+          await assertReadOnlyStatements(sandbox.conn, query);
+          result = await executeWithTimeout(sandbox.conn, query, limit);
+        } finally {
+          sandbox.close();
+        }
 
         // Determine if results were truncated
         const returnedRows = result.rows.length;
