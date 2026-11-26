@@ -565,6 +565,23 @@ export interface EnrichmentResult {
 // Enrichment Runner Private Helpers
 // =============================================================================
 
+/**
+ * Calendar-day warmup read before the first session that is (re)computed.
+ *
+ * Tier 1 fields depend on prior sessions: Gap_Pct / Prior_Close /
+ * Prev_Return_Pct (1-2 sessions), Return_20D / Realized_Vol_20D (20),
+ * Price_vs_SMA50_Pct (50) and the recursive Wilder RSI_14 / ATR / EMA21
+ * smoothing. 200 calendar days (~138 sessions) covers the longest finite
+ * window (SMA50) with room for the recursive smoothers to converge, so a
+ * recompute that starts at date D reads OHLCV from D minus this many days.
+ */
+export const ENRICHMENT_LOOKBACK_CALENDAR_DAYS = 200;
+
+/** First calendar date read to (re)compute sessions starting at `from`. */
+export function enrichmentLookbackStart(from: string): string {
+  return subtractDays(from, ENRICHMENT_LOOKBACK_CALENDAR_DAYS);
+}
+
 /** Subtract N calendar days from a YYYY-MM-DD string, returns YYYY-MM-DD */
 function subtractDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + "T00:00:00Z");
@@ -1383,8 +1400,12 @@ export async function runEnrichment(
     // SELECT against the metadata sync table has been removed — when callers
     // don't supply `io.watermarkStore` we fall back to the same JSON adapter
     // the store wrappers wire (`getEnrichedThrough(ticker, dataDir)`).
+    // A bounded window is recomputed regardless of the watermark, so a
+    // bounded forceFull still reads it: the watermark must never move
+    // backwards when an older window is recomputed.
+    const unbounded = !opts.from && !opts.to;
     let watermark: string | null = null;
-    if (!forceFull) {
+    if (!(forceFull && unbounded)) {
       if (io?.watermarkStore) {
         watermark = await io.watermarkStore.get(ticker);
       } else if (opts.dataDir) {
@@ -1400,9 +1421,8 @@ export async function runEnrichment(
     // 2. Bounded refreshes retain their 200-day indicator lookback. An
     // unbounded enrichment must inspect the whole ticker history: a newer
     // refresh watermark can coexist with unpublished older sessions.
-    const unbounded = !opts.from && !opts.to;
-    const watermarkLookback = watermark ? subtractDays(watermark, 200) : null;
-    const requestedLookback = opts.from ? subtractDays(opts.from, 200) : null;
+    const watermarkLookback = watermark ? enrichmentLookbackStart(watermark) : null;
+    const requestedLookback = opts.from ? enrichmentLookbackStart(opts.from) : null;
     const lookbackStart = unbounded
       ? null
       : watermarkLookback && requestedLookback
@@ -1558,7 +1578,25 @@ export async function runEnrichment(
     const writeRows = rawRows
       .map((_, i) => i)
       .filter((i) => {
-        if (forceFull || !watermark || dates[i] > watermark) return true;
+        // forceFull rewrites every fetched row only when unbounded. A bounded
+        // call already rewrites its whole [from, to] window below; forceFull
+        // must not also rewrite the lookback warmup rows read before `from`.
+        if (forceFull && unbounded) return true;
+        // A bounded call reads `from − 200d` of warmup rows computed from a
+        // cut-off series. Never write one before `from` (that would null or
+        // skew good published rows), whether or not a watermark exists. The
+        // only exception is a row after the watermark: it is unpublished, and
+        // its lookback is complete because the read starts at the earlier of
+        // the watermark and `from` lookbacks.
+        if (
+          !unbounded &&
+          opts.from &&
+          dates[i] < opts.from &&
+          !(watermark && dates[i] > watermark)
+        ) {
+          return false;
+        }
+        if (!watermark || dates[i] > watermark) return true;
         if (unbounded && !publishedDates.has(dates[i])) return true;
         return Boolean(opts.from && opts.to && dates[i] >= opts.from && dates[i] <= opts.to);
       });

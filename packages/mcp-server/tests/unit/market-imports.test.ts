@@ -78,9 +78,35 @@ function makeMockStores(
   } = {},
 ): MockStoresHandle {
   const calls: string[] = [];
+  // Minimal in-memory spot state: the handler snapshots daily OHLC around the
+  // write to find changed sessions, then asks for the ticker's latest session.
+  const written = new Map<string, BarRow[]>();
   const spotWriteBars = jest.fn(async (ticker: string, date: string, bars: BarRow[]) => {
     calls.push(`spot.writeBars(${ticker},${date},${bars.length})`);
     if (opts.writeBarsRejects) throw opts.writeBarsRejects;
+    written.set(date, bars);
+  });
+  const readDailyBars = jest.fn(async (ticker: string, from: string, to: string) =>
+    [...written.entries()]
+      .filter(([date]) => date >= from && date <= to)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, bars]) => ({
+        ...bars[0],
+        ticker,
+        date,
+        high: Math.max(...bars.map((bar) => bar.high)),
+        low: Math.min(...bars.map((bar) => bar.low)),
+        close: bars[bars.length - 1].close,
+      })),
+  );
+  const getCoverage = jest.fn(async () => {
+    const dates = [...written.keys()].sort();
+    return {
+      earliest: dates[0] ?? null,
+      latest: dates[dates.length - 1] ?? null,
+      missingDates: [],
+      totalDates: dates.length,
+    };
   });
   const enrichedCompute = jest.fn(async (ticker: string, from: string, to: string) => {
     calls.push(`enriched.compute(${ticker},${from},${to})`);
@@ -90,10 +116,10 @@ function makeMockStores(
     calls.push(`enriched.computeContext(${from},${to})`);
   });
 
-  // Cast through unknown — the handler only touches spot.writeBars + enriched
-  // .compute / .computeContext. Other methods are untouched and never invoked.
+  // Cast through unknown — the handler only touches spot.writeBars /
+  // readDailyBars / getCoverage + enriched.compute / .computeContext.
   const stores = {
-    spot: { writeBars: spotWriteBars },
+    spot: { writeBars: spotWriteBars, readDailyBars, getCoverage },
     enriched: { compute: enrichedCompute, computeContext: enrichedComputeContext },
     chain: {},
     quote: {},
