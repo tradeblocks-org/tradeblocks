@@ -807,6 +807,38 @@ existing enriched slices; cross-ticker VIX context reads spot history separately
 `refresh_market_data` publishes the requested session only. A failed publication
 does not advance the ticker's enrichment watermark.
 
+### Re-imports and recomputing enrichment
+
+Derived fields depend on earlier sessions: `Gap_Pct` and `Prior_Close` on the
+prior close, `Prev_Return_Pct` on two sessions back, `Return_20D` /
+`Realized_Vol_20D` / `Price_vs_SMA50_Pct` on rolling windows, and `RSI_14`,
+`ATR_Pct` and `Price_vs_EMA21_Pct` on recursive smoothing. A recompute that
+starts at date D therefore reads OHLCV from 200 calendar days before D
+(about 138 sessions) and rewrites every session in its window.
+
+`import_market_csv` and `import_from_database` compare the ticker's daily OHLC
+for the imported span before and after the write. When any session changed,
+was added or disappeared, enrichment is recomputed from the earliest such
+session through the ticker's latest stored session; otherwise the imported
+span is recomputed. The result names the exact window in
+`enrichment.recomputed` (with `changedDates`, `addedDates`, `removedDates` and
+`lookbackFrom`), and the text reads e.g.
+`recomputed enrichment 2021-02-23 → 2026-11-25 (1 changed, 0 new sessions; ...)`.
+
+To recompute without re-importing, call `enrich_market_data` with:
+
+- `ticker` and `start_date` / `end_date` (YYYY-MM-DD, inclusive) to recompute
+  one session window. Omitting `end_date` runs through the latest session.
+  Sessions after `end_date` are not touched, so leave it off when a change
+  should flow forward.
+- `ticker` and `force_full: true` to recompute the ticker's whole stored
+  history.
+
+Without those parameters `enrich_market_data` stays incremental
+(watermark-driven). A recompute never moves the enrichment watermark
+backwards, and there is no need to edit
+`market-meta/enrichment-watermarks.json` or purge `market.enriched`.
+
 ### Tier 1: Technical Indicators
 
 Written to `market.enriched` for the imported ticker. ~20 fields:

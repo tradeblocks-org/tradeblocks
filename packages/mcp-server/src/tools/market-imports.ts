@@ -15,10 +15,14 @@
  *   try { ...store writes + enrichment... }
  *   finally { await downgradeToReadOnly(baseDir); }
  *
- * After every successful SpotStore.writeBars(), the tool handler calls
- * stores.enriched.compute(ticker, minDate, maxDate). For the VIX family
- * (VIX, VIX9D, VIX3M) it also calls stores.enriched.computeContext(...) to
- * refresh the cross-ticker date_context output.
+ * Around SpotStore.writeBars() the handler snapshots the ticker's daily OHLC
+ * for the imported span. If any session changed, was added or disappeared,
+ * enrichment is recomputed from the earliest such session through the
+ * ticker's latest session (later sessions depend on it through prior-close,
+ * rolling and recursive fields). Otherwise the imported span itself is
+ * recomputed. For the VIX family (VIX, VIX9D, VIX3M) the cross-ticker
+ * context is recomputed over the same window. The result reports the exact
+ * recomputed range plus the changed/added session dates.
  */
 
 import { z } from "zod";
@@ -31,12 +35,13 @@ import { parseCsvToBars, parseDatabaseRowsToBars } from "../utils/market-importe
 import { normalizeTicker } from "../utils/ticker.ts";
 import type { MarketStores } from "../market/stores/index.ts";
 import type { BarRow } from "../market/stores/types.ts";
-
-// ---------------------------------------------------------------------------
-// VIX family — used to gate stores.enriched.computeContext after a write
-// ---------------------------------------------------------------------------
-
-const VIX_FAMILY = new Set(["VIX", "VIX9D", "VIX3M"]);
+import {
+  diffDailyOhlc,
+  recomputeEnrichmentRange,
+  snapshotDailyOhlc,
+  tickerSpotSpan,
+  type RecomputedRange,
+} from "../utils/enrichment-recompute.ts";
 
 /**
  * Group an array of BarRow values by their `date` field, preserving insertion
@@ -53,30 +58,91 @@ function groupBarsByDate(bars: BarRow[]): Map<string, BarRow[]> {
   return byDate;
 }
 
+export interface ImportEnrichmentReport {
+  /** Exact inclusive session windows whose enrichment was recomputed. */
+  recomputed: RecomputedRange[];
+  /** First calendar date of OHLCV read as indicator warmup. */
+  lookbackFrom: string;
+  /** Existing sessions whose daily OHLC changed in this import. */
+  changedDates: string[];
+  /** Sessions that had no daily bar before this import. */
+  addedDates: string[];
+  /** Sessions whose daily bar disappeared in this import. */
+  removedDates: string[];
+  contextComputed: boolean;
+}
+
 /**
- * Run `stores.enriched.compute(ticker, ...)` and (for VIX-family tickers)
- * `stores.enriched.computeContext(...)` after a spot write completes.
+ * Write per-date bars, then recompute enrichment for every session the write
+ * can have affected.
  *
  * Loud failure: if compute() throws, the caller surfaces an error response
  * (so the user knows the spot write succeeded but the enrichment did not).
  *
- * @returns the date span actually enriched, or `null` when skip=true.
+ * @returns rows written plus the enrichment report (null when skip=true).
  */
-async function autoEnrichAfterWrite(
+async function writeBarsAndEnrich(
   stores: MarketStores,
   ticker: string,
-  fromDate: string,
-  toDate: string,
+  byDate: Map<string, BarRow[]>,
+  minDate: string,
+  maxDate: string,
   skip: boolean,
-): Promise<{ datesEnriched: number; from: string; to: string } | null> {
-  if (skip) return null;
-  await stores.enriched.compute(ticker, fromDate, toDate);
-  if (VIX_FAMILY.has(ticker)) {
-    await stores.enriched.computeContext(fromDate, toDate);
+): Promise<{ rowsWritten: number; enrichment: ImportEnrichmentReport | null }> {
+  const before = skip ? null : await snapshotDailyOhlc(stores, ticker, minDate, maxDate);
+
+  let rowsWritten = 0;
+  for (const [date, dayBars] of byDate) {
+    await stores.spot.writeBars(ticker, date, dayBars);
+    rowsWritten += dayBars.length;
   }
-  // Best-effort calendar-date count (one date per partition). We don't
-  // re-walk the calendar here — just report the span size.
-  return { datesEnriched: 1, from: fromDate, to: toDate };
+  if (!before) return { rowsWritten, enrichment: null };
+
+  const after = await snapshotDailyOhlc(stores, ticker, minDate, maxDate);
+  const { changedDates, addedDates, removedDates } = diffDailyOhlc(before, after);
+  const affected = [...changedDates, ...addedDates, ...removedDates].sort();
+
+  let from = minDate;
+  let to = maxDate;
+  if (affected.length > 0) {
+    // Later sessions depend on the earliest affected one (prior close,
+    // rolling windows, recursive smoothing), so run through the latest
+    // stored session, not just the end of the imported span.
+    from = affected[0];
+    const span = await tickerSpotSpan(stores, ticker);
+    if (span && span.latest > to) to = span.latest;
+  }
+  const { range, lookbackFrom, contextComputed } = await recomputeEnrichmentRange(
+    stores,
+    ticker,
+    from,
+    to,
+  );
+  return {
+    rowsWritten,
+    enrichment: {
+      recomputed: [range],
+      lookbackFrom,
+      changedDates,
+      addedDates,
+      removedDates,
+      contextComputed,
+    },
+  };
+}
+
+function describeEnrichment(enrichment: ImportEnrichmentReport | null): string {
+  if (!enrichment)
+    return " (enrichment skipped; run enrich_market_data to populate derived fields)";
+  const ranges = enrichment.recomputed.map((r) => `${r.from} → ${r.to}`).join(", ");
+  const changes =
+    `${enrichment.changedDates.length} changed, ${enrichment.addedDates.length} new` +
+    (enrichment.removedDates.length > 0 ? `, ${enrichment.removedDates.length} removed` : "") +
+    " sessions";
+  return (
+    ` + recomputed enrichment ${ranges} (${changes}; indicator warmup from ${enrichment.lookbackFrom})` +
+    (enrichment.contextComputed ? " (incl. VIX context)" : "")
+  );
 }
 
 /**
@@ -176,17 +242,12 @@ export function registerMarketImportTools(
           );
         }
 
-        // 2) Per-date writeBars — SpotStore is per-(ticker, date) partitioned.
-        let rowsWritten = 0;
-        for (const [date, dayBars] of byDate) {
-          await stores.spot.writeBars(normalizedTicker, date, dayBars);
-          rowsWritten += dayBars.length;
-        }
-
-        // 3) Auto-enrich — composed at the handler level, not inside writeBars.
-        const enrichment = await autoEnrichAfterWrite(
+        // 2) Per-date writeBars (SpotStore is per-(ticker, date) partitioned),
+        //    then recompute enrichment for every affected session.
+        const { rowsWritten, enrichment } = await writeBarsAndEnrich(
           stores,
           normalizedTicker,
+          byDate,
           minDate,
           maxDate,
           skip_enrichment,
@@ -194,10 +255,7 @@ export function registerMarketImportTools(
 
         return createToolOutput(
           `Imported ${rowsWritten} rows for ${normalizedTicker} across ${dates.length} dates` +
-            (enrichment
-              ? ` + enriched ${enrichment.from} → ${enrichment.to}` +
-                (VIX_FAMILY.has(normalizedTicker) ? " (incl. VIX context)" : "")
-              : ""),
+            describeEnrichment(enrichment),
           {
             ticker: normalizedTicker,
             rowsWritten,
@@ -337,15 +395,10 @@ export function registerMarketImportTools(
           );
         }
 
-        let rowsWritten = 0;
-        for (const [date, dayBars] of byDate) {
-          await stores.spot.writeBars(normalizedTicker, date, dayBars);
-          rowsWritten += dayBars.length;
-        }
-
-        const enrichment = await autoEnrichAfterWrite(
+        const { rowsWritten, enrichment } = await writeBarsAndEnrich(
           stores,
           normalizedTicker,
+          byDate,
           minDate,
           maxDate,
           skip_enrichment,
@@ -353,10 +406,7 @@ export function registerMarketImportTools(
 
         return createToolOutput(
           `Imported ${rowsWritten} rows for ${normalizedTicker} across ${dates.length} dates` +
-            (enrichment
-              ? ` + enriched ${enrichment.from} → ${enrichment.to}` +
-                (VIX_FAMILY.has(normalizedTicker) ? " (incl. VIX context)" : "")
-              : ""),
+            describeEnrichment(enrichment),
           {
             ticker: normalizedTicker,
             rowsWritten,

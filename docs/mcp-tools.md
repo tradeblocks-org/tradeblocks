@@ -114,7 +114,7 @@ Live fallback values do not imply that a revision-bearing quote was persisted.
 | `fetch_chain`           | Fetch option chain snapshot for an underlying on a given date                                                 |
 | `compute_vix_context`   | Compute cross-ticker VIX regime fields (Vol_Regime, Term_Structure_State, etc.) for a date range              |
 | `refresh_market_data`   | Composite daily refresh: fetch bars for all tickers, auto-fire VIX context, return coverage report            |
-| `enrich_market_data`    | Run enrichment pipeline to compute derived indicators                                                         |
+| `enrich_market_data`    | Run enrichment: incremental by default; `start_date`/`end_date` or `force_full` recompute rows                |
 | `purge_market_table`    | Delete all data from a market table for re-import                                                             |
 
 See [Market Data Guide](market-data.md) for import examples, ticker formats, and enrichment details.

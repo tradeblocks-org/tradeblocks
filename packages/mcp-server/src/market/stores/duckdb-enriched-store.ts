@@ -30,16 +30,22 @@ export class DuckdbEnrichedStore extends EnrichedStore {
 
   async compute(
     ticker: string,
-    _from: string,
-    _to: string,
+    from: string,
+    to: string,
     options: EnrichedComputeOptions = {},
   ): Promise<void> {
+    // Empty bounds keep the watermark-driven operational window. Concrete
+    // bounds rewrite every session in [from, to] even when it is at or
+    // before the watermark (re-imported or revised bars), reading OHLCV from
+    // a lookback before `from` so prior-row and rolling fields are correct.
     await runEnrichment(
       this.ctx.conn,
       ticker,
       {
         dataDir: this.ctx.dataDir,
         parquetMode: false,
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
         persistWatermark: options.persistWatermark,
       },
       {
