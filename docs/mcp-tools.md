@@ -787,6 +787,14 @@ those legacy fields. A no-drawdown result adds an empty list when opted in.
 | `run_sql`           | Execute SQL against DuckDB. SELECT runs freely. DELETE/UPDATE require `confirm: true` with affected row preview. |
 | `describe_database` | Schema discovery with table info, VIX tenor auto-discovery, and example queries                                  |
 
+`run_sql` runs in a sandbox enforced by DuckDB itself: queries can read files only under the data
+root (`--data-root`, or the data directory when unset), cannot reach the network, and cannot
+install or load extensions, attach databases, write files or change DuckDB settings. This applies
+to every file reader, `COPY`, `ATTACH` and quoted-path or URL table references, and also to
+`confirm: true` mutations. Read queries run on a short-lived read-only instance, so they cannot
+modify stored data. Only read statements (`SELECT`, `WITH`, `DESCRIBE`, `SHOW`, `EXPLAIN`) run
+without `confirm: true`.
+
 ## Block Import
 
 | Tool                | Description                                                     |

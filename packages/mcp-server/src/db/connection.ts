@@ -164,6 +164,25 @@ function defaultThreads(): string {
   return "2";
 }
 
+/**
+ * Paths and limits of the database the server last opened, for callers that
+ * open their own (separate) instance over the same files — see query-sandbox.ts.
+ * Values are null until the first getConnection().
+ */
+export function getStoredOpenConfig(): {
+  dbPath: string | null;
+  marketDbPath: string | null;
+  threads: string | null;
+  memoryLimit: string | null;
+} {
+  return {
+    dbPath: storedDbPath,
+    marketDbPath: storedMarketDbPath,
+    threads: storedThreads,
+    memoryLimit: storedMemoryLimit,
+  };
+}
+
 function isLockError(message: string): boolean {
   const lower = message.toLowerCase();
   return (
