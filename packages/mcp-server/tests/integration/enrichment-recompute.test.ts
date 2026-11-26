@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 
 import { registerMarketImportTools } from "../../src/tools/market-imports.ts";
 import { registerMarketEnrichmentTools } from "../../src/tools/market-enrichment.ts";
-import { closeConnection, createMarketStores } from "../../src/test-exports.ts";
+import { closeConnection, createMarketStores, getDataRoot } from "../../src/test-exports.ts";
 import { buildStoreFixture, type FixtureHandle } from "../fixtures/market-stores/build-fixture.ts";
 import type { MarketStores } from "../../src/market/stores/index.ts";
 import { isXnysSessionDate } from "../../src/market/provenance/xnys-session-calendar.ts";
@@ -263,7 +263,7 @@ describe.each([
     expect(Number(outside.Gap_Pct)).toBeCloseTo(expectedGap(mar10.open, mar9.close), 6);
   });
 
-  it("range recompute warms indicators from the lookback, matching a full recompute", async () => {
+  it("range recompute warms indicators from the lookback, matching a full recompute within tolerance", async () => {
     const full = await stores.enriched.read({
       ticker: "SPX",
       from: "2021-03-01",
@@ -310,6 +310,58 @@ describe.each([
       expectedGap(mar10.open + 20, mar9.close),
       6,
     );
+  });
+
+  describe("ticker with no watermark and history older than the 200-day lookback", () => {
+    const FROM = "2021-03-01";
+
+    async function seedLongHistoryWithoutWatermark() {
+      // Start >200 days before FROM so the warmup rows read before FROM carry
+      // real, fully warmed values that a cut-off recompute would clobber.
+      const long = buildSeries("2020-01-02", "2021-03-31");
+      await importBars(long, "long-history.csv");
+      await fs.rm(
+        path.join(getDataRoot(fixture.ctx.dataDir), "market-meta", "enrichment-watermarks.json"),
+        { force: true },
+      );
+      const before = await stores.enriched.read({
+        ticker: "SPX",
+        from: "2020-01-02",
+        to: "2021-02-26",
+      });
+      expect(before.length).toBeGreaterThan(200);
+      // Sanity: the warmup rows we are protecting hold real values.
+      const probe = before.find((r) => String(r.date).slice(0, 10) === "2020-08-13")!;
+      expect(probe.Prior_Close).not.toBeNull();
+      expect(probe.RSI_14).not.toBeNull();
+      return { long, before };
+    }
+
+    it("enrich_market_data start/end leaves rows before start_date byte-identical", async () => {
+      const { before } = await seedLongHistoryWithoutWatermark();
+      const out = await enrich({ ticker: "SPX", start_date: FROM, end_date: "2021-03-10" });
+      expect(out.isError ? textOf(out) : "").toBe("");
+
+      const after = await stores.enriched.read({
+        ticker: "SPX",
+        from: "2020-01-02",
+        to: "2021-02-26",
+      });
+      expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+    });
+
+    it("re-import with a revised bar leaves rows before the change byte-identical", async () => {
+      const { long, before } = await seedLongHistoryWithoutWatermark();
+      const revised = long.map((b) => (b.date === FROM ? { ...b, open: b.open + 20 } : b));
+      await importBars(revised, "long-revised.csv");
+
+      const after = await stores.enriched.read({
+        ticker: "SPX",
+        from: "2020-01-02",
+        to: "2021-02-26",
+      });
+      expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+    });
   });
 
   it("rejects an inverted date range", async () => {

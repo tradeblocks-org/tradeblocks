@@ -1582,6 +1582,20 @@ export async function runEnrichment(
         // call already rewrites its whole [from, to] window below; forceFull
         // must not also rewrite the lookback warmup rows read before `from`.
         if (forceFull && unbounded) return true;
+        // A bounded call reads `from − 200d` of warmup rows computed from a
+        // cut-off series. Never write one before `from` (that would null or
+        // skew good published rows), whether or not a watermark exists. The
+        // only exception is a row after the watermark: it is unpublished, and
+        // its lookback is complete because the read starts at the earlier of
+        // the watermark and `from` lookbacks.
+        if (
+          !unbounded &&
+          opts.from &&
+          dates[i] < opts.from &&
+          !(watermark && dates[i] > watermark)
+        ) {
+          return false;
+        }
         if (!watermark || dates[i] > watermark) return true;
         if (unbounded && !publishedDates.has(dates[i])) return true;
         return Boolean(opts.from && opts.to && dates[i] >= opts.from && dates[i] <= opts.to);
