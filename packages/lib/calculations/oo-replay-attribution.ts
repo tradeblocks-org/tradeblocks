@@ -13,6 +13,12 @@ export interface ReplayLeg {
   numberOfContracts: number;
   /** Dollars per contract, already multiplied by 100 in the OO trade log. */
   pricePerContract: number;
+  /**
+   * Exact OCC series proven for this leg (for example from the entry-minute quote that matches the
+   * logged fill). When present it is the only ticker marked: no root fallback. Its expiry, type and
+   * strike must equal the leg's.
+   */
+  provenOccTicker?: string;
 }
 
 export interface ReplayTrade {
@@ -166,7 +172,10 @@ export interface OoReplayAttributionV3 extends Omit<
   method_parameters: ReplayMethodV3Parameters;
 }
 
-/** SPXW is the observed OO-preferred PM-settled series, including on third Fridays. */
+/**
+ * SPXW is the observed OO-preferred PM-settled series, including on third Fridays. A leg carrying a
+ * `provenOccTicker` resolves to exactly that ticker.
+ */
 export function occReplayTickers(
   leg: ReplayLeg,
   underlying: string,
@@ -198,6 +207,13 @@ export function occReplayTickers(
     roots.some((root, index) => !/^[A-Z][A-Z0-9]{0,5}$/.test(root) || roots.indexOf(root) !== index)
   ) {
     throw new RangeError(`Invalid OCC roots for ${underlying}`);
+  }
+  if (leg.provenOccTicker !== undefined) {
+    const pinned = /^([A-Z][A-Z0-9]{0,5})(\d{6}[CP]\d{8})$/.exec(leg.provenOccTicker);
+    if (pinned?.[2] !== tail) {
+      throw new RangeError(`Invalid OCC ticker ${leg.provenOccTicker} for leg ${tail}`);
+    }
+    return [leg.provenOccTicker];
   }
   return roots.map((root) => `${root}${tail}`);
 }

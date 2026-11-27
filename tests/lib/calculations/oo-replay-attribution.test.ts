@@ -392,6 +392,34 @@ describe("OO replay attribution public interface", () => {
       missing: true,
     });
   });
+  it("marks a provenOccTicker leg on that series only, never a fallback root or year", () => {
+    const pinned = {
+      ...short(5000),
+      expiration: "20270618",
+      provenOccTicker: "SPXW270618P05000000",
+    };
+    expect(occReplayTickers(pinned, "SPX")).toEqual(["SPXW270618P05000000"]);
+    // An unrelated caller field named occTicker keeps the legacy root fallback.
+    expect(
+      occReplayTickers({ ...short(5000), expiration: "20270618", occTicker: "X" } as never, "SPX"),
+    ).toEqual(["SPXW270618P05000000", "SPX270618P05000000"]);
+    const lookup = (_: string, ticker: string) =>
+      ticker === "SPXW270618P05000000" ? undefined : { bid: 0.5, ask: 0.5 };
+    const unavailable = valueReplayLegs([pinned], "SPX", "2026-06-18", lookup);
+    expect(unavailable.value).toBeNull();
+    expect(unavailable.observations).toEqual([
+      { date: "2026-06-18", ticker: "SPXW270618P05000000", missing: true },
+    ]);
+    expect(valueReplayLegs([pinned], "SPX", "2026-06-18", () => ({ bid: 2, ask: 2 })).value).toBe(
+      -200,
+    );
+    expect(() =>
+      occReplayTickers({ ...pinned, provenOccTicker: "SPXW260618P05000000" }, "SPX"),
+    ).toThrow(/Invalid OCC ticker/);
+    expect(() =>
+      occReplayTickers({ ...pinned, provenOccTicker: "SPXW270618C05000000" }, "SPX"),
+    ).toThrow(/Invalid OCC ticker/);
+  });
   it("normalizes both OO and market-provider expirations, rejecting malformed dates", () => {
     const compact = { ...short(5000), expiration: "20260612" };
     const hyphenated = { ...compact, expiration: "2026-06-12" };
