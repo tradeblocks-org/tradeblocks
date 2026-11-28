@@ -154,6 +154,7 @@ const EXISTING_TOOL_NAMES = [
   "get_period_returns",
   "get_position_sizing",
   "get_reporting_log_stats",
+  "get_rule_calendar",
   "get_statistics",
   "get_strategy_comparison",
   "get_strategy_profile",

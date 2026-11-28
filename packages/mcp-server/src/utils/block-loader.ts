@@ -269,6 +269,7 @@ function convertToTrade(
     const trade: Trade = {
       dateOpened,
       timeOpened: raw["Time Opened"] || "00:00:00",
+      timeOpenedProvided: Boolean(raw["Time Opened"]),
       openingPrice: parseNumber(raw["Opening Price"]),
       legs,
       premium: parseNumber(raw["Premium"]),
