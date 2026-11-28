@@ -614,6 +614,96 @@ dataset fields. Time-of-day uses valid trade times independently of market cover
 | `what_if_scaling`             | Trade-derived sizing counterfactuals, not the shared-funds result of a native Option Omega Portfolio backtest. Confirm a surviving fixed allocation with that native backtest.                                                      |
 | `paired_bootstrap_comparison` | Paired bootstrap intervals for two strategy runs                                                                                                                                                                                    |
 
+### Paired comparison: days without a position
+
+`paired_bootstrap_comparison` compares two arms day by day. By default
+(`unobservedDays: "exclude"`) a day counts only when both arms hold a position,
+and the grid is the union of the compared strategies' trade open and close
+dates (`grid: "trades"`). For a filtered strategy against its unfiltered
+version this drops exactly the days the filter skips, so the comparison cannot
+show what the filter gained or lost.
+
+- `unobservedDays: "zero"` counts a grid day without a position as a flat day
+  with 0 P&L, but only while the strategy was demonstrably running (see
+  coverage below).
+- `grid: "xnys"` uses every NYSE session from the compared strategies' first to
+  their last trade date (calendar 2013-2030), plus any trade date that is not a
+  session, so holding periods and flat days are counted in sessions. Trades
+  outside 2013-2030 are refused for this grid.
+
+With the default settings (both options omitted, or passed as `"exclude"` and
+`"trades"`) the response is unchanged. A non-default setting of either option
+adds `unobservedDays`, `grid` and `dayGridMethodology` to the response. With
+`grid: "xnys"`, `attributionMethodology` describes the XNYS session calendar
+instead of the trade-date grid.
+
+#### Coverage: when a day without a position is a 0 P&L day
+
+A day without a position is a real 0 P&L day only if the strategy was running
+that day. Outside that window a 0 would be invented and bias the comparison.
+
+- `coverage: { A: { from, through }, B: { from, through } }` (calendar dates,
+  inclusive, `YYYY-MM-DD`) states the dates each strategy was running, for
+  example the range of the backtest that produced it. `A` belongs to
+  `strategyA`, `B` to `strategyB`. Coverage is only accepted with
+  `unobservedDays: "zero"`; with `strategyB` give both `A` and `B`, without it
+  only `A`. Invalid dates and `from` after `through` are refused.
+- Each coverage is clipped to `dateRange` when one is given.
+- An arm is observed only on grid days inside its own coverage: a day there
+  without a position is 0 P&L. Only grid days inside both coverages are
+  compared; a day inside one coverage only is dropped, never filled with 0 for
+  the other arm.
+- A trade whose open or close date lies outside its strategy's coverage is
+  refused, naming the strategy, the trade dates and the coverage.
+- The same check runs against the coverage clipped to `dateRange`, the window
+  the P&L is attributed on. `dateRange` keeps trades by open date, so a trade
+  that opens before `dateRange.end` and closes after it would lose its P&L on
+  the days after `end`. Such a trade is refused instead, naming the strategy,
+  the trade dates and the `dateRange` bound; widen `dateRange` or omit it.
+- The mirror case is refused too: a trade that `dateRange` removes because it
+  opened before `dateRange.start` (or after `dateRange.end`) but that is still
+  held on a day inside the clipped coverage would turn its held days into 0 P&L
+  days. The refusal names the strategy, the trade dates, the `dateRange` bound
+  and the first held day inside the window; widen `dateRange` or omit it.
+- With `grid: "xnys"` the sessions span the coverage windows as well as the
+  trades; `grid: "trades"` keeps the compared strategies' trade dates.
+- A strategy that is in the block but has no trades in the selected range can
+  be compared as an all-flat arm (0 on every grid day inside its coverage). The
+  result then equals the negated single-arm test of the other strategy.
+  Without coverage such a strategy is refused with "Strategy "…" has no trades
+  in the selected date range.", which differs from the refusal for a strategy
+  that is not in the block at all ("Strategy "…" is not in this block.").
+  Two strategies without trades in the range are refused even with coverage.
+
+Without `coverage`, `"zero"` falls back to the common held window of both
+strategies: from the later of the two first opens to the earlier of the two last
+closes. Grid days outside it are not observed for either arm, so neither arm
+gets 0 P&L days before it started or after it stopped trading. The cost is that
+genuine flat days at the edges (a filter that let its first trade through late)
+drop out; pass `coverage` to keep them. When the two strategies' traded windows
+do not overlap (one stopped trading before the other started), there is no
+common held window and the comparison is refused with "the two strategies'
+traded windows do not overlap"; pass `coverage`. In single-arm mode the window
+is the arm's own first open to last close. The held windows come from the kept
+trades' own open and close dates, so `dateRange` does not cut a kept trade here.
+A trade that `dateRange` removed (opened before its start or after its end) but
+that is still held inside the common held window is refused the same way as
+with coverage; widen `dateRange` or omit it.
+
+Under `"zero"` the response adds:
+
+- `coverage`: the windows actually used (`{ A, B }`, or `{ A }` in single-arm
+  mode).
+- `coverageSource`: `"caller"` or `"heldWindow"`.
+- `flatWindowTrimmed` (only for `"heldWindow"`):
+  `{ trimmed, from, through, droppedDays }`, where `droppedDays` counts the grid
+  days of the joint span of both arms that the trim removed.
+
+`dayGridMethodology` states which coverage was used. Power checks
+(`effectiveN`, `effectiveNFloorBlocks`, `underpowered`) count the compared grid
+days after the coverage rule. Responses with `unobservedDays: "exclude"` are
+unchanged.
+
 ### Monte Carlo input series and marked-account risk
 
 `run_monte_carlo` defaults remain trade-based. Select `resampleMethod` explicitly
